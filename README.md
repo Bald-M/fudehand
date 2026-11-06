@@ -1,3 +1,25 @@
+# 界面图鉴 · macOS
+
+现在默认使用 **SwiftUI + AppKit 原生 macOS App**。作品侧栏、工具栏、画布和偏好由 Swift 实现，现有 Vue/React 案例通过系统 WebKit 展示。
+
+```bash
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` 构建并打开 App，App 自动启动案例服务，退出时清理服务。需要 macOS 14+、Swift 6+（Xcode Command Line Tools 即可）、Node.js 22.12+ 和 pnpm 11.7.0。
+
+- 发布优化构建：`pnpm build:native`，然后双击 `dist/界面图鉴.app`。
+- 原生测试：`pnpm test:native`；现有网页案例检查：`pnpm check`。
+- 浏览器兼容入口：`pnpm dev:web`。
+
+完整操作、构建和边界说明见 [macOS 使用说明](docs/macos.md)。App 使用本地源码目录和 Node/pnpm，当前是本机构建，不是脱离源码的独立分发包。网页案例仍有 WebKit 渲染开销。
+
+<details>
+<summary>浏览器兼容版与案例接入文档</summary>
+
+以下原有文档中的 `pnpm dev` 请改用 `pnpm dev:web`。目录配置与案例接入方式继续共用。
+
 # UI Atlas
 
 一个放在本机的 UI 学习画布。把喜欢的设计复刻为可交互的页面，或接入现成前端源码，在同一张画布里比较移动、网页和 PC 界面。
@@ -169,3 +191,5 @@ pnpm check
 - **位置与配置不一致**：使用恢复默认布局，或在修改默认布局后递增 `layoutVersion`。
 
 本项目仅在本地交付和运行，不配置远程仓库、云同步或生产部署。
+
+</details>
