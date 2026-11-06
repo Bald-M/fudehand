@@ -206,10 +206,10 @@ private final class CanvasHarness {
     #expect(harness.window.firstResponder === harness.canvas)
 }
 
-@MainActor private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], window: NSWindow) throws -> NSEvent {
+@MainActor private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], chars: String = "", window: NSWindow) throws -> NSEvent {
     try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                                  windowNumber: window.windowNumber, context: nil, characters: "",
-                                  charactersIgnoringModifiers: "", isARepeat: false, keyCode: code))
+                                  windowNumber: window.windowNumber, context: nil, characters: chars,
+                                  charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code))
 }
 
 @MainActor private func select(_ harness: CanvasHarness, at point: NSPoint = NSPoint(x: 100, y: 150)) {
@@ -252,8 +252,11 @@ private final class CanvasHarness {
     var tools: [CanvasTool] = []
     harness.canvas.onToolChange = { tools.append($0) }
     select(harness, at: NSPoint(x: 500, y: 600))
-    harness.canvas.keyDown(with: try key(4, window: harness.window))
-    harness.canvas.keyDown(with: try key(9, window: harness.window))
+    // Key codes are deliberately those of other letters: the character decides, not the QWERTY position.
+    harness.canvas.keyDown(with: try key(0, chars: "h", window: harness.window))
+    harness.canvas.keyDown(with: try key(0, chars: "V", window: harness.window))
+    harness.canvas.keyDown(with: try key(9, chars: "x", window: harness.window))
+    harness.canvas.keyDown(with: try key(4, .command, chars: "h", window: harness.window))
     #expect(tools == [.hand, .move])
 }
 
@@ -307,4 +310,26 @@ private final class CanvasHarness {
     #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, zoomModifier: true) == .canvas)
     #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .page)
     #expect(canvas.routeScroll(phase: [], momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
+}
+
+@Test @MainActor func arrowKeysAreIgnoredDuringADrag() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150), release: false)
+    let undoManager = try #require(harness.window.undoManager)
+    harness.canvas.keyDown(with: try key(124, window: harness.window))
+    #expect(harness.moves.isEmpty)
+    #expect(!undoManager.canUndo)
+    harness.send(.leftMouseUp, at: NSPoint(x: 200, y: 150))
+    #expect(harness.moves == [["a": Point(x: 100, y: 0)]])
+}
+
+@Test @MainActor func scrollLockResetsWhenTheSelectionChanges() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let canvas = harness.canvas
+    select(harness)
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, zoomModifier: false) == .page)
+    select(harness, at: NSPoint(x: 500, y: 600))
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
 }

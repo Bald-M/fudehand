@@ -117,6 +117,7 @@ final class AtlasCanvasView: NSView {
             frames.values.forEach { $0.dispose(); $0.removeFromSuperview() }
             frames.removeAll()
             projectID = project.id
+            scrollRouter = ScrollRouter()
             for frame in project.frames {
                 let view = PreviewFrameView(frame: frame, baseURL: project.preview.baseUrl)
                 view.canvas = self
@@ -166,6 +167,8 @@ final class AtlasCanvasView: NSView {
     private func setSelection(_ next: Set<String>, deferReport: Bool = false) {
         guard next != selection else { return }
         selection = next
+        // A gesture locked to the previous active page must not carry over.
+        scrollRouter = ScrollRouter()
         // Keyboard focus never stays in a page whose frame is no longer the active one.
         if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: world),
            activeFrameID.flatMap({ frames[$0] }).map({ !responder.isDescendant(of: $0) }) ?? true {
@@ -186,6 +189,7 @@ final class AtlasCanvasView: NSView {
     }
 
     func frameReadinessChanged(_ frame: PreviewFrameView) {
+        if selection.contains(frame.frameID) { scrollRouter = ScrollRouter() }
         // A page that reloads or fails hides its web view, so keyboard focus must not stay inside it.
         if !frame.isReady, let responder = window?.firstResponder as? NSView, responder.isDescendant(of: frame) {
             window?.makeFirstResponder(self)
@@ -465,6 +469,12 @@ final class AtlasCanvasView: NSView {
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
         let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
         let plain = flags.subtracting(.shift).isEmpty
+        // Tool letters follow the typed character, not the physical key, so other layouts work.
+        if flags.isEmpty || flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
+           letter == "v" || letter == "h" {
+            onToolChange?(letter == "v" ? .move : .hand)
+            return
+        }
         switch event.keyCode {
         case 49: spaceHeld = true
         case 53:
@@ -474,12 +484,10 @@ final class AtlasCanvasView: NSView {
         case 18 where flags == .shift: onCommand?(.fitAll)
         case 19 where flags == .shift: onCommand?(.zoomToSelection)
         case 29 where flags == .shift: onCommand?(.actualSize)
-        case 9 where flags.isEmpty: onToolChange?(.move)
-        case 4 where flags.isEmpty: onToolChange?(.hand)
         case 36 where plain:
             if selection.count == 1, let id = selection.first { frames[id]?.focusContent() }
         case 123, 124, 125, 126:
-            guard plain, !selection.isEmpty else { super.keyDown(with: event); return }
+            guard plain, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }
             nudgeSelection(keyCode: event.keyCode, step: flags.contains(.shift) ? 100 : 10)
         default:
             super.keyDown(with: event)
