@@ -146,7 +146,6 @@ final class AtlasStore: ObservableObject {
         request(CanvasGeometry.fitRects(rectangles(), size: canvasExtent, padding: 64), animated: animated)
     }
     func focusFrame(_ id: String) {
-        selection = []
         request(CanvasGeometry.fitRects(rectangles(id), size: canvasExtent, padding: 40), animated: true)
     }
     func zoomToSelection() {

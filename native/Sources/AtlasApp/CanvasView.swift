@@ -271,7 +271,9 @@ final class AtlasCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         // WebKit may pass an unhandled key up the native responder chain after DOM
-        // dispatch. The injected Escape script alone decides whether Escape exits interaction.
+        // dispatch. Canvas keys apply only when the canvas itself is first responder; the
+        // injected Escape script alone decides whether Escape exits interaction.
+        guard window?.firstResponder === self else { super.keyDown(with: event); return }
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 53 { return }
         guard selection.count == 1, let id = selection.first, let position = positions[id] else { super.keyDown(with: event); return }
@@ -291,6 +293,7 @@ final class AtlasCanvasView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
+        if window?.firstResponder !== self { super.keyUp(with: event); return }
         if event.keyCode == 49 { spaceHeld = false } else { super.keyUp(with: event) }
     }
 }

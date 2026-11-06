@@ -57,3 +57,23 @@ import Testing
     guard case .failed(let detail) = session.phase else { Issue.record("会话未报告失败：\(session.phase)"); return }
     #expect(detail.hasSuffix(message))
 }
+
+@Test @MainActor func canvasKeysOnlyApplyWhenTheCanvasIsFirstResponder() throws {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: true)
+    let canvas = AtlasCanvasView(frame: window.contentLayoutRect)
+    window.contentView = canvas
+    let space = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: window.windowNumber, context: nil,
+                                              characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49))
+    // Stands in for a WKWebView that holds focus.
+    final class Acceptor: NSView { override var acceptsFirstResponder: Bool { true } }
+    let inner = Acceptor()
+    canvas.addSubview(inner)
+    #expect(window.makeFirstResponder(inner))
+    canvas.keyDown(with: space)
+    #expect(!canvas.spaceHeld)
+    #expect(window.makeFirstResponder(canvas))
+    canvas.keyDown(with: space)
+    #expect(canvas.spaceHeld)
+    canvas.dispose()
+}
