@@ -33,6 +33,9 @@ final class CanvasOverlay: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    /// Screen-space bounds of the drawn selection outlines; `.null` when nothing is selected.
+    var selectionBounds: CGRect { selectionLayer.path?.boundingBoxOfPath ?? .null }
+
     override func layout() {
         super.layout()
         CATransaction.begin()

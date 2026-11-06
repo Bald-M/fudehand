@@ -12,8 +12,8 @@ final class AtlasCanvasView: NSView {
     var onFocusFrame: ((String) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
     private let world = CanvasWorldView()
-    private let overlay = CanvasOverlay()
-    private var frames: [String: PreviewFrameView] = [:]
+    let overlay = CanvasOverlay()
+    private(set) var frames: [String: PreviewFrameView] = [:]
     private var projectID: String?
     private var reloadToken: Int?
     private var positionsToken: Int?
@@ -83,6 +83,7 @@ final class AtlasCanvasView: NSView {
     }
 
     func dispose() {
+        window?.undoManager?.removeAllActions(withTarget: self)
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
@@ -183,7 +184,11 @@ final class AtlasCanvasView: NSView {
         return id
     }
 
-    func frameReadinessChanged() {
+    func frameReadinessChanged(_ frame: PreviewFrameView) {
+        // A page that reloads or fails hides its web view, so keyboard focus must not stay inside it.
+        if !frame.isReady, let responder = window?.firstResponder as? NSView, responder.isDescendant(of: frame) {
+            window?.makeFirstResponder(self)
+        }
         updateFrameAccessibility()
         refreshOverlay()
     }
@@ -279,7 +284,11 @@ final class AtlasCanvasView: NSView {
 
     /// Only the active frame's page content receives the pointer, and frame controls stay clickable;
     /// everything else comes to the canvas.
-    override func hitTest(_ point: NSPoint) -> NSView? {
+    override func hitTest(_ point: NSPoint) -> NSView? { hitTest(point, event: NSApp?.currentEvent) }
+
+    /// `event` is the event being routed; Shift-clicks always come to the canvas so they toggle selection,
+    /// and only button 2 counts as the middle (panning) button.
+    func hitTest(_ point: NSPoint, event: NSEvent?) -> NSView? {
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
         let hit = hitTarget(at: local)
@@ -289,7 +298,8 @@ final class AtlasCanvasView: NSView {
         case .empty:
             break
         }
-        let button: PointerButton = NSApp?.currentEvent?.type == .otherMouseDown ? .middle : .primary
+        if event?.type == .leftMouseDown, event?.modifierFlags.contains(.shift) == true { return self }
+        let button: PointerButton = event?.type == .otherMouseDown && event?.buttonNumber == 2 ? .middle : .primary
         if CanvasInteraction.pageReceivesPointer(hit: hit, button: button, context: interactionContext()) {
             return super.hitTest(point)
         }
@@ -455,9 +465,11 @@ final class AtlasCanvasView: NSView {
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 53 { return }
-        guard selection.count == 1, let id = selection.first, let position = positions[id] else { super.keyDown(with: event); return }
+        guard selection.count == 1, let id = selection.first, let origin = frames[id]?.frame.origin else {
+            super.keyDown(with: event); return
+        }
         let step: Double = event.modifierFlags.contains(.shift) ? 100 : 10
-        var next = position
+        var next = Point(x: origin.x, y: origin.y)
         switch event.keyCode {
         case 123: next.x -= step
         case 124: next.x += step
@@ -466,8 +478,7 @@ final class AtlasCanvasView: NSView {
         case 36: frames[id]?.focusContent(); return
         default: super.keyDown(with: event); return
         }
-        positions[id] = next
-        frames[id]?.setFrameOrigin(NSPoint(x: next.x, y: next.y))
+        setOrigins([id: next])
         onFramesMoved?([id: next])
     }
 

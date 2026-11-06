@@ -131,3 +131,77 @@ private final class CanvasHarness {
     harness.send(.leftMouseUp, at: NSPoint(x: 700, y: 20), flags: .shift)
     #expect(harness.selections.last == ["a", "b"])
 }
+
+@Test @MainActor func arrowNudgeMovesTheSelectionOutline() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    harness.send(.leftMouseDown, at: NSPoint(x: 100, y: 150))
+    harness.send(.leftMouseUp, at: NSPoint(x: 100, y: 150))
+    let before = harness.canvas.overlay.selectionBounds
+    #expect(!before.isNull)
+    #expect(harness.window.firstResponder === harness.canvas)
+    let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: harness.window.windowNumber, context: nil, characters: "",
+                                              charactersIgnoringModifiers: "", isARepeat: false, keyCode: 124))
+    harness.canvas.keyDown(with: right)
+    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
+    #expect(harness.canvas.overlay.selectionBounds.minX == before.minX + 10)
+}
+
+@Test @MainActor func disposingClearsUndo() throws {
+    let harness = CanvasHarness()
+    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150))
+    let undoManager = try #require(harness.window.undoManager)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    #expect(undoManager.canUndo)
+    harness.dispose()
+    #expect(!undoManager.canUndo)
+}
+
+/// Selects "a" and marks its page loaded so it becomes the active frame.
+@MainActor private func activateA(_ harness: CanvasHarness) throws -> PreviewFrameView {
+    harness.send(.leftMouseDown, at: NSPoint(x: 100, y: 150))
+    harness.send(.leftMouseUp, at: NSPoint(x: 100, y: 150))
+    let frame = try #require(harness.canvas.frames["a"])
+    frame.isReady = true
+    return frame
+}
+
+@Test @MainActor func activePageRoutingHonorsShiftAndButtonNumber() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let frame = try activateA(harness)
+    let canvas = harness.canvas
+    let point = canvas.convert(NSPoint(x: 100, y: 150), to: canvas.superview)
+    func click(_ flags: NSEvent.ModifierFlags) -> NSEvent {
+        NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                           windowNumber: harness.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+    }
+    func other(_ button: UInt32) throws -> NSEvent {
+        let mouseButton = try #require(CGMouseButton(rawValue: button))
+        let cg = try #require(CGEvent(mouseEventSource: nil, mouseType: .otherMouseDown, mouseCursorPosition: .zero,
+                                      mouseButton: mouseButton))
+        return try #require(NSEvent(cgEvent: cg))
+    }
+    func goesToPage(_ event: NSEvent) -> Bool {
+        guard let view = canvas.hitTest(point, event: event) else { return false }
+        return view !== canvas && view.isDescendant(of: frame)
+    }
+    #expect(goesToPage(click([])))
+    #expect(canvas.hitTest(point, event: click(.shift)) === canvas)
+    #expect(canvas.hitTest(point, event: try other(2)) === canvas)
+    #expect(goesToPage(try other(3)))
+}
+
+@Test @MainActor func pageThatStopsBeingReadyReturnsFocusToCanvas() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let frame = try activateA(harness)
+    // Stands in for the frame's WKWebView holding focus.
+    final class Acceptor: NSView { override var acceptsFirstResponder: Bool { true } }
+    let inner = Acceptor()
+    frame.addSubview(inner)
+    #expect(harness.window.makeFirstResponder(inner))
+    frame.isReady = false
+    #expect(harness.window.firstResponder === harness.canvas)
+}

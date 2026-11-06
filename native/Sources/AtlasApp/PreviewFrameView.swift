@@ -18,8 +18,9 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private var rejectedResponse = false
     var frameID: String { definition.id }
     /// True once the page has loaded; only a ready frame can become the active frame that receives web input.
-    private(set) var isReady = false {
-        didSet { if isReady != oldValue { canvas?.frameReadinessChanged() } }
+    /// Set only by navigation callbacks; settable internally so tests can simulate a loaded page.
+    var isReady = false {
+        didSet { if isReady != oldValue { canvas?.frameReadinessChanged(self) } }
     }
 
     init(frame: Frame, baseURL: String) {
