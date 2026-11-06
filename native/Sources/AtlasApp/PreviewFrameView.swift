@@ -129,6 +129,9 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
 
     @objc private func retry() { reload() }
 
+    /// The web view, for routing scroll events to the page.
+    var pageView: NSView { webView }
+
     func focusContent() {
         if isReady { window?.makeFirstResponder(webView) }
     }

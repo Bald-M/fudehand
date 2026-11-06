@@ -205,3 +205,106 @@ private final class CanvasHarness {
     frame.isReady = false
     #expect(harness.window.firstResponder === harness.canvas)
 }
+
+@MainActor private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], window: NSWindow) throws -> NSEvent {
+    try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                  windowNumber: window.windowNumber, context: nil, characters: "",
+                                  charactersIgnoringModifiers: "", isARepeat: false, keyCode: code))
+}
+
+@MainActor private func select(_ harness: CanvasHarness, at point: NSPoint = NSPoint(x: 100, y: 150)) {
+    harness.send(.leftMouseDown, at: point)
+    harness.send(.leftMouseUp, at: point)
+}
+
+@Test @MainActor func arrowKeysNudgeSelectionAndUndoAsOneStep() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    let undoManager = try #require(harness.window.undoManager)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    harness.canvas.keyDown(with: try key(124, window: harness.window))
+    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    harness.canvas.keyDown(with: try key(124, .shift, window: harness.window))
+    #expect(harness.moves.last == ["a": Point(x: 110, y: 0)])
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    undoManager.undo()
+    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
+    #expect(undoManager.canUndo)
+}
+
+@Test @MainActor func shiftDigitsIssueCommands() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var commands: [CanvasCommand] = []
+    harness.canvas.onCommand = { commands.append($0) }
+    select(harness, at: NSPoint(x: 500, y: 600))
+    for code: UInt16 in [18, 19, 29] { harness.canvas.keyDown(with: try key(code, .shift, window: harness.window)) }
+    harness.canvas.keyDown(with: try key(18, [.shift, .command], window: harness.window))
+    harness.canvas.keyDown(with: try key(18, window: harness.window))
+    #expect(commands == [.fitAll, .zoomToSelection, .actualSize])
+}
+
+@Test @MainActor func toolKeysReportToolChange() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var tools: [CanvasTool] = []
+    harness.canvas.onToolChange = { tools.append($0) }
+    select(harness, at: NSPoint(x: 500, y: 600))
+    harness.canvas.keyDown(with: try key(4, window: harness.window))
+    harness.canvas.keyDown(with: try key(9, window: harness.window))
+    #expect(tools == [.hand, .move])
+}
+
+@Test @MainActor func escapeClearsSelectionAndSelectAllSelectsEveryFrame() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    harness.canvas.keyDown(with: try key(53, window: harness.window))
+    #expect(harness.selections.last == [])
+    harness.canvas.keyDown(with: try key(0, .command, window: harness.window))
+    #expect(harness.selections.last == ["a", "b"])
+}
+
+@Test @MainActor func returnFocusesOnlyAReadySingleSelection() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    let frame = try #require(harness.canvas.frames["a"])
+    harness.canvas.keyDown(with: try key(36, window: harness.window))
+    #expect(harness.window.firstResponder === harness.canvas)
+    frame.isReady = true
+    harness.canvas.keyDown(with: try key(36, window: harness.window))
+    #expect(harness.window.firstResponder === frame.pageView)
+}
+
+@Test func scrollPhaseMapping() {
+    typealias Canvas = AtlasCanvasView
+    #expect(Canvas.scrollPhase([], momentum: []) == .discrete)
+    #expect(Canvas.scrollPhase(.mayBegin, momentum: []) == .began)
+    #expect(Canvas.scrollPhase(.began, momentum: []) == .began)
+    #expect(Canvas.scrollPhase(.changed, momentum: []) == .changed)
+    #expect(Canvas.scrollPhase(.ended, momentum: []) == .ended)
+    #expect(Canvas.scrollPhase(.cancelled, momentum: []) == .ended)
+    #expect(Canvas.scrollPhase([], momentum: .began) == .momentum)
+    #expect(Canvas.scrollPhase([], momentum: .changed) == .momentum)
+    #expect(Canvas.scrollPhase([], momentum: .ended) == .momentumEnded)
+}
+
+@Test @MainActor func momentumKeepsTheTargetChosenAtGestureStart() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let canvas = harness.canvas
+    // A gesture that starts over empty canvas stays on the canvas as it slides over the active page.
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .ended, momentum: [], overActivePage: true, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: [], momentum: .changed, overActivePage: true, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, zoomModifier: false) == .canvas)
+    // The next gesture starts over the page and keeps scrolling it, even with zoom held only for its own events.
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, zoomModifier: false) == .page)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, zoomModifier: true) == .canvas)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .page)
+    #expect(canvas.routeScroll(phase: [], momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
+}

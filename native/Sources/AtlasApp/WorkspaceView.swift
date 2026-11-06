@@ -140,7 +140,15 @@ struct WorkspaceView: View {
                                      onFramesMoved: store.framesMoved,
                                      onSelectionChange: { store.selection = $0 },
                                      onToolChange: { store.tool = $0 },
-                                     onFocusFrame: store.focusFrame, onSizeChange: store.resize)
+                                     onFocusFrame: store.focusFrame,
+                                     onCommand: { command in
+                                         switch command {
+                                         case .fitAll: store.fitAll()
+                                         case .zoomToSelection: store.zoomToSelection()
+                                         case .actualSize: store.zoom(1)
+                                         }
+                                     },
+                                     onSizeChange: store.resize)
                             .clipped()
                         canvasFooter(project)
                     }
@@ -160,12 +168,20 @@ struct WorkspaceView: View {
                     }.buttonStyle(.borderless).help("聚焦 \(frame.title)")
                 }
                 Spacer()
-                Text("空格拖动平移 · ⌘滚轮或捏合缩放 · 点击画框内容进行交互").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text("点选画框后可直接操作 · 空格拖动平移 · ⌘滚轮或捏合缩放 · Shift+1 适应全部").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }.padding(.horizontal, 20).padding(.vertical, 12)
         }.background(.bar)
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("工具", selection: $store.tool) {
+                Label("移动 V", systemImage: "cursorarrow").tag(CanvasTool.move)
+                Label("抓手 H", systemImage: "hand.raised").tag(CanvasTool.hand)
+            }
+            .pickerStyle(.segmented).labelsHidden().disabled(store.project == nil)
+            .help("移动（V）/ 抓手（H）").accessibilityLabel("画布工具")
+        }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { store.zoom(store.zoomIndicator.viewport.scale / 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("缩小（⌘−）").accessibilityLabel("缩小").disabled(store.project == nil)

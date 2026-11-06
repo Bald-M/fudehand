@@ -17,6 +17,7 @@ struct NativeCanvas: NSViewRepresentable {
     let onSelectionChange: (Set<String>) -> Void
     let onToolChange: (CanvasTool) -> Void
     let onFocusFrame: (String) -> Void
+    let onCommand: (CanvasCommand) -> Void
     let onSizeChange: (CGSize) -> Void
 
     func makeNSView(context: Context) -> AtlasCanvasView {
@@ -32,6 +33,7 @@ struct NativeCanvas: NSViewRepresentable {
         view.onSelectionChange = onSelectionChange
         view.onToolChange = onToolChange
         view.onFocusFrame = onFocusFrame
+        view.onCommand = onCommand
         view.onSizeChange = onSizeChange
         view.update(project: project, positions: positions, positionsToken: positionsToken,
                     viewportRequest: viewportRequest, tool: tool, reloadToken: reloadToken)

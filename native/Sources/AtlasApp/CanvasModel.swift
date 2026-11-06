@@ -8,6 +8,9 @@ struct ViewportRequest: Equatable {
     var token: Int
 }
 
+/// A keyboard command the canvas asks the store to run.
+enum CanvasCommand: Equatable { case fitAll, zoomToSelection, actualSize }
+
 /// Carries the live viewport from the canvas to the toolbar without re-rendering SwiftUI on every tick.
 @MainActor
 final class ZoomIndicator: ObservableObject {

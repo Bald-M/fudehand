@@ -10,6 +10,7 @@ final class AtlasCanvasView: NSView {
     var onSelectionChange: ((Set<String>) -> Void)?
     var onToolChange: ((CanvasTool) -> Void)?
     var onFocusFrame: ((String) -> Void)?
+    var onCommand: ((CanvasCommand) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
     private let world = CanvasWorldView()
     let overlay = CanvasOverlay()
@@ -18,7 +19,10 @@ final class AtlasCanvasView: NSView {
     private var reloadToken: Int?
     private var positionsToken: Int?
     private var requestToken: Int?
-    private(set) var tool = CanvasTool.move
+    private(set) var tool = CanvasTool.move {
+        didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
+    }
+    private var scrollRouter = ScrollRouter()
     private var viewport = Viewport()
     private var positions: [String: Point] = [:]
     /// The active frame (its page receives pointer input) is the only selected frame, once loaded.
@@ -70,10 +74,7 @@ final class AtlasCanvasView: NSView {
             if event.type == .flagsChanged { return event }
             let point = self.convert(event.locationInWindow, from: nil)
             guard self.bounds.contains(point) else { return event }
-            if event.type == .scrollWheel, event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
-                self.scrollWheel(with: event)
-                return nil
-            }
+            if event.type == .scrollWheel { return self.routeScrollEvent(event, at: point) }
             if event.type == .magnify {
                 self.magnify(with: event)
                 return nil
@@ -345,7 +346,7 @@ final class AtlasCanvasView: NSView {
     private func settlePan() {
         guard gesturePanned else { return }
         gesturePanned = false
-        NSCursor.arrow.set()
+        restingCursor.set()
         onViewportSettled?(viewport)
     }
 
@@ -460,27 +461,96 @@ final class AtlasCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         // WebKit may pass an unhandled key up the native responder chain after DOM
-        // dispatch. Canvas keys apply only when the canvas itself is first responder; the
-        // injected Escape script alone decides whether Escape exits interaction.
+        // dispatch. Canvas keys apply only when the canvas itself is first responder.
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
-        if event.keyCode == 49 { spaceHeld = true; return }
-        if event.keyCode == 53 { return }
-        guard selection.count == 1, let id = selection.first, let origin = frames[id]?.frame.origin else {
-            super.keyDown(with: event); return
-        }
-        let step: Double = event.modifierFlags.contains(.shift) ? 100 : 10
-        var next = Point(x: origin.x, y: origin.y)
+        let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
+        let plain = flags.subtracting(.shift).isEmpty
         switch event.keyCode {
-        case 123: next.x -= step
-        case 124: next.x += step
-        case 125: next.y += step
-        case 126: next.y -= step
-        case 36: frames[id]?.focusContent(); return
-        default: super.keyDown(with: event); return
+        case 49: spaceHeld = true
+        case 53:
+            setSelection([])
+        case 0 where flags == .command:
+            setSelection(Set(frames.keys))
+        case 18 where flags == .shift: onCommand?(.fitAll)
+        case 19 where flags == .shift: onCommand?(.zoomToSelection)
+        case 29 where flags == .shift: onCommand?(.actualSize)
+        case 9 where flags.isEmpty: onToolChange?(.move)
+        case 4 where flags.isEmpty: onToolChange?(.hand)
+        case 36 where plain:
+            if selection.count == 1, let id = selection.first { frames[id]?.focusContent() }
+        case 123, 124, 125, 126:
+            guard plain, !selection.isEmpty else { super.keyDown(with: event); return }
+            nudgeSelection(keyCode: event.keyCode, step: flags.contains(.shift) ? 100 : 10)
+        default:
+            super.keyDown(with: event)
         }
-        setOrigins([id: next])
-        onFramesMoved?([id: next])
     }
+
+    /// One key press moves every selected frame and is one undo step.
+    private func nudgeSelection(keyCode: UInt16, step: Double) {
+        var from: [String: Point] = [:]
+        var to: [String: Point] = [:]
+        for id in selection {
+            guard let origin = frames[id]?.frame.origin else { continue }
+            var next = Point(x: origin.x, y: origin.y)
+            switch keyCode {
+            case 123: next.x -= step
+            case 124: next.x += step
+            case 125: next.y += step
+            default: next.y -= step
+            }
+            from[id] = Point(x: origin.x, y: origin.y)
+            to[id] = next
+        }
+        guard !to.isEmpty else { return }
+        setOrigins(to)
+        onFramesMoved?(to)
+        registerMove(from: from, to: to)
+    }
+
+    // MARK: Scroll routing
+
+    /// Maps an AppKit scroll event's phases to the router's vocabulary.
+    static func scrollPhase(_ phase: NSEvent.Phase, momentum: NSEvent.Phase) -> ScrollPhase {
+        if !momentum.isEmpty {
+            return momentum.isDisjoint(with: [.ended, .cancelled]) ? .momentum : .momentumEnded
+        }
+        if phase.contains(.ended) || phase.contains(.cancelled) { return .ended }
+        if phase.contains(.began) || phase.contains(.mayBegin) { return .began }
+        if phase.isEmpty { return .discrete }
+        return .changed
+    }
+
+    /// The routing decision for one scroll event; the per-gesture lock lives in `scrollRouter`.
+    func routeScroll(phase: NSEvent.Phase, momentum: NSEvent.Phase, overActivePage: Bool, zoomModifier: Bool) -> ScrollTarget {
+        scrollRouter.route(phase: Self.scrollPhase(phase, momentum: momentum), overActivePage: overActivePage, zoomModifier: zoomModifier)
+    }
+
+    /// Returns the event when AppKit should deliver it as usual, nil when it was handled here.
+    func routeScrollEvent(_ event: NSEvent, at point: NSPoint) -> NSEvent? {
+        let active = activeFrameID
+        let over: Bool
+        if case .frameContent(let id) = hitTarget(at: point), id == active { over = true } else { over = false }
+        let zoom = !event.modifierFlags.isDisjoint(with: [.command, .control])
+        switch routeScroll(phase: event.phase, momentum: event.momentumPhase, overActivePage: over, zoomModifier: zoom) {
+        case .canvas:
+            scrollWheel(with: event)
+            return nil
+        case .page:
+            guard let page = active.flatMap({ frames[$0] })?.pageView else { return event }
+            if let hit = hitTest(convert(point, to: superview), event: event), hit.isDescendant(of: page) { return event }
+            page.scrollWheel(with: event)
+            return nil
+        }
+    }
+
+    // MARK: Cursor
+
+    override func resetCursorRects() {
+        if tool == .hand { addCursorRect(bounds, cursor: .openHand) }
+    }
+
+    private var restingCursor: NSCursor { tool == .hand ? .openHand : .arrow }
 
     override func keyUp(with event: NSEvent) {
         if window?.firstResponder !== self { super.keyUp(with: event); return }
