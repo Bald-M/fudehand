@@ -15,60 +15,70 @@ type Idea = {
   art: string;
   description: string;
 };
+const categoryLabels: Record<Category, string> = {
+  Branding: "品牌视觉",
+  Digital: "数字设计",
+  Objects: "器物设计",
+};
+const filterLabels: Record<string, string> = {
+  "All ideas": "全部灵感",
+  ...categoryLabels,
+  Saved: "已收藏",
+};
 const initialIdeas: Idea[] = [
   {
     id: 1,
-    title: "Quiet objects, considered forms",
+    title: "静物之美，形有所思",
     category: "Objects",
-    author: "STUDIO STILL",
+    author: "留白工作室",
     art: "objects",
     description:
-      "A study in balance, warm materials, and the beauty of leaving a little room. These sculptural forms are drawn entirely with CSS.",
+      "以平衡的构图、温润的材质，探索留一点余地的美。这些雕塑般的造型完全由 CSS 绘制。",
   },
   {
     id: 2,
-    title: "An ordinary kind of magic",
+    title: "平凡日常里的魔法",
     category: "Branding",
-    author: "THE EVERYDAY PRESS",
+    author: "日常出版社",
     art: "poster",
     description:
-      "An editorial identity for noticing the extraordinary in everyday life. A warm red, a confident serif, and a little room to be playful.",
+      "一套让人看见日常不凡之处的出版品牌视觉：温暖的红色、鲜明的衬线字体，再留一点玩心。",
   },
   {
     id: 3,
-    title: "Modo — less, but better",
+    title: "慢度：少一点，好一点",
     category: "Digital",
-    author: "FORM LAB",
+    author: "形态实验室",
     art: "banking",
     description:
-      "A small dashboard exploration. Soft hierarchy, deliberate spacing, and one strong accent keep a complex product feeling calm.",
+      "一次小小的仪表盘设计探索。柔和的层次、讲究的留白与一抹鲜明的强调色，让复杂的产品也能从容呈现。",
   },
   {
     id: 4,
-    title: "In very good company",
+    title: "与美好相伴",
     category: "Branding",
-    author: "FIELD NOTES",
+    author: "原野手记",
     art: "company",
     description:
-      "An identity built around gathering, growing, and finding common ground. A fresh green palette paired with expressive, oversized type.",
+      "围绕相聚、成长与共鸣展开的品牌视觉，以清新的绿色搭配富有表现力的大字，传达彼此靠近的温度。",
   },
   {
     id: 5,
-    title: "A softer kind of interface",
+    title: "让界面柔和一点",
     category: "Digital",
-    author: "SUNDAY OFFICE",
+    author: "星期日事务所",
     art: "weather",
     description:
-      "A gentle weather interface that makes space for a slower morning. A local illustration composed from gradients and simple shapes.",
+      "一款温柔的天气界面，为慢一点的清晨留出空间。插画由渐变与简单图形在本地绘制。",
   },
   {
     id: 6,
-    title: "The art of taking a pause",
+    title: "停一停的艺术",
     category: "Objects",
-    author: "OFFLINE STUDIO",
+    author: "离线工作室",
     art: "pause",
     description:
-      "A warm, tactile study of arches and light. An imagined object collection for the moments between doing things.",
+      "以拱形与光线探索温暖而可感的质地。这是一组想象中的器物，为忙碌之间的片刻而作。",
   },
 ];
 const iconPaths: Record<string, string> = {
@@ -109,25 +119,25 @@ function Art({ kind }: { kind: string }) {
   if (kind === "objects")
     return (
       <div className="art art-objects" aria-hidden="true">
-        <span className="art-caption">OBJECTS OF EVERYDAY / Nº 01</span>
+        <span className="art-caption">日常器物 / 第 01 号</span>
         <div className="object-shadow" />
         <div className="vase vase-one" />
         <div className="vase vase-two" />
         <div className="object-ball" />
-        <span className="art-foot">A STUDY IN STILLNESS</span>
+        <span className="art-foot">静谧习作</span>
       </div>
     );
   if (kind === "poster")
     return (
       <div className="art art-poster" aria-hidden="true">
-        <span className="poster-top">THE EVERYDAY PRESS</span>
+        <span className="poster-top">日常出版社</span>
         <span className="poster-type">
-          An ordinary
+          平凡日常
           <br />
-          kind of <i>magic.</i>
+          也有<i>魔法。</i>
         </span>
         <span className="poster-flower">✳</span>
-        <span className="poster-foot">GOOD THINGS ARE ALL AROUND US.</span>
+        <span className="poster-foot">美好就在我们身边。</span>
       </div>
     );
   if (kind === "banking")
@@ -135,7 +145,7 @@ function Art({ kind }: { kind: string }) {
       <div className="art art-banking" aria-hidden="true">
         <div className="bank-window">
           <div className="bank-sidebar">
-            <b>m.</b>
+            <b>慢</b>
             <i />
             <i />
             <i />
@@ -143,24 +153,24 @@ function Art({ kind }: { kind: string }) {
           </div>
           <div className="bank-main">
             <span>
-              Good morning, Alex <b>↗</b>
+              早上好，小安 <b>↗</b>
             </span>
             <div className="bank-cards">
               <div>
-                <small>Total balance</small>
+                <small>总余额</small>
                 <strong>
                   $12,840<span>.00</span>
                 </strong>
-                <em>↗ 12.8% this month</em>
+                <em>↗ 本月增长 12.8%</em>
               </div>
               <div className="bank-purple">
-                <small>Your card</small>
-                <strong>modo.</strong>
+                <small>你的卡片</small>
+                <strong>慢度</strong>
                 <em>•••• 4820</em>
               </div>
             </div>
             <div className="bank-chart">
-              <span>Monthly overview</span>
+              <span>月度概览</span>
               <div>
                 {[28, 46, 34, 65, 52, 80, 61, 90, 72, 57, 77, 95].map(
                   (height, index) => (
@@ -176,15 +186,15 @@ function Art({ kind }: { kind: string }) {
   if (kind === "company")
     return (
       <div className="art art-company" aria-hidden="true">
-        <span className="company-small">GROW SOMETHING GOOD.</span>
+        <span className="company-small">让美好慢慢生长。</span>
         <span className="company-title">
-          in good
+          美好
           <br />
-          <i>company.</i>
+          <i>相伴。</i>
         </span>
         <span className="company-ring ring-one" />
         <span className="company-ring ring-two" />
-        <span className="company-foot">A LITTLE MORE TOGETHER.</span>
+        <span className="company-foot">多一点彼此相伴。</span>
       </div>
     );
   if (kind === "weather")
@@ -193,29 +203,29 @@ function Art({ kind }: { kind: string }) {
         <div className="weather-sun" />
         <div className="weather-cloud" />
         <div className="weather-ui">
-          <span>Somewhere, slowly.</span>
+          <span>在某处，慢慢来。</span>
           <strong>
             22<span>°</span>
           </strong>
-          <span>A little sunshine for your day.</span>
+          <span>给今天添一缕阳光。</span>
           <div>
             <i>
-              MON
+              周一
               <br />
               <b>21°</b>
             </i>
             <i>
-              TUE
+              周二
               <br />
               <b>23°</b>
             </i>
             <i>
-              WED
+              周三
               <br />
               <b>22°</b>
             </i>
             <i>
-              THU
+              周四
               <br />
               <b>20°</b>
             </i>
@@ -225,15 +235,15 @@ function Art({ kind }: { kind: string }) {
     );
   return (
     <div className="art art-pause" aria-hidden="true">
-      <span className="pause-top">THE OFFLINE COLLECTION</span>
+      <span className="pause-top">离线生活系列</span>
       <div className="pause-arch" />
       <div className="pause-orb" />
       <span className="pause-type">
-        Take
+        不妨
         <br />
-        <i>a pause.</i>
+        <i>停一停。</i>
       </span>
-      <span className="pause-foot">LESS RUSH. MORE ROOM.</span>
+      <span className="pause-foot">少一点匆忙，多一点余地。</span>
     </div>
   );
 }
@@ -255,7 +265,7 @@ function App() {
       (filter === "All ideas" ||
         (filter === "Saved" && saved.includes(idea.id)) ||
         idea.category === filter) &&
-      `${idea.title} ${idea.author} ${idea.category}`
+      `${idea.title} ${idea.author} ${categoryLabels[idea.category]}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -278,7 +288,7 @@ function App() {
   function addIdea(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newTitle.trim()) {
-      setFormError("Give your idea a name to keep it here.");
+      setFormError("先给灵感起个名字，就能把它留在这里。");
       newTitleInput.current?.focus();
       return;
     }
@@ -287,7 +297,7 @@ function App() {
         id: Date.now(),
         title: newTitle.trim(),
         category: newCategory,
-        author: "YOUR FIELD NOTES",
+        author: "你的原野手记",
         art:
           newCategory === "Objects"
             ? "objects"
@@ -295,7 +305,7 @@ function App() {
               ? "company"
               : "weather",
         description:
-          "Your newest field note. A little idea worth keeping, ready to grow into something good.",
+          "你最新的一页原野手记。一个值得留存的小灵感，正等待长成美好的模样。",
       },
       ...previous,
     ]);
@@ -306,10 +316,11 @@ function App() {
   return (
     <div className="field-app">
       <header className="site-header">
-        <a href="/" className="brand" aria-label="Form and Field home">
-          form<span>&</span>field<span className="brand-dot">®</span>
+        <a href="/" className="brand" aria-label="灵感原野首页">
+          灵感<span className="brand-field">原野</span>
+          <span className="brand-dot">®</span>
         </a>
-        <nav aria-label="Main navigation">
+        <nav aria-label="主导航">
           <button
             className="nav-active"
             onClick={() => {
@@ -317,16 +328,16 @@ function App() {
               setQuery("");
             }}
           >
-            My collection
+            我的收藏集
           </button>
           <button onClick={() => aboutDialog.current?.showModal()}>
-            A little about this space <span>↗</span>
+            关于这片原野 <span>↗</span>
           </button>
         </nav>
         <div className="header-actions">
           <button
             className="saved-toggle"
-            aria-label={`Show ${saved.length} saved ideas`}
+            aria-label={`查看 ${saved.length} 条已收藏的灵感`}
             onClick={() => setFilter("Saved")}
           >
             <Icon name="bookmark" />
@@ -334,10 +345,10 @@ function App() {
           </button>
           <button className="add-button" onClick={openAdd}>
             <Icon name="plus" size={16} />
-            Add an idea
+            添加灵感
           </button>
-          <span className="profile-avatar" aria-label="Personal collection">
-            Y
+          <span className="profile-avatar" aria-label="个人收藏集">
+            你
           </span>
         </div>
       </header>
@@ -345,12 +356,12 @@ function App() {
         <section className="intro">
           <div>
             <p className="eyebrow">
-              <span />A PERSONAL COLLECTION OF INSPIRATION
+              <span />我的私人灵感集
             </p>
             <h1>
-              A place for
+              为美好
               <br />
-              <i>good things.</i>
+              <i>留一片原野。</i>
               <span className="heading-star" aria-hidden="true">
                 ✳
               </span>
@@ -358,17 +369,17 @@ function App() {
           </div>
           <div className="intro-note">
             <p>
-              A few things that caught the eye,
+              有些事物让人眼前一亮，
               <br />
-              stayed in the mind, and felt worth keeping.
+              留在心里，也值得好好珍藏。
             </p>
-            <span>COLLECT SLOWLY. CREATE THOUGHTFULLY.</span>
+            <span>慢慢收集，用心创造。</span>
             <div className="note-line" />
           </div>
         </section>
-        <section className="collection" aria-label="Idea collection">
+        <section className="collection" aria-label="灵感收藏集">
           <div className="collection-toolbar">
-            <div className="filters" aria-label="Filter ideas">
+            <div className="filters" aria-label="筛选灵感">
               {["All ideas", "Branding", "Digital", "Objects", "Saved"].map(
                 (name) => (
                   <button
@@ -377,7 +388,7 @@ function App() {
                     aria-pressed={filter === name}
                     onClick={() => setFilter(name)}
                   >
-                    {name}
+                    {filterLabels[name]}
                     <span>
                       {name === "All ideas"
                         ? ideas.length
@@ -393,10 +404,10 @@ function App() {
             <label className="search">
               <Icon name="search" size={15} />
               <input
-                aria-label="Search ideas"
+                aria-label="搜索灵感"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Find a little inspiration…"
+                placeholder="找一点灵感……"
               />
             </label>
           </div>
@@ -405,7 +416,7 @@ function App() {
               <article className="idea-card" key={idea.id}>
                 <button
                   className="art-button"
-                  aria-label={`View ${idea.title}`}
+                  aria-label={`查看《${idea.title}》`}
                   onClick={() => setSelected(idea)}
                 >
                   <Art kind={idea.art} />
@@ -416,7 +427,7 @@ function App() {
                 <div className="idea-info">
                   <div>
                     <span className="idea-category">
-                      {idea.category}
+                      {categoryLabels[idea.category]}
                       <span> / </span>
                       {idea.author}
                     </span>
@@ -428,7 +439,7 @@ function App() {
                   </div>
                   <button
                     className={`save-button ${saved.includes(idea.id) ? "is-saved" : ""}`}
-                    aria-label={`${saved.includes(idea.id) ? "Unsave" : "Save"} ${idea.title}`}
+                    aria-label={`${saved.includes(idea.id) ? "取消收藏" : "收藏"}《${idea.title}》`}
                     aria-pressed={saved.includes(idea.id)}
                     onClick={() => toggleSaved(idea.id)}
                   >
@@ -445,9 +456,9 @@ function App() {
           {visible.length === 0 && (
             <div className="empty-state">
               <Icon name="search" size={28} />
-              <h2>A little room for something new.</h2>
+              <h2>为新灵感留一点空间。</h2>
               <p>
-                No ideas match this view. Try another filter or add your own.
+                这里还没有符合条件的灵感。换个筛选条件，或添上你自己的想法吧。
               </p>
               <button
                 className="add-button"
@@ -456,20 +467,20 @@ function App() {
                   setQuery("");
                 }}
               >
-                Show all ideas
+                查看全部灵感
                 <Icon name="arrow" size={16} />
               </button>
             </div>
           )}
         </section>
         <footer className="site-footer">
-          <span>GOOD IDEAS START WITH NOTICING.</span>
+          <span>好灵感，从留心开始。</span>
           <span>
-            Made with a curious eye{" "}
+            怀着好奇，发现美好{" "}
             <span className="footer-star" aria-hidden="true">
               ✳
             </span>{" "}
-            Form & Field, 2026
+            灵感原野，2026
           </span>
         </footer>
       </main>
@@ -489,7 +500,7 @@ function App() {
               <Art kind={selected.art} />
               <button
                 className="close-button"
-                aria-label="Close idea details"
+                aria-label="关闭灵感详情"
                 onClick={() => detailDialog.current?.close()}
               >
                 <Icon name="close" />
@@ -497,7 +508,7 @@ function App() {
             </div>
             <div className="detail-copy">
               <span className="idea-category">
-                {selected.category} / {selected.author}
+                {categoryLabels[selected.category]} / {selected.author}
               </span>
               <h2 id="idea-title">{selected.title}</h2>
               <p>{selected.description}</p>
@@ -510,8 +521,8 @@ function App() {
                   size={16}
                 />
                 {saved.includes(selected.id)
-                  ? "Saved to your collection"
-                  : "Keep this idea"}
+                  ? "已加入你的收藏集"
+                  : "收藏这份灵感"}
               </button>
             </div>
           </>
@@ -527,49 +538,49 @@ function App() {
       >
         <form onSubmit={addIdea}>
           <div className="dialog-heading">
-            <span className="eyebrow">A NEW FIELD NOTE</span>
+            <span className="eyebrow">新的一页原野手记</span>
             <button
               type="button"
               className="close-button"
-              aria-label="Close new idea"
+              aria-label="关闭添加灵感"
               onClick={() => addDialog.current?.close()}
             >
               <Icon name="close" />
             </button>
           </div>
           <h2 id="new-idea-title">
-            Something worth
+            总有一些美好
             <br />
-            <i>keeping.</i>
+            <i>值得留下。</i>
           </h2>
-          <p>Good ideas can start very small.</p>
-          <label htmlFor="idea-name">What caught your eye?</label>
+          <p>好灵感，常从小小的念头开始。</p>
+          <label htmlFor="idea-name">什么让你眼前一亮？</label>
           <input
             ref={newTitleInput}
             id="idea-name"
             value={newTitle}
             maxLength={80}
             onChange={(event) => setNewTitle(event.target.value)}
-            placeholder="A name for your idea"
+            placeholder="为这份灵感起个名字"
             aria-invalid={Boolean(formError)}
             aria-describedby="idea-error"
           />
           <p id="idea-error" className="form-error" role="status">
             {formError}
           </p>
-          <label htmlFor="idea-category">Make a little space in</label>
+          <label htmlFor="idea-category">为灵感选个分类</label>
           <select
             id="idea-category"
             value={newCategory}
             onChange={(event) => setNewCategory(event.target.value as Category)}
           >
-            <option>Digital</option>
-            <option>Branding</option>
-            <option>Objects</option>
+            <option value="Digital">数字设计</option>
+            <option value="Branding">品牌视觉</option>
+            <option value="Objects">器物设计</option>
           </select>
           <button className="add-button" type="submit">
             <Icon name="plus" size={16} />
-            Keep this idea
+            收藏这份灵感
           </button>
         </form>
       </dialog>
@@ -583,35 +594,31 @@ function App() {
         }}
       >
         <div className="dialog-heading">
-          <span className="eyebrow">A LITTLE ABOUT THIS SPACE</span>
+          <span className="eyebrow">关于这片原野</span>
           <button
             className="close-button"
-            aria-label="Close about"
+            aria-label="关闭关于窗口"
             onClick={() => aboutDialog.current?.close()}
           >
             <Icon name="close" />
           </button>
         </div>
         <h2 id="about-title">
-          A curious eye.
+          带着好奇看世界。
           <br />
-          <i>An open field.</i>
+          <i>为灵感留片原野。</i>
         </h2>
         <p>
-          Form & Field is an original UI Atlas demonstration: a tiny collection
-          of imagined objects, identities, and interfaces. Every illustration is
-          drawn locally with CSS.
+          灵感原野是界面图鉴的原创示例，收集了一些想象中的器物、品牌视觉与界面设计。每一幅插画都由 CSS 在本地绘制。
         </p>
         <p>
-          Try a filter, keep a favorite, open a detail, or add a field note.
-          This is a local study, so your changes live only in this preview
-          session.
+          试着切换分类、收藏心头好、查看作品详情，或添加一页原野手记。这里是一处本地设计试验，你的更改仅在本次预览中保留。
         </p>
         <button
           className="add-button"
           onClick={() => aboutDialog.current?.close()}
         >
-          Back to the good things
+          回到美好事物中
           <Icon name="arrow" size={16} />
         </button>
       </dialog>

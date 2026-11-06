@@ -33,7 +33,7 @@ async function directory(root, cwd, name) {
   return absolute
 }
 
-/** The browser and launcher share catalog.json; runtime state never replaces it. */
+/** 浏览器与启动器共用 catalog.json，运行状态不覆盖这份权威配置。 */
 export async function servicesFromCatalog(catalog, root) {
   requireValue(catalog && catalog.version === 1, 'catalog.version 必须是 1')
   requireValue(catalog.shell && Array.isArray(catalog.projects), '需要 shell 和 projects 数组')
@@ -41,7 +41,7 @@ export async function servicesFromCatalog(catalog, root) {
   requirePort(catalog.shell.port, 'shell.port', ports)
   localUrl(catalog.shell.url, catalog.shell.port, 'shell.url')
   const services = [{
-    id: 'atlas', title: 'UI Atlas', cwd: await directory(root, 'apps/atlas', '画布'),
+    id: 'atlas', title: '界面图鉴', cwd: await directory(root, 'apps/atlas', '画布'),
     command: ['pnpm', 'dev'], port: catalog.shell.port, url: catalog.shell.url,
   }]
   const ids = new Set()
@@ -135,7 +135,7 @@ function signalGroup(child, signal) {
   }
 }
 
-/** Signal our own process groups, including grandchildren left by package managers. */
+/** 只向本次启动的进程组发送信号，同时清理包管理器遗留的孙进程。 */
 async function stopGroups(children, graceMs) {
   for (const child of children) signalGroup(child, 'SIGTERM')
   const deadline = Date.now() + graceMs
@@ -149,7 +149,7 @@ async function stopGroups(children, graceMs) {
   ))
 }
 
-/** Stays alive after HTTP readiness; resolves only after an intentional stop. */
+/** HTTP 就绪后持续运行，仅在主动停止后结束。 */
 export async function runServices(services, { signal, timeoutMs = 30000, shutdownGraceMs = 1500, stdio = 'inherit', onReady = () => {}, log = console.log } = {}) {
   if (signal?.aborted) return
   await assertPortsAvailable(services)

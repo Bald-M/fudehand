@@ -81,9 +81,9 @@ h3 {
 .brand {
   display: flex;
   align-items: center;
-  font-family: Georgia, serif;
+  font-family: Georgia, "Songti SC", "STSong", serif;
   font-size: 37px;
-  letter-spacing: -2px;
+  letter-spacing: 1px;
   gap: 10px;
   font-weight: 400;
 }
@@ -361,8 +361,8 @@ h1 {
   min-height: 222px;
 }
 .small-label {
-  font-size: 8px;
-  letter-spacing: 1.7px;
+  font-size: 9px;
+  letter-spacing: 0.8px;
   color: #77866d;
   font-weight: 500;
 }
@@ -525,7 +525,7 @@ h1 {
 .thought-number {
   font-size: 9px;
   color: #9ca38e;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.8px;
   margin-left: auto;
 }
 .content-footer {
@@ -535,7 +535,7 @@ h1 {
   padding: 26px 0;
   color: #8f9785;
   font-size: 8px;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.8px;
 }
 .footer-leaf {
   display: inline-flex;
@@ -747,8 +747,8 @@ h1 {
   padding: 22px 0;
 }
 .desktop .small-label {
-  font-size: 7px;
-  letter-spacing: 1.3px;
+  font-size: 8px;
+  letter-spacing: 0.8px;
 }
 .date-strip {
   display: flex;
@@ -841,8 +841,8 @@ h1 {
   gap: 10px;
 }
 .mobile .eyebrow {
-  font-size: 8px;
-  letter-spacing: 1.8px;
+  font-size: 9px;
+  letter-spacing: 1px;
   gap: 12px;
 }
 .mobile .greeting-rule {
@@ -897,8 +897,8 @@ h1 {
   margin: 7px 0 15px;
 }
 .mobile .focus-card .small-label {
-  font-size: 6px;
-  letter-spacing: 1.4px;
+  font-size: 8px;
+  letter-spacing: 0.8px;
 }
 .mobile .focus-card button {
   font-size: 8px;
@@ -1091,7 +1091,7 @@ h1 {
   margin: 6px 0 0;
 }
 .task-dialog .small-label {
-  font-size: 7px;
+  font-size: 8px;
 }
 .task-dialog .icon-button {
   margin-right: -8px;

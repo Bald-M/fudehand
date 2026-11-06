@@ -7,10 +7,10 @@
   "projects": [
     {
       "id": "still",
-      "title": "Still",
+      "title": "留白",
       "subtitle": "日常，留一点白。",
       "description": "一个安静的日常计划工具。探索相同设计语言在移动应用、网页与桌面工作台上的表达。",
-      "author": "UI Atlas · 原创演示",
+      "author": "界面图鉴 · 原创演示",
       "sourceUrl": null,
       "framework": "Vue 3",
       "tags": [
@@ -52,7 +52,7 @@
         },
         {
           "id": "desktop",
-          "title": "工作空间 / PC 端",
+          "title": "工作空间 / 桌面端",
           "platform": "desktop",
           "path": "/?view=desktop",
           "width": 1280,
@@ -64,10 +64,10 @@
     },
     {
       "id": "form",
-      "title": "Form & Field",
+      "title": "灵感原野",
       "subtitle": "让想法，自由生长。",
       "description": "一个小小的 React 灵感收集器。用筛选、收藏与详情面板，展示独立技术栈如何进入同一张学习画布。",
-      "author": "UI Atlas · 原创演示",
+      "author": "界面图鉴 · 原创演示",
       "sourceUrl": null,
       "framework": "React",
       "tags": [

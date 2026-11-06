@@ -47,7 +47,7 @@ const sourceUrl = computed(() => {
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
   } catch { return null }
 })
-const platformName: Record<string, string> = { mobile: '移动端', web: '网页端', desktop: 'PC 端' }
+const platformName: Record<string, string> = { mobile: '移动端', web: '网页端', desktop: '桌面端' }
 const dotStyle = computed(() => ({ backgroundPosition: `${viewport.value.x}px ${viewport.value.y}px`, backgroundSize: `${24 * viewport.value.scale}px ${24 * viewport.value.scale}px` }))
 
 function point(event: PointerEvent | WheelEvent): Point {
@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
   <div class="workspace">
     <button v-if="sidebarOpen" class="sidebar-scrim" aria-label="关闭作品列表" @click="sidebarOpen = false" />
     <aside class="sidebar" :class="{ 'is-open': sidebarOpen }" aria-label="作品资料库">
-      <a class="brand" href="/" aria-label="UI Atlas 首页"><span class="brand-mark"><i /><i /><i /><i /></span><span>UI Atlas<span class="brand-dot">.</span></span><span class="local-badge">LOCAL</span></a>
+      <a class="brand" href="/" aria-label="界面图鉴 首页"><span class="brand-mark"><i /><i /><i /><i /></span><span>界面图鉴<span class="brand-dot">.</span></span><span class="local-badge">本地</span></a>
       <div class="library-label"><span>你的设计观察室</span><span class="tiny-dot" /></div>
       <label class="search-box"><Icon name="search" :size="16" /><input ref="searchInput" v-model="query" type="search" placeholder="搜索作品、技术栈…" aria-label="搜索作品" /><kbd>/</kbd></label>
       <div class="section-heading"><span>作品收藏</span><span>{{ String(projects.length).padStart(2, '0') }}</span></div>
@@ -261,7 +261,7 @@ onBeforeUnmount(() => {
         <div class="section-heading"><span>关于这个作品</span><Icon name="book" :size="14" /></div>
         <p>{{ current.description }}</p>
         <div class="detail-tags"><span v-for="tag in current.tags" :key="tag">{{ tag }}</span></div>
-        <div class="author-row"><span class="avatar">A</span><div><strong>{{ current.author }}</strong><small>{{ sourceUrl ? '设计参考' : '原创演示 · 本地模拟数据' }}</small></div></div>
+        <div class="author-row"><span class="avatar">图</span><div><strong>{{ current.author }}</strong><small>{{ sourceUrl ? '设计参考' : '原创演示 · 本地模拟数据' }}</small></div></div>
         <a v-if="sourceUrl" class="source-link" :href="sourceUrl" target="_blank" rel="noopener noreferrer">查看原作 <Icon name="arrow" :size="14" /></a>
         <div class="source-path"><Icon name="folder" :size="14" /><code>{{ current.preview.cwd }}</code></div>
       </div>
@@ -281,8 +281,8 @@ onBeforeUnmount(() => {
         <button class="text-button reset-button" :disabled="!current" title="恢复配置中的初始位置和视角" @click="resetLayout"><Icon name="reset" :size="15" /><span>恢复默认布局</span></button>
       </div>
 
-      <div ref="canvas" class="canvas" :class="{ 'is-grabbing': dragging, 'space-held': spaceHeld, 'is-interacting': interactionFrame }" :style="dotStyle" tabindex="0" aria-label="UI 作品画布。拖动平移，Ctrl 或 Command 加滚轮缩放。" @pointerdown="startCanvasDrag" @pointermove="onPointerMove" @pointerup="finishDrag" @pointercancel="finishDrag" @lostpointercapture="finishDrag" @wheel.prevent="onWheel">
-        <div v-if="current" class="canvas-watermark"><span class="watermark-line" /><span>{{ current.title.toUpperCase() }} / DESIGN EXPLORATION</span></div>
+      <div ref="canvas" class="canvas" :class="{ 'is-grabbing': dragging, 'space-held': spaceHeld, 'is-interacting': interactionFrame }" :style="dotStyle" tabindex="0" aria-label="界面作品画布。拖动平移，Ctrl 或 Command 加滚轮缩放。" @pointerdown="startCanvasDrag" @pointermove="onPointerMove" @pointerup="finishDrag" @pointercancel="finishDrag" @lostpointercapture="finishDrag" @wheel.prevent="onWheel">
+        <div v-if="current" class="canvas-watermark"><span class="watermark-line" /><span>{{ current.title.toUpperCase() }} / 设计探索</span></div>
         <div v-if="current" :key="current.id" class="world" :style="worldStyle">
           <section v-for="frame in current.frames" :key="current.id + ':' + frame.id" class="preview-frame" :class="{ 'is-selected': frame.id === selectedFrame, 'is-live': interactionFrame === frame.id }" :style="{ left: position(frame).x + 'px', top: position(frame).y + 'px', width: frame.width + 'px' }" :aria-label="frame.title">
             <div class="frame-header" tabindex="0" :aria-label="frame.title + '，方向键移动，双击聚焦'" @pointerdown="startFrameDrag($event, frame)" @dblclick="focusFrame(frame)" @keydown="frameKey($event, frame)">
@@ -303,8 +303,8 @@ onBeforeUnmount(() => {
         <div v-if="current" class="frame-tabs" aria-label="定位画框"><button class="all-frames" title="适应全部画框" @click="fitAll"><Icon name="fit" :size="15" /><span>全部画框</span></button><span class="tab-divider" /><button v-for="frame in current.frames" :key="frame.id" :class="{ active: selectedFrame === frame.id }" @click="focusFrame(frame)"><Icon :name="frame.platform" :size="15" /><span>{{ platformName[frame.platform] || frame.platform }}</span></button></div>
         <div class="zoom-control"><button class="icon-button" aria-label="缩小画布" :disabled="!current || viewport.scale <= 0.1" @click="changeZoom(viewport.scale / 1.2)"><Icon name="minus" :size="16" /></button><button class="zoom-number" :disabled="!current" title="恢复 100% 缩放" aria-label="恢复百分之百缩放" @click="changeZoom(1)">{{ zoomLabel }}</button><button class="icon-button" aria-label="放大画布" :disabled="!current || viewport.scale >= 2" @click="changeZoom(viewport.scale * 1.2)"><Icon name="plus" :size="16" /></button><span class="tab-divider" /><button class="icon-button" aria-label="适应全部画框" :disabled="!current" @click="fitAll"><Icon name="fit" :size="17" /></button></div>
       </div>
-      <footer class="workspace-footer"><span><span class="footer-dot" />{{ enabledCount }} 个本地作品 · 独立视口</span><span class="shortcut-hint"><kbd>Space</kbd> 拖动画布 <span>·</span> <kbd>⌘ / Ctrl</kbd> + 滚轮缩放 <span>·</span> 双击画框进入交互</span><span class="footer-wordmark">A SPACE FOR GOOD DESIGN</span></footer>
+      <footer class="workspace-footer"><span><span class="footer-dot" />{{ enabledCount }} 个本地作品 · 独立视口</span><span class="shortcut-hint"><kbd>空格</kbd> 拖动画布 <span>·</span> <kbd>⌘ / Ctrl</kbd> + 滚轮缩放 <span>·</span> 双击画框进入交互</span><span class="footer-wordmark">给好设计，留一方空间</span></footer>
     </main>
-    <div v-if="helpOpen" class="help-popover" role="dialog" aria-label="画布操作说明"><div><strong>自在浏览，深入观察。</strong><button class="icon-button" aria-label="关闭操作说明" @click="helpOpen = false"><Icon name="close" :size="16" /></button></div><dl><dt>移动画布</dt><dd>拖动空白处，或按住 Space 拖动</dd><dt>缩放画布</dt><dd>⌘ / Ctrl + 滚轮，或底部缩放按钮</dd><dt>移动画框</dt><dd>拖动标题栏，或聚焦标题栏后按方向键</dd><dt>聚焦画框</dt><dd>双击标题栏，或点击底部设备标签</dd><dt>操作案例</dt><dd>点击交互按钮，或双击画框内容</dd><dt>返回浏览</dt><dd>点击“退出交互”；接入快捷键的案例支持 Esc</dd></dl><p>画框尺寸以 CSS 像素计；预览不等同于真实设备模拟。</p></div>
+    <div v-if="helpOpen" class="help-popover" role="dialog" aria-label="画布操作说明"><div><strong>自在浏览，深入观察。</strong><button class="icon-button" aria-label="关闭操作说明" @click="helpOpen = false"><Icon name="close" :size="16" /></button></div><dl><dt>移动画布</dt><dd>拖动空白处，或按住空格键拖动</dd><dt>缩放画布</dt><dd>⌘ / Ctrl + 滚轮，或底部缩放按钮</dd><dt>移动画框</dt><dd>拖动标题栏，或聚焦标题栏后按方向键</dd><dt>聚焦画框</dt><dd>双击标题栏，或点击底部设备标签</dd><dt>操作案例</dt><dd>点击交互按钮，或双击画框内容</dd><dt>返回浏览</dt><dd>点击“退出交互”；接入快捷键的案例支持 Esc</dd></dl><p>画框尺寸以 CSS 像素计；预览不等同于真实设备模拟。</p></div>
   </div>
 </template>

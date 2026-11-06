@@ -1,6 +1,6 @@
 /**
- * Connect a trusted local preview to UI Atlas. Pass the shell origin explicitly
- * if its host or port changes. The returned function removes the listener.
+ * 将可信的本地预览连接到界面图鉴。外壳主机名或端口改变时，需显式传入来源地址。
+ * 返回的函数用于移除监听器。
  */
 export function installPreviewBridge(
   shellOrigin = "http://127.0.0.1:4400",

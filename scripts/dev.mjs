@@ -10,10 +10,10 @@ try {
   const services = await readServices(root)
   await runServices(services, {
     signal: controller.signal,
-    onReady: () => console.log(`\nUI Atlas 已就绪 → ${services[0].url}\n已启动 ${services.length - 1} 个案例。按 Ctrl+C 统一停止。\n`),
+    onReady: () => console.log(`\n界面图鉴 已就绪 → ${services[0].url}\n已启动 ${services.length - 1} 个案例。按 Ctrl+C 统一停止。\n`),
   })
 } catch (error) {
-  console.error(`\n[UI Atlas] ${error instanceof Error ? error.message : String(error)}\n`)
+  console.error(`\n[界面图鉴] ${error instanceof Error ? error.message : String(error)}\n`)
   process.exitCode = 1
 } finally {
   process.removeListener('SIGINT', stop)

@@ -40,7 +40,7 @@ const tasks = ref<Task[]>([
   },
   {
     id: 3,
-    title: "为 Still 画出下一张草图",
+    title: "为留白画出下一张草图",
     category: "工作",
     time: "14:00",
     done: false,
@@ -120,9 +120,9 @@ function selectList(name: string) {
 <template>
   <div class="still-app" :class="view">
     <aside v-if="view === 'desktop'" class="desktop-sidebar">
-      <a class="brand" href="?view=desktop" aria-label="Still 首页"
+      <a class="brand" href="?view=desktop" aria-label="留白首页"
         ><span class="brand-mark"><Icon name="leaf" :size="21" /></span
-        >still<span class="brand-dot">.</span></a
+        >留白<span class="brand-dot">.</span></a
       >
       <div class="workspace-label">个人工作空间 <span>⌄</span></div>
       <nav aria-label="工作空间导航">
@@ -144,14 +144,14 @@ function selectList(name: string) {
         </button>
       </nav>
       <div class="sidebar-note">
-        <span class="small-label">A LITTLE REMINDER</span>
+        <span class="small-label">给自己的小提醒</span>
         <p>慢慢来，<br />也会走得很远。</p>
         <div class="note-sprout" aria-hidden="true">
           <span></span><i></i><b></b>
         </div>
       </div>
       <button class="sidebar-profile" @click="selectList('生活清单')">
-        <span class="avatar">Y</span
+        <span class="avatar">你</span
         ><span>你的日常<small>留白练习者</small></span
         ><Icon name="more" :size="18" />
       </button>
@@ -167,9 +167,9 @@ function selectList(name: string) {
           v-if="view === 'web'"
           class="brand"
           href="?view=web"
-          aria-label="Still 首页"
+          aria-label="留白首页"
           ><span class="brand-mark"><Icon name="leaf" :size="21" /></span
-          >still<span class="brand-dot">.</span></a
+          >留白<span class="brand-dot">.</span></a
         >
         <span v-else class="breadcrumb"
           >工作空间 <span>/</span> {{ activeList }}</span
@@ -186,14 +186,17 @@ function selectList(name: string) {
         </nav>
         <div class="topbar-right">
           <span class="weather"><Icon name="sun" :size="17" />22°，晴</span
-          ><span class="avatar">Y</span>
+          ><span class="avatar">你</span>
         </div>
       </header>
       <section class="app-content">
         <header class="greeting">
           <div>
             <div class="eyebrow">
-              <span v-if="view === 'mobile'">HELLO, FRIDAY</span
+              <span v-if="view === 'mobile'"
+                >你好，星期{{
+                  week.find((day) => day.date === selectedDay)?.day
+                }}</span
               ><span v-else
                 >2026 年 11 月 {{ selectedDay }} 日 · 星期{{
                   week.find((day) => day.date === selectedDay)?.day
@@ -209,7 +212,7 @@ function selectList(name: string) {
             aria-label="打开生活清单"
             @click="selectList('生活清单')"
           >
-            Y
+            你
           </button>
           <button v-else class="new-task" @click="openTaskDialog">
             <Icon name="plus" :size="18" />记一件小事
@@ -308,7 +311,7 @@ function selectList(name: string) {
             <section class="focus-card" :class="{ focusing: focusActive }">
               <div class="focus-card-copy">
                 <span class="small-label">{{
-                  focusActive ? "JUST THIS MOMENT" : "A MOMENT FOR YOURSELF"
+                  focusActive ? "此刻，只专注眼前" : "留一点时间给自己"
                 }}</span>
                 <h2>
                   {{
@@ -335,7 +338,7 @@ function selectList(name: string) {
             <section class="weekly-card">
               <div class="weekly-top">
                 <div>
-                  <span class="small-label">YOUR LITTLE PROGRESS</span>
+                  <span class="small-label">每一点进步，都算数</span>
                   <h2>一周的，小小积累</h2>
                 </div>
                 <Icon name="chart" :size="19" />
@@ -363,15 +366,15 @@ function selectList(name: string) {
         <section v-if="view !== 'mobile'" class="thought-card">
           <span class="thought-icon"><Icon name="note" :size="23" /></span>
           <div>
-            <span class="small-label">TODAY'S THOUGHT</span>
+            <span class="small-label">今日随想</span>
             <p>“生活不在于拥有多少，而在于感受到多少。”</p>
           </div>
-          <span class="thought-number">NO. 006</span>
+          <span class="thought-number">第六则</span>
         </section>
         <footer class="content-footer">
           <span class="footer-leaf"
             ><Icon name="leaf" :size="14" />一点留白，让日常呼吸。</span
-          ><span v-if="view !== 'mobile'">MADE FOR A SLOWER EVERYDAY</span>
+          ><span v-if="view !== 'mobile'">让每一天，慢下来</span>
         </footer>
       </section>
       <nav
@@ -405,7 +408,7 @@ function selectList(name: string) {
     >
       <form @submit.prevent="addTask">
         <div class="dialog-top">
-          <span class="small-label">MAKE A LITTLE ROOM</span
+          <span class="small-label">为小事留一点空间</span
           ><button
             type="button"
             class="icon-button"

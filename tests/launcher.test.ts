@@ -19,7 +19,7 @@ async function httpServer(handler: RequestListener) {
   const server = createServer(handler)
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('No test port')
+  if (!address || typeof address === 'string') throw new Error('未获得测试端口')
   cleanup.push(async () => {
     server.closeAllConnections()
     await new Promise<void>(resolve => server.close(() => resolve()))
@@ -31,7 +31,7 @@ async function unusedPort() {
   const server = createServer()
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('No test port')
+  if (!address || typeof address === 'string') throw new Error('未获得测试端口')
   await new Promise<void>(resolve => server.close(() => resolve()))
   return address.port
 }
@@ -59,14 +59,14 @@ async function fixture(wait = 0, mode = 'normal') {
   const port = await unusedPort()
   return {
     marker, script,
-    service: { id: 'fixture', title: 'Fixture', cwd, command: [process.execPath, script, String(port), marker, String(wait), mode], port, url: `http://127.0.0.1:${port}/` },
+    service: { id: 'fixture', title: '测试样例', cwd, command: [process.execPath, script, String(port), marker, String(wait), mode], port, url: `http://127.0.0.1:${port}/` },
   }
 }
 
 function supervised(services: object[], options: Record<string, unknown> = {}) {
   const controller = new AbortController()
   const result = runServices(services, { signal: controller.signal, stdio: 'ignore', log: () => {}, shutdownGraceMs: 100, ...options })
-  // Attach a handler immediately: assertions may first wait for fixture readiness.
+  // 立即注册处理器：断言可能需要先等待测试样例就绪。
   void result.catch(() => {})
   cleanup.push(async () => { controller.abort(); await result.catch(() => {}) })
   return { controller, result }
@@ -79,15 +79,15 @@ async function fixtureCatalog() {
   return { cwd, catalog: {
     version: 1,
     shell: { port: 31001, url: 'http://127.0.0.1:31001/' },
-    projects: [{ id: 'demo', title: 'Demo', subtitle: '', description: '', author: 'Original', sourceUrl: null as string | null, framework: 'HTML', tags: ['demo'], enabled: true, layoutVersion: 1,
+    projects: [{ id: 'demo', title: '演示作品', subtitle: '', description: '', author: '原创作者', sourceUrl: null as string | null, framework: 'HTML', tags: ['演示'], enabled: true, layoutVersion: 1,
       preview: { cwd: 'examples/demo', command: [process.execPath, 'dev.mjs'], port: 31002, baseUrl: 'http://127.0.0.1:31002/demo/' },
-      frames: [{ id: 'home', title: 'Home', platform: 'web', path: 'home', width: 1440, height: 900, x: 0, y: 0 }],
+      frames: [{ id: 'home', title: '首页', platform: 'web', path: 'home', width: 1440, height: 900, x: 0, y: 0 }],
     }],
   } }
 }
 
-describe('catalog and local services', () => {
-  it('keeps enabled projects independent and supports an empty gallery', async () => {
+describe('作品目录与本地服务', () => {
+  it('保持已启用作品相互独立，并支持空作品集', async () => {
     const { cwd, catalog } = await fixtureCatalog()
     const services = await servicesFromCatalog(catalog, cwd)
     expect(services.map((service: { id: string }) => service.id)).toEqual(['atlas', 'demo'])
@@ -98,7 +98,7 @@ describe('catalog and local services', () => {
     expect(await servicesFromCatalog(catalog, cwd)).toHaveLength(1)
   })
 
-  it('rejects duplicate ports, off-machine URLs, invalid geometry and escaping directories', async () => {
+  it('拒绝重复端口、非本机地址、无效几何数据和越界目录', async () => {
     const { cwd, catalog } = await fixtureCatalog()
     const duplicate = structuredClone(catalog)
     duplicate.projects[0].preview.port = 31001
@@ -125,21 +125,21 @@ describe('catalog and local services', () => {
     await expect(servicesFromCatalog(frame, cwd)).rejects.toThrow('本地预览服务')
   })
 
-  it('reports an occupied port without disturbing its existing server', async () => {
+  it('报告端口占用，并保持既有服务正常运行', async () => {
     const occupied = await httpServer((_request, response) => response.end('existing'))
-    const service = { title: 'Already running', port: occupied.port, url: occupied.url }
+    const service = { title: '已在运行的服务', port: occupied.port, url: occupied.url }
     await expect(assertPortsAvailable([service])).rejects.toThrow(`端口 ${occupied.port}`)
     expect(await (await fetch(occupied.url)).text()).toBe('existing')
   })
 
-  it('waits for HTTP success, not just an open socket', async () => {
+  it('等待 HTTP 成功响应，开放套接字不足以判定就绪', async () => {
     const readyAt = Date.now() + 120
     const endpoint = await httpServer((_request, response) => { response.writeHead(Date.now() < readyAt ? 503 : 200); response.end() })
     await waitForHttp(endpoint.url, { timeoutMs: 1000, intervalMs: 15 })
     expect(Date.now()).toBeGreaterThanOrEqual(readyAt)
   })
 
-  it('times out unhealthy HTTP and cancels a pending request promptly', async () => {
+  it('对异常 HTTP 响应超时退出，并及时取消挂起的请求', async () => {
     const unhealthy = await httpServer((_request, response) => { response.writeHead(503); response.end() })
     await expect(waitForHttp(unhealthy.url, { timeoutMs: 90, intervalMs: 10 })).rejects.toThrow('HTTP 503')
     const hanging = await httpServer(() => {})
@@ -151,7 +151,7 @@ describe('catalog and local services', () => {
     expect(Date.now() - startedAt).toBeLessThan(1000)
   })
 
-  it('starts a real child, announces readiness and releases its port on stop', async () => {
+  it('启动真实子进程，通知就绪，并在停止后释放端口', async () => {
     const { service, marker } = await fixture(80)
     let ready = false
     const { controller, result } = supervised([service], { onReady: () => { ready = true } })
@@ -165,19 +165,19 @@ describe('catalog and local services', () => {
     expect(() => process.kill(pid, 0)).toThrow()
   })
 
-  it('cleans up a child when its HTTP readiness never becomes successful', async () => {
+  it('子进程的 HTTP 就绪检查始终未成功时将其清理', async () => {
     const { service } = await fixture(10000)
     const { result } = supervised([service], { timeoutMs: 250 })
     await expect(result).rejects.toThrow('启动超时')
     await expect(assertPortsAvailable([service])).resolves.toBeUndefined()
   })
 
-  it('cancels other HTTP waits immediately if one service exits', async () => {
+  it('一个服务退出后立即取消其余 HTTP 等待', async () => {
     const healthy = await fixture()
     const failing = await fixture()
     failing.service.command = [process.execPath, '-e', 'setTimeout(() => process.exit(23), 120)']
     failing.service.id = 'failing'
-    failing.service.title = 'Failing fixture'
+    failing.service.title = '失败测试样例'
     const startedAt = Date.now()
     const { result } = supervised([healthy.service, failing.service], { timeoutMs: 5000 })
     await expect(result).rejects.toThrow('意外退出')
@@ -185,7 +185,7 @@ describe('catalog and local services', () => {
     await expect(assertPortsAvailable([healthy.service])).resolves.toBeUndefined()
   })
 
-  it('cleans the full process group, including a grandchild that ignores TERM', async () => {
+  it('清理整个进程组，包括忽略 TERM 信号的孙进程', async () => {
     const nested = await fixture(0, 'ignore')
     const parentScript = join(nested.service.cwd, 'parent.mjs')
     await writeFile(parentScript, `import { spawn } from 'node:child_process'; spawn(process.execPath, process.argv.slice(2), { stdio: 'ignore' }); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`)

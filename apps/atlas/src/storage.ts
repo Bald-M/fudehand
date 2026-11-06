@@ -13,10 +13,10 @@ export function readJson(storage: StorageLike | undefined, key: string): unknown
   try { const raw = storage?.getItem(PREFIX + key); return raw ? JSON.parse(raw) : null } catch { return null }
 }
 export function writeJson(storage: StorageLike | undefined, key: string, value: unknown) {
-  try { storage?.setItem(PREFIX + key, JSON.stringify(value)) } catch { /* Browsing still works when storage is unavailable. */ }
+  try { storage?.setItem(PREFIX + key, JSON.stringify(value)) } catch { /* 存储不可用时仍可正常浏览。 */ }
 }
 export function clearLayout(storage: StorageLike | undefined, id: string) {
-  try { storage?.removeItem(PREFIX + 'layout:' + id) } catch { /* Reset also works for this session. */ }
+  try { storage?.removeItem(PREFIX + 'layout:' + id) } catch { /* 当前会话仍可恢复默认布局。 */ }
 }
 export function defaultPositions(project: Project): Record<string, Point> {
   return Object.fromEntries(project.frames.map(frame => [frame.id, { x: frame.x, y: frame.y }]))

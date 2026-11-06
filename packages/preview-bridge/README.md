@@ -1,12 +1,12 @@
-# Preview bridge
+# 预览通信桥
 
-This tiny workspace package lets Escape return focus from a trusted local iframe to the Atlas canvas.
+这个轻量工作区包让 Esc 键可以将焦点从可信的本地 iframe 返回界面图鉴画布。
 
 ```ts
 import { installPreviewBridge } from "@ui-atlas/preview-bridge";
 const cleanup = installPreviewBridge("http://127.0.0.1:4400");
 ```
 
-Pass the exact shell origin when changing its host or port. Both built-in cases read it from `catalog.json`. The bridge does nothing outside an iframe. It sends only `{ type: 'ui-atlas:exit-preview' }` to that exact origin; the shell must also check the message's origin and source window. The visible shell exit button works without this bridge. A case can call `event.preventDefault()` on Escape before the window listener if it needs to consume that key locally.
+更改外壳的主机名或端口时，需传入准确的外壳来源地址。两个内置案例都从 `catalog.json` 读取该地址。通信桥仅在 iframe 内生效，只向指定来源发送 `{ type: 'ui-atlas:exit-preview' }`；外壳还必须检查消息的来源与来源窗口。外壳中始终可见的退出按钮无需此通信桥即可使用。如果案例需要自行处理 Esc，可以在窗口监听器执行前调用 `event.preventDefault()`。
 
-When a native `<dialog>` is open, Escape is left to the dialog so the browser can close it before the preview exits. After the dialog closes, a subsequent Escape returns to the canvas.
+原生 `<dialog>` 打开时，Esc 留给弹窗处理，让浏览器先关闭弹窗。弹窗关闭后，再次按下 Esc 才会返回画布。

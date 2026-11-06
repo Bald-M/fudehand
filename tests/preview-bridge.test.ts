@@ -23,8 +23,8 @@ function previewEnvironment() {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("preview Escape bridge", () => {
-  it("leaves the first Escape to an open native dialog, then exits after it closes", () => {
+describe("预览 Esc 通信桥", () => {
+  it("首次 Esc 交给已打开的原生弹窗处理，关闭后再次按下才退出", () => {
     const environment = previewEnvironment();
     const dialog = { open: true };
     environment.querySelector.mockReturnValue(dialog);
@@ -34,7 +34,7 @@ describe("preview Escape bridge", () => {
     expect(environment.querySelector).toHaveBeenCalledWith("dialog[open]");
     expect(environment.postMessage).not.toHaveBeenCalled();
 
-    // The browser handles dialog cancellation after keydown dispatch.
+    // 浏览器在分发 keydown 事件后处理弹窗取消。
     environment.querySelector.mockReturnValue(null);
     environment.keydown();
     expect(environment.postMessage).toHaveBeenCalledExactlyOnceWith(
@@ -43,7 +43,7 @@ describe("preview Escape bridge", () => {
     );
   });
 
-  it("respects locally consumed Escape and ignores unrelated keys", () => {
+  it("尊重案例已处理的 Esc，并忽略无关按键", () => {
     const environment = previewEnvironment();
     installPreviewBridge();
     environment.keydown("Escape", true);
@@ -52,7 +52,7 @@ describe("preview Escape bridge", () => {
     expect(environment.querySelector).not.toHaveBeenCalled();
   });
 
-  it("targets the configured origin and removes its listener on cleanup", () => {
+  it("向配置的来源发送消息，并在清理时移除监听器", () => {
     const environment = previewEnvironment();
     const cleanup = installPreviewBridge("http://127.0.0.1:5500/canvas");
     environment.keydown();
@@ -69,7 +69,7 @@ describe("preview Escape bridge", () => {
     );
   });
 
-  it("does not intercept keys when the case is opened outside a frame", () => {
+  it("案例在画框外打开时不拦截按键", () => {
     const environment = previewEnvironment();
     Object.assign(environment.iframeWindow, {
       parent: environment.iframeWindow,
