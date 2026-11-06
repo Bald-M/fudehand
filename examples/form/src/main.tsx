@@ -1,68 +1,626 @@
-import { StrictMode, useEffect, useRef, useState } from 'react'
-import { createRoot } from 'react-dom/client'
-import { installPreviewBridge } from '@ui-atlas/preview-bridge'
-import catalog from '../../../catalog.json'
-import './style.css'
+import { StrictMode, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { installPreviewBridge } from "@ui-atlas/preview-bridge";
+import catalog from "../../../catalog.json";
+import "./style.css";
 
-installPreviewBridge(new URL(catalog.shell.url).origin)
+installPreviewBridge(new URL(catalog.shell.url).origin);
 
-type Category = 'Branding' | 'Digital' | 'Objects'
-type Idea = { id: number; title: string; category: Category; author: string; art: string; description: string }
+type Category = "Branding" | "Digital" | "Objects";
+type Idea = {
+  id: number;
+  title: string;
+  category: Category;
+  author: string;
+  art: string;
+  description: string;
+};
 const initialIdeas: Idea[] = [
-  { id: 1, title: 'Quiet objects, considered forms', category: 'Objects', author: 'STUDIO STILL', art: 'objects', description: 'A study in balance, warm materials, and the beauty of leaving a little room. These sculptural forms are drawn entirely with CSS.' },
-  { id: 2, title: 'An ordinary kind of magic', category: 'Branding', author: 'THE EVERYDAY PRESS', art: 'poster', description: 'An editorial identity for noticing the extraordinary in everyday life. A warm red, a confident serif, and a little room to be playful.' },
-  { id: 3, title: 'Modo — less, but better', category: 'Digital', author: 'FORM LAB', art: 'banking', description: 'A small dashboard exploration. Soft hierarchy, deliberate spacing, and one strong accent keep a complex product feeling calm.' },
-  { id: 4, title: 'In very good company', category: 'Branding', author: 'FIELD NOTES', art: 'company', description: 'An identity built around gathering, growing, and finding common ground. A fresh green palette paired with expressive, oversized type.' },
-  { id: 5, title: 'A softer kind of interface', category: 'Digital', author: 'SUNDAY OFFICE', art: 'weather', description: 'A gentle weather interface that makes space for a slower morning. A local illustration composed from gradients and simple shapes.' },
-  { id: 6, title: 'The art of taking a pause', category: 'Objects', author: 'OFFLINE STUDIO', art: 'pause', description: 'A warm, tactile study of arches and light. An imagined object collection for the moments between doing things.' },
-]
-const iconPaths: Record<string, string> = { plus: 'M12 5v14M5 12h14', arrow: 'M5 12h14m-5-5 5 5-5 5', bookmark: 'M6 3h12v18l-6-4-6 4V3Z', search: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6', close: 'm6 6 12 12M6 18 18 6', star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z', check: 'm5 12 4 4L19 6' }
-function Icon({ name, size = 18, filled = false }: { name: string; size?: number; filled?: boolean }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={iconPaths[name] || iconPaths.arrow} /></svg> }
+  {
+    id: 1,
+    title: "Quiet objects, considered forms",
+    category: "Objects",
+    author: "STUDIO STILL",
+    art: "objects",
+    description:
+      "A study in balance, warm materials, and the beauty of leaving a little room. These sculptural forms are drawn entirely with CSS.",
+  },
+  {
+    id: 2,
+    title: "An ordinary kind of magic",
+    category: "Branding",
+    author: "THE EVERYDAY PRESS",
+    art: "poster",
+    description:
+      "An editorial identity for noticing the extraordinary in everyday life. A warm red, a confident serif, and a little room to be playful.",
+  },
+  {
+    id: 3,
+    title: "Modo — less, but better",
+    category: "Digital",
+    author: "FORM LAB",
+    art: "banking",
+    description:
+      "A small dashboard exploration. Soft hierarchy, deliberate spacing, and one strong accent keep a complex product feeling calm.",
+  },
+  {
+    id: 4,
+    title: "In very good company",
+    category: "Branding",
+    author: "FIELD NOTES",
+    art: "company",
+    description:
+      "An identity built around gathering, growing, and finding common ground. A fresh green palette paired with expressive, oversized type.",
+  },
+  {
+    id: 5,
+    title: "A softer kind of interface",
+    category: "Digital",
+    author: "SUNDAY OFFICE",
+    art: "weather",
+    description:
+      "A gentle weather interface that makes space for a slower morning. A local illustration composed from gradients and simple shapes.",
+  },
+  {
+    id: 6,
+    title: "The art of taking a pause",
+    category: "Objects",
+    author: "OFFLINE STUDIO",
+    art: "pause",
+    description:
+      "A warm, tactile study of arches and light. An imagined object collection for the moments between doing things.",
+  },
+];
+const iconPaths: Record<string, string> = {
+  plus: "M12 5v14M5 12h14",
+  arrow: "M5 12h14m-5-5 5 5-5 5",
+  bookmark: "M6 3h12v18l-6-4-6 4V3Z",
+  search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6",
+  close: "m6 6 12 12M6 18 18 6",
+  star: "m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z",
+  check: "m5 12 4 4L19 6",
+};
+function Icon({
+  name,
+  size = 18,
+  filled = false,
+}: {
+  name: string;
+  size?: number;
+  filled?: boolean;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={iconPaths[name] || iconPaths.arrow} />
+    </svg>
+  );
+}
 function Art({ kind }: { kind: string }) {
-  if (kind === 'objects') return <div className="art art-objects" aria-hidden="true"><span className="art-caption">OBJECTS OF EVERYDAY / Nº 01</span><div className="object-shadow" /><div className="vase vase-one" /><div className="vase vase-two" /><div className="object-ball" /><span className="art-foot">A STUDY IN STILLNESS</span></div>
-  if (kind === 'poster') return <div className="art art-poster" aria-hidden="true"><span className="poster-top">THE EVERYDAY PRESS</span><span className="poster-type">An ordinary<br />kind of <i>magic.</i></span><span className="poster-flower">✳</span><span className="poster-foot">GOOD THINGS ARE ALL AROUND US.</span></div>
-  if (kind === 'banking') return <div className="art art-banking" aria-hidden="true"><div className="bank-window"><div className="bank-sidebar"><b>m.</b><i /><i /><i /><i /></div><div className="bank-main"><span>Good morning, Alex <b>↗</b></span><div className="bank-cards"><div><small>Total balance</small><strong>$12,840<span>.00</span></strong><em>↗ 12.8% this month</em></div><div className="bank-purple"><small>Your card</small><strong>modo.</strong><em>•••• 4820</em></div></div><div className="bank-chart"><span>Monthly overview</span><div>{[28, 46, 34, 65, 52, 80, 61, 90, 72, 57, 77, 95].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div></div></div></div></div>
-  if (kind === 'company') return <div className="art art-company" aria-hidden="true"><span className="company-small">GROW SOMETHING GOOD.</span><span className="company-title">in good<br /><i>company.</i></span><span className="company-ring ring-one" /><span className="company-ring ring-two" /><span className="company-foot">A LITTLE MORE TOGETHER.</span></div>
-  if (kind === 'weather') return <div className="art art-weather" aria-hidden="true"><div className="weather-sun" /><div className="weather-cloud" /><div className="weather-ui"><span>Somewhere, slowly.</span><strong>22<span>°</span></strong><span>A little sunshine for your day.</span><div><i>MON<br /><b>21°</b></i><i>TUE<br /><b>23°</b></i><i>WED<br /><b>22°</b></i><i>THU<br /><b>20°</b></i></div></div></div>
-  return <div className="art art-pause" aria-hidden="true"><span className="pause-top">THE OFFLINE COLLECTION</span><div className="pause-arch" /><div className="pause-orb" /><span className="pause-type">Take<br /><i>a pause.</i></span><span className="pause-foot">LESS RUSH. MORE ROOM.</span></div>
+  if (kind === "objects")
+    return (
+      <div className="art art-objects" aria-hidden="true">
+        <span className="art-caption">OBJECTS OF EVERYDAY / Nº 01</span>
+        <div className="object-shadow" />
+        <div className="vase vase-one" />
+        <div className="vase vase-two" />
+        <div className="object-ball" />
+        <span className="art-foot">A STUDY IN STILLNESS</span>
+      </div>
+    );
+  if (kind === "poster")
+    return (
+      <div className="art art-poster" aria-hidden="true">
+        <span className="poster-top">THE EVERYDAY PRESS</span>
+        <span className="poster-type">
+          An ordinary
+          <br />
+          kind of <i>magic.</i>
+        </span>
+        <span className="poster-flower">✳</span>
+        <span className="poster-foot">GOOD THINGS ARE ALL AROUND US.</span>
+      </div>
+    );
+  if (kind === "banking")
+    return (
+      <div className="art art-banking" aria-hidden="true">
+        <div className="bank-window">
+          <div className="bank-sidebar">
+            <b>m.</b>
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="bank-main">
+            <span>
+              Good morning, Alex <b>↗</b>
+            </span>
+            <div className="bank-cards">
+              <div>
+                <small>Total balance</small>
+                <strong>
+                  $12,840<span>.00</span>
+                </strong>
+                <em>↗ 12.8% this month</em>
+              </div>
+              <div className="bank-purple">
+                <small>Your card</small>
+                <strong>modo.</strong>
+                <em>•••• 4820</em>
+              </div>
+            </div>
+            <div className="bank-chart">
+              <span>Monthly overview</span>
+              <div>
+                {[28, 46, 34, 65, 52, 80, 61, 90, 72, 57, 77, 95].map(
+                  (height, index) => (
+                    <i key={index} style={{ height: `${height}%` }} />
+                  ),
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  if (kind === "company")
+    return (
+      <div className="art art-company" aria-hidden="true">
+        <span className="company-small">GROW SOMETHING GOOD.</span>
+        <span className="company-title">
+          in good
+          <br />
+          <i>company.</i>
+        </span>
+        <span className="company-ring ring-one" />
+        <span className="company-ring ring-two" />
+        <span className="company-foot">A LITTLE MORE TOGETHER.</span>
+      </div>
+    );
+  if (kind === "weather")
+    return (
+      <div className="art art-weather" aria-hidden="true">
+        <div className="weather-sun" />
+        <div className="weather-cloud" />
+        <div className="weather-ui">
+          <span>Somewhere, slowly.</span>
+          <strong>
+            22<span>°</span>
+          </strong>
+          <span>A little sunshine for your day.</span>
+          <div>
+            <i>
+              MON
+              <br />
+              <b>21°</b>
+            </i>
+            <i>
+              TUE
+              <br />
+              <b>23°</b>
+            </i>
+            <i>
+              WED
+              <br />
+              <b>22°</b>
+            </i>
+            <i>
+              THU
+              <br />
+              <b>20°</b>
+            </i>
+          </div>
+        </div>
+      </div>
+    );
+  return (
+    <div className="art art-pause" aria-hidden="true">
+      <span className="pause-top">THE OFFLINE COLLECTION</span>
+      <div className="pause-arch" />
+      <div className="pause-orb" />
+      <span className="pause-type">
+        Take
+        <br />
+        <i>a pause.</i>
+      </span>
+      <span className="pause-foot">LESS RUSH. MORE ROOM.</span>
+    </div>
+  );
 }
 function App() {
-  const [ideas, setIdeas] = useState(initialIdeas)
-  const [filter, setFilter] = useState('All ideas')
-  const [query, setQuery] = useState('')
-  const [saved, setSaved] = useState<number[]>([2, 4])
-  const [selected, setSelected] = useState<Idea | null>(null)
-  const [newTitle, setNewTitle] = useState('')
-  const [newCategory, setNewCategory] = useState<Category>('Digital')
-  const [formError, setFormError] = useState('')
-  const detailDialog = useRef<HTMLDialogElement>(null)
-  const addDialog = useRef<HTMLDialogElement>(null)
-  const aboutDialog = useRef<HTMLDialogElement>(null)
-  const newTitleInput = useRef<HTMLInputElement>(null)
-  const visible = ideas.filter(idea => (filter === 'All ideas' || filter === 'Saved' && saved.includes(idea.id) || idea.category === filter) && `${idea.title} ${idea.author} ${idea.category}`.toLowerCase().includes(query.toLowerCase()))
-  useEffect(() => { if (selected) detailDialog.current?.showModal() }, [selected])
-  function toggleSaved(id: number) { setSaved(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]) }
-  function openAdd() { setNewTitle(''); setFormError(''); addDialog.current?.showModal(); newTitleInput.current?.focus() }
-  function addIdea(event: React.SubmitEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!newTitle.trim()) { setFormError('Give your idea a name to keep it here.'); newTitleInput.current?.focus(); return }
-    setIdeas(previous => [{ id: Date.now(), title: newTitle.trim(), category: newCategory, author: 'YOUR FIELD NOTES', art: newCategory === 'Objects' ? 'objects' : newCategory === 'Branding' ? 'company' : 'weather', description: 'Your newest field note. A little idea worth keeping, ready to grow into something good.' }, ...previous])
-    setFilter('All ideas'); setQuery(''); addDialog.current?.close()
+  const [ideas, setIdeas] = useState(initialIdeas);
+  const [filter, setFilter] = useState("All ideas");
+  const [query, setQuery] = useState("");
+  const [saved, setSaved] = useState<number[]>([2, 4]);
+  const [selected, setSelected] = useState<Idea | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState<Category>("Digital");
+  const [formError, setFormError] = useState("");
+  const detailDialog = useRef<HTMLDialogElement>(null);
+  const addDialog = useRef<HTMLDialogElement>(null);
+  const aboutDialog = useRef<HTMLDialogElement>(null);
+  const newTitleInput = useRef<HTMLInputElement>(null);
+  const visible = ideas.filter(
+    (idea) =>
+      (filter === "All ideas" ||
+        (filter === "Saved" && saved.includes(idea.id)) ||
+        idea.category === filter) &&
+      `${idea.title} ${idea.author} ${idea.category}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+  useEffect(() => {
+    if (selected) detailDialog.current?.showModal();
+  }, [selected]);
+  function toggleSaved(id: number) {
+    setSaved((previous) =>
+      previous.includes(id)
+        ? previous.filter((value) => value !== id)
+        : [...previous, id],
+    );
   }
-  return <div className="field-app">
-    <header className="site-header"><a href="/" className="brand" aria-label="Form and Field home">form<span>&</span>field<span className="brand-dot">®</span></a><nav aria-label="Main navigation"><button className="nav-active" onClick={() => { setFilter('All ideas'); setQuery('') }}>My collection</button><button onClick={() => aboutDialog.current?.showModal()}>A little about this space <span>↗</span></button></nav><div className="header-actions"><button className="saved-toggle" aria-label={`Show ${saved.length} saved ideas`} onClick={() => setFilter('Saved')}><Icon name="bookmark" /><span>{saved.length}</span></button><button className="add-button" onClick={openAdd}><Icon name="plus" size={16} />Add an idea</button><span className="profile-avatar" aria-label="Personal collection">Y</span></div></header>
-    <main>
-      <section className="intro"><div><p className="eyebrow"><span />A PERSONAL COLLECTION OF INSPIRATION</p><h1>A place for<br /><i>good things.</i><span className="heading-star" aria-hidden="true">✳</span></h1></div><div className="intro-note"><p>A few things that caught the eye,<br />stayed in the mind, and felt worth keeping.</p><span>COLLECT SLOWLY. CREATE THOUGHTFULLY.</span><div className="note-line" /></div></section>
-      <section className="collection" aria-label="Idea collection"><div className="collection-toolbar"><div className="filters" aria-label="Filter ideas">{['All ideas', 'Branding', 'Digital', 'Objects', 'Saved'].map(name => <button key={name} className={filter === name ? 'selected' : ''} aria-pressed={filter === name} onClick={() => setFilter(name)}>{name}<span>{name === 'All ideas' ? ideas.length : name === 'Saved' ? saved.length : ideas.filter(idea => idea.category === name).length}</span></button>)}</div><label className="search"><Icon name="search" size={15} /><input aria-label="Search ideas" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a little inspiration…" /></label></div>
-        <div className="idea-grid">{visible.map(idea => <article className="idea-card" key={idea.id}><button className="art-button" aria-label={`View ${idea.title}`} onClick={() => setSelected(idea)}><Art kind={idea.art} /><span className="open-idea"><Icon name="arrow" size={18} /></span></button><div className="idea-info"><div><span className="idea-category">{idea.category}<span> / </span>{idea.author}</span><h2><button onClick={() => setSelected(idea)}>{idea.title}</button></h2></div><button className={`save-button ${saved.includes(idea.id) ? 'is-saved' : ''}`} aria-label={`${saved.includes(idea.id) ? 'Unsave' : 'Save'} ${idea.title}`} aria-pressed={saved.includes(idea.id)} onClick={() => toggleSaved(idea.id)}><Icon name="bookmark" size={16} filled={saved.includes(idea.id)} /></button></div></article>)}</div>
-        {visible.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h2>A little room for something new.</h2><p>No ideas match this view. Try another filter or add your own.</p><button className="add-button" onClick={() => { setFilter('All ideas'); setQuery('') }}>Show all ideas<Icon name="arrow" size={16} /></button></div>}
-      </section>
-      <footer className="site-footer"><span>GOOD IDEAS START WITH NOTICING.</span><span>Made with a curious eye <span className="footer-star" aria-hidden="true">✳</span> Form & Field, 2026</span></footer>
-    </main>
-    <dialog ref={detailDialog} className="detail-dialog" onClose={() => setSelected(null)} onClick={event => { if (event.target === event.currentTarget) detailDialog.current?.close() }} aria-labelledby="idea-title">{selected && <><div className="detail-art"><Art kind={selected.art} /><button className="close-button" aria-label="Close idea details" onClick={() => detailDialog.current?.close()}><Icon name="close" /></button></div><div className="detail-copy"><span className="idea-category">{selected.category} / {selected.author}</span><h2 id="idea-title">{selected.title}</h2><p>{selected.description}</p><button className="add-button" onClick={() => toggleSaved(selected.id)}><Icon name={saved.includes(selected.id) ? 'check' : 'bookmark'} size={16} />{saved.includes(selected.id) ? 'Saved to your collection' : 'Keep this idea'}</button></div></>}</dialog>
-    <dialog ref={addDialog} className="form-dialog" aria-labelledby="new-idea-title" onClick={event => { if (event.target === event.currentTarget) addDialog.current?.close() }}><form onSubmit={addIdea}><div className="dialog-heading"><span className="eyebrow">A NEW FIELD NOTE</span><button type="button" className="close-button" aria-label="Close new idea" onClick={() => addDialog.current?.close()}><Icon name="close" /></button></div><h2 id="new-idea-title">Something worth<br /><i>keeping.</i></h2><p>Good ideas can start very small.</p><label htmlFor="idea-name">What caught your eye?</label><input ref={newTitleInput} id="idea-name" value={newTitle} maxLength={80} onChange={event => setNewTitle(event.target.value)} placeholder="A name for your idea" aria-invalid={Boolean(formError)} aria-describedby="idea-error" /><p id="idea-error" className="form-error" role="status">{formError}</p><label htmlFor="idea-category">Make a little space in</label><select id="idea-category" value={newCategory} onChange={event => setNewCategory(event.target.value as Category)}><option>Digital</option><option>Branding</option><option>Objects</option></select><button className="add-button" type="submit"><Icon name="plus" size={16} />Keep this idea</button></form></dialog>
-    <dialog ref={aboutDialog} className="form-dialog about-dialog" aria-labelledby="about-title" onClick={event => { if (event.target === event.currentTarget) aboutDialog.current?.close() }}><div className="dialog-heading"><span className="eyebrow">A LITTLE ABOUT THIS SPACE</span><button className="close-button" aria-label="Close about" onClick={() => aboutDialog.current?.close()}><Icon name="close" /></button></div><h2 id="about-title">A curious eye.<br /><i>An open field.</i></h2><p>Form & Field is an original UI Atlas demonstration: a tiny collection of imagined objects, identities, and interfaces. Every illustration is drawn locally with CSS.</p><p>Try a filter, keep a favorite, open a detail, or add a field note. This is a local study, so your changes live only in this preview session.</p><button className="add-button" onClick={() => aboutDialog.current?.close()}>Back to the good things<Icon name="arrow" size={16} /></button></dialog>
-  </div>
+  function openAdd() {
+    setNewTitle("");
+    setFormError("");
+    addDialog.current?.showModal();
+    newTitleInput.current?.focus();
+  }
+  function addIdea(event: React.SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newTitle.trim()) {
+      setFormError("Give your idea a name to keep it here.");
+      newTitleInput.current?.focus();
+      return;
+    }
+    setIdeas((previous) => [
+      {
+        id: Date.now(),
+        title: newTitle.trim(),
+        category: newCategory,
+        author: "YOUR FIELD NOTES",
+        art:
+          newCategory === "Objects"
+            ? "objects"
+            : newCategory === "Branding"
+              ? "company"
+              : "weather",
+        description:
+          "Your newest field note. A little idea worth keeping, ready to grow into something good.",
+      },
+      ...previous,
+    ]);
+    setFilter("All ideas");
+    setQuery("");
+    addDialog.current?.close();
+  }
+  return (
+    <div className="field-app">
+      <header className="site-header">
+        <a href="/" className="brand" aria-label="Form and Field home">
+          form<span>&</span>field<span className="brand-dot">®</span>
+        </a>
+        <nav aria-label="Main navigation">
+          <button
+            className="nav-active"
+            onClick={() => {
+              setFilter("All ideas");
+              setQuery("");
+            }}
+          >
+            My collection
+          </button>
+          <button onClick={() => aboutDialog.current?.showModal()}>
+            A little about this space <span>↗</span>
+          </button>
+        </nav>
+        <div className="header-actions">
+          <button
+            className="saved-toggle"
+            aria-label={`Show ${saved.length} saved ideas`}
+            onClick={() => setFilter("Saved")}
+          >
+            <Icon name="bookmark" />
+            <span>{saved.length}</span>
+          </button>
+          <button className="add-button" onClick={openAdd}>
+            <Icon name="plus" size={16} />
+            Add an idea
+          </button>
+          <span className="profile-avatar" aria-label="Personal collection">
+            Y
+          </span>
+        </div>
+      </header>
+      <main>
+        <section className="intro">
+          <div>
+            <p className="eyebrow">
+              <span />A PERSONAL COLLECTION OF INSPIRATION
+            </p>
+            <h1>
+              A place for
+              <br />
+              <i>good things.</i>
+              <span className="heading-star" aria-hidden="true">
+                ✳
+              </span>
+            </h1>
+          </div>
+          <div className="intro-note">
+            <p>
+              A few things that caught the eye,
+              <br />
+              stayed in the mind, and felt worth keeping.
+            </p>
+            <span>COLLECT SLOWLY. CREATE THOUGHTFULLY.</span>
+            <div className="note-line" />
+          </div>
+        </section>
+        <section className="collection" aria-label="Idea collection">
+          <div className="collection-toolbar">
+            <div className="filters" aria-label="Filter ideas">
+              {["All ideas", "Branding", "Digital", "Objects", "Saved"].map(
+                (name) => (
+                  <button
+                    key={name}
+                    className={filter === name ? "selected" : ""}
+                    aria-pressed={filter === name}
+                    onClick={() => setFilter(name)}
+                  >
+                    {name}
+                    <span>
+                      {name === "All ideas"
+                        ? ideas.length
+                        : name === "Saved"
+                          ? saved.length
+                          : ideas.filter((idea) => idea.category === name)
+                              .length}
+                    </span>
+                  </button>
+                ),
+              )}
+            </div>
+            <label className="search">
+              <Icon name="search" size={15} />
+              <input
+                aria-label="Search ideas"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Find a little inspiration…"
+              />
+            </label>
+          </div>
+          <div className="idea-grid">
+            {visible.map((idea) => (
+              <article className="idea-card" key={idea.id}>
+                <button
+                  className="art-button"
+                  aria-label={`View ${idea.title}`}
+                  onClick={() => setSelected(idea)}
+                >
+                  <Art kind={idea.art} />
+                  <span className="open-idea">
+                    <Icon name="arrow" size={18} />
+                  </span>
+                </button>
+                <div className="idea-info">
+                  <div>
+                    <span className="idea-category">
+                      {idea.category}
+                      <span> / </span>
+                      {idea.author}
+                    </span>
+                    <h2>
+                      <button onClick={() => setSelected(idea)}>
+                        {idea.title}
+                      </button>
+                    </h2>
+                  </div>
+                  <button
+                    className={`save-button ${saved.includes(idea.id) ? "is-saved" : ""}`}
+                    aria-label={`${saved.includes(idea.id) ? "Unsave" : "Save"} ${idea.title}`}
+                    aria-pressed={saved.includes(idea.id)}
+                    onClick={() => toggleSaved(idea.id)}
+                  >
+                    <Icon
+                      name="bookmark"
+                      size={16}
+                      filled={saved.includes(idea.id)}
+                    />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          {visible.length === 0 && (
+            <div className="empty-state">
+              <Icon name="search" size={28} />
+              <h2>A little room for something new.</h2>
+              <p>
+                No ideas match this view. Try another filter or add your own.
+              </p>
+              <button
+                className="add-button"
+                onClick={() => {
+                  setFilter("All ideas");
+                  setQuery("");
+                }}
+              >
+                Show all ideas
+                <Icon name="arrow" size={16} />
+              </button>
+            </div>
+          )}
+        </section>
+        <footer className="site-footer">
+          <span>GOOD IDEAS START WITH NOTICING.</span>
+          <span>
+            Made with a curious eye{" "}
+            <span className="footer-star" aria-hidden="true">
+              ✳
+            </span>{" "}
+            Form & Field, 2026
+          </span>
+        </footer>
+      </main>
+      <dialog
+        ref={detailDialog}
+        className="detail-dialog"
+        onClose={() => setSelected(null)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget)
+            detailDialog.current?.close();
+        }}
+        aria-labelledby="idea-title"
+      >
+        {selected && (
+          <>
+            <div className="detail-art">
+              <Art kind={selected.art} />
+              <button
+                className="close-button"
+                aria-label="Close idea details"
+                onClick={() => detailDialog.current?.close()}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+            <div className="detail-copy">
+              <span className="idea-category">
+                {selected.category} / {selected.author}
+              </span>
+              <h2 id="idea-title">{selected.title}</h2>
+              <p>{selected.description}</p>
+              <button
+                className="add-button"
+                onClick={() => toggleSaved(selected.id)}
+              >
+                <Icon
+                  name={saved.includes(selected.id) ? "check" : "bookmark"}
+                  size={16}
+                />
+                {saved.includes(selected.id)
+                  ? "Saved to your collection"
+                  : "Keep this idea"}
+              </button>
+            </div>
+          </>
+        )}
+      </dialog>
+      <dialog
+        ref={addDialog}
+        className="form-dialog"
+        aria-labelledby="new-idea-title"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) addDialog.current?.close();
+        }}
+      >
+        <form onSubmit={addIdea}>
+          <div className="dialog-heading">
+            <span className="eyebrow">A NEW FIELD NOTE</span>
+            <button
+              type="button"
+              className="close-button"
+              aria-label="Close new idea"
+              onClick={() => addDialog.current?.close()}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <h2 id="new-idea-title">
+            Something worth
+            <br />
+            <i>keeping.</i>
+          </h2>
+          <p>Good ideas can start very small.</p>
+          <label htmlFor="idea-name">What caught your eye?</label>
+          <input
+            ref={newTitleInput}
+            id="idea-name"
+            value={newTitle}
+            maxLength={80}
+            onChange={(event) => setNewTitle(event.target.value)}
+            placeholder="A name for your idea"
+            aria-invalid={Boolean(formError)}
+            aria-describedby="idea-error"
+          />
+          <p id="idea-error" className="form-error" role="status">
+            {formError}
+          </p>
+          <label htmlFor="idea-category">Make a little space in</label>
+          <select
+            id="idea-category"
+            value={newCategory}
+            onChange={(event) => setNewCategory(event.target.value as Category)}
+          >
+            <option>Digital</option>
+            <option>Branding</option>
+            <option>Objects</option>
+          </select>
+          <button className="add-button" type="submit">
+            <Icon name="plus" size={16} />
+            Keep this idea
+          </button>
+        </form>
+      </dialog>
+      <dialog
+        ref={aboutDialog}
+        className="form-dialog about-dialog"
+        aria-labelledby="about-title"
+        onClick={(event) => {
+          if (event.target === event.currentTarget)
+            aboutDialog.current?.close();
+        }}
+      >
+        <div className="dialog-heading">
+          <span className="eyebrow">A LITTLE ABOUT THIS SPACE</span>
+          <button
+            className="close-button"
+            aria-label="Close about"
+            onClick={() => aboutDialog.current?.close()}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+        <h2 id="about-title">
+          A curious eye.
+          <br />
+          <i>An open field.</i>
+        </h2>
+        <p>
+          Form & Field is an original UI Atlas demonstration: a tiny collection
+          of imagined objects, identities, and interfaces. Every illustration is
+          drawn locally with CSS.
+        </p>
+        <p>
+          Try a filter, keep a favorite, open a detail, or add a field note.
+          This is a local study, so your changes live only in this preview
+          session.
+        </p>
+        <button
+          className="add-button"
+          onClick={() => aboutDialog.current?.close()}
+        >
+          Back to the good things
+          <Icon name="arrow" size={16} />
+        </button>
+      </dialog>
+    </div>
+  );
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
