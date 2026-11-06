@@ -23,3 +23,10 @@ import AtlasCore
     #expect(r.offset == Point(x: -2, y: -3))
     #expect(r.guides.count == 2)
 }
+
+@Test func guidesCoverCrossEdgeAlignment() {
+    // moving.maxX = 96 snaps to other.minX = 100 (maxX -> minX).
+    let r = Snapping.snap(Rect(x: 46, y: 300, width: 50, height: 50), to: [Rect(x: 100, y: 0, width: 200, height: 100)], threshold: 6)
+    #expect(r.offset == Point(x: 4, y: 0))
+    #expect(r.guides == [Guide(axis: .vertical, position: 100, start: 0, end: 350)])
+}

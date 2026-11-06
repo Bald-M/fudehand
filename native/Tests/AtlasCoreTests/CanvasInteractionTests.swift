@@ -83,7 +83,7 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     _ = down(&machine, 10, 10, hit: .frameContent("a"), context: ctx)
     let snapped = machine.pointerDragged(to: Point(x: 48, y: 10), modifiers: [], context: ctx)
     #expect(moveFramesEffects(snapped) == [["a": Point(x: 80, y: 0)]])
-    #expect(guides(snapped)?.isEmpty == false)
+    #expect(guides(snapped)?.contains(Guide(axis: .vertical, position: 470, start: 0, end: 944)) == true)
     _ = machine.cancel()
 
     _ = down(&machine, 10, 10, hit: .frameContent("a"), context: ctx)
@@ -174,4 +174,23 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     #expect(commits(cancelled) == [.commitMove(from: ["a": Point(x: 0, y: 0)], to: ["a": Point(x: 200, y: 0)])])
     #expect(machine.cancel() == [])
     #expect(machine.isIdle)
+}
+
+@Test func moveEndingAtStartClearsGuidesWithoutCommit() {
+    var machine = CanvasInteraction()
+    let ctx = context()
+    _ = down(&machine, 10, 10, hit: .frameContent("a"), context: ctx)
+    _ = machine.pointerDragged(to: Point(x: 110, y: 10), modifiers: [.control], context: ctx)
+    _ = machine.pointerDragged(to: Point(x: 10, y: 10), modifiers: [.control], context: ctx)
+    #expect(machine.pointerUp(at: Point(x: 10, y: 10), context: ctx) == [.guides([])])
+}
+
+@Test func pointerDownWhileBusyFinishesPreviousGesture() {
+    var machine = CanvasInteraction()
+    let ctx = context()
+    _ = down(&machine, 10, 10, hit: .frameContent("a"), context: ctx)
+    _ = machine.pointerDragged(to: Point(x: 110, y: 10), modifiers: [.control], context: ctx)
+    let effects = down(&machine, 600, 600, hit: .empty, context: ctx)
+    #expect(effects == [.commitMove(from: ["a": Point(x: 0, y: 0)], to: ["a": Point(x: 200, y: 0)]),
+                        .guides([]), .select([])])
 }

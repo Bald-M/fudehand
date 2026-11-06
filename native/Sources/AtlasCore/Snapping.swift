@@ -24,25 +24,31 @@ public enum Snapping {
         let moved = moving.offsetBy(Point(x: dx ?? 0, y: dy ?? 0))
 
         var guides: [Guide] = []
+        func append(_ guide: Guide) { if !guides.contains(guide) { guides.append(guide) } }
         if let dx {
             for other in others {
-                for (m, o) in zip([moving.minX, moving.midX, moving.maxX], [other.minX, other.midX, other.maxX])
+                for (m, o) in pairs([moving.minX, moving.midX, moving.maxX], [other.minX, other.midX, other.maxX])
                 where abs((o - m) - dx) <= tolerance {
-                    guides.append(Guide(axis: .vertical, position: o,
+                    append(Guide(axis: .vertical, position: o,
                                         start: min(moved.minY, other.minY), end: max(moved.maxY, other.maxY)))
                 }
             }
         }
         if let dy {
             for other in others {
-                for (m, o) in zip([moving.minY, moving.midY, moving.maxY], [other.minY, other.midY, other.maxY])
+                for (m, o) in pairs([moving.minY, moving.midY, moving.maxY], [other.minY, other.midY, other.maxY])
                 where abs((o - m) - dy) <= tolerance {
-                    guides.append(Guide(axis: .horizontal, position: o,
+                    append(Guide(axis: .horizontal, position: o,
                                         start: min(moved.minX, other.minX), end: max(moved.maxX, other.maxX)))
                 }
             }
         }
         return (Point(x: dx ?? 0, y: dy ?? 0), guides)
+    }
+
+    /// Every (moving edge, other edge) combination, regardless of edge kind.
+    private static func pairs(_ moving: [Double], _ others: [Double]) -> [(Double, Double)] {
+        moving.flatMap { m in others.map { (m, $0) } }
     }
 
     /// Smallest-magnitude difference within the threshold; ties keep the first candidate.

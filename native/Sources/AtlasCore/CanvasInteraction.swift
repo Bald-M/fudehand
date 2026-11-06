@@ -88,6 +88,14 @@ public struct CanvasInteraction {
 
     public mutating func pointerDown(at point: Point, hit: HitTarget, button: PointerButton, modifiers: PointerModifiers,
                                      clickCount: Int, context: InteractionContext) -> [InteractionEffect] {
+        // A previous gesture whose mouse-up was missed is finished first.
+        let leftover = isIdle ? [] : finish()
+        return leftover + beginPress(at: point, hit: hit, button: button, modifiers: modifiers,
+                                     clickCount: clickCount, context: context)
+    }
+
+    private mutating func beginPress(at point: Point, hit: HitTarget, button: PointerButton, modifiers: PointerModifiers,
+                                     clickCount: Int, context: InteractionContext) -> [InteractionEffect] {
         if button == .middle || context.tool == .hand || context.spaceHeld {
             state = .panning(origin: point, viewport: context.viewport)
             return []
@@ -167,7 +175,8 @@ public struct CanvasInteraction {
         case .marquee:
             return [.marquee(nil)]
         case .movingFrames(let moving):
-            guard !moving.current.isEmpty, moving.current != moving.start else { return [] }
+            guard !moving.current.isEmpty else { return [] }
+            guard moving.current != moving.start else { return [.guides([])] }
             return [.commitMove(from: moving.start, to: moving.current), .guides([])]
         }
     }
