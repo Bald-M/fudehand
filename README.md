@@ -106,7 +106,7 @@ scripts/                   本地进程启动与清理
 - `sourceUrl` 是原作出处，可使用 HTTP/HTTPS 地址；原创演示没有外部出处时填 `null`。不要把原作链接填进本地预览地址。
 - `enabled` 控制是否随根命令启动。所有作品的端口仍须独立，包括暂时停用的作品。
 - `preview.cwd` 是相对仓库根目录的现存目录；`command` 是直接执行的参数数组，不支持 shell 管道、`&&` 或环境变量展开。
-- `port` 是**预期端口声明**，不会自动改变任意工具链的启动参数。请同步设置案例自己的命令，使用固定端口和严格端口检查。
+- `port` 是端口的唯一来源。内置画布与案例的 `vite.config.ts` 直接读取 `catalog.json` 中的 `port` 和 `baseUrl` 主机名，并开启严格端口检查，修改配置即可。非 Vite 案例的命令需自行监听同一端口。
 - `baseUrl` 使用与端口一致的本机 HTTP 地址。可使用 `127.0.0.1`、`localhost` 或 `::1`，但日常固定使用 `127.0.0.1`，以保持浏览器保存数据和 Esc 桥的来源一致。
 - 画框 `width/height` 是正数，`x/y` 是画布中的有限坐标。`platform` 使用 `mobile`、`web` 或 `desktop`。
 - 修改案例目录、命令、端口、启用状态或画框配置后，停止并重启 `pnpm dev`，再刷新画布。
@@ -115,22 +115,26 @@ scripts/                   本地进程启动与清理
 
 ### 添加 Vue 或 React 案例
 
-复制对应的内置案例到新目录，修改包名、页面内容和固定端口，再增加配置项。常用端口设置如下：
+复制对应的内置案例到新目录，修改包名、页面内容，以及 `vite.config.ts` 里查找的作品 `id`，再增加配置项。`vite.config.ts` 从 `catalog.json` 读取端口和主机名：
 
-```json
-{
-  "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 4403 --strictPort",
-    "build": "vite build"
-  }
-}
+```ts
+import { defineConfig } from "vite";
+import catalog from "../../catalog.json";
+
+const { preview } = catalog.projects.find((project) => project.id === "demo")!;
+
+export default defineConfig({
+  server: { host: new URL(preview.baseUrl).hostname.replace(/^\[|\]$/g, ""), port: preview.port, strictPort: true },
+});
 ```
+
+`package.json` 中使用 `"dev": "vite"` 和 `"build": "vite build"`。
 
 新目录由 pnpm 工作区管理。改完依赖后在根目录执行 `pnpm install`。同一作品可用不同路径或查询参数实现多个页面；不需要为每个画框启动一个服务器。
 
 ### 添加纯 HTML 案例
 
-在新目录放入 `index.html`、CSS 和 JS，再增加一个带上述 `dev/build` 脚本的私有 `package.json`。根目录已有 Vite，无需引入界面框架。多个 HTML 文件可分别作为画框路径。
+在新目录放入 `index.html`、CSS 和 JS，再增加一个带上述 `dev/build` 脚本的私有 `package.json` 和上面的 `vite.config.ts`。根目录已有 Vite，无需引入界面框架。多个 HTML 文件可分别作为画框路径。
 
 纯 HTML 页面若要使用 Esc 桥，可以编写模块脚本：
 
@@ -182,9 +186,9 @@ pnpm build
 pnpm check
 ```
 
-测试覆盖画布几何、布局恢复，以及真实 HTTP/子进程测试样例 的就绪、超时、异常退出、端口占用和进程组清理。构建分别输出画布与各案例的 `dist/`；画布中的预览地址仍是本地服务地址，此项目没有整站静态发布打包流程。
+测试覆盖画布几何、布局恢复，以及真实 HTTP/子进程测试样例 的就绪、超时、异常退出、端口占用和进程组清理。目录校验规则写在 `tests/fixtures/catalog-conformance.json`，浏览器启动器与原生 App 的测试都执行这份用例，修改规则时两端需同时通过。构建分别输出画布与各案例的 `dist/`；画布中的预览地址仍是本地服务地址，此项目没有整站静态发布打包流程。
 
-- **端口已占用**：关闭你确认占用该端口的程序，或同时修改配置目录和对应案例的启动端口。启动器不会结束其它项目的进程，也不会悄悄换端口。
+- **端口已占用**：关闭你确认占用该端口的程序，或修改 `catalog.json` 中的端口（非 Vite 案例还需同步其启动命令）。启动器不会结束其它项目的进程，也不会悄悄换端口。
 - **启动超时**：查看终端里对应案例的输出，确认依赖、启动命令与本地模拟 环境。默认在 30 秒内等待 HTTP 2xx；失败会停止本次启动的其它服务。
 - **画框空白或加载失败**：直接打开画框的本地地址，核对路径和终端错误，再使用重新加载。iframe 的 `load` 事件不能证明页面内容已正确运行。
 - **Esc 无效**：确认案例接入了桥，且画布地址一致；案例弹窗可能先消耗一次 Esc。随时可用画布的退出按钮。

@@ -55,7 +55,8 @@ final class AtlasCanvasView: NSView {
     private var interactingFrameID: String?
     private var panStart: (CGPoint, Viewport)?
     private var eventMonitor: Any?
-    fileprivate var spaceHeld = false
+    private var focusObservers: [NSObjectProtocol] = []
+    var spaceHeld = false
     private var lastReportedSize = CGSize.zero
 
     override init(frame frameRect: NSRect) {
@@ -73,7 +74,18 @@ final class AtlasCanvasView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
-        guard window != nil else { return }
+        removeFocusObservers()
+        guard let window else { return }
+        // The Space key-up goes to whichever app or window is focused when it is released.
+        let center = NotificationCenter.default
+        focusObservers = [
+            center.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.releaseHeldInput() }
+            },
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.releaseHeldInput() }
+            },
+        ]
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify, .flagsChanged, .keyUp]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             if event.type == .keyUp, event.keyCode == 49 { self.spaceHeld = false }
@@ -94,12 +106,25 @@ final class AtlasCanvasView: NSView {
 
     func dispose() {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
+        removeFocusObservers()
         frames.values.forEach { $0.dispose() }
         frames.removeAll()
     }
 
     deinit {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
+        focusObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    private func removeFocusObservers() {
+        focusObservers.forEach(NotificationCenter.default.removeObserver)
+        focusObservers = []
+    }
+
+    /// Clears Space panning when focus leaves, since the matching key-up will not arrive here.
+    func releaseHeldInput() {
+        spaceHeld = false
+        if panStart != nil { endPan() }
     }
 
     func update(project: Project, viewport: Viewport, positions: [String: Point],
@@ -217,12 +242,15 @@ final class AtlasCanvasView: NSView {
     override func mouseUp(with event: NSEvent) { endPan() }
 
     override func scrollWheel(with event: NSEvent) {
+        // A line-based mouse wheel reports about one unit per notch; trackpads report points.
+        let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY),
+                                              precise: event.hasPreciseScrollingDeltas)
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
             let point = convert(event.locationInWindow, from: nil)
             viewport = CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y),
-                                             scale: viewport.scale * exp(-event.scrollingDeltaY * 0.01))
+                                             scale: viewport.scale * exp(-delta.y * 0.01))
         } else {
-            viewport = Viewport(x: viewport.x + event.scrollingDeltaX, y: viewport.y + event.scrollingDeltaY, scale: viewport.scale)
+            viewport = Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale)
         }
         applyViewport()
         onViewportChange?(viewport)
@@ -286,6 +314,8 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
     private var dragStart: (CGPoint, Point)?
     private var panning = false
     private var hasDisposed = false
+    /// Set when a response is rejected, so the follow-up cancellation error keeps the HTTP message.
+    private var rejectedResponse = false
     var interactive = false {
         didSet {
             interactionButton.title = interactive ? "退出交互" : "进入交互"
@@ -458,6 +488,7 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
 
     func reload() {
         timeout?.cancel()
+        rejectedResponse = false
         guard let previewURL else { showFailure("预览地址无效，请检查 catalog.json。"); return }
         status.stringValue = "正在加载预览…"
         status.isHidden = false
@@ -493,10 +524,15 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        if (error as NSError).code != NSURLErrorCancelled { showFailure("预览加载失败：\(error.localizedDescription)") }
+        navigationFailed(error)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        navigationFailed(error)
+    }
+
+    private func navigationFailed(_ error: Error) {
+        if rejectedResponse { rejectedResponse = false; return }
         if (error as NSError).code != NSURLErrorCancelled { showFailure("预览加载失败：\(error.localizedDescription)") }
     }
 
@@ -521,6 +557,7 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         if navigationResponse.isForMainFrame, let response = navigationResponse.response as? HTTPURLResponse,
            !(200...299).contains(response.statusCode) {
+            rejectedResponse = true
             showFailure("预览返回 HTTP \(response.statusCode)，请检查案例路径。")
             decisionHandler(.cancel)
         } else { decisionHandler(.allow) }

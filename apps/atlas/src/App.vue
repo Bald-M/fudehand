@@ -158,12 +158,14 @@ function onPointerMove(event: PointerEvent) {
   else if (drag.frame) positions.value[drag.frame] = moveFrame(drag.origin, delta, viewport.value.scale)
 }
 function finishDrag(event?: PointerEvent) {
-  if (event && drag && event.pointerId !== drag.pointerId) return
-  if (drag && activeCapture?.hasPointerCapture(drag.pointerId)) activeCapture.releasePointerCapture(drag.pointerId)
+  // pointerup, lostpointercapture and the window listener all land here; only the first one ending a real drag saves.
+  if (!drag || (event && event.pointerId !== drag.pointerId)) return
+  const moved = dragging.value
+  if (activeCapture?.hasPointerCapture(drag.pointerId)) activeCapture.releasePointerCapture(drag.pointerId)
   activeCapture = null
   drag = null
   dragging.value = false
-  persist()
+  if (moved) persist()
 }
 function onWheel(event: WheelEvent) {
   if (event.ctrlKey || event.metaKey) setView(zoomAt(viewport.value, point(event), viewport.value.scale * Math.exp(-event.deltaY * 0.005)))
@@ -249,12 +251,12 @@ onBeforeUnmount(() => {
       <label class="search-box"><Icon name="search" :size="16" /><input ref="searchInput" v-model="query" type="search" placeholder="搜索作品、技术栈…" aria-label="搜索作品" /><kbd>/</kbd></label>
       <div class="section-heading"><span>作品收藏</span><span>{{ String(projects.length).padStart(2, '0') }}</span></div>
       <nav class="project-list" aria-label="选择作品">
-        <button v-for="(project, index) in filtered" :key="project.id" class="project-card" :class="{ active: project.id === selectedId }" :disabled="!project.enabled" @click="chooseProject(project)">
-          <span class="project-number">{{ String(index + 1).padStart(2, '0') }}</span>
+        <button v-for="project in filtered" :key="project.id" class="project-card" :class="{ active: project.id === selectedId }" :disabled="!project.enabled" @click="chooseProject(project)">
+          <span class="project-number">{{ String(projects.indexOf(project) + 1).padStart(2, '0') }}</span>
           <span class="project-copy"><strong>{{ project.title }}</strong><small>{{ project.subtitle }}</small><span class="project-tags"><span>{{ project.framework }}</span><span>{{ project.frames.length }} 个画框</span></span></span>
           <Icon v-if="project.enabled" name="chevron" :size="14" /><span v-else class="disabled-tag">未启用</span>
         </button>
-        <p v-if="!filtered.length" class="search-empty">没有找到匹配的作品。<br />试试作品名或技术栈。</p>
+        <p v-if="projects.length && !filtered.length" class="search-empty">没有找到匹配的作品。<br />试试作品名或技术栈。</p>
         <p v-if="!projects.length" class="search-empty">收藏夹还是空的。<br />在 catalog.json 中添加第一个作品。</p>
       </nav>
       <div v-if="current" class="project-details">

@@ -5,6 +5,18 @@ public struct Catalog: Codable, Equatable {
     public var shell: Shell
     public var projects: [Project]
 
+    private enum CodingKeys: String, CodingKey { case version, shell, projects }
+
+    public init(version: Int, shell: Shell, projects: [Project]) {
+        self.version = version; self.shell = shell; self.projects = projects
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(version: try values.decodeInteger(forKey: .version), shell: try values.decode(Shell.self, forKey: .shell),
+                  projects: try values.decode([Project].self, forKey: .projects))
+    }
+
     public static func load(from root: URL) throws -> Catalog {
         do {
             let data = try Data(contentsOf: root.appendingPathComponent("catalog.json"))
@@ -74,6 +86,13 @@ public struct Shell: Codable, Equatable {
     public var url: String
 }
 
+extension Shell {
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(port: try values.decodeInteger(forKey: .port), url: try values.decode(String.self, forKey: .url))
+    }
+}
+
 public struct Project: Codable, Equatable, Identifiable {
     public var id: String
     public var title: String
@@ -106,7 +125,7 @@ extension Project {
             framework: try values.decode(String.self, forKey: .framework),
             tags: try values.decode([String].self, forKey: .tags),
             enabled: try values.decode(Bool.self, forKey: .enabled),
-            layoutVersion: try values.decode(Int.self, forKey: .layoutVersion),
+            layoutVersion: try values.decodeInteger(forKey: .layoutVersion),
             preview: try values.decode(Preview.self, forKey: .preview),
             frames: try values.decode([Frame].self, forKey: .frames)
         )
@@ -135,6 +154,26 @@ public struct Preview: Codable, Equatable {
     public var command: [String]
     public var port: Int
     public var baseUrl: String
+}
+
+extension Preview {
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(cwd: try values.decode(String.self, forKey: .cwd), command: try values.decode([String].self, forKey: .command),
+                  port: try values.decodeInteger(forKey: .port), baseUrl: try values.decode(String.self, forKey: .baseUrl))
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// Foundation reports a fractional value for an Int field without its coding path,
+    /// so decode a number first and name the field in the error, as the launcher does.
+    func decodeInteger(forKey key: Key) throws -> Int {
+        let number = try decode(Double.self, forKey: key)
+        guard let integer = Int(exactly: number) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "\(key.stringValue) 必须是整数")
+        }
+        return integer
+    }
 }
 
 public struct Frame: Codable, Equatable, Identifiable {

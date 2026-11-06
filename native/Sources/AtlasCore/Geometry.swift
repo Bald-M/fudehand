@@ -35,6 +35,12 @@ public enum CanvasGeometry {
     public static let minScale = 0.1
     public static let maxScale = 2.0
     public static let headerHeight = 44.0
+    /// Points per notch for a line-based mouse wheel, matching the browser canvas.
+    public static let wheelLineHeight = 16.0
+
+    public static func wheelDelta(_ delta: Point, precise: Bool) -> Point {
+        precise ? delta : Point(x: delta.x * wheelLineHeight, y: delta.y * wheelLineHeight)
+    }
 
     public static func screenToWorld(_ point: Point, viewport: Viewport) -> Point {
         Point(x: (point.x - viewport.x) / viewport.scale, y: (point.y - viewport.y) / viewport.scale)

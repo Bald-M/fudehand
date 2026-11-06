@@ -24,33 +24,11 @@ private func catalogWorkspace() throws -> URL {
 @Test func invalidCatalogConfigurationIsRejectedBeforeStartingAnyPreview() throws {
     let root = try catalogWorkspace()
     defer { try? FileManager.default.removeItem(at: root) }
+    // JSON cannot express non-finite numbers; the shared conformance file covers the other rules.
     let valid = try sampleCatalog()
     let mutations: [(String, (inout Catalog) -> Void)] = [
-        ("version", { $0.version = 2 }),
-        ("shell.port", { $0.shell.port = 0 }),
-        ("本机 HTTP", { $0.shell.url = "https://127.0.0.1:4400/" }),
-        ("id", { $0.projects.append($0.projects[0]) }),
-        ("id", { $0.projects[0].id = "Bad ID" }),
-        ("title", { $0.projects[0].title = "  " }),
-        ("layoutVersion", { $0.projects[0].layoutVersion = 0 }),
-        ("sourceUrl", { $0.projects[0].sourceUrl = "javascript:alert(1)" }),
-        ("重复", { $0.projects[0].preview.port = 4400; $0.projects[0].enabled = false }),
-        ("本机 HTTP", { $0.projects[0].preview.baseUrl = "http://example.com:4401/" }),
-        ("端口", { $0.projects[0].preview.baseUrl = "http://127.0.0.1:4402/" }),
-        ("账号", { $0.projects[0].preview.baseUrl = "http://user@127.0.0.1:4401/" }),
-        ("cwd", { $0.projects[0].preview.cwd = "../outside" }),
-        ("cwd", { $0.projects[0].preview.cwd = "examples/missing" }),
-        ("command", { $0.projects[0].preview.command = [] }),
-        ("command", { $0.projects[0].preview.command = ["pnpm", "bad\0command"] }),
-        ("画框", { $0.projects[0].frames = [] }),
-        ("id", { $0.projects[0].frames.append($0.projects[0].frames[0]) }),
-        ("platform", { $0.projects[0].frames[0].platform = "tv" }),
-        ("宽高", { $0.projects[0].frames[0].width = 0 }),
         ("宽高", { $0.projects[0].frames[0].height = .infinity }),
         ("坐标", { $0.projects[0].frames[0].x = .nan }),
-        ("path", { $0.projects[0].frames[0].path = "//example.com/escape" }),
-        ("path", { $0.projects[0].frames[0].path = "http://127.0.0.1:4402/escape" }),
-        ("path", { $0.projects[0].frames[0].path = "\\\\example.com/escape" }),
     ]
     for (field, mutate) in mutations {
         var invalid = valid
@@ -62,18 +40,71 @@ private func catalogWorkspace() throws -> URL {
             #expect(error.localizedDescription.contains(field))
         }
     }
-    let encoded = try JSONEncoder().encode(valid)
-    for field in ["title", "sourceUrl", "enabled", "frames", "preview"] {
-        var raw = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-        var projects = try #require(raw["projects"] as? [[String: Any]])
-        projects[0].removeValue(forKey: field)
-        raw["projects"] = projects
-        try JSONSerialization.data(withJSONObject: raw).write(to: root.appendingPathComponent("catalog.json"))
+}
+
+/// Runs tests/fixtures/catalog-conformance.json, which the browser launcher tests run too.
+@Test func catalogValidationMatchesTheBrowserLauncher() throws {
+    let root = try catalogWorkspace()
+    let outside = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-outside-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.removeItem(at: outside)
+    }
+    try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("examples/outside-link"), withDestinationURL: outside)
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("tests/fixtures/catalog-conformance.json")
+    let fixture = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any])
+    let cases = try #require(fixture["cases"] as? [[String: Any]])
+    #expect(!cases.isEmpty)
+    for testCase in cases {
+        let name = testCase["name"] as? String ?? "?"
+        let ops = try #require(testCase["ops"] as? [[String: Any]])
+        var catalog: Any = try #require(fixture["catalog"])
+        for op in ops { catalog = try applyConformanceOp(op, to: catalog) }
+        try JSONSerialization.data(withJSONObject: catalog).write(to: root.appendingPathComponent("catalog.json"))
+        let expected = testCase["error"] as? String
         do {
             _ = try Catalog.load(from: root)
-            Issue.record("缺少必填字段未被拒绝：\(field)")
+            if let expected { Issue.record("\(name)：配置未被拒绝，期望错误包含 \(expected)") }
         } catch {
-            #expect(error.localizedDescription.contains(field))
+            if let expected {
+                #expect(error.localizedDescription.contains(expected), "\(name)：\(error.localizedDescription)")
+            } else {
+                Issue.record("\(name)：有效配置被拒绝：\(error.localizedDescription)")
+            }
         }
     }
 }
+
+private func applyConformanceOp(_ op: [String: Any], to value: Any) throws -> Any {
+    let path = try #require(op["path"] as? [Any])
+    func update(_ current: Any, _ keys: ArraySlice<Any>) throws -> Any {
+        guard let key = keys.first else {
+            guard op["op"] as? String == "appendCopy", var array = current as? [Any], let index = op["index"] as? Int else {
+                throw ConformanceError()
+            }
+            array.append(array[index])
+            return array
+        }
+        let rest = keys.dropFirst()
+        let isLast = rest.isEmpty && op["op"] as? String != "appendCopy"
+        if var object = current as? [String: Any], let key = key as? String {
+            if isLast {
+                if op["op"] as? String == "remove" { object.removeValue(forKey: key) } else { object[key] = op["value"] }
+            } else {
+                object[key] = try update(try #require(object[key]), rest)
+            }
+            return object
+        }
+        if var array = current as? [Any], let index = key as? Int {
+            array[index] = isLast ? try #require(op["value"]) : try update(array[index], rest)
+            return array
+        }
+        throw ConformanceError()
+    }
+    return try update(value, path[...])
+}
+
+private struct ConformanceError: Error {}

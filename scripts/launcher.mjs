@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import net from 'node:net'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -24,12 +24,17 @@ function requirePort(port, name, ports) {
 
 async function directory(root, cwd, name) {
   requireValue(typeof cwd === 'string' && cwd.length > 0 && !isAbsolute(cwd), `${name} 必须是项目内的相对目录`)
+  const inside = (base, path) => {
+    const part = relative(base, path)
+    return part !== '..' && !part.startsWith(`..${sep}`) && !isAbsolute(part)
+  }
   const absolute = resolve(root, cwd)
-  const part = relative(root, absolute)
-  requireValue(part !== '..' && !part.startsWith(`..${sep}`), `${name} 不能离开项目目录`)
-  let info
-  try { info = await stat(absolute) } catch { throw new Error(`配置错误：${name} 目录不存在：${cwd}`) }
-  requireValue(info.isDirectory(), `${name} 不是目录：${cwd}`)
+  requireValue(inside(root, absolute), `${name} 不能离开项目目录`)
+  let real
+  try { real = await realpath(absolute) } catch { throw new Error(`配置错误：${name} 目录不存在：${cwd}`) }
+  // 符号链接可能指向项目外，按真实路径再检查一次。
+  requireValue(inside(await realpath(root), real), `${name} 不能离开项目目录`)
+  requireValue((await stat(real)).isDirectory(), `${name} 不是目录：${cwd}`)
   return absolute
 }
 

@@ -15,12 +15,16 @@ final class PreviewSession: ObservableObject {
     private var buffer = ""
     private var generation = UUID()
     private var stopping = false
+    private var exitStatus: Int32?
+    private var outputClosed = false
 
     func start(root: URL, runtime: WorkspaceLocation?) {
         guard process == nil else { return }
         phase = .starting
         stopping = false
         buffer = ""
+        exitStatus = nil
+        outputClosed = false
         let token = UUID()
         generation = token
         let child = Process()
@@ -40,30 +44,18 @@ final class PreviewSession: ObservableObject {
         child.standardInput = stdinPipe
         child.standardOutput = stdoutPipe
         child.standardError = stdoutPipe
+        // The main queue keeps output chunks in order, ending with EOF (an empty chunk).
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
-            let text = String(decoding: data, as: UTF8.self)
-            Task { @MainActor in
-                guard let self, self.generation == token else { return }
-                self.buffer += text
-                if self.phase == .starting, !self.stopping,
-                   self.buffer.split(separator: "\n").contains("UI_ATLAS_READY") { self.phase = .ready }
-                if self.buffer.count > 24000 { self.buffer = String(self.buffer.suffix(12000)) }
+            if data.isEmpty { handle.readabilityHandler = nil }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.receive(data, token: token) }
             }
         }
         child.terminationHandler = { [weak self] terminated in
-            Task { @MainActor in
-                guard let self, self.generation == token else { return }
-                self.generation = UUID()
-                self.output?.fileHandleForReading.readabilityHandler = nil
-                if !self.stopping {
-                    let detail = self.buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                    self.phase = .failed(detail.isEmpty ? "案例服务已退出（\(terminated.terminationStatus)）。请确认 Node.js、pnpm 和依赖已安装。" : detail)
-                }
-                self.process = nil
-                self.input = nil
-                self.output = nil
+            let status = terminated.terminationStatus
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.exited(status, token: token) }
             }
         }
         do {
@@ -77,6 +69,43 @@ final class PreviewSession: ObservableObject {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             phase = .failed("无法启动案例服务：\(error.localizedDescription)\n请在仓库执行 pnpm install 后重新构建 App。")
         }
+    }
+
+    private func receive(_ data: Data, token: UUID) {
+        guard generation == token else { return }
+        if data.isEmpty {
+            outputClosed = true
+            finish(token: token)
+            return
+        }
+        buffer += String(decoding: data, as: UTF8.self)
+        if phase == .starting, !stopping, buffer.split(separator: "\n").contains("UI_ATLAS_READY") { phase = .ready }
+        if buffer.count > 24000 { buffer = String(buffer.suffix(12000)) }
+    }
+
+    /// Exit can be reported before the last output arrives; wait briefly for EOF so the
+    /// failure message includes the launcher's final error. Lingering grandchildren can
+    /// hold the pipe open, so the wait is bounded.
+    private func exited(_ status: Int32, token: UUID) {
+        guard generation == token else { return }
+        exitStatus = status
+        if outputClosed { finish(token: token); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated { self?.finish(token: token) }
+        }
+    }
+
+    private func finish(token: UUID) {
+        guard generation == token, let status = exitStatus else { return }
+        generation = UUID()
+        output?.fileHandleForReading.readabilityHandler = nil
+        if !stopping {
+            let detail = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            phase = .failed(detail.isEmpty ? "案例服务已退出（\(status)）。请确认 Node.js、pnpm 和依赖已安装。" : detail)
+        }
+        process = nil
+        input = nil
+        output = nil
     }
 
     func stop() async {

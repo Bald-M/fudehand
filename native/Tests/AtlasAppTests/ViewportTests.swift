@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import AtlasApp
@@ -18,4 +19,34 @@ import Testing
     let chosenViewport = store.viewport
     store.resize(CGSize(width: 900, height: 650))
     #expect(store.viewport == chosenViewport)
+}
+
+@Test @MainActor func spacePanningEndsWhenTheWindowLosesFocus() {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: true)
+    let canvas = AtlasCanvasView(frame: window.contentLayoutRect)
+    window.contentView = canvas
+    canvas.spaceHeld = true
+    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+    #expect(!canvas.spaceHeld)
+    canvas.spaceHeld = true
+    NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+    #expect(!canvas.spaceHeld)
+    canvas.dispose()
+}
+
+@Test @MainActor func aLauncherThatExitsImmediatelyReportsItsFinalError() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-session-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let message = "[界面图鉴] 端口 4401 已被占用"
+    try "process.stderr.write(\(String(reflecting: String(repeating: "日志\n", count: 2000) + message))); process.exit(1)\n"
+        .write(to: root.appendingPathComponent("scripts/native-preview.mjs"), atomically: true, encoding: .utf8)
+    let session = PreviewSession()
+    session.start(root: root, runtime: WorkspaceLocation(root: root.path, node: nil, path: nil))
+    for _ in 0..<100 {
+        if case .failed = session.phase { break }
+        try await Task.sleep(nanoseconds: 50_000_000)
+    }
+    guard case .failed(let detail) = session.phase else { Issue.record("会话未报告失败：\(session.phase)"); return }
+    #expect(detail.hasSuffix(message))
 }
