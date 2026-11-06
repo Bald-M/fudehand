@@ -165,8 +165,8 @@ extension Preview {
 }
 
 extension KeyedDecodingContainer {
-    /// Foundation reports a fractional value for an Int field without its coding path,
-    /// so decode a number first and name the field in the error, as the launcher does.
+    /// Foundation reports a fractional value for an Int field without a coding path. Decoding a
+    /// number first keeps the path, so Catalog.load can name the field, as the launcher does.
     func decodeInteger(forKey key: Key) throws -> Int {
         let number = try decode(Double.self, forKey: key)
         guard let integer = Int(exactly: number) else {

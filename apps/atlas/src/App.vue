@@ -168,11 +168,10 @@ function finishDrag(event?: PointerEvent) {
   if (moved) persist()
 }
 function onWheel(event: WheelEvent) {
-  if (event.ctrlKey || event.metaKey) setView(zoomAt(viewport.value, point(event), viewport.value.scale * Math.exp(-event.deltaY * 0.005)))
-  else {
-    const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size().height : 1
-    setView({ ...viewport.value, x: viewport.value.x - event.deltaX * factor, y: viewport.value.y - event.deltaY * factor })
-  }
+  // Line- and page-mode wheels report small deltas; convert to pixels for both pan and zoom.
+  const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size().height : 1
+  if (event.ctrlKey || event.metaKey) setView(zoomAt(viewport.value, point(event), viewport.value.scale * Math.exp(-event.deltaY * factor * 0.005)))
+  else setView({ ...viewport.value, x: viewport.value.x - event.deltaX * factor, y: viewport.value.y - event.deltaY * factor })
 }
 function frameKey(event: KeyboardEvent, frame: Frame) {
   if (event.target !== event.currentTarget) return

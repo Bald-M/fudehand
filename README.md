@@ -106,7 +106,7 @@ scripts/                   本地进程启动与清理
 - `sourceUrl` 是原作出处，可使用 HTTP/HTTPS 地址；原创演示没有外部出处时填 `null`。不要把原作链接填进本地预览地址。
 - `enabled` 控制是否随根命令启动。所有作品的端口仍须独立，包括暂时停用的作品。
 - `preview.cwd` 是相对仓库根目录的现存目录；`command` 是直接执行的参数数组，不支持 shell 管道、`&&` 或环境变量展开。
-- `port` 是端口的唯一来源。内置画布与案例的 `vite.config.ts` 直接读取 `catalog.json` 中的 `port` 和 `baseUrl` 主机名，并开启严格端口检查，修改配置即可。非 Vite 案例的命令需自行监听同一端口。
+- `port` 是端口的唯一来源。内置画布与案例的 `vite.config.ts` 直接读取 `catalog.json` 中对应的端口和地址主机名（画布用 `shell.port`/`shell.url`，案例用 `preview.port`/`preview.baseUrl`），并开启严格端口检查，修改配置即可。非 Vite 案例的命令需自行监听同一端口。
 - `baseUrl` 使用与端口一致的本机 HTTP 地址。可使用 `127.0.0.1`、`localhost` 或 `::1`，但日常固定使用 `127.0.0.1`，以保持浏览器保存数据和 Esc 桥的来源一致。
 - 画框 `width/height` 是正数，`x/y` 是画布中的有限坐标。`platform` 使用 `mobile`、`web` 或 `desktop`。
 - 修改案例目录、命令、端口、启用状态或画框配置后，停止并重启 `pnpm dev`，再刷新画布。
@@ -118,15 +118,20 @@ scripts/                   本地进程启动与清理
 复制对应的内置案例到新目录，修改包名、页面内容，以及 `vite.config.ts` 里查找的作品 `id`，再增加配置项。`vite.config.ts` 从 `catalog.json` 读取端口和主机名：
 
 ```ts
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
-import catalog from "../../catalog.json";
 
-const { preview } = catalog.projects.find((project) => project.id === "demo")!;
+type Catalog = { projects: { id: string; preview: { port: number; baseUrl: string } }[] };
+const catalog: Catalog = JSON.parse(readFileSync(new URL("../../catalog.json", import.meta.url), "utf8"));
+const project = catalog.projects.find((item) => item.id === "demo");
+if (!project) throw new Error('catalog.json 中没有 id 为 "demo" 的作品，无法确定预览端口。');
 
 export default defineConfig({
-  server: { host: new URL(preview.baseUrl).hostname.replace(/^\[|\]$/g, ""), port: preview.port, strictPort: true },
+  server: { host: new URL(project.preview.baseUrl).hostname.replace(/^\[|\]$/g, ""), port: project.preview.port, strictPort: true },
 });
 ```
+
+配置用 `readFileSync` 而不是 `import` 读取 `catalog.json`，这样编辑目录不会让 Vite 重启所有案例服务；修改端口后仍需重启 `pnpm dev`。Vue 案例另加 `plugins: [vue()]`。
 
 `package.json` 中使用 `"dev": "vite"` 和 `"build": "vite build"`。
 

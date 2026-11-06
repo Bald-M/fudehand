@@ -39,8 +39,15 @@ import Testing
     try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let message = "[界面图鉴] 端口 4401 已被占用"
-    try "process.stderr.write(\(String(reflecting: String(repeating: "日志\n", count: 2000) + message))); process.exit(1)\n"
-        .write(to: root.appendingPathComponent("scripts/native-preview.mjs"), atomically: true, encoding: .utf8)
+    // The launcher exits first; a grandchild still holding the pipe writes the last line afterwards,
+    // so the failure must wait for end of output instead of using what arrived before the exit.
+    let grandchild = "setTimeout(() => process.stderr.write(\(String(reflecting: message))), 300)"
+    try """
+    import { spawn } from 'node:child_process'
+    process.stderr.write('日志\\n')
+    spawn(process.execPath, ['-e', \(String(reflecting: grandchild))], { stdio: ['ignore', 'inherit', 'inherit'], detached: true }).unref()
+    process.exitCode = 1
+    """.write(to: root.appendingPathComponent("scripts/native-preview.mjs"), atomically: true, encoding: .utf8)
     let session = PreviewSession()
     session.start(root: root, runtime: WorkspaceLocation(root: root.path, node: nil, path: nil))
     for _ in 0..<100 {
