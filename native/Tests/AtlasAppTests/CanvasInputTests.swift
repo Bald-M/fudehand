@@ -345,3 +345,114 @@ private final class CanvasHarness {
     #expect(log.record(11.016) == nil)
     #expect(log.record(12.0) == "[frame] hitches=1 frames=2")
 }
+
+@Test @MainActor func pointerDownCommitsPendingZoom() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    let before = harness.canvas.worldBounds
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    #expect(harness.canvas.worldBounds == before)
+    #expect(settled.isEmpty)
+    harness.send(.leftMouseDown, at: NSPoint(x: 900, y: 650))
+    #expect(harness.canvas.worldBounds == NSRect(x: 0, y: 0, width: before.width / 2, height: before.height / 2))
+    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
+    #expect(CATransform3DIsIdentity(harness.canvas.zoomHost.layer?.sublayerTransform ?? CATransform3DMakeScale(0, 0, 0)))
+}
+
+@Test @MainActor func pinchEndCommitsAndSettles() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    harness.canvas.magnify(by: 0, at: NSPoint(x: 0, y: 0), phase: .ended)
+    #expect(harness.canvas.worldBounds.width == 500)
+    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
+}
+
+@Test @MainActor func pendingZoomOverlayAndHitTestUseLiveViewport() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    let before = harness.canvas.overlay.selectionBounds
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    // The committed world is scaled on the GPU: frame "b" at world (600, 0) is drawn at screen (1200, 0).
+    let transform = try #require(harness.canvas.zoomHost.layer?.sublayerTransform)
+    #expect(CGPoint(x: 600, y: 0).applying(CATransform3DGetAffineTransform(transform)) == CGPoint(x: 1200, y: 0))
+    #expect(harness.canvas.overlay.selectionBounds.width == before.width * 2)
+    // Frame "b" starts at world x 600, now on screen at 1200; world x 450 (screen 900) is empty.
+    #expect(harness.canvas.hitTarget(at: NSPoint(x: 700, y: 300)) == .frameContent("a"))
+    #expect(harness.canvas.hitTarget(at: NSPoint(x: 900, y: 300)) == .empty)
+}
+
+@MainActor private func animatedRequest(_ harness: CanvasHarness, to target: Viewport) {
+    harness.canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
+                          viewportRequest: ViewportRequest(viewport: target, animated: true, token: 2),
+                          tool: .move, reloadToken: 0)
+}
+
+@Test @MainActor func animatedRequestSettlesAtTarget() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    let target = Viewport(x: -200, y: -100, scale: 0.5)
+    let before = harness.canvas.worldBounds
+    animatedRequest(harness, to: target)
+    #expect(harness.canvas.worldBounds == before)
+    harness.canvas.advanceAnimation(to: 0.5)
+    #expect(settled.isEmpty)
+    harness.canvas.advanceAnimation(to: 1)
+    #expect(settled == [target])
+    #expect(harness.canvas.worldBounds == NSRect(x: 400, y: 200, width: 2000, height: 1400))
+}
+
+@Test @MainActor func inputDuringAnimationStopsAtTheLiveViewport() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    let target = Viewport(x: -200, y: -100, scale: 0.5)
+    animatedRequest(harness, to: target)
+    harness.canvas.advanceAnimation(to: 0.5)
+    harness.send(.leftMouseDown, at: NSPoint(x: 990, y: 690))
+    let expected = ViewportAnimation.value(from: Viewport(x: 0, y: 0, scale: 1), to: target, size: Size(width: 1000, height: 700),
+                                           fraction: ViewportAnimation.easeOut(0.5))
+    #expect(settled == [expected])
+    harness.canvas.advanceAnimation(to: 1)
+    #expect(settled == [expected])
+}
+
+@Test @MainActor func gridHidesWhenDense() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let canvas = harness.canvas
+    canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
+                  viewportRequest: ViewportRequest(viewport: Viewport(x: 0, y: 0, scale: 0.2), animated: false, token: 2),
+                  tool: .move, reloadToken: 0)
+    #expect(canvas.gridLayer.isHidden)
+    canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
+                  viewportRequest: ViewportRequest(viewport: Viewport(x: 0, y: 0, scale: 1), animated: false, token: 3),
+                  tool: .move, reloadToken: 0)
+    #expect(!canvas.gridLayer.isHidden)
+}
+
+@Test @MainActor func commandScrollZoomSettlesAfterIdle() async throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    let before = harness.canvas.worldBounds
+    let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 50, wheel2: 0, wheel3: 0))
+    cg.flags = .maskCommand
+    harness.canvas.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
+    #expect(harness.canvas.worldBounds == before)
+    #expect(settled.isEmpty)
+    // Sleeping yields the main actor so the 150ms idle timer can fire.
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(settled.count == 1)
+    #expect((settled.first?.scale ?? 1) < 1)
+    #expect(abs(harness.canvas.worldBounds.width - 1000 / (settled.first?.scale ?? 1)) < 1e-6)
+}

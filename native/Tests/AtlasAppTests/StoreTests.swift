@@ -77,3 +77,11 @@ private func sampleProject(id: String) -> Project {
     indicator.update(Viewport(x: 5, y: 5, scale: 1.2))
     #expect(indicator.scale == 1.2)
 }
+
+@Test @MainActor func zoomButtonsAnimate() {
+    let store = AtlasStore()
+    store.select(sampleProject(id: "a"))
+    store.zoom(2)
+    #expect(store.viewportRequest.animated)
+    #expect(store.viewportRequest.viewport.scale == 2)
+}

@@ -12,7 +12,10 @@ final class AtlasCanvasView: NSView {
     var onFocusFrame: ((String) -> Void)?
     var onCommand: ((CanvasCommand) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
-    private let world = CanvasWorldView()
+    /// Holds `world`; a pending zoom is shown as its layer's sublayer transform.
+    let zoomHost = CanvasFlippedView()
+    let world = CanvasFlippedView()
+    let gridLayer = CanvasGrid()
     let overlay = CanvasOverlay()
     private(set) var frames: [String: PreviewFrameView] = [:]
     private var projectID: String?
@@ -23,7 +26,12 @@ final class AtlasCanvasView: NSView {
         didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
     }
     private var scrollRouter = ScrollRouter()
-    private var viewport = Viewport()
+    /// What is on screen right now; overlay, hit testing and interaction use it.
+    var liveViewport = Viewport()
+    /// What `world.bounds` reflects; differs from `liveViewport` only while a zoom is pending.
+    var committedViewport = Viewport()
+    var animation: ViewportAnimationRun?
+    var lastIndicatorUpdate: CFTimeInterval = 0
     private var positions: [String: Point] = [:]
     /// The active frame (its page receives pointer input) is the only selected frame, once loaded.
     private var selection: Set<String> = []
@@ -33,7 +41,7 @@ final class AtlasCanvasView: NSView {
     private var guides: [Guide] = []
     /// Set when the current gesture panned, so its end reports the settled viewport.
     private var gesturePanned = false
-    private var settleWork: DispatchWorkItem?
+    var settleWork: DispatchWorkItem?
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     var spaceHeld = false
@@ -45,8 +53,12 @@ final class AtlasCanvasView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.masksToBounds = true
-        addSubview(world)
+        layer?.insertSublayer(gridLayer, at: 0)
+        zoomHost.wantsLayer = true
+        zoomHost.addSubview(world)
+        addSubview(zoomHost)
         addSubview(overlay)
+        updateColors()
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self))
         setAccessibilityLabel("界面画布")
@@ -91,6 +103,7 @@ final class AtlasCanvasView: NSView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
+        animation = nil
         stopDisplayLink()
         frames.values.forEach { $0.dispose() }
         frames.removeAll()
@@ -111,6 +124,8 @@ final class AtlasCanvasView: NSView {
     func releaseHeldInput() {
         spaceHeld = false
         endGesture(interaction.cancel())
+        // A pinch whose end went elsewhere; a running animation finishes on its own.
+        if animation == nil { commitPendingZoom() }
     }
 
     func update(project: Project, positions: [String: Point], positionsToken: Int,
@@ -161,9 +176,7 @@ final class AtlasCanvasView: NSView {
         }
         if requestToken != viewportRequest.token {
             requestToken = viewportRequest.token
-            viewport = viewportRequest.viewport
-            applyViewport()
-            zoomIndicator?.update(viewport)
+            apply(viewportRequest)
         }
     }
 
@@ -216,8 +229,8 @@ final class AtlasCanvasView: NSView {
         window?.makeFirstResponder(self)
     }
 
-    private func refreshOverlay() {
-        overlay.render(viewport: viewport, frames: frameRects(), selection: selection, active: activeFrameID,
+    func refreshOverlay() {
+        overlay.render(viewport: liveViewport, frames: frameRects(), selection: selection, active: activeFrameID,
                        hover: hover, marquee: marquee, guides: guides)
     }
 
@@ -231,43 +244,16 @@ final class AtlasCanvasView: NSView {
         }
     }
 
-    private func applyViewport() {
-        world.frame = bounds
-        overlay.frame = bounds
-        world.bounds = NSRect(x: -viewport.x / viewport.scale, y: -viewport.y / viewport.scale,
-                              width: bounds.width / viewport.scale, height: bounds.height / viewport.scale)
-        refreshOverlay()
-        needsDisplay = true
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColors()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
-        let step = max(12, 32 * viewport.scale)
-        let offsetX = viewport.x.truncatingRemainder(dividingBy: step)
-        let offsetY = viewport.y.truncatingRemainder(dividingBy: step)
-        NSColor.separatorColor.withAlphaComponent(0.55).setFill()
-        var x = offsetX
-        while x < bounds.width {
-            var y = offsetY
-            while y < bounds.height {
-                NSBezierPath(ovalIn: NSRect(x: x, y: y, width: 1.5, height: 1.5)).fill()
-                y += step
-            }
-            x += step
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         }
-    }
-
-    /// Wheel and pinch events have no end marker, so a pause settles the viewport.
-    private func settleSoon() {
-        zoomIndicator?.update(viewport)
-        settleWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.onViewportSettled?(self.viewport)
-        }
-        settleWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+        gridLayer.updateColor(for: effectiveAppearance)
     }
 
     // MARK: Pointer input
@@ -278,13 +264,14 @@ final class AtlasCanvasView: NSView {
     }
 
     private func interactionContext() -> InteractionContext {
-        InteractionContext(viewport: viewport, frames: frameRects(), selection: selection, tool: tool, spaceHeld: spaceHeld,
+        InteractionContext(viewport: liveViewport, frames: frameRects(), selection: selection, tool: tool, spaceHeld: spaceHeld,
                            activatable: Set(frames.filter { $0.value.isReady }.keys))
     }
 
     /// The topmost frame under a canvas (screen-space) point; the header is the top `headerHeight` world units.
     func hitTarget(at screen: NSPoint) -> HitTarget {
-        let point = world.convert(screen, from: self)
+        let worldPoint = CanvasGeometry.screenToWorld(Point(x: screen.x, y: screen.y), viewport: liveViewport)
+        let point = NSPoint(x: worldPoint.x, y: worldPoint.y)
         for case let frame as PreviewFrameView in world.subviews.reversed() where frame.frame.contains(point) {
             return point.y - frame.frame.minY < CanvasGeometry.headerHeight ? .frameHeader(frame.frameID) : .frameContent(frame.frameID)
         }
@@ -300,6 +287,8 @@ final class AtlasCanvasView: NSView {
     func hitTest(_ point: NSPoint, event: NSEvent?) -> NSView? {
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
+        // AppKit hit testing ignores the pending zoom transform, so the canvas takes the event and commits it.
+        if isZoomPending { return self }
         let hit = hitTarget(at: local)
         switch hit {
         case .frameHeader(let id), .frameContent(let id):
@@ -328,6 +317,7 @@ final class AtlasCanvasView: NSView {
     }
 
     private func pointerDown(_ event: NSEvent, button: PointerButton) {
+        commitPendingZoom()
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
         // A pointer-down while busy finishes the previous gesture, which may have panned.
@@ -355,7 +345,7 @@ final class AtlasCanvasView: NSView {
         guard gesturePanned else { return }
         gesturePanned = false
         restingCursor.set()
-        onViewportSettled?(viewport)
+        settleViewport()
     }
 
     override func mouseDown(with event: NSEvent) { pointerDown(event, button: .primary) }
@@ -413,9 +403,7 @@ final class AtlasCanvasView: NSView {
                 refreshOverlay()
             case .pan(let next):
                 if !gesturePanned { gesturePanned = true; NSCursor.closedHand.set() }
-                viewport = next
-                applyViewport()
-                zoomIndicator?.update(viewport)
+                setLiveViewport(next, zooming: false)
             case .focus(let id):
                 onFocusFrame?(id)
             }
@@ -446,31 +434,44 @@ final class AtlasCanvasView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        stopAnimation()
         // A line-based mouse wheel reports about one unit per notch; trackpads report points.
         let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY),
                                               precise: event.hasPreciseScrollingDeltas)
+        let viewport = liveViewport
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
             let point = convert(event.locationInWindow, from: nil)
-            viewport = CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y),
-                                             scale: viewport.scale * exp(-delta.y * 0.01))
+            setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y),
+                                                  scale: viewport.scale * exp(-delta.y * 0.01)), zooming: true)
         } else {
-            viewport = Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale)
+            setLiveViewport(Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale), zooming: false)
         }
-        applyViewport()
         settleSoon()
     }
 
     override func magnify(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        viewport = CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y), scale: viewport.scale * (1 + event.magnification))
-        applyViewport()
-        settleSoon()
+        magnify(by: event.magnification, at: convert(event.locationInWindow, from: nil), phase: event.phase)
+    }
+
+    /// A pinch zooms as a transform until it ends; a phaseless magnify settles after a pause.
+    func magnify(by magnification: Double, at point: NSPoint, phase: NSEvent.Phase) {
+        stopAnimation()
+        let viewport = liveViewport
+        setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y), scale: viewport.scale * (1 + magnification)),
+                        zooming: true)
+        if !phase.isDisjoint(with: [.ended, .cancelled]) {
+            settleWork?.cancel()
+            settleViewport()
+        } else if phase.isEmpty {
+            settleSoon()
+        }
     }
 
     override func keyDown(with event: NSEvent) {
         // WebKit may pass an unhandled key up the native responder chain after DOM
         // dispatch. Canvas keys apply only when the canvas itself is first responder.
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
+        commitPendingZoom()
         let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
         let plain = flags.subtracting(.shift).isEmpty
         // Tool letters follow the typed character, not the physical key, so other layouts work.
@@ -570,6 +571,6 @@ final class AtlasCanvasView: NSView {
     }
 }
 
-private final class CanvasWorldView: NSView {
+final class CanvasFlippedView: NSView {
     override var isFlipped: Bool { true }
 }
