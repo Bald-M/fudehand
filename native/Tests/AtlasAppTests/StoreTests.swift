@@ -85,3 +85,17 @@ private func sampleProject(id: String) -> Project {
     #expect(store.viewportRequest.animated)
     #expect(store.viewportRequest.viewport.scale == 2)
 }
+
+@Test @MainActor func zoomPressesStackOnTheRequestedTarget() {
+    let store = AtlasStore()
+    store.select(sampleProject(id: "a"))
+    store.resize(CGSize(width: 1000, height: 700))
+    let start = store.viewport.scale
+    store.zoomIn()
+    // The canvas reports a live animation frame near the start before the second press.
+    store.zoomIndicator.update(Viewport(x: 0, y: 0, scale: start))
+    store.zoomIn()
+    #expect(abs(store.viewportRequest.viewport.scale - start * 1.44) < 1e-9)
+    store.zoomOut()
+    #expect(abs(store.viewportRequest.viewport.scale - start * 1.2) < 1e-9)
+}

@@ -157,9 +157,12 @@ final class AtlasStore: ObservableObject {
         request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
     }
     func zoom(_ scale: Double) {
-        request(CanvasGeometry.zoomAt(zoomIndicator.viewport, point: Point(x: canvasSize.width / 2, y: canvasSize.height / 2), scale: scale),
+        // Builds on the last requested or settled viewport, so presses during an animation stack.
+        request(CanvasGeometry.zoomAt(viewport, point: Point(x: canvasSize.width / 2, y: canvasSize.height / 2), scale: scale),
                 animated: true)
     }
+    func zoomIn() { zoom(viewport.scale * 1.2) }
+    func zoomOut() { zoom(viewport.scale / 1.2) }
     func reset() {
         guard let project else { return }
         pendingSave?.cancel()

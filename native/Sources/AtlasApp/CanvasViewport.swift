@@ -77,7 +77,8 @@ extension AtlasCanvasView {
         liveViewport = next
         if !transform { committedViewport = next }
         applyViewport()
-        updateIndicator(force: false)
+        // A requested animation's target is already on the indicator; intermediate frames would make it flicker.
+        if animation == nil { updateIndicator(force: false) }
     }
 
     /// Commits the live viewport to `world.bounds` and reports it.

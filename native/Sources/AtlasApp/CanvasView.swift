@@ -42,6 +42,8 @@ final class AtlasCanvasView: NSView {
     /// Set when the current gesture panned, so its end reports the settled viewport.
     private var gesturePanned = false
     var settleWork: DispatchWorkItem?
+    /// Set while a press is sent back through the window, so it cannot loop.
+    private var redeliveringEvent = false
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     var spaceHeld = false
@@ -317,7 +319,16 @@ final class AtlasCanvasView: NSView {
     }
 
     private func pointerDown(_ event: NSEvent, button: PointerButton) {
+        // A redelivered press that the hit view passed back up the responder chain is not a canvas press.
+        if redeliveringEvent { return }
+        let wasPending = isZoomPending || animation != nil
         commitPendingZoom()
+        // The canvas took this press only because a zoom was pending; once committed it may belong to the page or a control.
+        if wasPending, let superview,
+           let target = hitTest(superview.convert(event.locationInWindow, from: nil), event: event), target !== self {
+            redeliver(event, to: target)
+            return
+        }
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
         // A pointer-down while busy finishes the previous gesture, which may have panned.
@@ -326,6 +337,19 @@ final class AtlasCanvasView: NSView {
                                               clickCount: event.clickCount, context: interactionContext())
         if wasBusy { settlePan() }
         apply(effects)
+    }
+
+    /// Sends the press through the window again, so AppKit routes it and its drags to the hit view.
+    private func redeliver(_ event: NSEvent, to target: NSView) {
+        redeliveringEvent = true
+        defer { redeliveringEvent = false }
+        if let window, window.windowNumber == event.windowNumber, window.isVisible {
+            window.sendEvent(event)
+        } else if event.type == .otherMouseDown {
+            target.otherMouseDown(with: event)
+        } else {
+            target.mouseDown(with: event)
+        }
     }
 
     private func pointerDragged(_ event: NSEvent) {
@@ -453,7 +477,7 @@ final class AtlasCanvasView: NSView {
         magnify(by: event.magnification, at: convert(event.locationInWindow, from: nil), phase: event.phase)
     }
 
-    /// A pinch zooms as a transform until it ends; a phaseless magnify settles after a pause.
+    /// A pinch zooms as a transform until it ends, or until 150ms pass without another magnify event.
     func magnify(by magnification: Double, at point: NSPoint, phase: NSEvent.Phase) {
         stopAnimation()
         let viewport = liveViewport
@@ -462,7 +486,8 @@ final class AtlasCanvasView: NSView {
         if !phase.isDisjoint(with: [.ended, .cancelled]) {
             settleWork?.cancel()
             settleViewport()
-        } else if phase.isEmpty {
+        } else {
+            // Also a watchdog for a pinch whose end never arrives.
             settleSoon()
         }
     }
@@ -471,32 +496,34 @@ final class AtlasCanvasView: NSView {
         // WebKit may pass an unhandled key up the native responder chain after DOM
         // dispatch. Canvas keys apply only when the canvas itself is first responder.
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
-        commitPendingZoom()
         let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
         let plain = flags.subtracting(.shift).isEmpty
+        let action: () -> Void
         // Tool letters follow the typed character, not the physical key, so other layouts work.
         if flags.isEmpty || flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
            letter == "v" || letter == "h" {
-            onToolChange?(letter == "v" ? .move : .hand)
-            return
+            action = { self.onToolChange?(letter == "v" ? .move : .hand) }
+        } else {
+            switch event.keyCode {
+            case 49: action = { self.spaceHeld = true }
+            case 53: action = { self.setSelection([]) }
+            case 0 where flags == .command: action = { self.setSelection(Set(self.frames.keys)) }
+            case 18 where flags == .shift: action = { self.onCommand?(.fitAll) }
+            case 19 where flags == .shift: action = { self.onCommand?(.zoomToSelection) }
+            case 29 where flags == .shift: action = { self.onCommand?(.actualSize) }
+            case 36 where plain:
+                action = { if self.selection.count == 1, let id = self.selection.first { self.frames[id]?.focusContent() } }
+            case 123, 124, 125, 126:
+                guard plain, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }
+                action = { self.nudgeSelection(keyCode: event.keyCode, step: flags.contains(.shift) ? 100 : 10) }
+            default:
+                // Keys the canvas does not handle leave a running animation alone.
+                super.keyDown(with: event)
+                return
+            }
         }
-        switch event.keyCode {
-        case 49: spaceHeld = true
-        case 53:
-            setSelection([])
-        case 0 where flags == .command:
-            setSelection(Set(frames.keys))
-        case 18 where flags == .shift: onCommand?(.fitAll)
-        case 19 where flags == .shift: onCommand?(.zoomToSelection)
-        case 29 where flags == .shift: onCommand?(.actualSize)
-        case 36 where plain:
-            if selection.count == 1, let id = selection.first { frames[id]?.focusContent() }
-        case 123, 124, 125, 126:
-            guard plain, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }
-            nudgeSelection(keyCode: event.keyCode, step: flags.contains(.shift) ? 100 : 10)
-        default:
-            super.keyDown(with: event)
-        }
+        commitPendingZoom()
+        action()
     }
 
     /// One key press moves every selected frame and is one undo step.

@@ -456,3 +456,65 @@ private final class CanvasHarness {
     #expect((settled.first?.scale ?? 1) < 1)
     #expect(abs(harness.canvas.worldBounds.width - 1000 / (settled.first?.scale ?? 1)) < 1e-6)
 }
+
+@Test @MainActor func requestedAnimationKeepsTheIndicatorAtItsTarget() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    let indicator = ZoomIndicator()
+    harness.canvas.zoomIndicator = indicator
+    let target = Viewport(x: -200, y: -100, scale: 0.5)
+    indicator.update(target)
+    animatedRequest(harness, to: target)
+    harness.canvas.lastIndicatorUpdate = 0
+    harness.canvas.advanceAnimation(to: 0.3)
+    #expect(indicator.viewport == target)
+    harness.canvas.advanceAnimation(to: 1)
+    #expect(indicator.viewport == target)
+}
+
+@Test @MainActor func clickOnTheActivePageDuringAPendingZoomIsNotACanvasPress() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    _ = try activateA(harness)
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    // Frame "a" content now covers screen (0, 60)–(800, 660); the press commits the zoom and goes to the page.
+    harness.drag(from: NSPoint(x: 200, y: 300), to: NSPoint(x: 400, y: 300))
+    #expect(!harness.canvas.isZoomPending)
+    #expect(harness.moves.isEmpty)
+}
+
+@Test @MainActor func clickOnEmptyCanvasDuringAPendingZoomIsStillACanvasPress() {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    harness.send(.leftMouseDown, at: NSPoint(x: 900, y: 690))
+    harness.send(.leftMouseUp, at: NSPoint(x: 900, y: 690))
+    #expect(harness.selections.last == [])
+}
+
+@Test @MainActor func pinchWithoutAnEndSettlesAfterIdle() async throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    #expect(settled.isEmpty)
+    try await Task.sleep(for: .milliseconds(250))
+    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
+    #expect(!harness.canvas.isZoomPending)
+}
+
+@Test @MainActor func unhandledKeyLeavesTheAnimationRunning() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    var settled: [Viewport] = []
+    harness.canvas.onViewportSettled = { settled.append($0) }
+    select(harness, at: NSPoint(x: 500, y: 600))
+    let target = Viewport(x: -200, y: -100, scale: 0.5)
+    animatedRequest(harness, to: target)
+    harness.canvas.advanceAnimation(to: 0.5)
+    harness.canvas.keyDown(with: try key(9, chars: "x", window: harness.window))
+    harness.canvas.advanceAnimation(to: 1)
+    #expect(settled == [target])
+}

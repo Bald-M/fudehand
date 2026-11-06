@@ -183,11 +183,11 @@ struct WorkspaceView: View {
             .help("移动（V）/ 抓手（H）").accessibilityLabel("画布工具")
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { store.zoom(store.zoomIndicator.viewport.scale / 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
+            Button { store.zoomOut() } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("缩小（⌘−）").accessibilityLabel("缩小").disabled(store.project == nil)
             ZoomLabel(indicator: store.zoomIndicator) { store.zoom(1) }
                 .disabled(store.project == nil)
-            Button { store.zoom(store.zoomIndicator.viewport.scale * 1.2) } label: { Image(systemName: "plus.magnifyingglass") }
+            Button { store.zoomIn() } label: { Image(systemName: "plus.magnifyingglass") }
                 .help("放大（⌘+）").accessibilityLabel("放大").disabled(store.project == nil)
             Button { store.fitAll() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .help("适应全部（⌘0）").accessibilityLabel("适应全部").disabled(store.project == nil)

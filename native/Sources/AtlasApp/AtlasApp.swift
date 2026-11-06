@@ -41,8 +41,8 @@ struct AtlasApp: App {
                 Button("打开项目目录…") { store.chooseWorkspace() }.keyboardShortcut("o")
             }
             CommandMenu("画布") {
-                Button("放大") { store.zoom(store.zoomIndicator.viewport.scale * 1.2) }.keyboardShortcut("+")
-                Button("缩小") { store.zoom(store.zoomIndicator.viewport.scale / 1.2) }.keyboardShortcut("-")
+                Button("放大") { store.zoomIn() }.keyboardShortcut("+")
+                Button("缩小") { store.zoomOut() }.keyboardShortcut("-")
                 Button("实际大小") { store.zoom(1) }.keyboardShortcut("1")
                 Button("适应全部") { store.fitAll() }.keyboardShortcut("0")
                 Divider()
