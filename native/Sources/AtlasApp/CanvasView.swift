@@ -12,6 +12,7 @@ final class AtlasCanvasView: NSView {
     var onFocusFrame: ((String) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
     private let world = CanvasWorldView()
+    private let overlay = CanvasOverlay()
     private var frames: [String: PreviewFrameView] = [:]
     private var projectID: String?
     private var reloadToken: Int?
@@ -20,10 +21,15 @@ final class AtlasCanvasView: NSView {
     private(set) var tool = CanvasTool.move
     private var viewport = Viewport()
     private var positions: [String: Point] = [:]
-    /// A frame is interactive (its page receives input) exactly when it is the only selected frame.
+    /// The active frame (its page receives pointer input) is the only selected frame, once loaded.
     private var selection: Set<String> = []
+    private var interaction = CanvasInteraction()
+    private var hover: String?
+    private var marquee: Rect?
+    private var guides: [Guide] = []
+    /// Set when the current gesture panned, so its end reports the settled viewport.
+    private var gesturePanned = false
     private var settleWork: DispatchWorkItem?
-    private var panStart: (CGPoint, Viewport)?
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     var spaceHeld = false
@@ -33,10 +39,12 @@ final class AtlasCanvasView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.masksToBounds = true
-        world.canvas = self
         addSubview(world)
+        addSubview(overlay)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
         setAccessibilityLabel("界面画布")
-        setAccessibilityHelp("拖动空白平移；Command 加滚轮缩放；选择画框后用方向键移动。")
+        setAccessibilityHelp("点选画框后可直接操作；拖动空白框选；空格拖动平移；Command 加滚轮缩放；选择画框后用方向键移动。")
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -92,10 +100,11 @@ final class AtlasCanvasView: NSView {
         focusObservers = []
     }
 
-    /// Clears Space panning when focus leaves, since the matching key-up will not arrive here.
+    /// Clears Space panning and finishes any gesture when focus leaves, since the matching
+    /// key-up or mouse-up will not arrive here. An in-progress frame drag commits where it is.
     func releaseHeldInput() {
         spaceHeld = false
-        if panStart != nil { endPan() }
+        endGesture(interaction.cancel())
     }
 
     func update(project: Project, positions: [String: Point], positionsToken: Int,
@@ -116,7 +125,9 @@ final class AtlasCanvasView: NSView {
             self.positionsToken = nil
             layoutChanged = true
         }
+        // Also runs after every project switch, which resets positionsToken.
         if self.positionsToken != positionsToken {
+            window?.undoManager?.removeAllActions(withTarget: self)
             self.positionsToken = positionsToken
             self.positions = positions
             layoutChanged = true
@@ -128,7 +139,14 @@ final class AtlasCanvasView: NSView {
                 view.frame = NSRect(x: position.x, y: position.y, width: frame.width,
                                     height: frame.height + CanvasGeometry.headerHeight)
             }
-            setSelection([])
+            // Positions were replaced wholesale, so an unfinished gesture is dropped rather than committed.
+            _ = interaction.cancel()
+            gesturePanned = false
+            hover = nil
+            marquee = nil
+            guides = []
+            setSelection([], deferReport: true)
+            refreshOverlay()
         }
         if self.reloadToken != reloadToken {
             frames.values.forEach { $0.reload() }
@@ -142,17 +160,51 @@ final class AtlasCanvasView: NSView {
         }
     }
 
-    /// Reports through the store asynchronously because this can run during a SwiftUI update.
-    private func setSelection(_ next: Set<String>) {
+    /// `deferReport` is for calls made during a SwiftUI update, where the store must not change synchronously.
+    private func setSelection(_ next: Set<String>, deferReport: Bool = false) {
         guard next != selection else { return }
-        let wasInteracting = selection.count == 1
         selection = next
-        for (id, frame) in frames {
-            frame.selected = next.contains(id)
-            frame.interactive = next.count == 1 && next.contains(id)
+        // Keyboard focus never stays in a page whose frame is no longer the active one.
+        if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: world),
+           activeFrameID.flatMap({ frames[$0] }).map({ !responder.isDescendant(of: $0) }) ?? true {
+            window?.makeFirstResponder(self)
         }
-        if wasInteracting && next.count != 1 { window?.makeFirstResponder(self) }
-        DispatchQueue.main.async { [weak self] in self?.onSelectionChange?(next) }
+        updateFrameAccessibility()
+        refreshOverlay()
+        if deferReport {
+            DispatchQueue.main.async { [weak self] in self?.onSelectionChange?(next) }
+        } else {
+            onSelectionChange?(next)
+        }
+    }
+
+    private var activeFrameID: String? {
+        guard selection.count == 1, let id = selection.first, frames[id]?.isReady == true else { return nil }
+        return id
+    }
+
+    func frameReadinessChanged() {
+        updateFrameAccessibility()
+        refreshOverlay()
+    }
+
+    private func updateFrameAccessibility() {
+        let active = activeFrameID
+        for (id, frame) in frames {
+            frame.updateAccessibility(selected: selection.contains(id), active: id == active)
+        }
+    }
+
+    /// The active page's Escape bridge: leave the page and return keyboard focus to the canvas.
+    func pageRequestedExit(_ id: String) {
+        guard activeFrameID == id else { return }
+        setSelection([])
+        window?.makeFirstResponder(self)
+    }
+
+    private func refreshOverlay() {
+        overlay.render(viewport: viewport, frames: frameRects(), selection: selection, active: activeFrameID,
+                       hover: hover, marquee: marquee, guides: guides)
     }
 
     override func layout() {
@@ -167,8 +219,10 @@ final class AtlasCanvasView: NSView {
 
     private func applyViewport() {
         world.frame = bounds
+        overlay.frame = bounds
         world.bounds = NSRect(x: -viewport.x / viewport.scale, y: -viewport.y / viewport.scale,
                               width: bounds.width / viewport.scale, height: bounds.height / viewport.scale)
+        refreshOverlay()
         needsDisplay = true
     }
 
@@ -190,47 +244,6 @@ final class AtlasCanvasView: NSView {
         }
     }
 
-    func select(_ id: String) {
-        if selection == [id] { frames[id]?.focusContent() } else { setSelection([id]) }
-    }
-
-    /// Leaves page interaction and returns keyboard focus to the canvas.
-    func deselect() {
-        setSelection([])
-        window?.makeFirstResponder(self)
-    }
-
-    func focus(_ id: String) { select(id); onFocusFrame?(id) }
-
-    func move(_ id: String, delta: CGPoint, from start: Point) {
-        let point = CanvasGeometry.moveFrame(start, screenDelta: Point(x: delta.x, y: delta.y), scale: viewport.scale)
-        positions[id] = point
-        if let frame = frames[id] { frame.setFrameOrigin(NSPoint(x: point.x, y: point.y)) }
-        onFramesMoved?([id: point])
-    }
-
-    func position(of id: String) -> Point { positions[id] ?? Point(x: 0, y: 0) }
-
-    func beginPan(_ event: NSEvent) {
-        window?.makeFirstResponder(self)
-        panStart = (convert(event.locationInWindow, from: nil), viewport)
-        NSCursor.closedHand.set()
-    }
-
-    func continuePan(_ event: NSEvent) {
-        guard let (start, initial) = panStart else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        viewport = Viewport(x: initial.x + point.x - start.x, y: initial.y + point.y - start.y, scale: initial.scale)
-        applyViewport()
-        zoomIndicator?.update(viewport)
-    }
-
-    func endPan() {
-        panStart = nil
-        NSCursor.arrow.set()
-        onViewportSettled?(viewport)
-    }
-
     /// Wheel and pinch events have no end marker, so a pause settles the viewport.
     private func settleSoon() {
         zoomIndicator?.update(viewport)
@@ -243,9 +256,175 @@ final class AtlasCanvasView: NSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
-    override func mouseDown(with event: NSEvent) { beginPan(event) }
-    override func mouseDragged(with event: NSEvent) { continuePan(event) }
-    override func mouseUp(with event: NSEvent) { endPan() }
+    // MARK: Pointer input
+
+    /// World-space frame rects including the header, keyed by frame id.
+    private func frameRects() -> [String: Rect] {
+        frames.mapValues { Rect(x: $0.frame.minX, y: $0.frame.minY, width: $0.frame.width, height: $0.frame.height) }
+    }
+
+    private func interactionContext() -> InteractionContext {
+        InteractionContext(viewport: viewport, frames: frameRects(), selection: selection, tool: tool, spaceHeld: spaceHeld,
+                           activatable: Set(frames.filter { $0.value.isReady }.keys))
+    }
+
+    /// The topmost frame under a canvas (screen-space) point; the header is the top `headerHeight` world units.
+    func hitTarget(at screen: NSPoint) -> HitTarget {
+        let point = world.convert(screen, from: self)
+        for case let frame as PreviewFrameView in world.subviews.reversed() where frame.frame.contains(point) {
+            return point.y - frame.frame.minY < CanvasGeometry.headerHeight ? .frameHeader(frame.frameID) : .frameContent(frame.frameID)
+        }
+        return .empty
+    }
+
+    /// Only the active frame's page content receives the pointer, and frame controls stay clickable;
+    /// everything else comes to the canvas.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard bounds.contains(local) else { return nil }
+        let hit = hitTarget(at: local)
+        switch hit {
+        case .frameHeader(let id), .frameContent(let id):
+            if let frame = frames[id], let control = frame.control(at: frame.convert(local, from: self)) { return control }
+        case .empty:
+            break
+        }
+        let button: PointerButton = NSApp?.currentEvent?.type == .otherMouseDown ? .middle : .primary
+        if CanvasInteraction.pageReceivesPointer(hit: hit, button: button, context: interactionContext()) {
+            return super.hitTest(point)
+        }
+        return self
+    }
+
+    private func screenPoint(_ event: NSEvent) -> (NSPoint, Point) {
+        let point = convert(event.locationInWindow, from: nil)
+        return (point, Point(x: point.x, y: point.y))
+    }
+
+    private func modifiers(_ event: NSEvent) -> PointerModifiers {
+        var result: PointerModifiers = []
+        if event.modifierFlags.contains(.shift) { result.insert(.shift) }
+        if event.modifierFlags.contains(.control) { result.insert(.control) }
+        return result
+    }
+
+    private func pointerDown(_ event: NSEvent, button: PointerButton) {
+        window?.makeFirstResponder(self)
+        let (screen, point) = screenPoint(event)
+        // A pointer-down while busy finishes the previous gesture, which may have panned.
+        let wasBusy = !interaction.isIdle
+        let effects = interaction.pointerDown(at: point, hit: hitTarget(at: screen), button: button, modifiers: modifiers(event),
+                                              clickCount: event.clickCount, context: interactionContext())
+        if wasBusy { settlePan() }
+        apply(effects)
+    }
+
+    private func pointerDragged(_ event: NSEvent) {
+        apply(interaction.pointerDragged(to: screenPoint(event).1, modifiers: modifiers(event), context: interactionContext()))
+    }
+
+    private func pointerUp(_ event: NSEvent) {
+        endGesture(interaction.pointerUp(at: screenPoint(event).1, context: interactionContext()))
+    }
+
+    private func endGesture(_ effects: [InteractionEffect]) {
+        apply(effects)
+        settlePan()
+    }
+
+    private func settlePan() {
+        guard gesturePanned else { return }
+        gesturePanned = false
+        NSCursor.arrow.set()
+        onViewportSettled?(viewport)
+    }
+
+    override func mouseDown(with event: NSEvent) { pointerDown(event, button: .primary) }
+    override func mouseDragged(with event: NSEvent) { pointerDragged(event) }
+    override func mouseUp(with event: NSEvent) { pointerUp(event) }
+
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+        pointerDown(event, button: .middle)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDragged(with: event); return }
+        pointerDragged(event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseUp(with: event); return }
+        pointerUp(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let next: String?
+        switch hitTarget(at: screenPoint(event).0) {
+        case .frameHeader(let id), .frameContent(let id): next = id
+        case .empty: next = nil
+        }
+        setHover(next)
+    }
+
+    override func mouseExited(with event: NSEvent) { setHover(nil) }
+
+    private func setHover(_ id: String?) {
+        guard hover != id else { return }
+        hover = id
+        refreshOverlay()
+    }
+
+    private func apply(_ effects: [InteractionEffect]) {
+        for effect in effects {
+            switch effect {
+            case .select(let next):
+                setSelection(next)
+            case .moveFrames(let origins):
+                setOrigins(origins)
+            case .commitMove(let from, let to):
+                setOrigins(to)
+                onFramesMoved?(to)
+                registerMove(from: from, to: to)
+            case .marquee(let rect):
+                marquee = rect
+                refreshOverlay()
+            case .guides(let next):
+                guides = next
+                refreshOverlay()
+            case .pan(let next):
+                if !gesturePanned { gesturePanned = true; NSCursor.closedHand.set() }
+                viewport = next
+                applyViewport()
+                zoomIndicator?.update(viewport)
+            case .focus(let id):
+                onFocusFrame?(id)
+            }
+        }
+    }
+
+    private func setOrigins(_ origins: [String: Point]) {
+        for (id, point) in origins {
+            positions[id] = point
+            frames[id]?.setFrameOrigin(NSPoint(x: point.x, y: point.y))
+        }
+        refreshOverlay()
+    }
+
+    // MARK: Undo
+
+    /// Registers one undo step; undoing applies `from` and registers the reverse as the redo.
+    private func registerMove(from: [String: Point], to: [String: Point]) {
+        guard let undoManager = window?.undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { canvas in
+            MainActor.assumeIsolated {
+                canvas.setOrigins(from)
+                canvas.onFramesMoved?(from)
+                canvas.registerMove(from: to, to: from)
+            }
+        }
+        undoManager.setActionName("移动画框")
+    }
 
     override func scrollWheel(with event: NSEvent) {
         // A line-based mouse wheel reports about one unit per notch; trackpads report points.
@@ -284,7 +463,7 @@ final class AtlasCanvasView: NSView {
         case 124: next.x += step
         case 125: next.y += step
         case 126: next.y -= step
-        case 36: select(id); return
+        case 36: frames[id]?.focusContent(); return
         default: super.keyDown(with: event); return
         }
         positions[id] = next
@@ -299,10 +478,5 @@ final class AtlasCanvasView: NSView {
 }
 
 private final class CanvasWorldView: NSView {
-    weak var canvas: AtlasCanvasView?
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let result = super.hitTest(point)
-        return result === self ? canvas : result
-    }
 }

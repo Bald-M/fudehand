@@ -13,18 +13,14 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private let status = NSTextField(labelWithString: "正在加载预览…")
     private let progress = NSProgressIndicator()
     private var timeout: DispatchWorkItem?
-    private var dragStart: (CGPoint, Point)?
-    private var panning = false
     private var hasDisposed = false
     /// Set when a response is rejected, so the follow-up cancellation error keeps the HTTP message.
     private var rejectedResponse = false
-    var interactive = false {
-        didSet {
-            needsDisplay = true
-            if interactive && !oldValue { focusContent() }
-        }
+    var frameID: String { definition.id }
+    /// True once the page has loaded; only a ready frame can become the active frame that receives web input.
+    private(set) var isReady = false {
+        didSet { if isReady != oldValue { canvas?.frameReadinessChanged() } }
     }
-    var selected = false { didSet { needsDisplay = true } }
 
     init(frame: Frame, baseURL: String) {
         definition = frame
@@ -70,7 +66,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         addSubview(retryButton)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("\(frame.title)，\(Self.dimensions(frame))，画框")
+        updateAccessibility(selected: false, active: false)
         reload()
     }
 
@@ -107,10 +103,15 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         let detail = "\(platform) · \(Self.dimensions(definition))" as NSString
         detail.draw(in: NSRect(x: 14, y: 26, width: max(1, bounds.width - 155), height: 14),
                     withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor])
-        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.7, dy: 0.7), xRadius: 10, yRadius: 10)
-        (interactive || selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
-        border.lineWidth = interactive || selected ? 2 : 1
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 10, yRadius: 10)
+        NSColor.separatorColor.setStroke()
+        border.lineWidth = 1
         border.stroke()
+    }
+
+    func updateAccessibility(selected: Bool, active: Bool) {
+        let state = active ? "，活动" : selected ? "，已选中" : ""
+        setAccessibilityLabel("\(definition.title)，\(Self.dimensions(definition))，画框\(state)")
     }
 
     private static func dimensions(_ frame: Frame) -> String {
@@ -118,50 +119,17 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         return "\(frame.width.formatted(format)) × \(frame.height.formatted(format))"
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let result = super.hitTest(point)
-        guard result != nil else { return nil }
-        let local = convert(point, from: superview)
-        if externalButton.frame.contains(local) { return externalButton }
-        if !retryButton.isHidden, retryButton.frame.contains(local) { return retryButton }
-        if local.y < CanvasGeometry.headerHeight || !interactive || canvas?.spaceHeld == true { return self }
-        return result
+    /// The frame's own control under `point` (frame coordinates); these stay clickable in every state.
+    func control(at point: NSPoint) -> NSView? {
+        if externalButton.frame.contains(point) { return externalButton }
+        if !retryButton.isHidden, retryButton.frame.contains(point) { return retryButton }
+        return nil
     }
-
-    override func mouseDown(with event: NSEvent) {
-        guard let canvas else { return }
-        let local = convert(event.locationInWindow, from: nil)
-        panning = canvas.spaceHeld
-        if panning { canvas.beginPan(event); return }
-        canvas.select(definition.id)
-        if local.y < CanvasGeometry.headerHeight {
-            if event.clickCount == 2 { canvas.focus(definition.id); return }
-            dragStart = (canvas.convert(event.locationInWindow, from: nil), canvas.position(of: definition.id))
-            NSCursor.closedHand.set()
-        }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let canvas else { return }
-        if panning { canvas.continuePan(event); return }
-        guard let (start, position) = dragStart else { return }
-        let point = canvas.convert(event.locationInWindow, from: nil)
-        canvas.move(definition.id, delta: CGPoint(x: point.x - start.x, y: point.y - start.y), from: position)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        dragStart = nil
-        if panning { canvas?.endPan(); panning = false }
-        NSCursor.arrow.set()
-    }
-
-    override func scrollWheel(with event: NSEvent) { canvas?.scrollWheel(with: event) }
-    override func magnify(with event: NSEvent) { canvas?.magnify(with: event) }
 
     @objc private func retry() { reload() }
 
     func focusContent() {
-        if !webView.isHidden { window?.makeFirstResponder(webView) }
+        if isReady { window?.makeFirstResponder(webView) }
     }
 
     @objc private func openExternal() {
@@ -173,6 +141,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     func reload() {
         timeout?.cancel()
         rejectedResponse = false
+        isReady = false
         guard let previewURL else { showFailure("预览地址无效，请检查 catalog.json。"); return }
         status.stringValue = "正在加载预览…"
         status.isHidden = false
@@ -191,6 +160,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
 
     private func showFailure(_ message: String) {
         timeout?.cancel()
+        isReady = false
         status.stringValue = message
         status.isHidden = false
         retryButton.isHidden = false
@@ -204,7 +174,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         retryButton.isHidden = true
         progress.stopAnimation(nil)
         webView.isHidden = false
-        if interactive { focusContent() }
+        isReady = true
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -255,9 +225,9 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "atlasExit", message.frameInfo.isMainFrame, interactive,
+        guard message.name == "atlasExit", message.frameInfo.isMainFrame,
               let url = message.frameInfo.request.url, isPreviewOrigin(url) else { return }
-        canvas?.deselect()
+        canvas?.pageRequestedExit(definition.id)
     }
 
     private static let escapeScript = """
