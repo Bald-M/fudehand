@@ -25,6 +25,7 @@ final class AtlasStore: ObservableObject {
     private var bootstrapped = false
     private var pendingSave: DispatchWorkItem?
     private var needsInitialFit = false
+    private var hasMeasuredCanvas = false
 
     init() {
         let stored = UserDefaults.standard.string(forKey: "native.theme") ?? "system"
@@ -71,6 +72,7 @@ final class AtlasStore: ObservableObject {
         catalog = loaded
         error = nil
         interactingFrameID = nil
+        hasMeasuredCanvas = false
         defaults.set(url.path, forKey: "native.workspace")
         layouts = LayoutStore(defaults: defaults, namespace: "native.\(url.standardizedFileURL.path)")
         let recent = defaults.string(forKey: "native.recent.\(url.path)")
@@ -93,7 +95,7 @@ final class AtlasStore: ObservableObject {
         } else {
             positions = Dictionary(uniqueKeysWithValues: next.frames.map { ($0.id, Point(x: $0.x, y: $0.y)) })
             fitAll()
-            needsInitialFit = true
+            needsInitialFit = !hasMeasuredCanvas
         }
         if let root { defaults.set(next.id, forKey: "native.recent.\(root.path)") }
     }
@@ -101,6 +103,7 @@ final class AtlasStore: ObservableObject {
     func resize(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
         canvasSize = size
+        hasMeasuredCanvas = true
         if needsInitialFit { needsInitialFit = false; fitAll() }
     }
 

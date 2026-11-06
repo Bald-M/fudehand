@@ -66,18 +66,20 @@ struct WorkspaceView: View {
                         Text(search.isEmpty ? "目录中还没有作品" : "没有匹配的作品").font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
                     }
                 }
-            }.listStyle(.sidebar)
+            }.listStyle(.sidebar).frame(minHeight: 120)
             if let project = store.project {
                 Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("关于作品").font(.caption).foregroundStyle(.secondary)
-                    Text(project.description).font(.callout).fixedSize(horizontal: false, vertical: true)
-                    Text(project.author).font(.caption).foregroundStyle(.secondary)
-                    if !project.tags.isEmpty { Text(project.tags.joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary) }
-                    if let source = project.sourceUrl, let url = URL(string: source) {
-                        Link(destination: url) { Label("查看原作出处", systemImage: "arrow.up.right") }.font(.caption)
-                    }
-                }.padding(20)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("关于作品").font(.caption).foregroundStyle(.secondary)
+                        Text(project.description).font(.callout).fixedSize(horizontal: false, vertical: true)
+                        Text(project.author).font(.caption).foregroundStyle(.secondary)
+                        if !project.tags.isEmpty { Text(project.tags.joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary) }
+                        if let source = project.sourceUrl, let url = URL(string: source) {
+                            Link(destination: url) { Label("查看原作出处", systemImage: "arrow.up.right") }.font(.caption)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+                }.frame(maxHeight: 220)
             }
             Divider()
             HStack {

@@ -12,6 +12,7 @@ let package = Package(
         .target(name: "AtlasCore"),
         .executableTarget(name: "AtlasApp", dependencies: ["AtlasCore"]),
         .testTarget(name: "AtlasCoreTests", dependencies: ["AtlasCore"]),
+        .testTarget(name: "AtlasAppTests", dependencies: ["AtlasApp", "AtlasCore"]),
     ],
     swiftLanguageModes: [.v5]
 )

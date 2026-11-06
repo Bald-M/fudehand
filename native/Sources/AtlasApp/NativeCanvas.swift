@@ -348,7 +348,7 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
         addSubview(retryButton)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("\(frame.title)，\(Int(frame.width)) 乘 \(Int(frame.height))，画框")
+        setAccessibilityLabel("\(frame.title)，\(Self.dimensions(frame))，画框")
         reload()
     }
 
@@ -383,13 +383,18 @@ private final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate
         title.draw(in: NSRect(x: 14, y: 8, width: max(1, bounds.width - 155), height: 17),
                    withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor])
         let platform = ["mobile": "移动端", "web": "网页端", "desktop": "桌面端"][definition.platform] ?? definition.platform
-        let detail = "\(platform) · \(Int(definition.width)) × \(Int(definition.height))" as NSString
+        let detail = "\(platform) · \(Self.dimensions(definition))" as NSString
         detail.draw(in: NSRect(x: 14, y: 26, width: max(1, bounds.width - 155), height: 14),
                     withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor])
         let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.7, dy: 0.7), xRadius: 10, yRadius: 10)
         (interactive || selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
         border.lineWidth = interactive || selected ? 2 : 1
         border.stroke()
+    }
+
+    private static func dimensions(_ frame: Frame) -> String {
+        let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0)).grouping(.never)
+        return "\(frame.width.formatted(format)) × \(frame.height.formatted(format))"
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
