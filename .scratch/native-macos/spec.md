@@ -1,6 +1,6 @@
 # macOS 原生界面图鉴
 
-Status: implementing
+Status: complete
 
 用户于 2026-11-06 确认：macOS 桌面 App，SwiftUI 原生画布外壳，WebKit 内嵌现有网页案例；保留中文界面。
 
@@ -19,3 +19,7 @@ Status: implementing
 2. 实现原生画布与 WebKit，保留网页响应式断点和交互。
 3. 集成案例进程所有权、SwiftUI 工作台及 .app 构建，运行原生与现有检查。
 4. Standards 与 Spec 独立审查，修复有效发现，形成仅本任务的本地提交。
+
+## 交付记录
+
+已完成原生 App、打包与服务所有权管理。24 项网页测试和 7 项 Swift 测试通过；Release 构建与签名验证通过。真实 UI 验收及限制见 `docs/native-verification.md`。Standards 与 Spec 最终均 PASS；原有中文化修改保持未提交，无远端发布步骤。
