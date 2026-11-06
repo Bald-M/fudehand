@@ -4,6 +4,8 @@ public struct Point: Codable, Equatable {
     public var x: Double
     public var y: Double
     public init(x: Double, y: Double) { self.x = x; self.y = y }
+    public static func + (a: Point, b: Point) -> Point { Point(x: a.x + b.x, y: a.y + b.y) }
+    public static func - (a: Point, b: Point) -> Point { Point(x: a.x - b.x, y: a.y - b.y) }
 }
 
 public struct Viewport: Codable, Equatable {
@@ -29,11 +31,41 @@ public struct Rect: Equatable {
     public init(x: Double, y: Double, width: Double, height: Double) {
         self.x = x; self.y = y; self.width = width; self.height = height
     }
+
+    public var minX: Double { x }
+    public var maxX: Double { x + width }
+    public var midX: Double { x + width / 2 }
+    public var minY: Double { y }
+    public var maxY: Double { y + height }
+    public var midY: Double { y + height / 2 }
+
+    /// Strict overlap: rectangles that only touch along an edge do not intersect.
+    public func intersects(_ other: Rect) -> Bool {
+        minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY
+    }
+
+    public func offsetBy(_ d: Point) -> Rect {
+        Rect(x: x + d.x, y: y + d.y, width: width, height: height)
+    }
+
+    public static func union(_ rects: [Rect]) -> Rect? {
+        guard let first = rects.first else { return nil }
+        let left = rects.reduce(first.minX) { min($0, $1.minX) }
+        let top = rects.reduce(first.minY) { min($0, $1.minY) }
+        let right = rects.reduce(first.maxX) { max($0, $1.maxX) }
+        let bottom = rects.reduce(first.maxY) { max($0, $1.maxY) }
+        return Rect(x: left, y: top, width: right - left, height: bottom - top)
+    }
+
+    /// Normalized rectangle spanned by two corner points.
+    public static func spanning(_ a: Point, _ b: Point) -> Rect {
+        Rect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
 }
 
 public enum CanvasGeometry {
-    public static let minScale = 0.1
-    public static let maxScale = 2.0
+    public static let minScale = 0.05
+    public static let maxScale: Double = 4
     public static let headerHeight = 44.0
     /// Points per notch for a line-based mouse wheel (one CSS line, as browsers scroll).
     public static let wheelLineHeight = 16.0
