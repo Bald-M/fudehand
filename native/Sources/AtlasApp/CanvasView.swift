@@ -38,6 +38,8 @@ final class AtlasCanvasView: NSView {
     private var focusObservers: [NSObjectProtocol] = []
     var spaceHeld = false
     private var lastReportedSize = CGSize.zero
+    var activeDisplayLink: CADisplayLink?
+    var frameLog = FrameIntervalLog()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -57,6 +59,7 @@ final class AtlasCanvasView: NSView {
         super.viewDidMoveToWindow()
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
+        updateDisplayLink()
         guard let window else { return }
         // The Space key-up goes to whichever app or window is focused when it is released.
         let center = NotificationCenter.default
@@ -88,6 +91,7 @@ final class AtlasCanvasView: NSView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
+        stopDisplayLink()
         frames.values.forEach { $0.dispose() }
         frames.removeAll()
     }

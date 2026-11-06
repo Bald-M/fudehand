@@ -333,3 +333,15 @@ private final class CanvasHarness {
     select(harness, at: NSPoint(x: 500, y: 600))
     #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
 }
+
+@Test func frameIntervalLogCountsHitchesOncePerSecond() {
+    var log = FrameIntervalLog()
+    #expect(log.record(10.0) == nil)
+    #expect(log.record(10.016) == nil)
+    // 50ms is a hitch; 20ms is not.
+    #expect(log.record(10.066) == nil)
+    #expect(log.record(10.086) == nil)
+    #expect(log.record(11.0) == "[frame] hitches=2 frames=4")
+    #expect(log.record(11.016) == nil)
+    #expect(log.record(12.0) == "[frame] hitches=1 frames=2")
+}
