@@ -27,7 +27,6 @@ let outside = ''
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'ui-atlas-conformance-'))
   outside = await mkdtemp(join(tmpdir(), 'ui-atlas-outside-'))
-  await mkdir(join(root, 'apps/atlas'), { recursive: true })
   await mkdir(join(root, 'examples/demo'), { recursive: true })
   await symlink(outside, join(root, 'examples/outside-link'))
 })

@@ -35,7 +35,7 @@ public enum CanvasGeometry {
     public static let minScale = 0.1
     public static let maxScale = 2.0
     public static let headerHeight = 44.0
-    /// Points per notch for a line-based mouse wheel, matching the browser canvas.
+    /// Points per notch for a line-based mouse wheel (one CSS line, as browsers scroll).
     public static let wheelLineHeight = 16.0
 
     public static func wheelDelta(_ delta: Point, precise: Bool) -> Point {

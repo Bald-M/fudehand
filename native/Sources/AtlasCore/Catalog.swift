@@ -2,19 +2,17 @@ import Foundation
 
 public struct Catalog: Codable, Equatable {
     public var version: Int
-    public var shell: Shell
     public var projects: [Project]
 
-    private enum CodingKeys: String, CodingKey { case version, shell, projects }
+    private enum CodingKeys: String, CodingKey { case version, projects }
 
-    public init(version: Int, shell: Shell, projects: [Project]) {
-        self.version = version; self.shell = shell; self.projects = projects
+    public init(version: Int, projects: [Project]) {
+        self.version = version; self.projects = projects
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(version: try values.decodeInteger(forKey: .version), shell: try values.decode(Shell.self, forKey: .shell),
-                  projects: try values.decode([Project].self, forKey: .projects))
+        self.init(version: try values.decodeInteger(forKey: .version), projects: try values.decode([Project].self, forKey: .projects))
     }
 
     public static func load(from root: URL) throws -> Catalog {
@@ -47,9 +45,6 @@ public struct Catalog: Codable, Equatable {
             try requireCatalogValue((1...65535).contains(port), "\(field) 必须是 1～65535 的整数")
             try requireCatalogValue(ports.insert(port).inserted, "端口 \(port) 重复，请为每个服务设置独立端口")
         }
-        try checkPort(shell.port, "shell.port")
-        _ = try localPreviewURL(shell.url, port: shell.port, field: "shell.url")
-        try checkDirectory("apps/atlas", root: root, field: "shell")
         var ids = Set<String>()
         for project in projects {
             let name = project.id
@@ -78,18 +73,6 @@ public struct Catalog: Codable, Equatable {
                 _ = try frame.previewURL(baseURL: project.preview.baseUrl)
             }
         }
-    }
-}
-
-public struct Shell: Codable, Equatable {
-    public var port: Int
-    public var url: String
-}
-
-extension Shell {
-    public init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(port: try values.decodeInteger(forKey: .port), url: try values.decode(String.self, forKey: .url))
     }
 }
 

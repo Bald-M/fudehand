@@ -9,7 +9,6 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@ui-atlas/preview-bridge": "workspace:*",
     "vue": "3.5.45"
   },
   "devDependencies": {

@@ -9,7 +9,6 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@ui-atlas/preview-bridge": "workspace:*",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

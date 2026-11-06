@@ -5,7 +5,6 @@ import AtlasCore
 private func catalogWorkspace() throws -> URL {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-catalog-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root.appendingPathComponent("examples/demo"), withIntermediateDirectories: true)
-    try FileManager.default.createDirectory(at: root.appendingPathComponent("apps/atlas"), withIntermediateDirectories: true)
     return root
 }
 
@@ -42,8 +41,8 @@ private func catalogWorkspace() throws -> URL {
     }
 }
 
-/// Runs tests/fixtures/catalog-conformance.json, which the browser launcher tests run too.
-@Test func catalogValidationMatchesTheBrowserLauncher() throws {
+/// Runs tests/fixtures/catalog-conformance.json, which the Node launcher tests run too.
+@Test func catalogValidationMatchesTheNodeLauncher() throws {
     let root = try catalogWorkspace()
     let outside = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-outside-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)

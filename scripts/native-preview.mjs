@@ -15,7 +15,7 @@ process.stdout.once('error', stop)
 try {
   const { values } = parseArgs({ options: { root: { type: 'string' } } })
   const root = values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url))
-  const services = (await readServices(root)).slice(1)
+  const services = await readServices(root)
   await runServices(services, {
     signal: controller.signal,
     stdio: ['ignore', process.stderr, process.stderr],

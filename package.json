@@ -9,7 +9,6 @@
   },
   "scripts": {
     "dev": "node scripts/native-dev.mjs",
-    "dev:web": "node scripts/dev.mjs",
     "build:native": "node scripts/native-build.mjs",
     "test:native": "node scripts/native-test.mjs",
     "typecheck": "pnpm -r --if-present typecheck",

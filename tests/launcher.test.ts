@@ -74,11 +74,9 @@ function supervised(services: object[], options: Record<string, unknown> = {}) {
 
 async function fixtureCatalog() {
   const cwd = await tempDirectory()
-  await mkdir(join(cwd, 'apps/atlas'), { recursive: true })
   await mkdir(join(cwd, 'examples/demo'), { recursive: true })
   return { cwd, catalog: {
     version: 1,
-    shell: { port: 31001, url: 'http://127.0.0.1:31001/' },
     projects: [{ id: 'demo', title: '演示作品', subtitle: '', description: '', author: '原创作者', sourceUrl: null as string | null, framework: 'HTML', tags: ['演示'], enabled: true, layoutVersion: 1,
       preview: { cwd: 'examples/demo', command: [process.execPath, 'dev.mjs'], port: 31002, baseUrl: 'http://127.0.0.1:31002/demo/' },
       frames: [{ id: 'home', title: '首页', platform: 'web', path: 'home', width: 1440, height: 900, x: 0, y: 0 }],
@@ -90,18 +88,18 @@ describe('作品目录与本地服务', () => {
   it('保持已启用作品相互独立，并支持空作品集', async () => {
     const { cwd, catalog } = await fixtureCatalog()
     const services = await servicesFromCatalog(catalog, cwd)
-    expect(services.map((service: { id: string }) => service.id)).toEqual(['atlas', 'demo'])
-    expect(services[1].cwd).toBe(join(cwd, 'examples/demo'))
+    expect(services.map((service: { id: string }) => service.id)).toEqual(['demo'])
+    expect(services[0].cwd).toBe(join(cwd, 'examples/demo'))
     catalog.projects[0].enabled = false
-    expect(await servicesFromCatalog(catalog, cwd)).toHaveLength(1)
+    expect(await servicesFromCatalog(catalog, cwd)).toHaveLength(0)
     catalog.projects = []
-    expect(await servicesFromCatalog(catalog, cwd)).toHaveLength(1)
+    expect(await servicesFromCatalog(catalog, cwd)).toHaveLength(0)
   })
 
   it('拒绝重复端口、非本机地址、无效几何数据和越界目录', async () => {
     const { cwd, catalog } = await fixtureCatalog()
     const duplicate = structuredClone(catalog)
-    duplicate.projects[0].preview.port = 31001
+    duplicate.projects.push({ ...structuredClone(duplicate.projects[0]), id: 'demo-two' })
     await expect(servicesFromCatalog(duplicate, cwd)).rejects.toThrow('重复')
     const remote = structuredClone(catalog)
     remote.projects[0].preview.baseUrl = 'http://example.com:31002/'

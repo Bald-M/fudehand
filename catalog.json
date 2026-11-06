@@ -1,9 +1,5 @@
 {
   "version": 1,
-  "shell": {
-    "port": 4400,
-    "url": "http://127.0.0.1:4400/"
-  },
   "projects": [
     {
       "id": "still",

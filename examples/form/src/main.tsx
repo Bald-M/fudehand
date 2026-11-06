@@ -1,10 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { installPreviewBridge } from "@ui-atlas/preview-bridge";
-import catalog from "../../../catalog.json";
 import "./style.css";
-
-installPreviewBridge(new URL(catalog.shell.url).origin);
 
 type Category = "Branding" | "Digital" | "Objects";
 type Idea = {

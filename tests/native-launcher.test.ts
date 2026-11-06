@@ -10,23 +10,20 @@ import { assertPortsAvailable } from '../scripts/launcher.mjs'
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
 
-async function reservePort() {
-  const server = createServer((_request, response) => response.end('existing'))
+async function freePort() {
+  const server = createServer()
   await new Promise<void>((done, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', done) })
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Missing fixture port')
-  return { server, port: address.port, url: `http://127.0.0.1:${address.port}/` }
+  await new Promise<void>(done => server.close(() => done()))
+  return { port: address.port, url: `http://127.0.0.1:${address.port}/` }
 }
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'ui-atlas-native-'))
   cleanup.push(() => rm(root, { recursive: true, force: true }))
-  await mkdir(join(root, 'apps/atlas'), { recursive: true })
   await mkdir(join(root, 'examples/demo'), { recursive: true })
-  const shell = await reservePort()
-  cleanup.push(() => new Promise<void>(done => shell.server.close(() => done())))
-  const preview = await reservePort()
-  await new Promise<void>(done => preview.server.close(() => done()))
+  const preview = await freePort()
   const script = join(root, 'examples/demo/dev.mjs')
   const marker = join(root, 'preview.pid')
   await writeFile(script, `import http from 'node:http'; import { writeFileSync } from 'node:fs';
@@ -35,7 +32,7 @@ async function fixture() {
     process.on('SIGTERM', () => server.close(() => process.exit(0)));
   `)
   const catalog = {
-    version: 1, shell: { port: shell.port, url: shell.url },
+    version: 1,
     projects: [{ id: 'demo', title: '演示', subtitle: '', description: '', author: '', sourceUrl: null,
       framework: 'HTML', tags: [], enabled: true, layoutVersion: 1,
       preview: { cwd: 'examples/demo', command: [process.execPath, script], port: preview.port, baseUrl: preview.url },
@@ -43,7 +40,7 @@ async function fixture() {
     }],
   }
   await writeFile(join(root, 'catalog.json'), JSON.stringify(catalog))
-  return { root, marker, shell, preview, catalog }
+  return { root, marker, preview, catalog }
 }
 
 function launch(root: string) {
@@ -70,19 +67,17 @@ function launch(root: string) {
 }
 
 describe('原生案例服务入口', () => {
-  it('只启动案例，允许浏览器画布端口已被占用，并在 App 管道关闭后释放案例端口', async () => {
+  it('启动案例，并在 App 管道关闭后释放案例端口', async () => {
     const sample = await fixture()
     const running = launch(sample.root)
     await running.ready()
     expect(running.output()).toBe('UI_ATLAS_READY\n')
     expect(await (await fetch(sample.preview.url)).text()).toBe('native-preview')
-    expect(await (await fetch(sample.shell.url)).text()).toBe('existing')
     const pid = Number(await readFile(sample.marker, 'utf8'))
     running.child.stdin.end()
     expect(await running.exited).toBe(0)
     await expect(assertPortsAvailable([{ ...sample.preview, title: '案例' }])).resolves.toBeUndefined()
     expect(() => process.kill(pid, 0)).toThrow()
-    expect(await (await fetch(sample.shell.url)).text()).toBe('existing')
   })
 
   it('收到终止信号时清理本次案例进程', async () => {

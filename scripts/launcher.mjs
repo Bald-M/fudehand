@@ -38,17 +38,12 @@ async function directory(root, cwd, name) {
   return absolute
 }
 
-/** 浏览器与启动器共用 catalog.json，运行状态不覆盖这份权威配置。 */
+/** 原生 App 与案例启动器共用 catalog.json，运行状态不覆盖这份权威配置。返回已启用案例的服务。 */
 export async function servicesFromCatalog(catalog, root) {
   requireValue(catalog && catalog.version === 1, 'catalog.version 必须是 1')
-  requireValue(catalog.shell && Array.isArray(catalog.projects), '需要 shell 和 projects 数组')
+  requireValue(Array.isArray(catalog.projects), '需要 projects 数组')
   const ports = new Set()
-  requirePort(catalog.shell.port, 'shell.port', ports)
-  localUrl(catalog.shell.url, catalog.shell.port, 'shell.url')
-  const services = [{
-    id: 'atlas', title: '界面图鉴', cwd: await directory(root, 'apps/atlas', '画布'),
-    command: ['pnpm', 'dev'], port: catalog.shell.port, url: catalog.shell.url,
-  }]
+  const services = []
   const ids = new Set()
   for (const project of catalog.projects) {
     requireValue(project && typeof project.id === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(project.id) && !ids.has(project.id), '作品 id 必须唯一，且仅使用小写字母、数字或连字符')

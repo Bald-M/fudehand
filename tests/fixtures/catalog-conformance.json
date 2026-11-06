@@ -1,8 +1,7 @@
 {
-  "description": "浏览器启动器（scripts/launcher.mjs）与原生 App（AtlasCore/Catalog.swift）共用的 catalog 校验用例。新增或修改校验规则时，在这里补充用例，两端测试都会执行。工作区包含 apps/atlas、examples/demo，以及指向项目外目录的符号链接 examples/outside-link。error 为 null 表示配置有效，否则两端的错误信息都必须包含该文本。",
+  "description": "案例启动器（scripts/launcher.mjs）与原生 App（AtlasCore/Catalog.swift）共用的 catalog 校验用例。新增或修改校验规则时，在这里补充用例，两端测试都会执行。工作区包含 examples/demo，以及指向项目外目录的符号链接 examples/outside-link。error 为 null 表示配置有效，否则两端的错误信息都必须包含该文本。",
   "catalog": {
     "version": 1,
-    "shell": { "port": 4400, "url": "http://127.0.0.1:4400/" },
     "projects": [
       {
         "id": "demo",
@@ -29,11 +28,10 @@
     { "name": "允许停用作品", "ops": [{ "op": "set", "path": ["projects", 0, "enabled"], "value": false }], "error": null },
     { "name": "允许 IPv6 本机地址", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "baseUrl"], "value": "http://[::1]:4401/" }], "error": null },
     { "name": "版本必须为 1", "ops": [{ "op": "set", "path": ["version"], "value": 2 }], "error": "version" },
-    { "name": "外壳端口不能是小数", "ops": [{ "op": "set", "path": ["shell", "port"], "value": 4400.5 }], "error": "port" },
     { "name": "预览端口不能是小数", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "port"], "value": 4401.5 }], "error": "port" },
     { "name": "版本不能是小数", "ops": [{ "op": "set", "path": ["version"], "value": 1.5 }], "error": "version" },
-    { "name": "外壳端口越界", "ops": [{ "op": "set", "path": ["shell", "port"], "value": 0 }], "error": "shell.port" },
-    { "name": "外壳只能使用本机 HTTP", "ops": [{ "op": "set", "path": ["shell", "url"], "value": "https://127.0.0.1:4400/" }], "error": "本机 HTTP" },
+    { "name": "预览端口越界", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "port"], "value": 0 }], "error": "preview.port" },
+    { "name": "忽略已移除的 shell 字段", "ops": [{ "op": "set", "path": ["shell"], "value": { "port": 4400, "url": "http://127.0.0.1:4400/" } }], "error": null },
     { "name": "作品 id 重复", "ops": [{ "op": "appendCopy", "path": ["projects"], "index": 0 }], "error": "id" },
     { "name": "作品 id 格式", "ops": [{ "op": "set", "path": ["projects", 0, "id"], "value": "Bad ID" }], "error": "id" },
     { "name": "标题不能为空白", "ops": [{ "op": "set", "path": ["projects", 0, "title"], "value": "  " }], "error": "title" },
@@ -47,7 +45,7 @@
     { "name": "布局版本不能是小数", "ops": [{ "op": "set", "path": ["projects", 0, "layoutVersion"], "value": 1.5 }], "error": "layoutVersion" },
     { "name": "出处不能是脚本地址", "ops": [{ "op": "set", "path": ["projects", 0, "sourceUrl"], "value": "javascript:alert(1)" }], "error": "sourceUrl" },
     { "name": "出处必须有主机", "ops": [{ "op": "set", "path": ["projects", 0, "sourceUrl"], "value": "https://" }], "error": "sourceUrl" },
-    { "name": "停用作品的端口也不能重复", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "port"], "value": 4400 }, { "op": "set", "path": ["projects", 0, "enabled"], "value": false }], "error": "重复" },
+    { "name": "停用作品的端口也不能重复", "ops": [{ "op": "appendCopy", "path": ["projects"], "index": 0 }, { "op": "set", "path": ["projects", 1, "id"], "value": "demo-two" }, { "op": "set", "path": ["projects", 1, "enabled"], "value": false }], "error": "重复" },
     { "name": "预览只能使用本机 HTTP", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "baseUrl"], "value": "http://example.com:4401/" }], "error": "本机 HTTP" },
     { "name": "预览地址端口一致", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "baseUrl"], "value": "http://127.0.0.1:4402/" }], "error": "端口" },
     { "name": "预览地址不能含账号", "ops": [{ "op": "set", "path": ["projects", 0, "preview", "baseUrl"], "value": "http://user@127.0.0.1:4401/" }], "error": "账号" },

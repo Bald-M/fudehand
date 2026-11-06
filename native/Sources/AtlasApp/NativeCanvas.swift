@@ -265,7 +265,7 @@ final class AtlasCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         // WebKit may pass an unhandled key up the native responder chain after DOM
-        // dispatch. The page bridge alone decides whether Escape exits interaction.
+        // dispatch. The injected Escape script alone decides whether Escape exits interaction.
         if interactingFrameID != nil { return }
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 53 { return }

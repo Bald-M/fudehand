@@ -1,5 +1,7 @@
 # 原生迁移验证记录
 
+> 历史记录：其中的浏览器服务与 4400 端口已随浏览器兼容版移除，见 [ADR 0002](adr/0002-remove-browser-shell.md)。
+
 环境：2026-11-06，Apple Silicon，macOS 15.2，Command Line Tools Swift 6.0.3，Node 22.22.2。未安装完整 Xcode；最低部署目标 macOS 14。
 
 ## 自动检查

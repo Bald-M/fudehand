@@ -21,30 +21,8 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5))
 
-  apps/atlas:
-    dependencies:
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@5.9.3)
-    devDependencies:
-      '@vitejs/plugin-vue':
-        specifier: 6.0.10
-        version: 6.0.10(vite@8.3.6(@types/node@22.20.5))(vue@3.5.45(typescript@5.9.3))
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: 8.3.6
-        version: 8.3.6(@types/node@22.20.5)
-      vue-tsc:
-        specifier: 3.3.14
-        version: 3.3.14(typescript@5.9.3)
-
   examples/form:
     dependencies:
-      '@ui-atlas/preview-bridge':
-        specifier: workspace:*
-        version: link:../../packages/preview-bridge
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -67,9 +45,6 @@ importers:
 
   examples/still:
     dependencies:
-      '@ui-atlas/preview-bridge':
-        specifier: workspace:*
-        version: link:../../packages/preview-bridge
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@5.9.3)
@@ -86,12 +61,6 @@ importers:
       vue-tsc:
         specifier: 3.3.14
         version: 3.3.14(typescript@5.9.3)
-
-  packages/preview-bridge:
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
 
 packages:
 

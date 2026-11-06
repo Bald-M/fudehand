@@ -16,7 +16,7 @@ import AtlasCore
     #expect(CanvasGeometry.zoomAt(Viewport(), point: Point(x: 0, y: 0), scale: 0).scale == 0.1)
 }
 
-@Test func lineBasedWheelNotchesMoveTheCanvasLikeTheBrowser() {
+@Test func lineBasedWheelNotchesMoveTheCanvasOneLineEach() {
     #expect(CanvasGeometry.wheelDelta(Point(x: 1, y: -2), precise: false) == Point(x: 16, y: -32))
     #expect(CanvasGeometry.wheelDelta(Point(x: 3.5, y: -7), precise: true) == Point(x: 3.5, y: -7))
 }
