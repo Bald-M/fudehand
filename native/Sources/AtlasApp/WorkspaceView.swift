@@ -133,18 +133,13 @@ struct WorkspaceView: View {
             case .ready:
                 if let project = store.project {
                     VStack(spacing: 0) {
-                        if let id = store.interactingFrameID {
-                            HStack {
-                                Label("正在交互：\(project.frames.first { $0.id == id }?.title ?? id)", systemImage: "cursorarrow.click")
-                                Spacer()
-                                Button("退出交互 ⎋") { store.interactingFrameID = nil }.buttonStyle(.bordered)
-                            }.font(.callout).padding(.horizontal, 20).padding(.vertical, 10).background(Color.accentColor.opacity(0.09))
-                        }
-                        NativeCanvas(project: project, viewport: store.viewport, positions: store.positions,
-                                     interactingFrameID: store.interactingFrameID, reloadToken: store.reloadToken,
-                                     onViewportChange: store.updateViewport,
-                                     onMoveFrame: { store.moveFrame($0, to: $1) },
-                                     onInteractionChange: { store.interactingFrameID = $0 },
+                        NativeCanvas(project: project, positions: store.positions, positionsToken: store.positionsToken,
+                                     viewportRequest: store.viewportRequest, tool: store.tool,
+                                     reloadToken: store.reloadToken, zoomIndicator: store.zoomIndicator,
+                                     onViewportSettled: store.viewportSettled,
+                                     onFramesMoved: store.framesMoved,
+                                     onSelectionChange: { store.selection = $0 },
+                                     onToolChange: { store.tool = $0 },
                                      onFocusFrame: store.focusFrame, onSizeChange: store.resize)
                             .clipped()
                         canvasFooter(project)
@@ -165,18 +160,18 @@ struct WorkspaceView: View {
                     }.buttonStyle(.borderless).help("聚焦 \(frame.title)")
                 }
                 Spacer()
-                Text("空格拖动平移 · ⌘滚轮或捏合缩放 · 双击进入交互").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text("空格拖动平移 · ⌘滚轮或捏合缩放 · 点击画框内容进行交互").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }.padding(.horizontal, 20).padding(.vertical, 12)
         }.background(.bar)
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { store.zoom(store.viewport.scale / 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
+            Button { store.zoom(store.zoomIndicator.viewport.scale / 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("缩小（⌘−）").accessibilityLabel("缩小").disabled(store.project == nil)
-            Button("\(Int((store.viewport.scale * 100).rounded()))%") { store.zoom(1) }
-                .monospacedDigit().frame(minWidth: 44).help("实际大小（⌘1）").disabled(store.project == nil)
-            Button { store.zoom(store.viewport.scale * 1.2) } label: { Image(systemName: "plus.magnifyingglass") }
+            ZoomLabel(indicator: store.zoomIndicator) { store.zoom(1) }
+                .disabled(store.project == nil)
+            Button { store.zoom(store.zoomIndicator.viewport.scale * 1.2) } label: { Image(systemName: "plus.magnifyingglass") }
                 .help("放大（⌘+）").accessibilityLabel("放大").disabled(store.project == nil)
             Button { store.fitAll() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .help("适应全部（⌘0）").accessibilityLabel("适应全部").disabled(store.project == nil)
@@ -195,5 +190,15 @@ struct WorkspaceView: View {
                 Button("打开项目目录…") { store.chooseWorkspace() }.disabled(store.opening)
             } label: { Image(systemName: "slider.horizontal.3") }.help("外观与布局").accessibilityLabel("外观与布局")
         }
+    }
+}
+
+private struct ZoomLabel: View {
+    @ObservedObject var indicator: ZoomIndicator
+    let action: () -> Void
+
+    var body: some View {
+        Button("\(Int((indicator.scale * 100).rounded()))%", action: action)
+            .monospacedDigit().frame(minWidth: 44).help("实际大小（⌘1）")
     }
 }

@@ -8,7 +8,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private let definition: Frame
     private let previewURL: URL?
     private let webView: WKWebView
-    private let interactionButton = NSButton()
     private let externalButton = NSButton()
     private let retryButton = NSButton()
     private let status = NSTextField(labelWithString: "正在加载预览…")
@@ -21,8 +20,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private var rejectedResponse = false
     var interactive = false {
         didSet {
-            interactionButton.title = interactive ? "退出交互" : "进入交互"
-            interactionButton.image = NSImage(systemSymbolName: interactive ? "hand.raised" : "cursorarrow.and.square.on.square.dashed", accessibilityDescription: nil)
             needsDisplay = true
             if interactive && !oldValue { focusContent() }
         }
@@ -46,14 +43,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: "atlasExit")
         addSubview(webView)
-        interactionButton.bezelStyle = .inline
-        interactionButton.controlSize = .small
-        interactionButton.font = .systemFont(ofSize: 11)
-        interactionButton.title = "进入交互"
-        interactionButton.target = self
-        interactionButton.action = #selector(toggleInteraction)
-        interactionButton.setAccessibilityLabel("\(frame.title)，进入或退出交互")
-        addSubview(interactionButton)
         externalButton.bezelStyle = .inline
         externalButton.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "在浏览器打开")
         externalButton.imagePosition = .imageOnly
@@ -100,7 +89,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         super.layout()
         // Content bounds remain in CSS pixels even when the ancestor is magnified.
         webView.frame = NSRect(x: 0, y: CanvasGeometry.headerHeight, width: definition.width, height: definition.height)
-        interactionButton.frame = NSRect(x: max(0, bounds.width - 134), y: 12, width: 90, height: 22)
         externalButton.frame = NSRect(x: max(0, bounds.width - 36), y: 12, width: 24, height: 22)
         status.frame = NSRect(x: 24, y: CanvasGeometry.headerHeight + min(200, definition.height * 0.38), width: max(1, bounds.width - 48), height: 58)
         progress.frame = NSRect(x: bounds.midX - 12, y: status.frame.minY - 38, width: 24, height: 24)
@@ -134,7 +122,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         let result = super.hitTest(point)
         guard result != nil else { return nil }
         let local = convert(point, from: superview)
-        if interactionButton.frame.contains(local) { return interactionButton }
         if externalButton.frame.contains(local) { return externalButton }
         if !retryButton.isHidden, retryButton.frame.contains(local) { return retryButton }
         if local.y < CanvasGeometry.headerHeight || !interactive || canvas?.spaceHeld == true { return self }
@@ -151,8 +138,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
             if event.clickCount == 2 { canvas.focus(definition.id); return }
             dragStart = (canvas.convert(event.locationInWindow, from: nil), canvas.position(of: definition.id))
             NSCursor.closedHand.set()
-        } else if event.clickCount == 2 {
-            canvas.interact(definition.id)
         }
     }
 
@@ -172,10 +157,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
 
     override func scrollWheel(with event: NSEvent) { canvas?.scrollWheel(with: event) }
     override func magnify(with event: NSEvent) { canvas?.magnify(with: event) }
-
-    @objc private func toggleInteraction() {
-        if interactive { canvas?.onInteractionChange?(nil) } else { canvas?.interact(definition.id) }
-    }
 
     @objc private func retry() { reload() }
 
@@ -276,7 +257,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "atlasExit", message.frameInfo.isMainFrame, interactive,
               let url = message.frameInfo.request.url, isPreviewOrigin(url) else { return }
-        canvas?.onInteractionChange?(nil)
+        canvas?.deselect()
     }
 
     private static let escapeScript = """

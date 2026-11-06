@@ -4,19 +4,25 @@ import AtlasCore
 final class AtlasCanvasView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
-    var onViewportChange: ((Viewport) -> Void)?
-    var onMoveFrame: ((String, Point) -> Void)?
-    var onInteractionChange: ((String?) -> Void)?
+    var zoomIndicator: ZoomIndicator?
+    var onViewportSettled: ((Viewport) -> Void)?
+    var onFramesMoved: (([String: Point]) -> Void)?
+    var onSelectionChange: ((Set<String>) -> Void)?
+    var onToolChange: ((CanvasTool) -> Void)?
     var onFocusFrame: ((String) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
     private let world = CanvasWorldView()
     private var frames: [String: PreviewFrameView] = [:]
     private var projectID: String?
     private var reloadToken: Int?
+    private var positionsToken: Int?
+    private var requestToken: Int?
+    private(set) var tool = CanvasTool.move
     private var viewport = Viewport()
     private var positions: [String: Point] = [:]
-    private var selectedFrameID: String?
-    private var interactingFrameID: String?
+    /// A frame is interactive (its page receives input) exactly when it is the only selected frame.
+    private var selection: Set<String> = []
+    private var settleWork: DispatchWorkItem?
     private var panStart: (CGPoint, Viewport)?
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
@@ -71,6 +77,7 @@ final class AtlasCanvasView: NSView {
     func dispose() {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
+        settleWork?.cancel()
         frames.values.forEach { $0.dispose() }
         frames.removeAll()
     }
@@ -91,16 +98,13 @@ final class AtlasCanvasView: NSView {
         if panStart != nil { endPan() }
     }
 
-    func update(project: Project, viewport: Viewport, positions: [String: Point],
-                interactingFrameID: String?, reloadToken: Int) {
-        self.viewport = viewport
-        self.positions = positions
-        let leavingInteraction = self.interactingFrameID != nil && interactingFrameID == nil
-        self.interactingFrameID = interactingFrameID
+    func update(project: Project, positions: [String: Point], positionsToken: Int,
+                viewportRequest: ViewportRequest, tool: CanvasTool, reloadToken: Int) {
+        self.tool = tool
+        var layoutChanged = false
         if projectID != project.id {
             frames.values.forEach { $0.dispose(); $0.removeFromSuperview() }
             frames.removeAll()
-            selectedFrameID = nil
             projectID = project.id
             for frame in project.frames {
                 let view = PreviewFrameView(frame: frame, baseURL: project.preview.baseUrl)
@@ -109,21 +113,46 @@ final class AtlasCanvasView: NSView {
                 world.addSubview(view)
             }
             self.reloadToken = reloadToken
+            self.positionsToken = nil
+            layoutChanged = true
+        }
+        if self.positionsToken != positionsToken {
+            self.positionsToken = positionsToken
+            self.positions = positions
+            layoutChanged = true
+        }
+        if layoutChanged {
+            for frame in project.frames {
+                guard let view = frames[frame.id] else { continue }
+                let position = self.positions[frame.id] ?? Point(x: frame.x, y: frame.y)
+                view.frame = NSRect(x: position.x, y: position.y, width: frame.width,
+                                    height: frame.height + CanvasGeometry.headerHeight)
+            }
+            setSelection([])
         }
         if self.reloadToken != reloadToken {
             frames.values.forEach { $0.reload() }
             self.reloadToken = reloadToken
         }
-        for frame in project.frames {
-            guard let view = frames[frame.id] else { continue }
-            let position = positions[frame.id] ?? Point(x: frame.x, y: frame.y)
-            view.frame = NSRect(x: position.x, y: position.y, width: frame.width,
-                                height: frame.height + CanvasGeometry.headerHeight)
-            view.interactive = interactingFrameID == frame.id
-            view.selected = selectedFrameID == frame.id
+        if requestToken != viewportRequest.token {
+            requestToken = viewportRequest.token
+            viewport = viewportRequest.viewport
+            applyViewport()
+            zoomIndicator?.update(viewport)
         }
-        if leavingInteraction { window?.makeFirstResponder(self) }
-        applyViewport()
+    }
+
+    /// Reports through the store asynchronously because this can run during a SwiftUI update.
+    private func setSelection(_ next: Set<String>) {
+        guard next != selection else { return }
+        let wasInteracting = selection.count == 1
+        selection = next
+        for (id, frame) in frames {
+            frame.selected = next.contains(id)
+            frame.interactive = next.count == 1 && next.contains(id)
+        }
+        if wasInteracting && next.count != 1 { window?.makeFirstResponder(self) }
+        DispatchQueue.main.async { [weak self] in self?.onSelectionChange?(next) }
     }
 
     override func layout() {
@@ -162,16 +191,13 @@ final class AtlasCanvasView: NSView {
     }
 
     func select(_ id: String) {
-        if let interactingFrameID, interactingFrameID != id { onInteractionChange?(nil) }
-        selectedFrameID = id
-        for (frameID, frame) in frames { frame.selected = frameID == id }
-        if interactingFrameID == id { frames[id]?.focusContent() }
-        else { window?.makeFirstResponder(self) }
+        if selection == [id] { frames[id]?.focusContent() } else { setSelection([id]) }
     }
 
-    func interact(_ id: String) {
-        select(id)
-        onInteractionChange?(id)
+    /// Leaves page interaction and returns keyboard focus to the canvas.
+    func deselect() {
+        setSelection([])
+        window?.makeFirstResponder(self)
     }
 
     func focus(_ id: String) { select(id); onFocusFrame?(id) }
@@ -180,7 +206,7 @@ final class AtlasCanvasView: NSView {
         let point = CanvasGeometry.moveFrame(start, screenDelta: Point(x: delta.x, y: delta.y), scale: viewport.scale)
         positions[id] = point
         if let frame = frames[id] { frame.setFrameOrigin(NSPoint(x: point.x, y: point.y)) }
-        onMoveFrame?(id, point)
+        onFramesMoved?([id: point])
     }
 
     func position(of id: String) -> Point { positions[id] ?? Point(x: 0, y: 0) }
@@ -196,10 +222,26 @@ final class AtlasCanvasView: NSView {
         let point = convert(event.locationInWindow, from: nil)
         viewport = Viewport(x: initial.x + point.x - start.x, y: initial.y + point.y - start.y, scale: initial.scale)
         applyViewport()
-        onViewportChange?(viewport)
+        zoomIndicator?.update(viewport)
     }
 
-    func endPan() { panStart = nil; NSCursor.arrow.set() }
+    func endPan() {
+        panStart = nil
+        NSCursor.arrow.set()
+        onViewportSettled?(viewport)
+    }
+
+    /// Wheel and pinch events have no end marker, so a pause settles the viewport.
+    private func settleSoon() {
+        zoomIndicator?.update(viewport)
+        settleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.onViewportSettled?(self.viewport)
+        }
+        settleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
 
     override func mouseDown(with event: NSEvent) { beginPan(event) }
     override func mouseDragged(with event: NSEvent) { continuePan(event) }
@@ -217,23 +259,22 @@ final class AtlasCanvasView: NSView {
             viewport = Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale)
         }
         applyViewport()
-        onViewportChange?(viewport)
+        settleSoon()
     }
 
     override func magnify(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         viewport = CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y), scale: viewport.scale * (1 + event.magnification))
         applyViewport()
-        onViewportChange?(viewport)
+        settleSoon()
     }
 
     override func keyDown(with event: NSEvent) {
         // WebKit may pass an unhandled key up the native responder chain after DOM
         // dispatch. The injected Escape script alone decides whether Escape exits interaction.
-        if interactingFrameID != nil { return }
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 53 { return }
-        guard let id = selectedFrameID, let position = positions[id] else { super.keyDown(with: event); return }
+        guard selection.count == 1, let id = selection.first, let position = positions[id] else { super.keyDown(with: event); return }
         let step: Double = event.modifierFlags.contains(.shift) ? 100 : 10
         var next = position
         switch event.keyCode {
@@ -241,12 +282,12 @@ final class AtlasCanvasView: NSView {
         case 124: next.x += step
         case 125: next.y += step
         case 126: next.y -= step
-        case 36: onInteractionChange?(id); return
+        case 36: select(id); return
         default: super.keyDown(with: event); return
         }
         positions[id] = next
         frames[id]?.setFrameOrigin(NSPoint(x: next.x, y: next.y))
-        onMoveFrame?(id, next)
+        onFramesMoved?([id: next])
     }
 
     override func keyUp(with event: NSEvent) {
