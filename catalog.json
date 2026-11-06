@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "shell": {
+    "port": 4400,
+    "url": "http://127.0.0.1:4400/"
+  },
+  "projects": [
+    {
+      "id": "still",
+      "title": "Still",
+      "subtitle": "日常，留一点白。",
+      "description": "一个安静的日常计划工具。探索相同设计语言在移动应用、网页与桌面工作台上的表达。",
+      "author": "UI Atlas · 原创演示",
+      "sourceUrl": null,
+      "framework": "Vue 3",
+      "tags": [
+        "多端设计",
+        "效率工具",
+        "轻交互"
+      ],
+      "enabled": true,
+      "layoutVersion": 1,
+      "preview": {
+        "cwd": "examples/still",
+        "command": [
+          "pnpm",
+          "dev"
+        ],
+        "port": 4401,
+        "baseUrl": "http://127.0.0.1:4401/"
+      },
+      "frames": [
+        {
+          "id": "mobile",
+          "title": "日常 / 移动端",
+          "platform": "mobile",
+          "path": "/?view=mobile",
+          "width": 390,
+          "height": 844,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "web",
+          "title": "概览 / 网页端",
+          "platform": "web",
+          "path": "/?view=web",
+          "width": 1440,
+          "height": 900,
+          "x": 470,
+          "y": 0
+        },
+        {
+          "id": "desktop",
+          "title": "工作空间 / PC 端",
+          "platform": "desktop",
+          "path": "/?view=desktop",
+          "width": 1280,
+          "height": 800,
+          "x": 470,
+          "y": 1040
+        }
+      ]
+    },
+    {
+      "id": "form",
+      "title": "Form & Field",
+      "subtitle": "让想法，自由生长。",
+      "description": "一个小小的 React 灵感收集器。用筛选、收藏与详情面板，展示独立技术栈如何进入同一张学习画布。",
+      "author": "UI Atlas · 原创演示",
+      "sourceUrl": null,
+      "framework": "React",
+      "tags": [
+        "网页设计",
+        "灵感收藏",
+        "React"
+      ],
+      "enabled": true,
+      "layoutVersion": 1,
+      "preview": {
+        "cwd": "examples/form",
+        "command": [
+          "pnpm",
+          "dev"
+        ],
+        "port": 4402,
+        "baseUrl": "http://127.0.0.1:4402/"
+      },
+      "frames": [
+        {
+          "id": "web",
+          "title": "灵感档案 / 网页端",
+          "platform": "web",
+          "path": "/",
+          "width": 1440,
+          "height": 900,
+          "x": 0,
+          "y": 0
+        }
+      ]
+    }
+  ]
+}
