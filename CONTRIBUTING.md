@@ -107,6 +107,23 @@ Check UI changes in the real App in both **light and dark** appearance, and put 
 - Record user-visible changes under `Unreleased` in [CHANGELOG.md](CHANGELOG.md); they are moved into the matching version on release ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
 - When canvas interaction behavior changes, update [docs/macos.md](docs/macos.md) too.
 
+## Releasing
+
+A release goes through its own PR, titled `chore(release): 发布 vX.Y.Z` (e.g. #73 for v0.0.1). On the release branch:
+
+1. Set the version everywhere and check that it agrees:
+
+   ```bash
+   pnpm version:set X.Y.Z   # sets package.json and Info.plist; bumps CFBundleVersion by 1
+   pnpm version:check       # exits non-zero and lists differences if any location disagrees
+   ```
+
+2. In [CHANGELOG.md](CHANGELOG.md), move the `Unreleased` entries into a new `[X.Y.Z] - YYYY-MM-DD` section and update the compare links at the bottom.
+3. Update the current version at the top of [README.md](README.md) and [README.zh-CN.md](README.zh-CN.md).
+4. Pass the full verification gate, including `pnpm build:native`, and smoke-test the built App in light and dark appearance.
+
+After the PR is merged, tag the merge commit `vX.Y.Z` and create a GitHub Release with the same name, using that version's CHANGELOG section as the notes. See "Releasing" in the [README](README.md) for what each version location controls.
+
 ## Security
 
 - Never commit, or paste into issues, PRs, or comments, `.env` files, API keys, tokens, Keychain contents, or other secrets (`.env` is in `.gitignore`).
