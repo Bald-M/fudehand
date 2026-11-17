@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import AtlasApp
@@ -98,4 +99,53 @@ private func sampleProject(id: String) -> Project {
     #expect(abs(store.viewportRequest.viewport.scale - start * 1.44) < 1e-9)
     store.zoomOut()
     #expect(abs(store.viewportRequest.viewport.scale - start * 1.2) < 1e-9)
+}
+
+private func isolatedDefaults() -> UserDefaults {
+    let name = "ui-atlas-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defaults.removePersistentDomain(forName: name)
+    return defaults
+}
+
+@Test @MainActor func pinsPersistPerWorkspace() {
+    let defaults = isolatedDefaults()
+    let first = URL(fileURLWithPath: "/tmp/atlas-a"), second = URL(fileURLWithPath: "/tmp/atlas-b")
+    let store = AtlasStore(defaults: defaults)
+    store.loadWorkspaceState(first)
+    store.togglePin("demo")
+    #expect(store.pinned == ["demo"])
+    let reopened = AtlasStore(defaults: defaults)
+    reopened.loadWorkspaceState(first)
+    #expect(reopened.pinned == ["demo"])
+    reopened.loadWorkspaceState(second)
+    #expect(reopened.pinned.isEmpty)
+    reopened.loadWorkspaceState(first)
+    reopened.togglePin("demo")
+    #expect(AtlasStore(defaults: defaults).pinnedIDs(for: first).isEmpty)
+}
+
+@Test @MainActor func projectOrderPersists() {
+    let defaults = isolatedDefaults()
+    let store = AtlasStore(defaults: defaults)
+    #expect(store.projectOrder == .catalog)
+    store.projectOrder = .recent
+    #expect(AtlasStore(defaults: defaults).projectOrder == .recent)
+}
+
+@Test func thumbnailCacheRoundTripsDownscaled() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let directory = ThumbnailCache.directory(for: URL(fileURLWithPath: "/tmp/atlas-a"), base: base)
+    #expect(directory != ThumbnailCache.directory(for: URL(fileURLWithPath: "/tmp/atlas-b"), base: base))
+    let cache = ThumbnailCache(directory: directory)
+    #expect(cache.load("demo") == nil)
+    let source = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 640, pixelsHigh: 400, bitsPerSample: 8, samplesPerPixel: 4,
+                                  hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let png = source.representation(using: .png, properties: [:])!
+    try cache.save(png, id: "demo")
+    let loaded = try #require(cache.load("demo"))
+    let rep = try #require(loaded.representations.first)
+    #expect(rep.pixelsWide == 320)
+    #expect(rep.pixelsHigh == 200)
 }

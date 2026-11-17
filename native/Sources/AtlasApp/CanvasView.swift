@@ -12,6 +12,8 @@ final class AtlasCanvasView: NSView {
     var onFocusFrame: ((String) -> Void)?
     var onCommand: ((CanvasCommand) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
+    /// A frame's page finished loading.
+    var onFrameReady: ((String) -> Void)?
     /// Holds `world`; a pending zoom is shown as its layer's sublayer transform.
     let zoomHost = CanvasFlippedView()
     let world = CanvasFlippedView()
@@ -215,6 +217,7 @@ final class AtlasCanvasView: NSView {
         }
         updateFrameAccessibility()
         refreshOverlay()
+        if frame.isReady { onFrameReady?(frame.frameID) }
     }
 
     private func updateFrameAccessibility() {
