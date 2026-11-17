@@ -1,63 +1,65 @@
 # CLAUDE.md
 
-本文件为 Claude Code（claude.ai/code）在本仓库中工作提供指引。
+This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
 
-ui-atlas 是一个本地 macOS 原生 AI 设计工具：SwiftUI + AppKit 外壳把一份由图层组成的“设计文档”用 Core Animation 渲染在可平移、可缩放的“画布”上，人和 AI Agent 编辑同一份文档，设计稿保存为 `.uiatlas` 工程文件（JSON）。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`（尤其 ADR 0006）；画布交互行为以 `docs/macos.md` 为权威规范。
+ui-atlas is a local, native macOS AI design tool: a SwiftUI + AppKit shell renders a "design document" made of layers with Core Animation on a pannable, zoomable "canvas". People and AI Agents edit the same document, and designs are saved as `.uiatlas` project files (JSON). Terminology follows `GLOSSARY.md`. Read `GLOSSARY.md` and the relevant `docs/adr/` (especially ADR 0006) before exploring the code; `docs/macos.md` is the authoritative spec for canvas interaction behavior.
 
-## 工作方式：superpowers 技能
+Language: project docs (README, CHANGELOG, `GLOSSARY.md`, `docs/`, ADRs), code comments, test descriptions, MCP tool descriptions, and error messages are in English; write any new content of these kinds in English too. App UI copy is in Chinese for now.
 
-本仓库要求使用 [superpowers](https://github.com/obra/superpowers) 技能干活。每次对话开始、做任何事之前（包括提澄清问题、读代码），先调用 `superpowers:using-superpowers`，再按任务调用对应技能并严格遵循；只要有一点可能适用就调用，不要以“任务太简单”为由跳过。常用对应关系：
+## Workflow: superpowers skills
 
-- 新功能、新行为、任何创作或规划 → 先 `superpowers:brainstorming`，再 `superpowers:writing-plans`
-- 按计划实现 → `superpowers:executing-plans`，或在有独立子任务时用 `superpowers:subagent-driven-development`
-- 写实现代码前 → `superpowers:test-driven-development`
-- Bug、测试失败、异常行为 → 先 `superpowers:systematic-debugging` 再改
-- 需要隔离的开发 → `superpowers:using-git-worktrees`
-- 声称完成、提交或开 PR 前 → `superpowers:verification-before-completion`
-- 完成后请求审查 → `superpowers:requesting-code-review`；收到审查意见 → `superpowers:receiving-code-review`
-- 实现完成、决定如何合入 → `superpowers:finishing-a-development-branch`
+This repository requires working with the [superpowers](https://github.com/obra/superpowers) skills. At the start of every conversation, before doing anything (including asking clarifying questions or reading code), invoke `superpowers:using-superpowers` first, then invoke the skill matching the task and follow it strictly. Invoke a skill whenever there is even a small chance it applies; do not skip it because "the task is too simple". Common mappings:
 
-用户的明确指示和本文件的约定优先于技能流程；只有用户明确说不用时才可跳过。
+- New feature, new behavior, any creative or planning work → `superpowers:brainstorming` first, then `superpowers:writing-plans`
+- Implementing a plan → `superpowers:executing-plans`, or `superpowers:subagent-driven-development` when there are independent subtasks
+- Before writing implementation code → `superpowers:test-driven-development`
+- Bugs, test failures, unexpected behavior → `superpowers:systematic-debugging` before changing anything
+- Development that needs isolation → `superpowers:using-git-worktrees`
+- Before claiming completion, committing, or opening a PR → `superpowers:verification-before-completion`
+- Requesting review after finishing → `superpowers:requesting-code-review`; receiving review feedback → `superpowers:receiving-code-review`
+- Implementation done, deciding how to integrate → `superpowers:finishing-a-development-branch`
 
-## 命令
+Explicit user instructions and the conventions in this file take precedence over skill workflows; skip a skill only when the user explicitly says not to use it.
 
-需要 macOS 14+、Swift 6（装 Command Line Tools 即可，不依赖第三方 Swift 包）、Node 22.12+、pnpm 11.7.0。
+## Commands
+
+Requires macOS 14+, Swift 6 (the Command Line Tools are enough; no third-party Swift packages), Node 22.12+, and pnpm 11.7.0.
 
 ```bash
 pnpm install
-pnpm dev               # 以 debug 构建应用并打开
-pnpm build:native      # release 构建 + ad-hoc 签名 → dist/ui-atlas.app
-pnpm test:native       # 对 native/ 运行 swift test（AtlasCoreTests + AtlasAppTests）
-pnpm check             # Vitest（tests/）：MCP 工具、MCP server、对话 harness
-pnpm mcp               # 以 stdio 启动 ui-atlas MCP server（通常由 Agent 自动启动）
+pnpm dev               # build the app in debug and open it
+pnpm build:native      # release build + ad-hoc signing → dist/ui-atlas.app
+pnpm test:native       # run swift test on native/ (AtlasCoreTests + AtlasAppTests)
+pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness
+pnpm mcp               # start the ui-atlas MCP server over stdio (usually launched by the Agent)
 ```
 
-运行单个测试：
+Run a single test:
 
 ```bash
 pnpm vitest run tests/control-tools.test.ts -t "<name>"
 swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 ```
 
-`pnpm test:native` 经由 `scripts/native-swift.mjs` 执行，它把 SwiftPM 的 scratch/cache 目录固定在 `/private/tmp/ui-atlas-native-*` 下（可用 `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE` 覆盖），并传入 `--disable-sandbox`；不要在同一个 scratch 目录上同时跑两个 Swift 构建。Node 测试会启动真实的本机 socket、HTTP 服务和子进程，因此需要回环网络——禁止监听 localhost 的沙箱会让它们误报失败。
+`pnpm test:native` runs through `scripts/native-swift.mjs`, which pins SwiftPM's scratch/cache directories under `/private/tmp/ui-atlas-native-*` (override with `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE`) and passes `--disable-sandbox`; do not run two Swift builds on the same scratch directory at once. The Node tests start real local sockets, HTTP servers, and child processes, so they need loopback networking — a sandbox that forbids listening on localhost makes them fail spuriously.
 
-设置 `UI_ATLAS_FRAME_LOG=1` 后，应用每秒打印一次 `[frame] hitches=N frames=M`，用于平移/缩放的性能调优。
+With `UI_ATLAS_FRAME_LOG=1` set, the app prints `[frame] hitches=N frames=M` once per second, for tuning pan/zoom performance.
 
-## 架构
+## Architecture
 
-**App 是设计文档的唯一持有者**（ADR 0006）。`AtlasStore` 持有 `DesignEditor`（文档 + 撤销历史）；画布、图层面板、属性面板和控制通道的修改都经它进行，人工与 Agent 的修改共用一条撤销历史。启动时先显示启动窗口（新建、最近打开、模板），进入编辑后才打开编辑窗口并关闭启动窗口（见 `docs/macos.md`“启动与构建”）；启动时不启动任何 Node 进程，只有对话面板发送消息时才启动 harness。`native-build.mjs` 把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，供对话面板找到 `scripts/agent-chat.mjs`。
+**The App is the sole owner of the design document** (ADR 0006). `AtlasStore` owns the `DesignEditor` (document + undo history); edits from the canvas, layers panel, properties panel, and control channel all go through it, and human and Agent edits share one undo history. On launch the App first shows the launch window (New, Open Recent, Templates); the editor window opens, and the launch window closes, only once editing starts (see "启动与构建" (Startup and build) in `docs/macos.md`). Launching starts no Node process; the harness starts only when the chat panel sends a message. `native-build.mjs` writes the repository path, Node path, and PATH into the app bundle's `Contents/Resources/workspace.json` so the chat panel can find `scripts/agent-chat.mjs`.
 
-**原生 target**（`native/Package.swift`，Swift 5 语言模式）：
-- `AtlasCore` —— 纯逻辑、不依赖 AppKit：`DesignDocument`（图层模型、`.uiatlas` 读写与版本校验）、`DesignJSON`（JSON 与节点互转、字段校验、部分字段补丁——文件读取、Agent 创建与修改共用这唯一一份校验）、`DesignLayout`（自动布局、文字自适应、分组收缩；文字测量由 App 注入）、`DesignEditor`（树操作与撤销历史，连续手势记为一步）、`DesignHitTest`（Figma 式点击选中规则）、`CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机：移动、缩放把手、框选、创建、平移）、几何与视口、吸附、视口动画、`ControlProtocol`。可测试的规则放在这里。
-- `AtlasApp` —— SwiftUI 外壳（`AtlasApp` 的菜单、`WorkspaceView`、`LayersPanel`、`InspectorPanel`、`ChatPanel`）、`AtlasStore`，以及 AppKit 画布：`NativeCanvas`（NSViewRepresentable 桥接）→ `AtlasCanvasView`（处理输入，通过 `CanvasHost` 协议把编辑交给 store）、`DesignRenderer`（文档 → CALayer 树，按 id 增量更新；`snapshotPNG` 离屏截图）、`TextMetrics`/`TextLayer`（CoreText 测量与绘制共用同一排版）、`CanvasViewport`（平移移动 `world.bounds`；缩放以 GPU 变换渲染，稳定后再提交并更新文字/图片的 `contentsScale`）、`CanvasGrid`、`CanvasOverlay`（选框、把手、顶层画框名称、框选、参考线，从不接收输入）。
+**Native targets** (`native/Package.swift`, Swift 5 language mode):
+- `AtlasCore` — pure logic, no AppKit dependency: `DesignDocument` (layer model, `.uiatlas` reading/writing and version validation), `DesignJSON` (JSON ↔ node conversion, field validation, partial field patches — file loading and Agent create/update share this single validation), `DesignLayout` (auto layout, text auto-sizing, group shrinking; text measurement is injected by the App), `DesignEditor` (tree operations and undo history; a continuous gesture is recorded as one step), `DesignHitTest` (Figma-style click selection rules), `CanvasInteraction` (a state machine turning pointer events + `HitTarget` into `InteractionEffect`: move, resize handles, marquee selection, create, pan), geometry and viewport, snapping, viewport animation, `ControlProtocol`. Testable rules belong here.
+- `AtlasApp` — the SwiftUI shell (`AtlasApp` menus, `WorkspaceView`, `LayersPanel`, `InspectorPanel`, `ChatPanel`), `AtlasStore`, and the AppKit canvas: `NativeCanvas` (NSViewRepresentable bridge) → `AtlasCanvasView` (handles input and hands edits to the store via the `CanvasHost` protocol), `DesignRenderer` (document → CALayer tree, updated incrementally by id; `snapshotPNG` for offscreen snapshots), `TextMetrics`/`TextLayer` (CoreText measuring and drawing share the same typesetting), `CanvasViewport` (panning moves `world.bounds`; zooming renders with a GPU transform and commits once stable, then updates `contentsScale` for text/images), `CanvasGrid`, `CanvasOverlay` (selection box, handles, top-level frame names, marquee, guides; never receives input).
 
-store 在每次文档变化时直接调用 `canvas.show(document)`（拖动时每帧都走这条路，不经 SwiftUI）；面板读取的 `@Published document` 在连续手势期间不更新，结束时一次更新。视口仍是画布持有实时值、只把稳定值回报给 store，store 用带 token 的 `ViewportRequest` 向下推送一次性视口变更。
+The store calls `canvas.show(document)` directly on every document change (during a drag this path runs every frame, bypassing SwiftUI); the `@Published document` that the panels read is not updated during a continuous gesture and is updated once when it ends. The canvas still owns the live viewport value and reports only stable values back to the store; the store pushes one-off viewport changes down with a token-tagged `ViewportRequest`.
 
-**Agent 接入**（ADR 0003、0006）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。所有工具经 `scripts/control-client.mjs` 转发给 App 的控制通道（`~/Library/Application Support/ui-atlas/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；Node 端只把 `image.path` 读成 base64、把相对文件路径按仓库目录解析，不做字段校验。协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
+**Agent integration** (ADR 0003, 0006). `scripts/atlas-tools.mjs` is the only tool implementation, shared by the MCP server (`scripts/mcp-server.mjs`, registered as `ui-atlas` in `.mcp.json`) and the App chat panel's Agent harness (`scripts/agent-chat.mjs`, JSON-lines protocol, model adapters in `agent-providers.mjs`). Every tool is forwarded through `scripts/control-client.mjs` to the App's control channel (`~/Library/Application Support/ui-atlas/control.sock`, override with `UI_ATLAS_CONTROL_SOCKET`); the Node side only reads `image.path` into base64 and resolves relative file paths against the repository directory, and does no field validation. The protocol lives in `AtlasCore/ControlProtocol.swift`, the listener in `AtlasApp/ControlServer.swift`, and command dispatch in `ControlCommands.swift`. The chat panel's API key is stored in the Keychain and passed to the harness only through the `UI_ATLAS_API_KEY` environment variable.
 
-## 约定
+## Conventions
 
-- 远端：`origin` → https://github.com/Bald-M/ui-atlas（默认分支 `main`）。未配置 CI 或部署，本地检查即门禁。在任务分支上交付，推送后向 `main` 发起 PR。
-- 任务直接用 `gh issue` 在 GitHub Issues 创建和跟踪，不在本地维护任务记录；`.scratch/<feature>/` 只用于起草较长的规格或计划。
-- 新术语记入 `GLOSSARY.md`，架构决策记入 `docs/adr/`。ADR 0002 已彻底移除浏览器外壳，ADR 0006 已移除网页作品链路——不要重新引入 `apps/atlas`、`catalog.json`、`examples/`、预览启动器或 WKWebView 画框。
-- 界面改动需在真实应用中按浅色和深色两种外观检查；证据截图放在 `docs/evidence/`。
+- Remote: `origin` → https://github.com/Bald-M/ui-atlas (default branch `main`). No CI or deployment is configured; local checks are the gate. Deliver on a task branch, push, then open a PR against `main`.
+- Create and track tasks directly in GitHub Issues with `gh issue`; do not keep local task records. `.scratch/<feature>/` is only for drafting longer specs or plans.
+- Record new terms in `GLOSSARY.md` and architecture decisions in `docs/adr/`. ADR 0002 fully removed the browser shell and ADR 0006 removed the web-work pipeline — do not reintroduce `apps/atlas`, `catalog.json`, `examples/`, the preview launcher, or WKWebView frames.
+- UI changes must be checked in the real app in both light and dark appearance; put evidence screenshots in `docs/evidence/`.
