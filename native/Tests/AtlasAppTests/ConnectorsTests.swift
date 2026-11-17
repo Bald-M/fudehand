@@ -73,3 +73,25 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
     #expect(model.entries[.claude]?.status == .connected)
     #expect(model.entries[.codex]?.status == .unavailable)
 }
+
+@Test @MainActor func connectorsShowCodexDetectionFailures() async {
+    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools"],
+                                claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), isExecutable: { $0 == "/tools/codex" }) { _, _, _ in
+        CommandResult(exitCode: 1, output: Data(), error: "Error: invalid config.toml")
+    }
+    await model.refresh()
+    #expect(model.entries[.codex]?.status == .disconnected)
+    #expect(model.entries[.codex]?.error == "检测连接状态失败：Error: invalid config.toml")
+}
+
+@Test @MainActor func connectorsFollowClaudeConfigDir() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data(#"{"mcpServers":{"ui-atlas":{"command":"node","args":["/repo/scripts/mcp-server.mjs"]}}}"#.utf8)
+        .write(to: directory.appendingPathComponent(".claude.json"))
+    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools", "CLAUDE_CONFIG_DIR": directory.path],
+                                isExecutable: { $0 == "/tools/claude" }) { _, _, _ in CommandResult(exitCode: 0, output: Data(), error: "") }
+    await model.refresh()
+    #expect(model.entries[.claude]?.status == .connected)
+}

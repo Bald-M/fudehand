@@ -30,7 +30,7 @@ final class ConnectorsModel: ObservableObject {
     private let run: Runner
 
     init(root: URL?, runtime: WorkspaceLocation?, inherited: [String: String] = ProcessInfo.processInfo.environment,
-         claudeConfig: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json"),
+         claudeConfig: URL? = nil,
          isExecutable: @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
          run: @escaping Runner = ConnectorsModel.runProcess) {
         script = root?.appendingPathComponent("scripts/mcp-server.mjs").path
@@ -39,13 +39,18 @@ final class ConnectorsModel: ObservableObject {
         environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ":")
         self.environment = environment
-        self.claudeConfig = claudeConfig
+        // claude CLI 在设置了 CLAUDE_CONFIG_DIR 时把用户级配置写在该目录下。
+        self.claudeConfig = claudeConfig ?? URL(fileURLWithPath: inherited["CLAUDE_CONFIG_DIR"] ?? FileManager.default.homeDirectoryForCurrentUser.path)
+            .appendingPathComponent(".claude.json")
         self.isExecutable = isExecutable
         self.run = run
     }
 
     func refresh() async {
-        for connector in AgentConnector.allCases { await refresh(connector) }
+        for connector in AgentConnector.allCases where entries[connector]?.busy == false {
+            entries[connector]?.error = nil
+            await refresh(connector)
+        }
     }
 
     func connect(_ connector: AgentConnector) async {
@@ -81,6 +86,11 @@ final class ConnectorsModel: ObservableObject {
         case .codex:
             let result = await run(executable, connector.statusArguments ?? [], environment)
             entries[connector]?.status = AgentConnector.codexStatus(output: result.output, exitCode: result.exitCode, script: script)
+            // 未注册时 codex 报 “No MCP server named”；其他失败（如配置文件损坏）要显示出来，而不是只显示未连接。
+            if result.exitCode != 0, !result.error.contains("No MCP server named"), entries[connector]?.error == nil {
+                let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
+                entries[connector]?.error = "检测连接状态失败" + (detail.isEmpty ? "（\(result.exitCode)）" : "：\(detail)")
+            }
         }
     }
 
