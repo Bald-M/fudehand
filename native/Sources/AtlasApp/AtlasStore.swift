@@ -42,7 +42,7 @@ final class AtlasStore: ObservableObject {
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
-    var ready: Bool { session.phase == .ready }
+    var ready: Bool { session.phase(for: project?.id) == .ready }
 
     func bootstrap() async {
         guard !bootstrapped else { return }
@@ -87,13 +87,15 @@ final class AtlasStore: ObservableObject {
         let recent = defaults.string(forKey: "native.recent.\(url.path)")
         let selected = loaded.projects.first { $0.enabled && $0.id == recent } ?? loaded.projects.first { $0.enabled }
         project = nil
+        session.start(root: url, runtime: runtime)
         if let selected { select(selected) }
         else { positions = [:]; positionsToken += 1; viewport = Viewport(); zoomIndicator.update(viewport) }
-        session.start(root: url, runtime: runtime)
     }
 
     func select(_ next: Project) {
-        guard next.enabled, next.id != project?.id else { return }
+        guard next.enabled else { return }
+        // 再次选中当前作品时只补发启动请求，用于重试失败的案例服务。
+        guard next.id != project?.id else { session.request(next.id); return }
         saveNow()
         selection = []
         project = next
@@ -109,6 +111,7 @@ final class AtlasStore: ObservableObject {
             needsInitialFit = !hasMeasuredCanvas
         }
         if let root { defaults.set(next.id, forKey: "native.recent.\(root.path)") }
+        session.request(next.id)
     }
 
     func resize(_ size: CGSize) {
@@ -175,6 +178,11 @@ final class AtlasStore: ObservableObject {
         positionsToken += 1
         selection = []
         fitAll(animated: false)
+    }
+    /// 启动器失败时整体重启；只是当前作品失败时只重试该作品。
+    func retryPreview() {
+        if case .failed = session.phase { restart() }
+        else if let project { session.request(project.id) }
     }
     func restart() {
         guard let root, !opening else { return }

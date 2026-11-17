@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { assertPortsAvailable, runServices, servicesFromCatalog, waitForHttp } from '../scripts/launcher.mjs'
+import { assertPortsAvailable, createServicePool, servicesFromCatalog, waitForHttp } from '../scripts/launcher.mjs'
 
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
@@ -64,12 +64,15 @@ async function fixture(wait = 0, mode = 'normal') {
 }
 
 function supervised(services: object[], options: Record<string, unknown> = {}) {
-  const controller = new AbortController()
-  const result = runServices(services, { signal: controller.signal, stdio: 'ignore', log: () => {}, shutdownGraceMs: 100, ...options })
-  // 立即注册处理器：断言可能需要先等待测试样例就绪。
-  void result.catch(() => {})
-  cleanup.push(async () => { controller.abort(); await result.catch(() => {}) })
-  return { controller, result }
+  const events: string[] = []
+  const pool = createServicePool(services, {
+    stdio: 'ignore', log: () => {}, shutdownGraceMs: 100,
+    onReady: (id: string) => events.push(`ready ${id}`),
+    onFailed: (id: string, error: Error) => events.push(`failed ${id} ${error.message}`),
+    ...options,
+  })
+  cleanup.push(() => pool.close())
+  return { pool, events }
 }
 
 async function fixtureCatalog() {
@@ -149,38 +152,81 @@ describe('作品目录与本地服务', () => {
     expect(Date.now() - startedAt).toBeLessThan(1000)
   })
 
-  it('启动真实子进程，通知就绪，并在停止后释放端口', async () => {
-    const { service, marker } = await fixture(80)
-    let ready = false
-    const { controller, result } = supervised([service], { onReady: () => { ready = true } })
-    await waitForHttp(service.url, { timeoutMs: 5000, intervalMs: 20 })
-    for (let count = 0; !ready && count < 30; count++) await delay(20)
-    expect(ready).toBe(true)
-    const pid = Number(await readFile(marker, 'utf8'))
-    controller.abort()
-    await expect(result).resolves.toBeUndefined()
-    await expect(assertPortsAvailable([service])).resolves.toBeUndefined()
+  it('只启动被请求的服务，通知就绪，关闭后释放端口', async () => {
+    const first = await fixture(80)
+    const second = await fixture()
+    second.service.id = 'second'
+    const { pool, events } = supervised([first.service, second.service])
+    await pool.start('fixture')
+    expect(events).toEqual(['ready fixture'])
+    // 重复请求复用已就绪的服务。
+    await pool.start('fixture')
+    expect(events).toEqual(['ready fixture'])
+    await expect(assertPortsAvailable([second.service])).resolves.toBeUndefined()
+    const pid = Number(await readFile(first.marker, 'utf8'))
+    await pool.close()
+    await expect(assertPortsAvailable([first.service])).resolves.toBeUndefined()
     expect(() => process.kill(pid, 0)).toThrow()
   })
 
-  it('子进程的 HTTP 就绪检查始终未成功时将其清理', async () => {
-    const { service } = await fixture(10000)
-    const { result } = supervised([service], { timeoutMs: 250 })
-    await expect(result).rejects.toThrow('启动超时')
-    await expect(assertPortsAvailable([service])).resolves.toBeUndefined()
+  it('停止单个服务，其余服务继续运行', async () => {
+    const first = await fixture()
+    const second = await fixture()
+    second.service.id = 'second'
+    const { pool } = supervised([first.service, second.service])
+    await Promise.all([pool.start('fixture'), pool.start('second')])
+    await pool.stop('fixture')
+    await expect(assertPortsAvailable([first.service])).resolves.toBeUndefined()
+    expect(await (await fetch(second.service.url)).text()).toBe('fixture')
+    // 停止后可以再次启动。
+    await pool.start('fixture')
+    expect(await (await fetch(first.service.url)).text()).toBe('fixture')
   })
 
-  it('一个服务退出后立即取消其余 HTTP 等待', async () => {
-    const healthy = await fixture()
+  it('拒绝未知作品', async () => {
+    const { pool, events } = supervised([])
+    await expect(pool.start('missing')).rejects.toThrow('missing')
+    expect(events[0]).toContain('failed missing')
+  })
+
+  it('端口被占用时只让该服务失败，保留占用者', async () => {
+    const occupied = await httpServer((_request, response) => response.end('existing'))
+    const blocked = await fixture()
+    blocked.service.port = occupied.port
+    blocked.service.url = occupied.url
+    const { pool, events } = supervised([blocked.service])
+    await expect(pool.start('fixture')).rejects.toThrow(`端口 ${occupied.port}`)
+    expect(events).toEqual([expect.stringContaining('failed fixture')])
+    expect(await (await fetch(occupied.url)).text()).toBe('existing')
+  })
+
+  it('子进程的 HTTP 就绪检查始终未成功时将其清理，之后可以重试', async () => {
+    const { service } = await fixture(10000)
+    const { pool, events } = supervised([service], { timeoutMs: 250 })
+    await expect(pool.start('fixture')).rejects.toThrow('启动超时')
+    await expect(assertPortsAvailable([service])).resolves.toBeUndefined()
+    service.command[4] = '0'
+    await pool.start('fixture')
+    expect(events.at(-1)).toBe('ready fixture')
+  })
+
+  it('服务在启动期间退出时立即报告失败', async () => {
     const failing = await fixture()
     failing.service.command = [process.execPath, '-e', 'setTimeout(() => process.exit(23), 120)']
-    failing.service.id = 'failing'
-    failing.service.title = '失败测试样例'
     const startedAt = Date.now()
-    const { result } = supervised([healthy.service, failing.service], { timeoutMs: 5000 })
-    await expect(result).rejects.toThrow('意外退出')
+    const { pool } = supervised([failing.service], { timeoutMs: 5000 })
+    await expect(pool.start('fixture')).rejects.toThrow('意外退出')
     expect(Date.now() - startedAt).toBeLessThan(2500)
-    await expect(assertPortsAvailable([healthy.service])).resolves.toBeUndefined()
+  })
+
+  it('已就绪的服务异常退出时报告失败并释放端口', async () => {
+    const { service, marker } = await fixture()
+    const { pool, events } = supervised([service])
+    await pool.start('fixture')
+    process.kill(Number(await readFile(marker, 'utf8')), 'SIGKILL')
+    for (let count = 0; events.length < 2 && count < 100; count++) await delay(20)
+    expect(events[1]).toContain('意外退出')
+    await expect(assertPortsAvailable([service])).resolves.toBeUndefined()
   })
 
   it('清理整个进程组，包括忽略 TERM 信号的孙进程', async () => {
@@ -188,10 +234,9 @@ describe('作品目录与本地服务', () => {
     const parentScript = join(nested.service.cwd, 'parent.mjs')
     await writeFile(parentScript, `import { spawn } from 'node:child_process'; spawn(process.execPath, process.argv.slice(2), { stdio: 'ignore' }); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`)
     nested.service.command = [process.execPath, parentScript, ...nested.service.command.slice(1)]
-    const { controller, result } = supervised([nested.service])
-    await waitForHttp(nested.service.url, { timeoutMs: 5000, intervalMs: 20 })
-    controller.abort()
-    await expect(result).resolves.toBeUndefined()
+    const { pool } = supervised([nested.service])
+    await pool.start('fixture')
+    await pool.close()
     await expect(assertPortsAvailable([nested.service])).resolves.toBeUndefined()
   })
 })

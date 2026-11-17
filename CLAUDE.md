@@ -47,7 +47,7 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 
 **`catalog.json` 是唯一事实来源**，记录作品、画框、默认布局和预览启动配置（`preview.cwd/command/port/baseUrl`）。每个示例的 `vite.config.ts` 用 `readFileSync`（而不是 `import`，以免修改 catalog 时 Vite 重启所有服务）从中读取自己的端口和主机。catalog 校验实现了两份——`scripts/launcher.mjs`（Node）和 `native/Sources/AtlasCore/Catalog.swift`（Swift）——两边的测试套件都会运行 `tests/fixtures/catalog-conformance.json` 中的共享用例。任何规则变更都必须同时更新两边和该 fixture。
 
-**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者借助 `launcher.mjs` 启动每个 `enabled` 示例的开发服务，等到 HTTP 返回 2xx 后打印 `UI_ATLAS_READY`。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
+**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者校验 catalog 后打印 `UI_ATLAS_LISTENING`，之后按需启动案例服务（ADR 0004）：应用选中作品时向 stdin 写 `start <id>`，启动器借助 `launcher.mjs` 的 `createServicePool` 拉起该示例的开发服务，HTTP 返回 2xx 后在 stdout 打印 `UI_ATLAS_READY <id>`，失败打印 `UI_ATLAS_FAILED <id> <JSON 消息>`（只影响该作品，可再次 `start` 重试）；日志只写 stderr。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
 
 **原生 target**（`native/Package.swift`，Swift 5 语言模式）：
 - `AtlasCore` —— 纯逻辑、不依赖 AppKit：catalog 模型与校验、几何与视口计算、布局持久化、吸附、滚动路由、视口动画，以及 `CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机）。可测试的交互规则放在这里。

@@ -67,7 +67,7 @@ extension AtlasStore {
     private func controlState() -> [String: Any] {
         let phase: String
         var failure: Any = NSNull()
-        switch session.phase {
+        switch session.phase(for: project?.id) {
         case .stopped: phase = "stopped"
         case .starting: phase = "starting"
         case .ready: phase = "ready"
