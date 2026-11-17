@@ -13,7 +13,15 @@ pnpm build:native        # Release 构建并进行本地 ad-hoc 签名
 open dist/ui-atlas.app
 ```
 
-App 启动时是一份空白文档，不启动任何 Node 进程。对话面板第一次发送消息时才启动 Agent harness。
+App 启动时先显示启动窗口，不启动任何 Node 进程：
+
+- 左侧“新建设计文档”（⌘N）打开空白的未命名文档，“打开…”（⌘O）弹出打开面板。
+- “最近打开”按时间倒序列出最近打开或保存过的工程文件（最多 10 条），显示文件名、所在目录和时间。单击或选中后回车打开；已删除或移动的文件显示为不可用，点击时提示并可从列表移除，“清除记录”清空列表。
+- “模板”列出 App 自带的模板，没有模板时显示“暂无模板”。点击模板得到一份未命名文档，不关联模板文件，保存时询问位置。
+
+通过新建、打开、最近记录、模板、Finder 打开文件或 Agent 的 `new_document` / `open_document` 进入编辑后，编辑窗口打开、启动窗口关闭；窗口 › 启动窗口可重新打开它。退出时不恢复编辑窗口，下次启动仍先显示启动窗口。对话面板第一次发送消息时才启动 Agent harness。
+
+模板放在 `native/Resources/Templates/`：把 `.uiatlas` 文件放进去，重新构建后即出现在模板区，名称取文件名，不需要改代码。
 
 构建脚本把本机源码目录、Node 路径和启动时 PATH 写进 App 的 `Contents/Resources/workspace.json`，对话面板据此找到 `scripts/agent-chat.mjs` 和 Node。画布、图层与工程文件不依赖源码目录；复制 App 到另一台机器后只有对话面板不可用。
 
@@ -21,7 +29,7 @@ SwiftPM 构建和模块缓存默认写到系统临时目录。`UI_ATLAS_SWIFT_SC
 
 ## 文件
 
-- 文件菜单：新建 ⌘N、打开 ⌘O、保存 ⌘S、另存为 ⇧⌘S。工程文件扩展名为 `.uiatlas`，内容是带版本号的 JSON（格式见 [设计文档](superpowers/specs/2026-11-17-native-design-document-design.md#文档格式atlascoredesigndocumentswift)）。
+- 文件菜单：新建 ⌘N、打开 ⌘O、打开最近、保存 ⌘S、另存为 ⇧⌘S。“打开最近”与启动窗口的最近打开列表共用同一份记录（打开或保存成功即写入，去重、置顶、最多 10 条），子菜单末尾可清除记录。工程文件扩展名为 `.uiatlas`，内容是带版本号的 JSON（格式见 [设计文档](superpowers/specs/2026-11-17-native-design-document-design.md#文档格式atlascoredesigndocumentswift)）。
 - 有未保存修改时，窗口标题带“已编辑”；新建、打开或退出前会询问是否保存。
 - 打开格式错误或由更新版本创建的文件时显示具体原因，当前文档保持不变。
 - App 在 Info.plist 中导出 `.uiatlas` 文件类型（`local.ui-atlas.design`，符合 JSON）并登记为它的编辑器：构建后 Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开工程文件；App 只有一个窗口，打开文件时替换当前文档（有未保存修改先询问）。

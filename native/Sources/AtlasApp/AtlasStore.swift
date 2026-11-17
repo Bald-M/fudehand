@@ -46,12 +46,21 @@ final class AtlasStore: ObservableObject {
     private(set) var viewport = Viewport()
     weak var canvas: AtlasCanvasView?
     private var inGesture = false
+    /// 编辑窗口未打开时替换了文档：画布出现后按实际尺寸适应全部。窗口打开过程中尺寸会变化几次，
+    /// 尺寸稳定一小段时间后才结束。
+    private var fitWhenCanvasSized = false
+    private var endFitWhenCanvasSized: DispatchWorkItem?
     private let defaults: UserDefaults
+    /// 最近打开的工程文件，启动窗口与“打开最近”菜单共用。
+    @Published private(set) var recents: RecentDocuments
+    /// 显示编辑窗口并关闭启动窗口；由窗口中的视图从环境取得动作后登记。
+    var presentEditor: () -> Void = {}
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
+        recents = RecentDocuments(data: defaults.data(forKey: Self.recentsKey))
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
@@ -239,6 +248,7 @@ final class AtlasStore: ObservableObject {
         replace(try DesignDocument.decode(data), url: url)
     }
 
+    /// 替换当前文档并进入编辑窗口；新建、打开、模板与 Agent 命令都经过这里。
     func replace(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         editor.replace(next)
@@ -248,6 +258,77 @@ final class AtlasStore: ObservableObject {
         setSelection([])
         changed()
         fitAll(animated: false)
+        if canvas == nil { fitWhenCanvasSized = true }
+        if let url { recordRecent(url) }
+        presentEditor()
+    }
+
+    // MARK: Recent documents
+
+    private static let recentsKey = "native.recentDocuments"
+
+    private func recordRecent(_ url: URL) {
+        // 解析符号链接，与 openFromSystem 判断“当前文件”的方式一致，避免同一文件出现两条。
+        updateRecents { $0.record(url.resolvingSymlinksInPath().path, at: Date()) }
+    }
+
+    func removeRecent(_ path: String) { updateRecents { $0.remove(path) } }
+    func clearRecents() { updateRecents { $0.clear() } }
+
+    private func updateRecents(_ change: (inout RecentDocuments) -> Void) {
+        change(&recents)
+        defaults.set(recents.encoded(), forKey: Self.recentsKey)
+    }
+
+    var recentEntries: [RecentDocuments.Entry] {
+        recents.entries { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    /// 打开一条最近记录；文件已不存在时提示并可从列表移除，当前文档不变。
+    func openRecent(_ path: String) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            let alert = NSAlert()
+            alert.messageText = "找不到“\(URL(fileURLWithPath: path).lastPathComponent)”"
+            alert.informativeText = "文件可能已被删除或移动。"
+            alert.addButton(withTitle: "从列表移除")
+            alert.addButton(withTitle: "取消")
+            if alert.runModal() == .alertFirstButtonReturn { removeRecent(path) }
+            return
+        }
+        openFromSystem(URL(fileURLWithPath: path))
+    }
+
+    // MARK: Templates
+
+    struct Template: Identifiable, Equatable {
+        let url: URL
+        var id: URL { url }
+        var name: String { url.deletingPathExtension().lastPathComponent }
+    }
+
+    /// App 自带的模板：构建时复制到 `Contents/Resources/Templates/` 的 `.uiatlas` 文件。
+    static var bundledTemplates: [Template] {
+        templates(in: Bundle.main.resourceURL?.appendingPathComponent("Templates"))
+    }
+
+    static func templates(in directory: URL?) -> [Template] {
+        guard let directory,
+              let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
+        return files.filter { $0.pathExtension.lowercased() == DesignDocument.fileExtension }
+            .map(Template.init)
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// 从模板新建：得到未命名文档，不关联模板文件，保存时询问位置。
+    func newDocument(fromTemplate template: Template) {
+        guard confirmDiscard("新建") else { return }
+        do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
+    }
+
+    func openTemplate(_ url: URL) throws {
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { throw DesignError("无法读取模板：\(url.lastPathComponent)") }
+        replace(try DesignDocument.decode(data), url: nil)
     }
 
     /// 保存到当前文件；未保存过时询问位置。返回是否已保存。
@@ -270,6 +351,7 @@ final class AtlasStore: ObservableObject {
         try editor.document.encoded().write(to: url, options: .atomic)
         fileURL = url
         savedRevision = editor.revision
+        recordRecent(url)
     }
 
     /// 工程文件的统一类型标识，在 Info.plist 中导出（扩展名 .uiatlas，符合 public.json）。
@@ -283,7 +365,7 @@ final class AtlasStore: ObservableObject {
     /// Finder 双击或“打开方式”传来的工程文件：有未保存修改时先询问，打不开时显示原因。
     func openFromSystem(_ url: URL) {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
-        guard !current || isDirty else { return }
+        guard !current || isDirty else { recordRecent(url); presentEditor(); return }
         guard confirmDiscard(current ? "重新打开文件" : "打开其他文件") else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
@@ -385,5 +467,12 @@ extension AtlasStore: CanvasHost {
     func canvasSizeChanged(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
         canvasSize = size
+        if fitWhenCanvasSized {
+            fitAll(animated: false)
+            endFitWhenCanvasSized?.cancel()
+            let end = DispatchWorkItem { [weak self] in self?.fitWhenCanvasSized = false }
+            endFitWhenCanvasSized = end
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: end)
+        }
     }
 }

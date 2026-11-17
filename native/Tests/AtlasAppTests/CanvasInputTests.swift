@@ -48,8 +48,8 @@ final class CanvasHarness {
         host = RecordingHost(store)
         window.contentView = canvas
         canvas.host = host
-        store.replace(document, url: nil)
         store.attach(canvas)
+        store.replace(document, url: nil)
         request(Viewport(x: 0, y: 100, scale: 1))
         canvas.layoutSubtreeIfNeeded()
     }

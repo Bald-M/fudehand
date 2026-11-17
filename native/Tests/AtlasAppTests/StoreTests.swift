@@ -158,3 +158,66 @@ private func temporaryFile() -> URL {
     store.canvasEndGesture()
     #expect(store.editor.document.node("f")?.x == 25 && store.editor.document.worldRect("c")?.x == 35)
 }
+
+@Test @MainActor func openingAndSavingRecordRecentDocumentsThatPersist() async throws {
+    let suite = "ui-atlas-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = AtlasStore(defaults: defaults)
+    // 记录中的路径解析了符号链接（临时目录 /var → /private/var）。
+    let first = temporaryFile().resolvingSymlinksInPath(), second = temporaryFile().resolvingSymlinksInPath()
+    _ = try await control(store, .saveDocument(first.path))
+    _ = try await control(store, .saveDocument(second.path))
+    _ = try await control(store, .openDocument(first.path, discard: false))
+    #expect(store.recents.items.map(\.path) == [first.path, second.path])
+    // 重启后（同一份 defaults）记录仍在。
+    let relaunched = AtlasStore(defaults: defaults)
+    #expect(relaunched.recents.items.map(\.path) == [first.path, second.path])
+    relaunched.removeRecent(first.path)
+    #expect(AtlasStore(defaults: defaults).recents.items.map(\.path) == [second.path])
+    relaunched.clearRecents()
+    #expect(AtlasStore(defaults: defaults).recents.items.isEmpty)
+}
+
+@Test @MainActor func openingAMissingFileKeepsTheDocumentAndRecents() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    let missing = temporaryFile()
+    #expect(throws: DesignError.self) { try store.open(missing) }
+    #expect(store.editor.document.node("r") != nil && store.recents.items.isEmpty)
+}
+
+@Test @MainActor func templatesAreListedAndOpenAsUntitledDocuments() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-templates-\(UUID().uuidString)")
+    #expect(AtlasStore.templates(in: directory).isEmpty)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    #expect(AtlasStore.templates(in: directory).isEmpty)
+    let document = DesignDocument(nodes: [DesignNode(id: "f", type: .frame, x: 0, y: 0, width: 390, height: 844)])
+    try document.encoded().write(to: directory.appendingPathComponent("移动端.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("桌面端.uiatlas"))
+    try Data().write(to: directory.appendingPathComponent("说明.md"))
+    try document.encoded().write(to: directory.appendingPathComponent("模板 10.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("模板 2.uiatlas"))
+    let templates = AtlasStore.templates(in: directory)
+    // 按访达的方式排序：数字按数值比较。
+    #expect(templates.map(\.name).filter { $0.hasPrefix("模板") } == ["模板 2", "模板 10"])
+    #expect(templates.count == 4)
+
+    let store = makeStore()
+    var presented = 0
+    store.presentEditor = { presented += 1 }
+    try store.openTemplate(templates[0].url)
+    #expect(store.fileURL == nil && store.title == "未命名" && !store.isDirty)
+    #expect(store.editor.document == document && store.recents.items.isEmpty && presented == 1)
+}
+
+@Test @MainActor func replacingTheDocumentPresentsTheEditor() async throws {
+    let store = makeStore()
+    var presented = 0
+    store.presentEditor = { presented += 1 }
+    _ = try await control(store, .newDocument(discard: false))
+    let url = temporaryFile()
+    _ = try await control(store, .saveDocument(url.path))
+    _ = try await control(store, .openDocument(url.path, discard: false))
+    #expect(presented == 2)
+}

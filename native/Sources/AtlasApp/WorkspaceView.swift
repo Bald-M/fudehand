@@ -17,9 +17,7 @@ struct WorkspaceView: View {
             InspectorPanel(store: store).inspectorColumnWidth(min: 260, ideal: 300, max: 520)
         }
         .toolbar { toolbar }
-        .alert("操作失败", isPresented: Binding(get: { store.alert != nil }, set: { if !$0 { store.alert = nil } })) {
-            Button("好", role: .cancel) { store.alert = nil }
-        } message: { Text(store.alert ?? "") }
+        .storeAlert(store)
     }
 
     private static let tools: [(CanvasTool, String, String)] = [
