@@ -10,7 +10,7 @@
 
 ### ui-atlas MCP
 
-本仓库提供 `ui-atlas` MCP server（`scripts/mcp-server.mjs`），可读写作品与画框，并在 App 运行时操作画布、截取画框。Codex 在 `~/.codex/config.toml` 中配置：
+本仓库提供 `ui-atlas` MCP server（`scripts/mcp-server.mjs`），在 App 运行时读取和编辑设计文档、操作视口并截图。Codex 在 `~/.codex/config.toml` 中配置：
 
 ```toml
 [mcp_servers.ui-atlas]

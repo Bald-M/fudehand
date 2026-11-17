@@ -15,7 +15,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   await copyFile(join(scratch, configuration, 'AtlasApp'), join(contents, 'MacOS', 'AtlasApp'))
   await chmod(join(contents, 'MacOS', 'AtlasApp'), 0o755)
   await copyFile(join(root, 'native', 'Resources', 'Info.plist'), join(contents, 'Info.plist'))
-  // Local build metadata: the App still runs the source workspace's Node previews.
+  // Local build metadata: the chat panel starts the source workspace's Agent harness with this Node.
   await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
   await runCommand('codesign', ['--force', '--deep', '--sign', '-', app])
   console.log(`原生 App 已构建：${app}`)

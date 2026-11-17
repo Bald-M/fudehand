@@ -1,5 +1,7 @@
 # 案例服务按需启动
 
+> 已被 [ADR 0006](0006-native-design-document.md) 取代：网页作品链路已移除，本文只作历史记录。
+
 2026-11-17。App 启动时原本会拉起所有已启用作品的开发服务，全部就绪后才可交互；作品越多启动越慢、后台进程越多，而用户通常一次只看一个作品（#23）。
 
 改为按需启动：`native-preview.mjs` 校验 catalog 后只打印 `UI_ATLAS_LISTENING`，不启动任何服务。App 选中作品时向 stdin 写 `start <id>`，启动器用 `launcher.mjs` 的 `createServicePool` 启动该作品，HTTP 就绪后在 stdout 打印 `UI_ATLAS_READY <id>`，失败打印 `UI_ATLAS_FAILED <id> <JSON 消息>`。stdout 只承载协议，日志改走 stderr，App 在失败说明中附上最近的日志。

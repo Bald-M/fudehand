@@ -12,15 +12,11 @@
     "build:native": "node scripts/native-build.mjs",
     "test:native": "node scripts/native-test.mjs",
     "mcp": "node scripts/mcp-server.mjs",
-    "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
-    "build": "pnpm -r --if-present build",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "~5.9.3",
-    "vite": "^8.3.6",
     "vitest": "^5.1.0"
   },
   "dependencies": {

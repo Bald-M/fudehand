@@ -1,135 +1,118 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import net from 'node:net'
-import { rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { callTool, tools } from '../scripts/atlas-tools.mjs'
+import { fakeApp } from './helpers/fake-app'
 
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
 
-/** 假的 App 控制通道：记录收到的请求，用 respond 生成响应。 */
-async function fakeApp(respond: (request: { id: unknown, command: string, args: Record<string, unknown> }) => object, { splitInside = '' } = {}) {
-  const socketPath = join(tmpdir(), `uia-${randomUUID().slice(0, 8)}.sock`)
-  const received: unknown[] = []
-  const server = net.createServer(socket => {
-    let buffer = ''
-    socket.on('data', chunk => {
-      buffer += chunk
-      let index
-      while ((index = buffer.indexOf('\n')) >= 0) {
-        const request = JSON.parse(buffer.slice(0, index))
-        buffer = buffer.slice(index + 1)
-        received.push(request)
-        const line = Buffer.from(JSON.stringify({ id: request.id, ...respond(request) }) + '\n')
-        if (!splitInside) { socket.write(line); continue }
-        const splitAt = line.indexOf(Buffer.from(splitInside)) + 1
-        // 分两次写出，模拟数据块恰好切在多字节字符中间。
-        socket.write(line.subarray(0, splitAt))
-        setTimeout(() => socket.write(line.subarray(splitAt)), 20)
-      }
-    })
-  })
-  await new Promise<void>(resolve => server.listen(socketPath, resolve))
-  cleanup.push(async () => { await new Promise(resolve => server.close(resolve)); await rm(socketPath, { force: true }) })
-  return { socketPath, received }
+async function app(respond: Parameters<typeof fakeApp>[0], options?: Parameters<typeof fakeApp>[1]) {
+  const result = await fakeApp(respond, options)
+  cleanup.push(result.close)
+  return result
 }
 
 const text = (result: { content: { text?: string }[] }) => result.content.map(item => item.text ?? '').join('\n')
+const echo = (request: { command: string }) => ({ ok: true, result: { echo: request.command } })
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-describe('画布控制工具', () => {
-  it('提供全部画布工具', () => {
-    expect(tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
-      'canvas_get_state', 'canvas_select_project', 'canvas_focus_frame', 'canvas_fit_all',
-      'canvas_zoom', 'canvas_reset', 'canvas_restart_preview', 'frame_snapshot',
-      'frame_console', 'frame_read', 'frame_interact',
-    ]))
+describe('设计工具', () => {
+  it('提供全部设计与画布工具，不再有作品与网页工具', () => {
+    const names = tools.map((tool: { name: string }) => tool.name)
+    expect(names).toEqual([
+      'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
+      'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
+      'design_new_document', 'design_open_document', 'design_save_document',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_snapshot',
+    ])
+    for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
 
-  it('把命令和参数转发给 App 并返回结果', async () => {
-    const app = await fakeApp(request => ({ ok: true, result: { project: 'still', echo: request.command } }))
-    const ctx = { root: '/unused', socketPath: app.socketPath }
-    const focused = await callTool('canvas_focus_frame', { frame: 'mobile' }, ctx)
-    expect(focused.isError).toBeFalsy()
-    expect(JSON.parse(text(focused))).toEqual({ project: 'still', echo: 'focus_frame' })
-    await callTool('canvas_select_project', { project: 'form' }, ctx)
+  it('把命令和定义过的参数转发给 App', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    const created = await callTool('design_create_node', { parent: 'f', node: { type: 'rectangle', fill: '#FFFFFF' }, extra: 1 }, ctx)
+    expect(created.isError).toBeFalsy()
+    expect(JSON.parse(text(created))).toEqual({ echo: 'create_node' })
+    await callTool('design_update_node', { id: 'a', changes: { opacity: 0.5 } }, ctx)
+    await callTool('design_delete_nodes', { ids: ['a', 'b'] }, ctx)
+    await callTool('design_move_node', { id: 'a', index: 0 }, ctx)
+    await callTool('design_select', { ids: [] }, ctx)
+    await callTool('design_undo', {}, ctx)
+    await callTool('design_new_document', { discard: true }, ctx)
+    await callTool('design_open_document', { path: 'designs/home.uiatlas' }, ctx)
+    await callTool('design_save_document', {}, ctx)
+    await callTool('design_save_document', { path: '/tmp/a.uiatlas' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
-    await callTool('canvas_fit_all', {}, ctx)
-    await callTool('canvas_reset', {}, ctx)
-    await callTool('canvas_restart_preview', {}, ctx)
-    await callTool('canvas_get_state', {}, ctx)
-    expect(app.received.map(request => {
-      const { command, args } = request as { command: string, args: object }
-      return { command, args }
-    })).toEqual([
-      { command: 'focus_frame', args: { frame: 'mobile' } },
-      { command: 'select_project', args: { project: 'form' } },
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
+      { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
+      { command: 'delete_nodes', args: { ids: ['a', 'b'] } },
+      { command: 'move_node', args: { id: 'a', index: 0 } },
+      { command: 'select', args: { ids: [] } },
+      { command: 'undo', args: {} },
+      { command: 'new_document', args: { discard: true } },
+      { command: 'open_document', args: { path: '/repo/designs/home.uiatlas' } },
+      { command: 'save_document', args: {} },
+      { command: 'save_document', args: { path: '/tmp/a.uiatlas' } },
       { command: 'zoom', args: { scale: 0.5 } },
-      { command: 'fit_all', args: {} },
-      { command: 'reset', args: {} },
-      { command: 'restart_preview', args: {} },
-      { command: 'get_state', args: {} },
     ])
   })
 
+  it('把 image.path 读成 base64，包括子图层与修改', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'uia-image-'))
+    cleanup.push(() => rm(dir, { recursive: true, force: true }))
+    await writeFile(join(dir, 'dot.png'), Buffer.from(PNG, 'base64'))
+    const fake = await app(echo)
+    const ctx = { root: dir, socketPath: fake.socketPath }
+    await callTool('design_create_node', { node: { type: 'frame', children: [{ type: 'image', image: { path: 'dot.png', fit: 'fit' } }] } }, ctx)
+    await callTool('design_update_node', { id: 'i', changes: { image: { path: join(dir, 'dot.png') } } }, ctx)
+    expect(fake.received[0].args.node).toEqual({ type: 'frame', children: [{ type: 'image', image: { data: PNG, fit: 'fit' } }] })
+    expect(fake.received[1].args.changes).toEqual({ image: { data: PNG } })
+    const missing = await callTool('design_create_node', { node: { type: 'image', image: { path: 'nope.png' } } }, ctx)
+    expect(missing.isError).toBe(true)
+    expect(text(missing)).toBe('无法读取图片：nope.png')
+    expect(fake.received).toHaveLength(2)
+  })
+
   it('透传 App 返回的中文错误', async () => {
-    const app = await fakeApp(() => ({ ok: false, error: '当前作品没有画框：tv' }))
-    const result = await callTool('canvas_focus_frame', { frame: 'tv' }, { root: '/unused', socketPath: app.socketPath })
+    const fake = await app(() => ({ ok: false, error: '图层 e：ellipse 不支持 layout' }))
+    const result = await callTool('design_update_node', { id: 'e', changes: { layout: {} } }, { root: '/repo', socketPath: fake.socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('当前作品没有画框：tv')
+    expect(text(result)).toBe('图层 e：ellipse 不支持 layout')
   })
 
   it('App 未运行时返回“ui-atlas 未运行”', async () => {
     const socketPath = join(tmpdir(), `uia-missing-${randomUUID().slice(0, 8)}.sock`)
-    const result = await callTool('canvas_get_state', {}, { root: '/unused', socketPath })
+    const result = await callTool('design_get_state', {}, { root: '/repo', socketPath })
     expect(result.isError).toBe(true)
     expect(text(result)).toBe('ui-atlas 未运行')
   })
 
-  it('frame_snapshot 以 MCP image 内容返回截图', async () => {
-    const app = await fakeApp(() => ({ ok: true, result: { frame: 'mobile', mimeType: 'image/png', data: 'iVBORw0KGgo=', width: 390, height: 844 } }))
-    const result = await callTool('frame_snapshot', { frame: 'mobile' }, { root: '/unused', socketPath: app.socketPath })
-    expect(result.isError).toBeFalsy()
+  it('design_snapshot 以 MCP image 内容返回截图', async () => {
+    const fake = await app(() => ({ ok: true, result: { id: 'home', mimeType: 'image/png', data: PNG, width: 390, height: 844 } }))
+    const result = await callTool('design_snapshot', { id: 'home' }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received[0]).toMatchObject({ command: 'node_snapshot', args: { id: 'home' } })
     expect(result.content).toEqual([
-      { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
-      { type: 'text', text: '画框 mobile 的截图（390×844）' },
+      { type: 'image', data: PNG, mimeType: 'image/png' },
+      { type: 'text', text: '图层 home 的截图（390×844）' },
     ])
-  })
-
-  it('转发画框控制台与交互命令，只传定义过的参数', async () => {
-    const app = await fakeApp(request => ({ ok: true, result: { frame: 'web', echo: request.command } }))
-    const ctx = { root: '/unused', socketPath: app.socketPath }
-    expect((await callTool('frame_console', { frame: 'web' }, ctx)).isError).toBeFalsy()
-    await callTool('frame_console', { frame: 'web', limit: 20 }, ctx)
-    await callTool('frame_interact', { frame: 'web', action: 'fill', selector: '#q', value: '猫', extra: 1 }, ctx)
-    await callTool('frame_interact', { frame: 'web', action: 'scroll', deltaY: 400 }, ctx)
-    expect(app.received.map(request => (request as { args: object }).args)).toEqual([
-      { frame: 'web' },
-      { frame: 'web', limit: 20 },
-      { frame: 'web', action: 'fill', selector: '#q', value: '猫' },
-      { frame: 'web', action: 'scroll', deltaY: 400 },
-    ])
-  })
-
-  it('frame_read 以文本大纲返回页面内容', async () => {
-    const app = await fakeApp(() => ({ ok: true, result: { frame: 'web', url: 'http://127.0.0.1:4401/', title: '首页', outline: 'h1 你好\nbutton "提交" → #go', truncated: true } }))
-    const result = await callTool('frame_read', { frame: 'web' }, { root: '/unused', socketPath: app.socketPath })
-    expect(result.isError).toBeFalsy()
-    expect(text(result)).toBe('首页\nhttp://127.0.0.1:4401/\n\nh1 你好\nbutton "提交" → #go\n\n（内容过长，已截断）')
   })
 
   it('响应跨数据块且切在中文字符中间时仍完整解析', async () => {
-    const error = '当前作品没有画框：手机'
-    const app = await fakeApp(() => ({ ok: false, error }), { splitInside: '没' })
-    const result = await callTool('canvas_focus_frame', { frame: '手机' }, { root: '/unused', socketPath: app.socketPath })
+    const error = '找不到图层：手机'
+    const fake = await app(() => ({ ok: false, error }), { splitInside: '图' })
+    const result = await callTool('design_get_node', { id: '手机' }, { root: '/repo', socketPath: fake.socketPath })
     expect(text(result)).toBe(error)
   })
 
   it('读取数 MB 的截图响应', async () => {
     const data = 'A'.repeat(6 << 20)
-    const app = await fakeApp(() => ({ ok: true, result: { frame: 'web', mimeType: 'image/png', data, width: 1440, height: 900 } }))
-    const result = await callTool('frame_snapshot', { frame: 'web' }, { root: '/unused', socketPath: app.socketPath })
+    const fake = await app(() => ({ ok: true, result: { id: 'web', mimeType: 'image/png', data, width: 1440, height: 900 } }))
+    const result = await callTool('design_snapshot', { id: 'web' }, { root: '/repo', socketPath: fake.socketPath })
     expect(result.content[0].data.length).toBe(data.length)
   })
 })

@@ -2,7 +2,7 @@
 
 本文件为 Claude Code（claude.ai/code）在本仓库中工作提供指引。
 
-ui-atlas 是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
+ui-atlas 是一个本地 macOS 原生 AI 设计工具：SwiftUI + AppKit 外壳把一份由图层组成的“设计文档”用 Core Animation 渲染在可平移、可缩放的“画布”上，人和 AI Agent 编辑同一份文档，设计稿保存为 `.uiatlas` 工程文件（JSON）。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`（尤其 ADR 0006）；画布交互行为以 `docs/macos.md` 为权威规范。
 
 ## 工作方式：superpowers 技能
 
@@ -28,40 +28,36 @@ pnpm install
 pnpm dev               # 以 debug 构建应用并打开
 pnpm build:native      # release 构建 + ad-hoc 签名 → dist/ui-atlas.app
 pnpm test:native       # 对 native/ 运行 swift test（AtlasCoreTests + AtlasAppTests）
-pnpm check             # 示例类型检查 + Vitest（tests/）+ 构建全部示例
+pnpm check             # Vitest（tests/）：MCP 工具、MCP server、对话 harness
 pnpm mcp               # 以 stdio 启动 ui-atlas MCP server（通常由 Agent 自动启动）
 ```
 
 运行单个测试：
 
 ```bash
-pnpm vitest run tests/launcher.test.ts -t "<name>"
+pnpm vitest run tests/control-tools.test.ts -t "<name>"
 swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 ```
 
-`pnpm test:native` 经由 `scripts/native-swift.mjs` 执行，它把 SwiftPM 的 scratch/cache 目录固定在 `/private/tmp/ui-atlas-native-*` 下（可用 `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE` 覆盖），并传入 `--disable-sandbox`；不要在同一个 scratch 目录上同时跑两个 Swift 构建。Node 测试会启动真实的 HTTP 服务和子进程，因此需要回环网络——禁止监听 localhost 的沙箱会让它们误报失败。
+`pnpm test:native` 经由 `scripts/native-swift.mjs` 执行，它把 SwiftPM 的 scratch/cache 目录固定在 `/private/tmp/ui-atlas-native-*` 下（可用 `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE` 覆盖），并传入 `--disable-sandbox`；不要在同一个 scratch 目录上同时跑两个 Swift 构建。Node 测试会启动真实的本机 socket、HTTP 服务和子进程，因此需要回环网络——禁止监听 localhost 的沙箱会让它们误报失败。
 
 设置 `UI_ATLAS_FRAME_LOG=1` 后，应用每秒打印一次 `[frame] hitches=N frames=M`，用于平移/缩放的性能调优。
 
 ## 架构
 
-**`catalog.json` 是唯一事实来源**，记录作品、画框、默认布局和预览启动配置（`preview.cwd/command/port/baseUrl`）。每个示例的 `vite.config.ts` 用 `readFileSync`（而不是 `import`，以免修改 catalog 时 Vite 重启所有服务）从中读取自己的端口和主机。catalog 校验实现了两份——`scripts/launcher.mjs`（Node）和 `native/Sources/AtlasCore/Catalog.swift`（Swift）——两边的测试套件都会运行 `tests/fixtures/catalog-conformance.json` 中的共享用例。任何规则变更都必须同时更新两边和该 fixture。
-
-**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者校验 catalog 后打印 `UI_ATLAS_LISTENING`，之后按需启动案例服务（ADR 0004）：应用选中作品时向 stdin 写 `start <id>`，启动器借助 `launcher.mjs` 的 `createServicePool` 拉起该示例的开发服务，HTTP 返回 2xx 后在 stdout 打印 `UI_ATLAS_READY <id>`，失败打印 `UI_ATLAS_FAILED <id> <JSON 消息>`（只影响该作品，可再次 `start` 重试）；日志只写 stderr。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
+**App 是设计文档的唯一持有者**（ADR 0006）。`AtlasStore` 持有 `DesignEditor`（文档 + 撤销历史）；画布、图层面板、属性面板和控制通道的修改都经它进行，人工与 Agent 的修改共用一条撤销历史。启动时是空白文档，不启动任何 Node 进程；只有对话面板发送消息时才启动 harness。`native-build.mjs` 把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，供对话面板找到 `scripts/agent-chat.mjs`。
 
 **原生 target**（`native/Package.swift`，Swift 5 语言模式）：
-- `AtlasCore` —— 纯逻辑、不依赖 AppKit：catalog 模型与校验、几何与视口计算、布局持久化、吸附、滚动路由、视口动画，以及 `CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机）。可测试的交互规则放在这里。
-- `AtlasApp` —— SwiftUI 外壳（`AtlasApp`、`WorkspaceView`）、`AtlasStore`（应用状态，用 UserDefaults 持久化主题、工作区、每个作品的位置和视口），以及 AppKit 画布：`NativeCanvas`（NSViewRepresentable 桥接）→ `AtlasCanvasView`（处理输入、应用交互效果）、`CanvasViewport`（平移移动 `world.bounds`；缩放以 GPU 变换渲染，稳定后再提交）、`CanvasGrid`、`CanvasOverlay`（选区/框选/参考线，从不接收输入），以及 `PreviewFrameView`（每个画框一个 WKWebView，注入 Esc 脚本）。
+- `AtlasCore` —— 纯逻辑、不依赖 AppKit：`DesignDocument`（图层模型、`.uiatlas` 读写与版本校验）、`DesignJSON`（JSON 与节点互转、字段校验、部分字段补丁——文件读取、Agent 创建与修改共用这唯一一份校验）、`DesignLayout`（自动布局、文字自适应、分组收缩；文字测量由 App 注入）、`DesignEditor`（树操作与撤销历史，连续手势记为一步）、`DesignHitTest`（Figma 式点击选中规则）、`CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机：移动、缩放把手、框选、创建、平移）、几何与视口、吸附、视口动画、`ControlProtocol`。可测试的规则放在这里。
+- `AtlasApp` —— SwiftUI 外壳（`AtlasApp` 的菜单、`WorkspaceView`、`LayersPanel`、`InspectorPanel`、`ChatPanel`）、`AtlasStore`，以及 AppKit 画布：`NativeCanvas`（NSViewRepresentable 桥接）→ `AtlasCanvasView`（处理输入，通过 `CanvasHost` 协议把编辑交给 store）、`DesignRenderer`（文档 → CALayer 树，按 id 增量更新；`snapshotPNG` 离屏截图）、`TextMetrics`/`TextLayer`（CoreText 测量与绘制共用同一排版）、`CanvasViewport`（平移移动 `world.bounds`；缩放以 GPU 变换渲染，稳定后再提交并更新文字/图片的 `contentsScale`）、`CanvasGrid`、`CanvasOverlay`（选框、把手、顶层画框名称、框选、参考线，从不接收输入）。
 
-画布持有实时视口和选区，只把稳定后的值回报给 `AtlasStore`；store 通过带 token 的请求（`ViewportRequest`、`positionsToken`、`reloadToken`）向下推送一次性变更——新 token 表示“应用一次”。画框整体做视觉缩放；每个 web view 保持其配置的 CSS 视口尺寸，因此响应式断点不会随缩放改变。
+store 在每次文档变化时直接调用 `canvas.show(document)`（拖动时每帧都走这条路，不经 SwiftUI）；面板读取的 `@Published document` 在连续手势期间不更新，结束时一次更新。视口仍是画布持有实时值、只把稳定值回报给 store，store 用带 token 的 `ViewportRequest` 向下推送一次性视口变更。
 
-**Agent 接入**（ADR 0003）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。写 `catalog.json` 的工具先调用 `servicesFromCatalog` 再原子写入，不要另写校验。画布工具经 `scripts/control-client.mjs` 连接 App 的控制通道（`~/Library/Application Support/ui-atlas/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
-
-**示例**位于 `examples/*`（pnpm workspace）。应用直接从各自端口加载它们（不经代理）。没有后端，也没有静态站点打包产物。
+**Agent 接入**（ADR 0003、0006）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。所有工具经 `scripts/control-client.mjs` 转发给 App 的控制通道（`~/Library/Application Support/ui-atlas/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；Node 端只把 `image.path` 读成 base64、把相对文件路径按仓库目录解析，不做字段校验。协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
 
 ## 约定
 
 - 远端：`origin` → https://github.com/Bald-M/ui-atlas（默认分支 `main`）。未配置 CI 或部署，本地检查即门禁。在任务分支上交付，推送后向 `main` 发起 PR。
 - 任务直接用 `gh issue` 在 GitHub Issues 创建和跟踪，不在本地维护任务记录；`.scratch/<feature>/` 只用于起草较长的规格或计划。
-- 新术语记入 `GLOSSARY.md`，架构决策记入 `docs/adr/`。ADR 0002 已彻底移除浏览器外壳——不要重新引入 `apps/atlas`、`dev:web`、4400 外壳端口或 iframe 桥接。
+- 新术语记入 `GLOSSARY.md`，架构决策记入 `docs/adr/`。ADR 0002 已彻底移除浏览器外壳，ADR 0006 已移除网页作品链路——不要重新引入 `apps/atlas`、`catalog.json`、`examples/`、预览启动器或 WKWebView 画框。
 - 界面改动需在真实应用中按浅色和深色两种外观检查；证据截图放在 `docs/evidence/`。
