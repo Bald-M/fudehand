@@ -8,9 +8,11 @@
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-11-17
+
 ### Summary
 
-尚未发布正式版本（`package.json` 为 `0.1.0`）。本节汇总首个版本的内容：原生 macOS 画布提供 Figma 式交互，作品只在 App 画框中按需启动和查看；Agent 可经 MCP server 或 App 内对话面板读写作品、控制画布并读取画框页面。#46 起改为原生 AI 设计工具：画布显示由图层组成的设计文档，人和 Agent 编辑同一份文档并保存为 `.uiatlas` 工程文件，网页作品链路随之移除。
+ui-atlas 的首个版本：一个本地运行的 macOS 原生 AI 设计工具。画布用 Core Animation 渲染由图层组成的设计文档，交互参照 Figma；人和 AI Agent（经 MCP server 或 App 内对话面板）编辑同一份文档、共用一条撤销历史，设计稿保存为 `.uiatlas` 工程文件。开发过程中曾以网页作品画框为核心，#46 起改为原生设计文档，网页作品链路随之移除；下面按时间保留了这段历程。产物为本机构建的 ad-hoc 签名应用，未公证。
 
 ### Added
 
@@ -25,6 +27,7 @@
 - 原生设计文档与 Figma 式工作流：画框、矩形、椭圆、文字、图片、分组与自动布局，Core Animation 直接渲染；画布选择、移动、缩放把手与创建工具，图层面板与属性面板；`.uiatlas` 工程文件（带格式版本号的 JSON）；人工与 Agent 共用的撤销历史（#46，ADR 0006）。
 - Agent 设计工具 `design_*`、`canvas_*` 与 `design_snapshot`，经控制通道编辑设计文档并截图核对（#46）。
 - 启动窗口：新建设计文档、最近打开（最多 10 条，文件菜单“打开最近”共用）与 App 自带模板（#54）。
+- MCP 连接器：在应用菜单一键把 MCP server 连接到 Claude Code 或 Codex，或断开连接（#51）。
 
 ### Changed
 
@@ -34,6 +37,7 @@
 - 画框内网页隐藏滚动条（#28）。
 - 产品名统一为 ui-atlas，不再使用中文名“界面图鉴”（#45）。
 - 任务记录改用 GitHub Issues，Issue 优先级自行判定（#8、#10、#11）。
+- 版本号统一为 0.0.1（`package.json`、应用 Info.plist 与 MCP server）；README 按原生设计工具重写，补充安装与构建、`.uiatlas` 工程文件说明与主界面截图（#67）。
 
 ### Removed
 
@@ -51,3 +55,6 @@
 - #46 起不再读取 `catalog.json` 和网页作品；Agent 配置中的作品与画框工具改用 `design_*` 设计工具（见 README）。`pnpm check` 只运行 Vitest。
 - 改名后应用包为 `dist/ui-atlas.app`，控制通道位于 `~/Library/Application Support/ui-atlas/control.sock`，钥匙串服务名为 `ui-atlas.agent`。改名前保存在钥匙串的对话面板 API key 需要重新填写（#45）。
 - Codex 调用 MCP 工具的批准设置见 [README](README.md)（#33）；MCP、控制通道与对话面板设计见 [ADR 0003](docs/adr/0003-agent-mcp.md)（#27）。
+
+[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/Bald-M/ui-atlas/releases/tag/v0.0.1

@@ -4,23 +4,33 @@
 
 App 是 **SwiftUI + AppKit 原生 macOS App**，画布用 Core Animation 直接渲染图层，不依赖网页服务。Node 只用于 MCP server 和 App 内对话面板的 Agent harness。
 
-## 开始使用
+![ui-atlas 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
 
-需要 macOS 14+、Swift 6+（Xcode Command Line Tools 即可）、Node.js **22.12+** 和 pnpm **11.7.0**。
+当前版本 v0.0.1，变更记录见 [CHANGELOG](CHANGELOG.md)。
+
+## 安装与构建
+
+需要 macOS 14+、Swift 6+（Xcode Command Line Tools 即可，不需要完整 Xcode）、Node.js **22.12+** 和 pnpm **11.7.0**。App 只从源码在本机构建，没有预编译安装包。
 
 ```bash
 pnpm install
-pnpm dev
+pnpm build:native        # Release 构建并 ad-hoc 签名，产出 dist/ui-atlas.app
+open dist/ui-atlas.app
 ```
 
-`pnpm dev` 构建并打开 App，启动时是一份空白文档。用工具栏的画框（F）、矩形（R）、椭圆（O）、文字（T）工具在画布上创建图层，在左侧图层面板和右侧属性面板中编辑，或让 Agent 搭建界面。
+开发时用 `pnpm dev` 以 Debug 构建并打开 App。`dist/ui-atlas.app` 可以拖进“应用程序”文件夹使用，但对话面板和 MCP 连接器依赖构建时的源码目录，请保留本检出目录。
 
-- 发布优化构建：`pnpm build:native`，然后双击 `dist/ui-atlas.app`。
-- 原生测试：`pnpm test:native`；Node 测试：`pnpm check`。
+## 开始使用
+
+App 启动时先显示启动窗口：新建设计文档（⌘N）、打开工程文件（⌘O）、从“最近打开”继续上次的文件，或从 App 自带模板开始。进入编辑后，用工具栏的画框（F）、矩形（R）、椭圆（O）、文字（T）工具在画布上创建图层，在左侧图层面板和右侧属性面板中编辑，或让 Agent 搭建界面。
 
 画布操作、面板、文件与快捷键见 [macOS 使用说明](docs/macos.md)。
 
-## 设计文档
+## `.uiatlas` 工程文件
+
+设计稿用文件菜单的保存（⌘S）、另存为（⇧⌘S）存为 `.uiatlas` 工程文件，打开（⌘O）或“打开最近”重新打开。App 导出了 `.uiatlas` 文件类型，Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开；有未保存修改时会先询问是否保存。
+
+### 文档格式
 
 设计文档是一棵图层树，支持画框、矩形、椭圆、文字、图片、分组，以及填充、描边、圆角、透明度、显示/隐藏、锁定和画框的自动布局。工程文件是带格式版本号的公开 JSON：
 
@@ -102,7 +112,7 @@ Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人�
 ## 验证
 
 ```bash
-pnpm test:native
+pnpm test:native   # Swift 测试：AtlasCoreTests 与 AtlasAppTests
 pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
 ```
 
