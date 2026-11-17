@@ -4,6 +4,21 @@
 
 界面图鉴（UI Atlas）是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
 
+## 工作方式：superpowers 技能
+
+本仓库要求使用 [superpowers](https://github.com/obra/superpowers) 技能干活。每次对话开始、做任何事之前（包括提澄清问题、读代码），先调用 `superpowers:using-superpowers`，再按任务调用对应技能并严格遵循；只要有一点可能适用就调用，不要以“任务太简单”为由跳过。常用对应关系：
+
+- 新功能、新行为、任何创作或规划 → 先 `superpowers:brainstorming`，再 `superpowers:writing-plans`
+- 按计划实现 → `superpowers:executing-plans`，或在有独立子任务时用 `superpowers:subagent-driven-development`
+- 写实现代码前 → `superpowers:test-driven-development`
+- Bug、测试失败、异常行为 → 先 `superpowers:systematic-debugging` 再改
+- 需要隔离的开发 → `superpowers:using-git-worktrees`
+- 声称完成、提交或开 PR 前 → `superpowers:verification-before-completion`
+- 完成后请求审查 → `superpowers:requesting-code-review`；收到审查意见 → `superpowers:receiving-code-review`
+- 实现完成、决定如何合入 → `superpowers:finishing-a-development-branch`
+
+用户的明确指示和本文件的约定优先于技能流程；只有用户明确说不用时才可跳过。
+
 ## 命令
 
 需要 macOS 14+、Swift 6（装 Command Line Tools 即可，不依赖第三方 Swift 包）、Node 22.12+、pnpm 11.7.0。
