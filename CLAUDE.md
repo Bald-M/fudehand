@@ -43,7 +43,7 @@ The canvas owns the live viewport and selection and reports only settled values 
 
 ## Conventions
 
-- Local-only repo: no remote, no PR/CI/deploy. Deliver on a task branch with local commits.
+- Remote: `origin` → https://github.com/Bald-M/ui-atlas (default branch `main`). No CI or deploy is configured, so local checks are the gate. Deliver on a task branch, push it and open a PR into `main`.
 - Specs and task records go in `.scratch/<feature>/spec.md` and `.scratch/<feature>/issues/NN-slug.md` (with `Status:` / `Blocked by:` lines), per `docs/agents/issue-tracker.md`.
 - Record new terms in `GLOSSARY.md` and architectural decisions in `docs/adr/`. ADR 0002 removed the browser shell entirely — don't reintroduce `apps/atlas`, `dev:web`, a 4400 shell port or an iframe bridge.
 - UI changes should be checked in the real app in both light and dark appearance; evidence screenshots go in `docs/evidence/`.
