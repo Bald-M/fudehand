@@ -20,7 +20,7 @@ private let script = "/repo/scripts/mcp-server.mjs"
     let elsewhere = Data(#"{"mcpServers":{"ui-atlas":{"command":"node","args":["/other/scripts/mcp-server.mjs"]}}}"#.utf8)
     #expect(AgentConnector.claudeStatus(config: elsewhere, script: script) == .elsewhere("node /other/scripts/mcp-server.mjs"))
 
-    // 只看用户级配置；项目级配置在 projects 下，不算已连接。
+    // Only the user-level configuration counts; project-level configuration lives under projects and does not count as connected.
     let projectOnly = Data(#"{"projects":{"/repo":{"mcpServers":{"ui-atlas":{"command":"node","args":["/repo/scripts/mcp-server.mjs"]}}}}}"#.utf8)
     #expect(AgentConnector.claudeStatus(config: projectOnly, script: script) == .disconnected)
     #expect(AgentConnector.claudeStatus(config: nil, script: script) == .disconnected)

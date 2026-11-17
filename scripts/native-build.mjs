@@ -25,7 +25,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   return app
 }
 
-// 启动窗口的模板：native/Resources/Templates/ 下的 .uiatlas 文件；先清空，删掉的模板不会留在 App 包里。
+// The launch window's templates: the .uiatlas files under native/Resources/Templates/; clear first so deleted templates do not stay in the app bundle.
 async function copyTemplates(target) {
   const source = join(root, 'native', 'Resources', 'Templates')
   await rm(target, { recursive: true, force: true })

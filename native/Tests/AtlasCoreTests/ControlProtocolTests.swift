@@ -72,10 +72,10 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"fit_all","args":[]}"#, "Invalid argument type: args"),
     ]
     for (line, message) in cases {
-        guard case .failure(let failure) = parse(line) else { Issue.record("应拒绝：\(line)"); continue }
+        guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }
         #expect(failure.message == message, "\(line)")
     }
-    guard case .failure(let failure) = parse(#"{"id":4,"command":"nope"}"#) else { Issue.record("应拒绝"); return }
+    guard case .failure(let failure) = parse(#"{"id":4,"command":"nope"}"#) else { Issue.record("Should be rejected"); return }
     #expect(failure.id == .int(4))
 }
 

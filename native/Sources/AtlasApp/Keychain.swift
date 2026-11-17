@@ -2,7 +2,7 @@ import AtlasCore
 import Foundation
 import Security
 
-/// 模型 API key 只保存在当前用户的钥匙串中，按模型提供方区分。
+/// Model API keys are saved only in the current user's Keychain, separated by model provider.
 enum Keychain {
     private static let service = "ui-atlas.agent"
 

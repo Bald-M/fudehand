@@ -2,11 +2,11 @@ import AppKit
 import AtlasCore
 import SwiftUI
 
-/// 启动窗口：新建、最近打开、模板。进入编辑后由 `AtlasStore.presentEditor` 关闭。
+/// The launch window: New, Open Recent, Templates. Closed by `AtlasStore.presentEditor` once editing starts.
 struct LaunchView: View {
     @ObservedObject var store: AtlasStore
     @State private var selection: String?
-    /// 最近记录及文件是否存在；记录变化、窗口出现或任一窗口成为关键窗口时重新检查。
+    /// The recent entries and whether each file exists; checked again when the entries change, the window appears, or any window becomes the key window.
     @State private var entries: [RecentDocuments.Entry] = []
     private let templates = AtlasStore.bundledTemplates
 
@@ -37,7 +37,7 @@ struct LaunchView: View {
         if current != entries { entries = current }
     }
 
-    // MARK: 新建
+    // MARK: New
 
     private var start: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -61,7 +61,7 @@ struct LaunchView: View {
         .padding(24)
     }
 
-    // MARK: 最近打开
+    // MARK: Open Recent
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -95,7 +95,7 @@ struct LaunchView: View {
         .frame(maxHeight: .infinity)
     }
 
-    // MARK: 模板
+    // MARK: Templates
 
     private var templateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -178,7 +178,7 @@ private struct RecentRow: View {
 }
 
 extension View {
-    /// 在当前关键窗口中显示 store 的错误；启动窗口与编辑窗口同时打开时只弹出一次。
+    /// Shows the store's error in the current key window; when the launch window and the editor window are both open it is presented only once.
     func storeAlert(_ store: AtlasStore) -> some View { modifier(StoreAlert(store: store)) }
 }
 

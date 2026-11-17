@@ -1,13 +1,13 @@
 import Foundation
 
-/// 设计文档的读写与校验错误；`message` 直接展示给使用者或 Agent。
+/// Errors from reading, writing, and validating a design document; `message` is shown directly to the user or the Agent.
 public struct DesignError: LocalizedError, Equatable, Sendable {
     public let message: String
     public init(_ message: String) { self.message = message }
     public var errorDescription: String? { message }
 }
 
-/// sRGB 颜色，分量 0–1；文件中写作 `#RRGGBB` 或 `#RRGGBBAA`。
+/// An sRGB color with components 0–1; written in files as `#RRGGBB` or `#RRGGBBAA`.
 public struct DesignColor: Hashable, Sendable {
     public var r: Double, g: Double, b: Double, a: Double
     public init(r: Double, g: Double, b: Double, a: Double = 1) { self.r = r; self.g = g; self.b = b; self.a = a }
@@ -47,7 +47,7 @@ public struct DesignText: Hashable, Sendable {
     public var fontFamily: String?
     public var color: DesignColor
     public var align: TextAlign
-    /// 行高倍数；nil 表示字体默认行高。
+    /// Line height multiple; nil means the font's default line height.
     public var lineHeight: Double?
     public var autoResize: TextAutoResize
 
@@ -62,7 +62,7 @@ public struct DesignText: Hashable, Sendable {
 public enum ImageFit: String, Sendable, CaseIterable { case fill, fit, stretch }
 
 public struct DesignImage: Equatable, Sendable {
-    /// PNG 或 JPEG 原始字节；文件中以 base64 保存。
+    /// Raw PNG or JPEG bytes; saved in files as base64.
     public var data: Data
     public var fit: ImageFit
     public init(data: Data, fit: ImageFit = .fill) { self.data = data; self.fit = fit }
@@ -79,7 +79,7 @@ public enum LayoutDirection: String, Sendable, CaseIterable { case horizontal, v
 public enum LayoutAlign: String, Sendable, CaseIterable { case start, center, end, spaceBetween = "space-between" }
 public enum LayoutCrossAlign: String, Sendable, CaseIterable { case start, center, end, stretch }
 
-/// 画框的自动布局。
+/// A frame's auto layout.
 public struct AutoLayout: Equatable, Sendable {
     public var direction: LayoutDirection
     public var spacing: Double
@@ -104,7 +104,7 @@ public struct Sizing: Equatable, Sendable {
 public enum NodeType: String, Sendable, CaseIterable {
     case frame, rectangle, ellipse, text, image, group
 
-    /// 新建图层的默认名称。
+    /// The default name of a new layer.
     public var title: String {
         switch self {
         case .frame: return L("Frame")
@@ -120,7 +120,7 @@ public enum NodeType: String, Sendable, CaseIterable {
     public var hasCornerRadius: Bool { self == .frame || self == .rectangle || self == .image }
 }
 
-/// 图层树中的一个节点。坐标相对父节点，`children` 的顺序即层叠顺序（后者在上）。
+/// One node in the layer tree. Coordinates are relative to the parent node, and the order of `children` is the stacking order (later ones on top).
 public struct DesignNode: Equatable, Sendable, Identifiable {
     public var id: String
     public var type: NodeType
@@ -154,7 +154,7 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     }
 }
 
-/// 一份设计文档：顶层图层的有序列表。
+/// A design document: the ordered list of top-level layers.
 public struct DesignDocument: Equatable, Sendable {
     public static let format = "ui-atlas.design"
     public static let formatVersion = 1
@@ -194,7 +194,7 @@ public struct DesignDocument: Equatable, Sendable {
         if let duplicate { throw DesignError("Duplicate layer id: \(duplicate)") }
     }
 
-    /// 深度优先遍历全部节点。
+    /// Depth-first traversal of all nodes.
     public func forEach(_ body: (DesignNode) -> Void) {
         func visit(_ nodes: [DesignNode]) { for node in nodes { body(node); visit(node.children) } }
         visit(nodes)

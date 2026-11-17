@@ -1,15 +1,15 @@
 /**
- * 模型提供方适配。对话历史使用中立格式，每次请求时再转换成各家接口的格式：
+ * Model provider adapters. The conversation history uses a neutral format and is converted to each API's format on every request:
  *   { role: 'user', text }
  *   { role: 'assistant', text, toolCalls: [{ id, name, args }], blocks? }
  *   { role: 'tool', id, name, text, isError }
- * 工具参数无法解析时，toolCalls 中的项带 error 字段，harness 不执行它。
+ * When tool arguments cannot be parsed, the item in toolCalls carries an error field and the harness does not execute it.
  * blocks holds the provider's own content blocks for the turn (Anthropic only), sent back unchanged.
  */
 
 export const providerDefaults = {
   deepseek: { kind: 'openai', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
-  // Codex 系列模型只支持 Responses API。
+  // Codex-series models only support the Responses API.
   openai: { kind: 'responses', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.3-codex' },
   anthropic: { kind: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
 }
@@ -59,7 +59,7 @@ function responsesInput(history) {
 
 function anthropicMessages(history) {
   const messages = []
-  // Anthropic 要求用户与助手交替：工具结果和随后的用户消息合并进同一条 user 消息。
+  // Anthropic requires user and assistant to alternate: tool results and the user message that follows are merged into the same user message.
   const push = (role, blocks) => {
     const last = messages.at(-1)
     if (last?.role === role) last.content.push(...blocks)
@@ -87,7 +87,7 @@ function functionCall(id, name, raw) {
   return { id, name, args: {}, error: 'Tool arguments are not valid JSON' }
 }
 
-/** 读取提供方的模型列表，返回 { models: [id], default }；用于设置面板的下拉菜单。 */
+/** Reads the provider's model list, returning { models: [id], default }; used for the dropdown menu in the settings panel. */
 export async function listModels({ provider, baseUrl, apiKey }, signal) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
@@ -99,7 +99,7 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
   return { models: [...new Set(ids)], default: defaults.model }
 }
 
-/** 返回 { model, turn(system, history, tools, signal) → { text, toolCalls } }。 */
+/** Returns { model, turn(system, history, tools, signal) → { text, toolCalls } }. */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)

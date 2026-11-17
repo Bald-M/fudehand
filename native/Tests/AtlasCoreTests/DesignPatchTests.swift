@@ -9,7 +9,7 @@ private func patchMessage(_ changes: [String: Any], on node: DesignNode) -> Stri
 
 private func textNode() -> DesignNode {
     var node = DesignNode(id: "t", type: .text)
-    node.text = DesignText(content: "你好", fontSize: 14)
+    node.text = DesignText(content: "Hello", fontSize: 14)
     return node
 }
 
@@ -33,7 +33,7 @@ private func textNode() -> DesignNode {
 @Test func patchMergesNestedFields() throws {
     var node = textNode()
     try DesignJSON.apply(["text": ["fontSize": 20], "fill": "#FF0000"], to: &node)
-    #expect(node.text?.fontSize == 20 && node.text?.content == "你好")
+    #expect(node.text?.fontSize == 20 && node.text?.content == "Hello")
     #expect(node.fill == DesignColor(r: 1, g: 0, b: 0))
     try DesignJSON.apply(["fill": NSNull()], to: &node)
     #expect(node.fill == nil)
@@ -63,6 +63,7 @@ private func textNode() -> DesignNode {
     let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")!
     let node = try DesignJSON.node(from: ["id": "i", "type": "image", "image": ["data": png.base64EncodedString()]])
     let summary = DesignJSON.object(node, includeImageData: false)["image"] as? [String: Any]
+    // Chinese kept: this is the placeholder `DesignJSON.object` currently produces; App output is out of scope here.
     #expect(summary?["data"] as? String == "<\(png.count) 字节>")
     #expect(throws: DesignError.self) { try DesignJSON.node(from: ["id": "i", "type": "image", "image": ["data": "aGVsbG8="]]) }
 }

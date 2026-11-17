@@ -4,7 +4,7 @@ import Testing
 @testable import AtlasApp
 @testable import AtlasCore
 
-/// 仓库里的 Info.plist（构建时原样复制进 App 包）。
+/// The Info.plist in the repository (copied as is into the app bundle at build time).
 private func infoPlist() throws -> [String: Any] {
     let url = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -38,7 +38,7 @@ private func infoPlist() throws -> [String: Any] {
     let store = AtlasStore(defaults: UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!)
     delegate.attach(store)
     #expect(store.fileURL == url && store.editor.document.node("r") != nil)
-    // 之后的打开请求直接交给 store；坏文件显示错误，当前文档不变。
+    // Later open requests go straight to the store; a bad file shows an error and the current document is unchanged.
     let bad = url.deletingLastPathComponent().appendingPathComponent("ui-atlas-\(UUID().uuidString).uiatlas")
     try Data("not json".utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }

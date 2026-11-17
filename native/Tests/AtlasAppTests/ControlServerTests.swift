@@ -5,7 +5,7 @@ import Testing
 @testable import AtlasCore
 
 private func temporarySocketPath() -> String {
-    // sockaddr_un 的路径上限约 104 字节，临时目录可能太长。
+    // The path limit of sockaddr_un is about 104 bytes, and the temporary directory may be too long.
     "/tmp/uia-\(UUID().uuidString.prefix(8)).sock"
 }
 
@@ -25,7 +25,7 @@ private func connectSocket(_ path: String) throws -> Int32 {
     return fd
 }
 
-/// 以普通客户端身份发送若干行，读回同样数量的响应行。
+/// Sends some lines as an ordinary client and reads back the same number of response lines.
 private func exchange(_ path: String, _ lines: [String]) async throws -> [[String: Any]] {
     let raw = try await Task.detached { () throws -> String in
         let fd = try connectSocket(path)
@@ -50,7 +50,7 @@ private func readLines(_ fd: Int32, count expected: Int) -> String {
     return String(decoding: received, as: UTF8.self)
 }
 
-/// 模拟崩溃留下的 socket 文件：监听后关闭，但不删除文件。
+/// Simulates a socket file left behind by a crash: listen, then close, without deleting the file.
 private func leaveStaleSocket(_ path: String) {
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
     var address = sockaddr_un()
@@ -130,7 +130,7 @@ private func leaveStaleSocket(_ path: String) {
     try server.start()
     let fd = try connectSocket(path)
     defer { close(fd) }
-    // 等连接被接受后再停止。
+    // Wait until the connection is accepted before stopping.
     _ = try await exchange(path, [#"{"id":1,"command":"get_state"}"#])
     try await Task.sleep(nanoseconds: 50_000_000)
     server.stop()

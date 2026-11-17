@@ -29,7 +29,7 @@ private let repository = URL(fileURLWithPath: #filePath)
 
 @Test @MainActor func chatSessionReportsAMissingKeyFromTheRealHarness() async throws {
     let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
-    session.send("你好", root: repository, runtime: nil)
+    session.send("Hello", root: repository, runtime: nil)
     #expect(session.transcript.busy)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     #expect(!session.transcript.busy)
@@ -57,7 +57,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     session.keyUpdated(provider: "anthropic", saved: true)
     #expect(session.hasKey)
     #expect(reads.isEmpty)
-    session.send("你好", root: repository, runtime: nil)
+    session.send("Hello", root: repository, runtime: nil)
     #expect(reads == ["anthropic"])
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     await session.shutdown()
@@ -78,7 +78,7 @@ private let repository = URL(fileURLWithPath: #filePath)
 
 @Test @MainActor func chatClearIsIgnoredWhileAReplyIsRunning() async throws {
     let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
-    session.send("你好", root: repository, runtime: nil)
+    session.send("Hello", root: repository, runtime: nil)
     session.clear()
     #expect(session.transcript.entries.count == 1)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
@@ -106,7 +106,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.savedKeyValue(for: "openai") == nil)
     #expect(reads.isEmpty)
 
-    // 旧版本保存的 key 没有提示，第一次读取钥匙串时补上。
+    // A key saved by an older version has no hint; it is added the first time the Keychain is read.
     session.keyUpdated(provider: "anthropic", saved: true)
     #expect(session.keyHint(for: "anthropic") == nil)
     #expect(session.savedKeyValue(for: "anthropic") == "sk-legacy-0000-9999")
@@ -132,18 +132,18 @@ private let repository = URL(fileURLWithPath: #filePath)
 
 @Test @MainActor func chatSettingsChangeDuringAReplyEndsTheReply() async throws {
     let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
-    session.send("你好", root: repository, runtime: nil)
+    session.send("Hello", root: repository, runtime: nil)
     #expect(session.transcript.busy)
     session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
     #expect(!session.transcript.busy)
-    #expect(session.transcript.entries.map(\.text) == ["你好", "Reply stopped", "Model settings changed; new replies do not include the earlier context."])
+    #expect(session.transcript.entries.map(\.text) == ["Hello", "Reply stopped", "Model settings changed; new replies do not include the earlier context."])
 
     // The panel is usable again: a new message reaches a fresh harness, and the transcript can be cleared.
-    session.send("再试一次", root: repository, runtime: nil)
+    session.send("Try again", root: repository, runtime: nil)
     #expect(session.transcript.busy)
     session.keyUpdated(provider: "openai", saved: false)
     #expect(!session.transcript.busy)
-    session.send("第三次", root: repository, runtime: nil)
+    session.send("Third time", root: repository, runtime: nil)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     #expect(session.transcript.entries.last?.text == "No API key configured")
     session.clear()

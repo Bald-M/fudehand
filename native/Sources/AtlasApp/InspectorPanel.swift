@@ -2,7 +2,7 @@ import AppKit
 import AtlasCore
 import SwiftUI
 
-/// 右侧检查器：“设计”页编辑选中图层的属性，“对话”页是 Agent 对话面板。
+/// The inspector on the right: the "Design" tab edits the properties of the selected layers, and the "Chat" tab is the Agent chat panel.
 struct InspectorPanel: View {
     @ObservedObject var store: AtlasStore
 
@@ -76,7 +76,7 @@ private struct Section<Content: View>: View {
     }
 }
 
-/// 数字输入：回车或失去焦点时提交。
+/// Number input: committed on Return or when focus is lost.
 private struct NumberField: View {
     let label: String
     let value: Double

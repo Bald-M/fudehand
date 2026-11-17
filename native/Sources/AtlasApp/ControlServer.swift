@@ -2,15 +2,15 @@ import AtlasCore
 import Darwin
 import Foundation
 
-/// 控制命令执行失败时的中文消息，原样返回给调用方。
+/// The message of a failed control command, returned to the caller as is.
 struct ControlCommandError: LocalizedError, Equatable {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
 }
 
-/// 控制通道：只对当前用户开放的 Unix domain socket，不监听任何网络地址。
-/// 每个连接按行读取请求，命令在主线程执行，响应按请求顺序写回。
+/// The control channel: a Unix domain socket open only to the current user, listening on no network address.
+/// Each connection reads requests line by line, commands run on the main thread, and responses are written back in request order.
 final class ControlServer: @unchecked Sendable {
     typealias Handler = @MainActor (ControlCommand) async throws -> Any
 
@@ -27,7 +27,7 @@ final class ControlServer: @unchecked Sendable {
     /// Longest accepted request line. An image travels as base64 inside the request, so this allows about 24 MB of image files.
     static let maximumLine = 32 << 20
     static let tooLargeMessage = "Request is too large: a request, including images embedded as base64, is limited to \(maximumLine >> 20) MB (about \((maximumLine * 3 / 4) >> 20) MB of image files)"
-    /// 每个连接占用一个阻塞线程，因此限制并发连接数，并在空闲 60 秒后断开。
+    /// Each connection occupies one blocking thread, so the number of concurrent connections is limited and a connection is dropped after 60 seconds idle.
     static let maximumConnections = 8
     private let lock = NSLock()
     private var clients = Set<Int32>()
@@ -43,7 +43,7 @@ final class ControlServer: @unchecked Sendable {
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         chmod(directory, 0o700)
         var address = try Self.address(path)
-        // 只清理崩溃残留的 socket；另一个实例仍在监听时不抢占，也不删除普通文件。
+        // Only clean up a socket left behind by a crash; do not take over while another instance is still listening, and do not delete regular files.
         var status = stat()
         if lstat(path, &status) == 0 {
             guard status.st_mode & S_IFMT == S_IFSOCK else { throw ControlCommandError("Control channel path is taken by another file: \(path)") }
@@ -56,7 +56,7 @@ final class ControlServer: @unchecked Sendable {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
         guard bound == 0 else {
-            // 绑定失败时文件不属于本进程，不能删除。
+            // When binding fails the file does not belong to this process and must not be deleted.
             let message = String(cString: strerror(errno))
             close(listener)
             throw ControlCommandError("Could not listen on the control channel: \(message)")
@@ -75,7 +75,7 @@ final class ControlServer: @unchecked Sendable {
         source.resume()
     }
 
-    /// 停止监听并断开已有连接，之后的请求一律拒绝。
+    /// Stops listening and drops existing connections; every later request is rejected.
     func stop() {
         lock.lock()
         stopped = true
@@ -95,7 +95,7 @@ final class ControlServer: @unchecked Sendable {
             if client < 0 {
                 if errno == EINTR { continue }
                 if errno == EAGAIN || errno == EWOULDBLOCK { return }
-                // 例如文件描述符耗尽：暂停一秒，避免可读事件反复触发而空转。
+                // For example, file descriptors are exhausted: pause for a second so the readable event does not fire repeatedly in a busy loop.
                 source?.suspend()
                 queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.source?.resume() }
                 return
@@ -124,7 +124,7 @@ final class ControlServer: @unchecked Sendable {
         }
     }
 
-    /// 阻塞读取一个连接，直到对方关闭。每行一个请求。
+    /// Reads one connection, blocking, until the peer closes it. One request per line.
     private func serve(_ client: Int32) {
         defer {
             lock.lock()

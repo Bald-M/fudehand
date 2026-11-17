@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import AtlasCore
 
-/// 把 AppKit 画布嵌入 SwiftUI。文档由 store 直接推送给画布（拖动时每帧更新，不经 SwiftUI）；
-/// 这里只传递一次性的视口请求与当前工具。
+/// Embeds the AppKit canvas in SwiftUI. The store pushes the document directly to the canvas (updated every frame during a drag, bypassing SwiftUI);
+/// only one-off viewport requests and the current tool are passed here.
 struct NativeCanvas: NSViewRepresentable {
     let store: AtlasStore
     let viewportRequest: ViewportRequest

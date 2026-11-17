@@ -46,7 +46,7 @@ private func date(_ seconds: Double) -> Date { Date(timeIntervalSince1970: secon
     #expect(RecentDocuments(data: recents.encoded()) == recents)
     #expect(RecentDocuments(data: Data("not json".utf8)).items.isEmpty)
     #expect(RecentDocuments(data: nil).items.isEmpty)
-    // 手工改坏的记录：重复与超出上限的部分在读取时去掉。
+    // Entries broken by hand: duplicates and anything beyond the limit are dropped on read.
     let items = (0..<12).map { RecentDocument(path: "/\($0 % 11).uiatlas", openedAt: date(Double(20 - $0))) }
     let data = try! JSONEncoder().encode(items)
     let loaded = RecentDocuments(data: data)

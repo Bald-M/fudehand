@@ -2,14 +2,14 @@ import net from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-/** 原生 App 控制通道的位置，与 Swift 端 ControlServer.defaultPath 一致。 */
+/** The location of the native App's control channel, matching ControlServer.defaultPath on the Swift side. */
 export function defaultSocketPath(env = process.env) {
   return env.UI_ATLAS_CONTROL_SOCKET || join(homedir(), 'Library/Application Support/ui-atlas/control.sock')
 }
 
 let nextId = 1
 
-/** 发送一条命令并等待对应响应；App 返回的错误原样抛出。 */
+/** Sends one command and waits for the matching response; errors returned by the App are thrown as is. */
 export function sendControl(command, args = {}, { socketPath = defaultSocketPath(), timeoutMs = 15000 } = {}) {
   return new Promise((resolveResult, reject) => {
     const id = nextId++
@@ -23,7 +23,7 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
       if (error) reject(error)
       else resolveResult(result)
     }
-    // StringDecoder 保证多字节字符跨数据块时不被截断。
+    // StringDecoder ensures a multi-byte character split across chunks is not cut off.
     socket.setEncoding('utf8')
     socket.setTimeout(timeoutMs, () => finish(new Error('ui-atlas did not respond')))
     socket.once('error', error => finish(new Error(

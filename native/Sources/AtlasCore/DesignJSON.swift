@@ -1,21 +1,21 @@
 import Foundation
 import ImageIO
 
-/// 设计节点与 JSON 之间的唯一转换与校验：读取工程文件、Agent 创建与修改图层都经过这里。
+/// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "children"]
-    /// 修改时逐字段合并的嵌套对象。
+    /// The nested objects that are merged field by field on update.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
-    /// 所有数值字段的绝对值上限。
+    /// The upper limit on the absolute value of every numeric field.
     public static let maximumMagnitude = 1_000_000.0
 
     static func isBool(_ number: NSNumber) -> Bool { CFGetTypeID(number) == CFBooleanGetTypeID() }
 
     // MARK: Reading
 
-    /// 按字段读取一个 JSON 对象，错误信息带图层 id 与字段路径。
+    /// Reads a JSON object field by field; error messages carry the layer id and the field path.
     struct Reader {
         let object: [String: Any]
         let owner: String
@@ -42,7 +42,7 @@ public enum DesignJSON {
                 throw fail("\(name(key)) must be a number")
             }
             let result = number.doubleValue
-            // 坐标与尺寸限制在合理范围内，避免极端值让渲染和界面换算溢出。
+            // Coordinates and sizes are limited to a sane range, so extreme values do not overflow rendering and UI conversions.
             guard abs(result) <= DesignJSON.maximumMagnitude else { throw fail("\(name(key)) is out of range (absolute value must not exceed 1000000)") }
             if let min, result < min { throw fail(min == 0 ? "\(name(key)) must not be negative" : "\(name(key)) must not be less than \(format(min))") }
             if let max, result > max { throw fail("\(name(key)) must not be greater than \(format(max))") }
@@ -95,7 +95,7 @@ public enum DesignJSON {
         }
     }
 
-    /// 从 JSON 对象构建并校验一个节点（含子节点）。`id` 必须已存在。
+    /// Builds and validates a node (with its children) from a JSON object. `id` must already be present.
     public static func node(from value: Any) throws -> DesignNode {
         guard let object = value as? [String: Any] else { throw DesignError("Layer must be a JSON object") }
         guard let raw = object["id"] else { throw DesignError("Layer is missing id") }
@@ -184,7 +184,7 @@ public enum DesignJSON {
 
     // MARK: Writing
 
-    /// 节点的 JSON 形式；省略默认值。`includeImageData` 为 false 时图片数据以字节数代替，供 Agent 阅读。
+    /// The JSON form of a node; default values are omitted. When `includeImageData` is false, image data is replaced by its byte count, for the Agent to read.
     public static func object(_ node: DesignNode, includeImageData: Bool, includeChildren: Bool = true) -> [String: Any] {
         var object: [String: Any] = ["id": node.id, "type": node.type.rawValue, "name": node.name,
                                      "x": node.x, "y": node.y, "width": node.width, "height": node.height]
@@ -221,7 +221,7 @@ public enum DesignJSON {
 
     // MARK: Patching
 
-    /// 把部分字段补丁应用到节点：嵌套对象逐字段合并，null 清除字段；整体重新校验，失败时节点不变。
+    /// Applies a partial field patch to a node: nested objects are merged field by field, and null clears a field; the whole node is validated again, and on failure the node is unchanged.
     public static func apply(_ changes: [String: Any], to node: inout DesignNode) throws {
         for key in ["id", "type", "children"] where changes[key] != nil {
             throw DesignError("Layer \(node.id): cannot change \(key)")
