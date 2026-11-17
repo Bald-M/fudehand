@@ -8,9 +8,9 @@ struct InspectorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("检查器", selection: $store.inspectorTab) {
-                Text("设计").tag(InspectorTab.design)
-                Text("对话").tag(InspectorTab.chat)
+            Picker(L("Inspector"), selection: $store.inspectorTab) {
+                Text(L("Design")).tag(InspectorTab.design)
+                Text(L("Chat")).tag(InspectorTab.chat)
             }
             .pickerStyle(.segmented).labelsHidden().padding(10)
             Divider()
@@ -35,18 +35,18 @@ private struct DesignInspector: View {
                 if selected.count == 1, let node = selected.first {
                     NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).id(node.id)
                 } else if selected.count > 1 {
-                    Section(title: "已选 \(selected.count) 个图层") {
-                        SliderRow(label: "透明度", value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
-                            store.edit("修改透明度", coalescing: "\(selected.map(\.id).sorted().joined(separator: ",")).opacity") { document in
+                    Section(title: L("%d layers selected", selected.count)) {
+                        SliderRow(label: L("Opacity"), value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
+                            store.edit("Change Opacity", coalescing: "\(selected.map(\.id).sorted().joined(separator: ",")).opacity") { document in
                                 for node in selected { try document.update(node.id) { $0.opacity = value } }
                             }
                         }
                     }
                 } else {
-                    Section(title: "文档") {
-                        LabeledContent("名称", value: store.title)
-                        LabeledContent("图层", value: "\(store.document.nodeCount)")
-                        Text("选中图层后在这里修改位置、尺寸、填充、描边、文字与自动布局。")
+                    Section(title: L("Document")) {
+                        LabeledContent(L("Name"), value: store.title)
+                        LabeledContent(L("Layers"), value: "\(store.document.nodeCount)")
+                        Text(L("Select a layer to edit its position, size, fill, stroke, text, and auto layout here."))
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -146,9 +146,9 @@ private struct ColorRow: View {
         HStack(spacing: 6) {
             ColorPicker(label, selection: Binding(get: { color.swiftUI }, set: { commit(DesignColor($0)) }), supportsOpacity: true)
                 .labelsHidden()
-            TextField("十六进制", text: $hex).textFieldStyle(.roundedBorder).monospaced()
+            TextField(L("Hex"), text: $hex).textFieldStyle(.roundedBorder).monospaced()
                 .onSubmit { if let next = try? DesignColor(hex: hex.hasPrefix("#") ? hex : "#" + hex) { commit(next) } else { hex = color.hex } }
-                .accessibilityLabel("\(label)十六进制")
+                .accessibilityLabel(L("%@ hex", label))
         }
         .onAppear { hex = color.hex }
         .onChange(of: color) { _, next in hex = next.hex }
@@ -168,154 +168,154 @@ private struct NodeInspector: View {
 
     var body: some View {
         Section(title: node.type.title) {
-            TextField("名称", text: $name).textFieldStyle(.roundedBorder)
-                .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("重命名图层") { $0.name = trimmed } } }
+            TextField(L("Name"), text: $name).textFieldStyle(.roundedBorder)
+                .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
                 .onAppear { name = node.name }
                 .onChange(of: node.name) { _, next in name = next }
-                .accessibilityLabel("图层名称")
+                .accessibilityLabel(L("Layer name"))
         }
-        Section(title: "位置与尺寸") {
+        Section(title: L("Position and Size")) {
             let inLayout = parentLayout != nil
             HStack {
-                NumberField(label: "X", value: node.x, disabled: inLayout) { v in update("修改位置") { $0.x = v } }
-                NumberField(label: "Y", value: node.y, disabled: inLayout) { v in update("修改位置") { $0.y = v } }
+                NumberField(label: "X", value: node.x, disabled: inLayout) { v in update("Change Position") { $0.x = v } }
+                NumberField(label: "Y", value: node.y, disabled: inLayout) { v in update("Change Position") { $0.y = v } }
             }
             HStack {
                 NumberField(label: "W", value: node.width, minimum: 0, disabled: node.type == .group) { v in
-                    update("修改尺寸") { $0.width = v; $0.sizing.horizontal = .fixed; if $0.text?.autoResize == .widthAndHeight { $0.text?.autoResize = .height } }
+                    update("Change Size") { $0.width = v; $0.sizing.horizontal = .fixed; if $0.text?.autoResize == .widthAndHeight { $0.text?.autoResize = .height } }
                 }
                 NumberField(label: "H", value: node.height, minimum: 0, disabled: node.type == .group) { v in
-                    update("修改尺寸") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
+                    update("Change Size") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
                 }
             }
             if inLayout || node.layout != nil || node.type == .text {
-                sizingPicker("宽度", node.sizing.horizontal) { mode in update("修改尺寸模式") { $0.sizing.horizontal = mode } }
-                sizingPicker("高度", node.sizing.vertical) { mode in update("修改尺寸模式") { $0.sizing.vertical = mode } }
+                sizingPicker(L("Width"), node.sizing.horizontal) { mode in update("Change Sizing") { $0.sizing.horizontal = mode } }
+                sizingPicker(L("Height"), node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }
             }
         }
-        Section(title: "外观") {
-            SliderRow(label: "透明度", value: node.opacity) { v in update("修改透明度", "opacity") { $0.opacity = v } }
+        Section(title: L("Appearance")) {
+            SliderRow(label: L("Opacity"), value: node.opacity) { v in update("Change Opacity", "opacity") { $0.opacity = v } }
             if node.type.hasCornerRadius {
-                NumberField(label: "圆角", value: node.cornerRadius, minimum: 0) { v in update("修改圆角") { $0.cornerRadius = v } }
+                NumberField(label: L("Corner radius"), value: node.cornerRadius, minimum: 0) { v in update("Change Corner Radius") { $0.cornerRadius = v } }
             }
             if node.type == .frame {
-                Toggle("裁剪内容", isOn: Binding(get: { node.clipsContent }, set: { v in update("修改裁剪") { $0.clipsContent = v } }))
+                Toggle(L("Clip content"), isOn: Binding(get: { node.clipsContent }, set: { v in update("Change Clipping") { $0.clipsContent = v } }))
             }
         }
         Group {
-            Section(title: node.type == .text ? "背景" : "填充") {
+            Section(title: node.type == .text ? L("Background") : L("Fill")) {
                 if let fill = node.fill {
                     HStack {
-                        ColorRow(label: "填充", color: fill) { c in update("修改填充", "fill") { $0.fill = c } }
-                        Button { update("移除填充") { $0.fill = nil } } label: { Image(systemName: "minus") }
-                            .buttonStyle(.borderless).help("移除填充").accessibilityLabel("移除填充")
+                        ColorRow(label: L("Fill"), color: fill) { c in update("Change Fill", "fill") { $0.fill = c } }
+                        Button { update("Remove Fill") { $0.fill = nil } } label: { Image(systemName: "minus") }
+                            .buttonStyle(.borderless).help(L("Remove fill")).accessibilityLabel(L("Remove fill"))
                     }
                 } else {
-                    Button("添加填充") { update("添加填充") { $0.fill = .white } }
+                    Button(L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
                 }
             }
-            Section(title: "描边") {
+            Section(title: L("Stroke")) {
                 if let stroke = node.stroke {
                     HStack {
-                        ColorRow(label: "描边", color: stroke.color) { c in update("修改描边", "stroke") { $0.stroke?.color = c } }
-                        Button { update("移除描边") { $0.stroke = nil } } label: { Image(systemName: "minus") }
-                            .buttonStyle(.borderless).help("移除描边").accessibilityLabel("移除描边")
+                        ColorRow(label: L("Stroke"), color: stroke.color) { c in update("Change Stroke", "stroke") { $0.stroke?.color = c } }
+                        Button { update("Remove Stroke") { $0.stroke = nil } } label: { Image(systemName: "minus") }
+                            .buttonStyle(.borderless).help(L("Remove stroke")).accessibilityLabel(L("Remove stroke"))
                     }
-                    NumberField(label: "粗细", value: stroke.width, minimum: 0) { v in update("修改描边") { $0.stroke?.width = v } }
+                    NumberField(label: L("Weight|stroke"), value: stroke.width, minimum: 0) { v in update("Change Stroke") { $0.stroke?.width = v } }
                 } else {
-                    Button("添加描边") { update("添加描边") { $0.stroke = DesignStroke(color: .black, width: 1) } }
+                    Button(L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
                 }
             }
         }
         if let text = node.text { textSection(text) }
         if node.type == .frame { layoutSection(node.layout) }
         if let image = node.image {
-            Section(title: "图片") {
-                Picker("适应方式", selection: Binding(get: { image.fit }, set: { v in update("修改图片适应方式") { $0.image?.fit = v } })) {
-                    Text("填满").tag(ImageFit.fill)
-                    Text("适应").tag(ImageFit.fit)
-                    Text("拉伸").tag(ImageFit.stretch)
+            Section(title: L("Image")) {
+                Picker(L("Scaling"), selection: Binding(get: { image.fit }, set: { v in update("Change Image Scaling") { $0.image?.fit = v } })) {
+                    Text(L("Fill|image scaling")).tag(ImageFit.fill)
+                    Text(L("Fit|image scaling")).tag(ImageFit.fit)
+                    Text(L("Stretch")).tag(ImageFit.stretch)
                 }
-                Button("替换图片…") { replaceImage() }
+                Button(L("Replace Image…")) { replaceImage() }
             }
         }
     }
 
     private func sizingPicker(_ label: String, _ mode: SizingMode, _ commit: @escaping (SizingMode) -> Void) -> some View {
         Picker(label, selection: Binding(get: { mode }, set: commit)) {
-            Text("固定").tag(SizingMode.fixed)
-            Text("包裹内容").tag(SizingMode.hug)
-            Text("填满容器").tag(SizingMode.fill)
+            Text(L("Fixed")).tag(SizingMode.fixed)
+            Text(L("Hug contents")).tag(SizingMode.hug)
+            Text(L("Fill container")).tag(SizingMode.fill)
         }
     }
 
     private func textSection(_ text: DesignText) -> some View {
-        Section(title: "文字") {
+        Section(title: L("Text")) {
             TextEditor(text: $content)
                 .font(.system(size: 12)).frame(minHeight: 54, maxHeight: 120)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
                 .onAppear { content = text.content }
                 .onChange(of: text.content) { _, next in if next != content { content = next } }
                 .onChange(of: content) { _, next in
-                    if next != node.text?.content { update("修改文字", "text.content") { $0.text?.content = next } }
+                    if next != node.text?.content { update("Change Text", "text.content") { $0.text?.content = next } }
                 }
-                .accessibilityLabel("文字内容")
+                .accessibilityLabel(L("Text content"))
             HStack {
-                NumberField(label: "字号", value: text.fontSize, minimum: 1) { v in update("修改字号") { $0.text?.fontSize = v } }
-                Picker("字重", selection: Binding(get: { text.fontWeight }, set: { v in update("修改字重") { $0.text?.fontWeight = v } })) {
+                NumberField(label: L("Font size"), value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
+                Picker(L("Weight|font"), selection: Binding(get: { text.fontWeight }, set: { v in update("Change Font Weight") { $0.text?.fontWeight = v } })) {
                     ForEach([100, 200, 300, 400, 500, 600, 700, 800, 900], id: \.self) { Text(Self.weightName($0)).tag($0) }
                 }.labelsHidden()
             }
-            ColorRow(label: "文字颜色", color: text.color) { c in update("修改文字颜色", "text.color") { $0.text?.color = c } }
-            Picker("对齐", selection: Binding(get: { text.align }, set: { v in update("修改对齐") { $0.text?.align = v } })) {
+            ColorRow(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
+            Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
                 Image(systemName: "text.alignleft").tag(TextAlign.left)
                 Image(systemName: "text.aligncenter").tag(TextAlign.center)
                 Image(systemName: "text.alignright").tag(TextAlign.right)
             }.pickerStyle(.segmented)
-            Picker("尺寸", selection: Binding(get: { text.autoResize }, set: { v in update("修改文字尺寸") { $0.text?.autoResize = v } })) {
-                Text("自动宽高").tag(TextAutoResize.widthAndHeight)
-                Text("自动高度").tag(TextAutoResize.height)
-                Text("固定").tag(TextAutoResize.none)
+            Picker(L("Sizing"), selection: Binding(get: { text.autoResize }, set: { v in update("Change Text Sizing") { $0.text?.autoResize = v } })) {
+                Text(L("Auto width and height")).tag(TextAutoResize.widthAndHeight)
+                Text(L("Auto height")).tag(TextAutoResize.height)
+                Text(L("Fixed")).tag(TextAutoResize.none)
             }
         }
     }
 
     static func weightName(_ weight: Int) -> String {
-        [100: "极细", 200: "纤细", 300: "细", 400: "常规", 500: "中等", 600: "半粗", 700: "粗", 800: "特粗", 900: "黑"][weight] ?? "\(weight)"
+        [100: L("Thin"), 200: L("Extra Light"), 300: L("Light|font weight"), 400: L("Regular"), 500: L("Medium"), 600: L("Semibold"), 700: L("Bold"), 800: L("Extra Bold"), 900: L("Black")][weight] ?? "\(weight)"
     }
 
     private func layoutSection(_ layout: AutoLayout?) -> some View {
-        Section(title: "自动布局") {
+        Section(title: L("Auto Layout")) {
             if let layout {
-                Picker("方向", selection: Binding(get: { layout.direction }, set: { v in update("修改布局方向") { $0.layout?.direction = v } })) {
+                Picker(L("Direction"), selection: Binding(get: { layout.direction }, set: { v in update("Change Layout Direction") { $0.layout?.direction = v } })) {
                     Image(systemName: "arrow.down").tag(LayoutDirection.vertical)
                     Image(systemName: "arrow.right").tag(LayoutDirection.horizontal)
                 }.pickerStyle(.segmented)
-                NumberField(label: "间距", value: layout.spacing) { v in update("修改间距") { $0.layout?.spacing = v } }
-                Text("内边距").foregroundStyle(.secondary)
+                NumberField(label: L("Spacing"), value: layout.spacing) { v in update("Change Spacing") { $0.layout?.spacing = v } }
+                Text(L("Padding")).foregroundStyle(.secondary)
                 HStack {
-                    NumberField(label: "上", value: layout.padding.top, minimum: 0) { v in update("修改内边距") { $0.layout?.padding.top = v } }
-                    NumberField(label: "右", value: layout.padding.right, minimum: 0) { v in update("修改内边距") { $0.layout?.padding.right = v } }
+                    NumberField(label: L("Top"), value: layout.padding.top, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.top = v } }
+                    NumberField(label: L("Right"), value: layout.padding.right, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.right = v } }
                 }
                 HStack {
-                    NumberField(label: "下", value: layout.padding.bottom, minimum: 0) { v in update("修改内边距") { $0.layout?.padding.bottom = v } }
-                    NumberField(label: "左", value: layout.padding.left, minimum: 0) { v in update("修改内边距") { $0.layout?.padding.left = v } }
+                    NumberField(label: L("Bottom"), value: layout.padding.bottom, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.bottom = v } }
+                    NumberField(label: L("Left"), value: layout.padding.left, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.left = v } }
                 }
-                Picker("主轴", selection: Binding(get: { layout.align }, set: { v in update("修改对齐") { $0.layout?.align = v } })) {
-                    Text("起点").tag(LayoutAlign.start)
-                    Text("居中").tag(LayoutAlign.center)
-                    Text("终点").tag(LayoutAlign.end)
-                    Text("两端分布").tag(LayoutAlign.spaceBetween)
+                Picker(L("Main axis"), selection: Binding(get: { layout.align }, set: { v in update("Change Alignment") { $0.layout?.align = v } })) {
+                    Text(L("Start")).tag(LayoutAlign.start)
+                    Text(L("Center")).tag(LayoutAlign.center)
+                    Text(L("End")).tag(LayoutAlign.end)
+                    Text(L("Space between")).tag(LayoutAlign.spaceBetween)
                 }
-                Picker("交叉轴", selection: Binding(get: { layout.crossAlign }, set: { v in update("修改对齐") { $0.layout?.crossAlign = v } })) {
-                    Text("起点").tag(LayoutCrossAlign.start)
-                    Text("居中").tag(LayoutCrossAlign.center)
-                    Text("终点").tag(LayoutCrossAlign.end)
-                    Text("拉伸").tag(LayoutCrossAlign.stretch)
+                Picker(L("Cross axis"), selection: Binding(get: { layout.crossAlign }, set: { v in update("Change Alignment") { $0.layout?.crossAlign = v } })) {
+                    Text(L("Start")).tag(LayoutCrossAlign.start)
+                    Text(L("Center")).tag(LayoutCrossAlign.center)
+                    Text(L("End")).tag(LayoutCrossAlign.end)
+                    Text(L("Stretch")).tag(LayoutCrossAlign.stretch)
                 }
-                Button("移除自动布局") { update("移除自动布局") { $0.layout = nil } }
+                Button(L("Remove Auto Layout")) { update("Remove Auto Layout") { $0.layout = nil } }
             } else {
-                Button("添加自动布局") { update("添加自动布局") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
+                Button(L("Add Auto Layout")) { update("Add Auto Layout") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
             }
         }
     }
@@ -324,6 +324,6 @@ private struct NodeInspector: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg]
         guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.cgImage(data) != nil else { return }
-        update("替换图片") { $0.image?.data = data }
+        update("Replace Image") { $0.image?.data = data }
     }
 }

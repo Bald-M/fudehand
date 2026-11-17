@@ -79,8 +79,12 @@ final class AtlasCanvasView: NSView {
         updateColors()
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self))
-        setAccessibilityLabel("设计画布")
-        setAccessibilityHelp("点击选中图层，拖动移动，拖动把手调整尺寸；拖动空白框选；滚动或空格拖动平移；Command 加滚轮缩放。")
+    }
+
+    // Read on demand so they follow the UI language.
+    override func accessibilityLabel() -> String? { L("Design canvas") }
+    override func accessibilityHelp() -> String? {
+        L("Click to select a layer, drag to move it, and drag a handle to resize it; drag empty space to select with a marquee; scroll or hold Space and drag to pan; hold Command and scroll to zoom.")
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

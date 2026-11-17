@@ -50,7 +50,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let store else { return .terminateNow }
         guard !quitting else { return .terminateLater }
-        guard store.confirmDiscard("退出") else { return .terminateCancel }
+        guard store.confirmDiscard() else { return .terminateCancel }
         quitting = true
         // 先关闭控制通道，退出过程中不再接受命令。
         control?.stop()
@@ -70,45 +70,66 @@ struct AtlasApp: App {
     static let launchWindowID = "launch"
     static let editorWindowID = "main"
 
+    init() {
+        // Before AppKit builds the menus: the App uses its own language setting, not the system's, and
+        // system-provided menu items (About, Quit, Edit, Window) read `AppleLanguages` once at launch.
+        let language = AppLanguage.saved(in: .standard)
+        L10n.language = language
+        UserDefaults.standard.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
+    }
+
     var body: some Scene {
         // 第一个场景在启动时打开：先显示启动窗口，新建或打开后才进入编辑窗口。
-        Window("启动窗口", id: Self.launchWindowID) {
+        Window(L("Launch Window"), id: Self.launchWindowID) {
             LaunchView(store: store)
+                // The scene's title is not refreshed while the window is open; this one is.
+                .navigationTitle(L("Launch Window"))
                 .preferredColorScheme(store.colorScheme)
+                .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .commands {
-            CommandGroup(after: .appInfo) { ConnectorsMenuItem() }
+            CommandGroup(after: .appInfo) {
+                ConnectorsMenuItem(title: L("MCP Connectors…"))
+                Menu(L("Language")) {
+                    Picker(L("Language"), selection: $store.language) {
+                        ForEach(AppLanguage.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
+                    Divider()
+                    Text(L("System menu items change after you restart ui-atlas"))
+                }
+            }
             CommandGroup(replacing: .newItem) {
-                Button("新建") { store.newDocument() }.keyboardShortcut("n")
-                Button("打开…") { store.openDocument() }.keyboardShortcut("o")
-                Menu("打开最近") {
+                Button(L("New")) { store.newDocument() }.keyboardShortcut("n")
+                Button(L("Open…")) { store.openDocument() }.keyboardShortcut("o")
+                Menu(L("Open Recent")) {
                     ForEach(store.recentEntries, id: \.path) { entry in
                         Button(URL(fileURLWithPath: entry.path).deletingPathExtension().lastPathComponent) { store.openRecent(entry.path) }
                     }
                     if !store.recents.items.isEmpty { Divider() }
-                    Button("清除记录") { store.clearRecents() }.disabled(store.recents.items.isEmpty)
+                    Button(L("Clear Recents")) { store.clearRecents() }.disabled(store.recents.items.isEmpty)
                 }
             }
             CommandGroup(replacing: .saveItem) {
-                Button("保存") { store.save() }.keyboardShortcut("s")
-                Button("另存为…") { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
+                Button(L("Save")) { store.save() }.keyboardShortcut("s")
+                Button(L("Save As…")) { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .undoRedo) {
-                Button("撤销") { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")
-                Button("重做") { undoOrForward(#selector(UndoManager.redo)) { store.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift])
+                Button(L("Undo")) { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")
+                Button(L("Redo")) { undoOrForward(#selector(UndoManager.redo)) { store.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
-            CommandMenu("画布") {
-                Button("放大") { store.zoomIn() }.keyboardShortcut("+")
-                Button("缩小") { store.zoomOut() }.keyboardShortcut("-")
-                Button("实际大小") { store.zoom(1) }.keyboardShortcut("1")
-                Button("适应全部") { store.fitAll() }.keyboardShortcut("0")
+            CommandMenu(L("Canvas")) {
+                Button(L("Zoom In")) { store.zoomIn() }.keyboardShortcut("+")
+                Button(L("Zoom Out")) { store.zoomOut() }.keyboardShortcut("-")
+                Button(L("Actual Size")) { store.zoom(1) }.keyboardShortcut("1")
+                Button(L("Fit All")) { store.fitAll() }.keyboardShortcut("0")
                 Divider()
-                Button("插入图片…") { store.insertImage() }.keyboardShortcut("i", modifiers: [.command, .shift])
-                Button("对话") { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
+                Button(L("Insert Image…")) { store.insertImage() }.keyboardShortcut("i", modifiers: [.command, .shift])
+                Button(L("Chat")) { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
             }
         }
 
@@ -117,13 +138,15 @@ struct AtlasApp: App {
             WorkspaceView(store: store)
                 .frame(minWidth: 960, minHeight: 620)
                 .preferredColorScheme(store.colorScheme)
+                .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))
         }
         .defaultSize(width: 1440, height: 940)
 
-        Window("MCP 连接器", id: ConnectorsMenuItem.windowID) {
+        Window(L("MCP Connectors"), id: ConnectorsMenuItem.windowID) {
             ConnectorsView(model: store.connectors)
                 .preferredColorScheme(store.colorScheme)
+                .environment(\.locale, store.language.locale)
         }
         .windowResizability(.contentSize)
     }
@@ -149,10 +172,12 @@ struct AtlasApp: App {
 /// 应用菜单中的“MCP 连接器…”；commands 里取得 openWindow 需要放在 View 中。
 private struct ConnectorsMenuItem: View {
     static let windowID = "connectors"
+    /// Passed in so the item re-renders when the UI language changes.
+    let title: String
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("MCP 连接器…") { openWindow(id: Self.windowID) }
+        Button(title) { openWindow(id: Self.windowID) }
     }
 }
 

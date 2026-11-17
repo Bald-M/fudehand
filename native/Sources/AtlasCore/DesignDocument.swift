@@ -107,12 +107,12 @@ public enum NodeType: String, Sendable, CaseIterable {
     /// 新建图层的默认名称。
     public var title: String {
         switch self {
-        case .frame: return "画框"
-        case .rectangle: return "矩形"
-        case .ellipse: return "椭圆"
-        case .text: return "文字"
-        case .image: return "图片"
-        case .group: return "分组"
+        case .frame: return L("Frame")
+        case .rectangle: return L("Rectangle")
+        case .ellipse: return L("Ellipse")
+        case .text: return L("Text")
+        case .image: return L("Image")
+        case .group: return L("Group")
         }
     }
 
@@ -165,15 +165,15 @@ public struct DesignDocument: Equatable, Sendable {
 
     public static func decode(_ data: Data) throws -> DesignDocument {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              object["format"] as? String == format else { throw DesignError("Not a ui-atlas project file") }
+              object["format"] as? String == format else { throw DesignError(L("Not a ui-atlas project file")) }
         guard let version = object["version"] as? NSNumber, !DesignJSON.isBool(version), version.doubleValue == version.doubleValue.rounded(),
               version.intValue >= 1 else {
-            throw DesignError("Project file is missing its format version")
+            throw DesignError(L("Project file is missing its format version"))
         }
         if version.intValue > formatVersion {
-            throw DesignError("File was created by a newer version of ui-atlas (format version \(version.intValue)); upgrade ui-atlas to open it")
+            throw DesignError(L("File was created by a newer version of ui-atlas (format version %d); upgrade ui-atlas to open it", version.intValue))
         }
-        guard let nodes = object["nodes"] as? [Any] else { throw DesignError("Project file is missing nodes") }
+        guard let nodes = object["nodes"] as? [Any] else { throw DesignError(L("Project file is missing nodes")) }
         let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) })
         try document.validateUniqueIDs()
         return document

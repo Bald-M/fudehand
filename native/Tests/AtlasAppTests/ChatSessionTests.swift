@@ -118,7 +118,7 @@ private let repository = URL(fileURLWithPath: #filePath)
             == .success(ModelListing(models: ["a", "b"], defaultModel: "a")))
     #expect(ChatSession.parseModelListing(Data(#"{"type":"error","message":"Invalid API key or insufficient permissions"}"#.utf8))
             == .failure(ModelListError(message: "Invalid API key or insufficient permissions")))
-    #expect(ChatSession.parseModelListing(Data()) == .failure(ModelListError(message: "对话程序没有返回模型列表，请确认已在项目目录执行 pnpm install。")))
+    #expect(ChatSession.parseModelListing(Data()) == .failure(ModelListError(message: "The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
 }
 
 @Test func modelListingRunsTheRealHarnessWithoutPuttingTheKeyInArguments() async {

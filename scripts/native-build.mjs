@@ -17,6 +17,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   await copyFile(join(root, 'native', 'Resources', 'Info.plist'), join(contents, 'Info.plist'))
   await copyFile(join(root, 'native', 'Resources', 'AppIcon.icns'), join(contents, 'Resources', 'AppIcon.icns'))
   await copyTemplates(join(contents, 'Resources', 'Templates'))
+  await copyLocalizations(join(contents, 'Resources'))
   // Local build metadata: the chat panel starts the source workspace's Agent harness with this Node.
   await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
   await runCommand('codesign', ['--force', '--deep', '--sign', '-', app])
@@ -31,6 +32,20 @@ async function copyTemplates(target) {
   await mkdir(target, { recursive: true })
   for (const name of await readdir(source)) {
     if (name.toLowerCase().endsWith('.uiatlas')) await copyFile(join(source, name), join(target, name))
+  }
+}
+
+// UI string tables: the App reads them from its own bundle, and their presence tells AppKit which languages
+// the system-provided menu items may use. Clear old ones first so a removed language does not linger.
+async function copyLocalizations(resources) {
+  const source = join(root, 'native', 'Sources', 'AtlasCore', 'Resources')
+  for (const name of await readdir(resources)) {
+    if (name.endsWith('.lproj')) await rm(join(resources, name), { recursive: true, force: true })
+  }
+  for (const name of await readdir(source)) {
+    if (!name.endsWith('.lproj')) continue
+    await mkdir(join(resources, name), { recursive: true })
+    await copyFile(join(source, name, 'Localizable.strings'), join(resources, name, 'Localizable.strings'))
   }
 }
 

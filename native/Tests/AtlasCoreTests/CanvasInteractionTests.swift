@@ -48,10 +48,10 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     let ctx = context(selection: ["a"])
     _ = down(&machine, 10, 10, hit: .node("a"), context: ctx)
     let first = machine.pointerDragged(to: Point(x: 110, y: 10), modifiers: [.control], context: ctx)
-    #expect(first.first == .beginGesture("移动图层"))
+    #expect(first.first == .beginGesture("Move Layers"))
     #expect(moves(first) == [["a": Point(x: 200, y: 0)]])
     let second = machine.pointerDragged(to: Point(x: 120, y: 10), modifiers: [.control], context: ctx)
-    #expect(!second.contains(.beginGesture("移动图层")))
+    #expect(!second.contains(.beginGesture("Move Layers")))
     #expect(machine.pointerUp(at: Point(x: 120, y: 10), context: ctx) == [.endGesture, .guides([])])
 }
 
@@ -133,7 +133,7 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     let ctx = context(selection: ["a"])
     #expect(down(&machine, 0, 0, hit: .handle("a", .bottomRight), context: ctx) == [])
     #expect(machine.pointerDragged(to: Point(x: 10, y: 20), modifiers: [], context: ctx)
-            == [.beginGesture("调整尺寸"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884))])
+            == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884))])
     #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx) == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844))])
     #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture])
     // 只点把手不拖动不产生修改。

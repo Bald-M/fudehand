@@ -11,7 +11,7 @@ struct WorkspaceView: View {
         } detail: {
             NativeCanvas(store: store, viewportRequest: store.viewportRequest, tool: store.tool)
                 .clipped()
-                .navigationTitle(store.title + (store.isDirty ? " — 已编辑" : ""))
+                .navigationTitle(store.isDirty ? L("%@ — Edited", store.title) : store.title)
         }
         .inspector(isPresented: $store.showingInspector) {
             InspectorPanel(store: store).inspectorColumnWidth(min: 260, ideal: 300, max: 520)
@@ -20,40 +20,42 @@ struct WorkspaceView: View {
         .storeAlert(store)
     }
 
-    private static let tools: [(CanvasTool, String, String)] = [
-        (.move, "移动 V", "cursorarrow"), (.hand, "抓手 H", "hand.raised"), (.frame, "画框 F", "number"),
-        (.rectangle, "矩形 R", "rectangle"), (.ellipse, "椭圆 O", "circle"), (.text, "文字 T", "t.square"),
+    /// Tool, name key, shortcut key, symbol.
+    private static let tools: [(CanvasTool, String, String, String)] = [
+        (.move, "Move", "V", "cursorarrow"), (.hand, "Hand", "H", "hand.raised"), (.frame, "Frame", "F", "number"),
+        (.rectangle, "Rectangle", "R", "rectangle"), (.ellipse, "Ellipse", "O", "circle"), (.text, "Text", "T", "t.square"),
     ]
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            Picker("工具", selection: $store.tool) {
-                ForEach(Self.tools, id: \.0) { tool, title, symbol in
+            Picker(L("Tools"), selection: $store.tool) {
+                ForEach(Self.tools, id: \.0) { tool, name, key, symbol in
+                    let title = "\(L(name)) \(key)"
                     Label(title, systemImage: symbol).tag(tool).help(title)
                 }
             }
-            .pickerStyle(.segmented).labelsHidden().accessibilityLabel("画布工具")
+            .pickerStyle(.segmented).labelsHidden().accessibilityLabel(L("Canvas tools"))
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { store.insertImage() } label: { Image(systemName: "photo.badge.plus") }
-                .help("插入图片").accessibilityLabel("插入图片")
+                .help(L("Insert Image")).accessibilityLabel(L("Insert Image"))
             Divider()
             Button { store.zoomOut() } label: { Image(systemName: "minus.magnifyingglass") }
-                .help("缩小（⌘−）").accessibilityLabel("缩小")
+                .help(L("Zoom Out (⌘−)")).accessibilityLabel(L("Zoom Out"))
             ZoomLabel(indicator: store.zoomIndicator) { store.zoom(1) }
             Button { store.zoomIn() } label: { Image(systemName: "plus.magnifyingglass") }
-                .help("放大（⌘+）").accessibilityLabel("放大")
+                .help(L("Zoom In (⌘+)")).accessibilityLabel(L("Zoom In"))
             Button { store.fitAll() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                .help("适应全部（⌘0）").accessibilityLabel("适应全部")
+                .help(L("Fit All (⌘0)")).accessibilityLabel(L("Fit All"))
             Menu {
-                Picker("外观", selection: $store.theme) {
-                    Text("跟随系统").tag("system")
-                    Text("浅色").tag("light")
-                    Text("深色").tag("dark")
+                Picker(L("Appearance"), selection: $store.theme) {
+                    Text(L("System")).tag("system")
+                    Text(L("Light")).tag("light")
+                    Text(L("Dark")).tag("dark")
                 }
-            } label: { Image(systemName: "circle.lefthalf.filled") }.help("外观").accessibilityLabel("外观")
+            } label: { Image(systemName: "circle.lefthalf.filled") }.help(L("Appearance")).accessibilityLabel(L("Appearance"))
             Toggle(isOn: $store.showingInspector) { Image(systemName: "sidebar.right") }
-                .help("检查器（⌥⌘I）").accessibilityLabel("检查器").keyboardShortcut("i", modifiers: [.command, .option])
+                .help(L("Inspector (⌥⌘I)")).accessibilityLabel(L("Inspector")).keyboardShortcut("i", modifiers: [.command, .option])
         }
     }
 }
@@ -61,9 +63,11 @@ struct WorkspaceView: View {
 private struct ZoomLabel: View {
     @ObservedObject var indicator: ZoomIndicator
     let action: () -> Void
+    @Environment(\.locale) private var locale
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         Button("\(Int((indicator.scale * 100).rounded()))%", action: action)
-            .monospacedDigit().frame(minWidth: 44).help("实际大小（⌘1）")
+            .monospacedDigit().frame(minWidth: 44).help(L("Actual Size (⌘1)"))
     }
 }

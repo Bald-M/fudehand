@@ -58,7 +58,7 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
     await model.connect(.codex)
     #expect(model.entries[.codex]?.status == .disconnected)
     #expect(model.entries[.codex]?.busy == false)
-    #expect(model.entries[.codex]?.error == "连接失败：Error: config is read-only")
+    #expect(model.entries[.codex]?.error == "Connection failed: Error: config is read-only")
 }
 
 @Test @MainActor func connectorsReadClaudeUserConfig() async throws {
@@ -81,7 +81,7 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
     }
     await model.refresh()
     #expect(model.entries[.codex]?.status == .disconnected)
-    #expect(model.entries[.codex]?.error == "检测连接状态失败：Error: invalid config.toml")
+    #expect(model.entries[.codex]?.error == "Could not check the connection status: Error: invalid config.toml")
 }
 
 @Test @MainActor func connectorsFollowClaudeConfigDir() async throws {

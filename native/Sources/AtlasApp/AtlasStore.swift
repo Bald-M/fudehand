@@ -31,6 +31,15 @@ final class AtlasStore: ObservableObject {
     @Published var theme: String {
         didSet { defaults.set(theme, forKey: "native.theme") }
     }
+    /// UI language. Views that observe the store re-render on change; the rest read `\.locale`, which each window sets from here.
+    @Published var language: AppLanguage {
+        didSet {
+            L10n.language = language
+            language.save(in: defaults)
+            // System-provided menu items follow this at the next launch.
+            defaults.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
+        }
+    }
     let zoomIndicator = ZoomIndicator()
     let chat = ChatSession()
     /// 源码目录：对话面板从这里启动 `scripts/agent-chat.mjs`。
@@ -60,12 +69,13 @@ final class AtlasStore: ObservableObject {
         self.defaults = defaults
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
+        language = AppLanguage.saved(in: defaults)
         recents = RecentDocuments(data: defaults.data(forKey: Self.recentsKey))
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
     var isDirty: Bool { editor.revision != savedRevision }
-    var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? "未命名" }
+    var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? L("Untitled") }
     var canUndo: Bool { editor.canUndo }
     var canRedo: Bool { editor.canRedo }
 
@@ -130,7 +140,7 @@ final class AtlasStore: ObservableObject {
         switch type {
         case .frame: node.fill = .white
         case .rectangle, .ellipse: node.fill = try? DesignColor(hex: "#D9D9D9")
-        case .text: node.text = DesignText(content: "文字", fontSize: 16, autoResize: clicked ? .widthAndHeight : .height)
+        case .text: node.text = DesignText(content: L("Text"), fontSize: 16, autoResize: clicked ? .widthAndHeight : .height)
         case .image, .group: break
         }
         return node
@@ -146,7 +156,7 @@ final class AtlasStore: ObservableObject {
         let id = DesignDocument.newID(existing: editor.document.allIDs())
         let node = Self.newNode(type, id: id, rect: Rect(x: rect.x - origin.x, y: rect.y - origin.y, width: rect.width, height: rect.height),
                                 clicked: clicked)
-        edit("新建\(type.title)") { try $0.insert(node, parent: parent?.id, index: nil) }
+        edit("Create \(type.rawValue.capitalized)") { try $0.insert(node, parent: parent?.id, index: nil) }
         if editor.document.node(id) != nil { setSelection([id]) }
         tool = .move
     }
@@ -155,11 +165,11 @@ final class AtlasStore: ObservableObject {
     func insertImage() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg]
-        panel.title = "插入图片"
+        panel.title = L("Insert Image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
-            guard let image = DesignRenderer.cgImage(data) else { throw DesignError("Could not read image: \(url.lastPathComponent)") }
+            guard let image = DesignRenderer.cgImage(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
             let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
             let width = Double(image.width) / 2, height = Double(image.height) / 2
             let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
@@ -168,7 +178,7 @@ final class AtlasStore: ObservableObject {
                                   x: parent == nil ? center.x - width / 2 : 0, y: parent == nil ? center.y - height / 2 : 0,
                                   width: width, height: height)
             node.image = DesignImage(data: data)
-            try perform("插入图片") { try $0.insert(node, parent: parent, index: nil) }
+            try perform("Insert Image") { try $0.insert(node, parent: parent, index: nil) }
             setSelection([id])
         } catch {
             alert = error.localizedDescription
@@ -211,14 +221,14 @@ final class AtlasStore: ObservableObject {
     // MARK: Files
 
     /// 有未保存修改时询问：保存、不保存或取消。返回是否可以继续。
-    func confirmDiscard(_ action: String) -> Bool {
+    func confirmDiscard() -> Bool {
         guard isDirty else { return true }
         let alert = NSAlert()
-        alert.messageText = "要保存对“\(title)”的修改吗？"
-        alert.informativeText = "\(action)前不保存，修改将会丢失。"
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-        alert.addButton(withTitle: "不保存")
+        alert.messageText = L("Do you want to save the changes made to “%@”?", title)
+        alert.informativeText = L("Your changes will be lost if you don’t save them.")
+        alert.addButton(withTitle: L("Save"))
+        alert.addButton(withTitle: L("Cancel"))
+        alert.addButton(withTitle: L("Don’t Save"))
         switch alert.runModal() {
         case .alertFirstButtonReturn: return save()
         case .alertThirdButtonReturn: return true
@@ -227,24 +237,24 @@ final class AtlasStore: ObservableObject {
     }
 
     func newDocument() {
-        guard confirmDiscard("新建") else { return }
+        guard confirmDiscard() else { return }
         replace(DesignDocument(), url: nil)
     }
 
     func openDocument() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [Self.contentType]
-        panel.title = "打开工程文件"
+        panel.title = L("Open Project File")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // 选好文件后再询问：选择期间 Agent 可能修改了文档。
-        guard confirmDiscard("打开其他文件") else { return }
+        guard confirmDiscard() else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
 
     /// 读取并校验工程文件；失败时当前文档不变。
     func open(_ url: URL) throws {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw DesignError("Could not read file: \(url.lastPathComponent)") }
+        do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read file: %@", url.lastPathComponent)) }
         replace(try DesignDocument.decode(data), url: url)
     }
 
@@ -288,10 +298,10 @@ final class AtlasStore: ObservableObject {
     func openRecent(_ path: String) {
         guard FileManager.default.fileExists(atPath: path) else {
             let alert = NSAlert()
-            alert.messageText = "找不到“\(URL(fileURLWithPath: path).lastPathComponent)”"
-            alert.informativeText = "文件可能已被删除或移动。"
-            alert.addButton(withTitle: "从列表移除")
-            alert.addButton(withTitle: "取消")
+            alert.messageText = L("“%@” cannot be found", URL(fileURLWithPath: path).lastPathComponent)
+            alert.informativeText = L("The file may have been deleted or moved.")
+            alert.addButton(withTitle: L("Remove from List"))
+            alert.addButton(withTitle: L("Cancel"))
             if alert.runModal() == .alertFirstButtonReturn { removeRecent(path) }
             return
         }
@@ -321,13 +331,13 @@ final class AtlasStore: ObservableObject {
 
     /// 从模板新建：得到未命名文档，不关联模板文件，保存时询问位置。
     func newDocument(fromTemplate template: Template) {
-        guard confirmDiscard("新建") else { return }
+        guard confirmDiscard() else { return }
         do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
     }
 
     func openTemplate(_ url: URL) throws {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw DesignError("Could not read template: \(url.lastPathComponent)") }
+        do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read template: %@", url.lastPathComponent)) }
         replace(try DesignDocument.decode(data), url: nil)
     }
 
@@ -366,7 +376,7 @@ final class AtlasStore: ObservableObject {
     func openFromSystem(_ url: URL) {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
-        guard confirmDiscard(current ? "重新打开文件" : "打开其他文件") else { return }
+        guard confirmDiscard() else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
 
@@ -437,13 +447,13 @@ extension AtlasStore: CanvasHost {
             return parent.flatMap { document.node($0)?.layout } == nil
         }
         guard !movable.isEmpty else { return }
-        edit("移动图层") { document in
+        edit("Move Layers") { document in
             for id in movable { try document.update(id) { $0.x += delta.x; $0.y += delta.y } }
         }
     }
 
     func canvasDelete(_ ids: Set<String>) {
-        edit("删除图层") { try $0.delete(ids) }
+        edit("Delete Layers") { try $0.delete(ids) }
         setSelection([])
     }
 

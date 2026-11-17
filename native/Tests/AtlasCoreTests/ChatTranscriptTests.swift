@@ -30,7 +30,7 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     transcript.apply(line(#"{"type":"done","stopped":true}"#))
     #expect(transcript.entries.map(\.kind) == [.user, .error, .user, .toolResult(ok: false), .notice])
     #expect(transcript.entries[1].text == "API key 无效或无权限")
-    #expect(transcript.entries[4].text == "已停止回复")
+    #expect(transcript.entries[4].text == "Reply stopped")
     #expect(!transcript.busy)
 }
 

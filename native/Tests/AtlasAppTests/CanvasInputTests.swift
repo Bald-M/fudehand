@@ -128,7 +128,7 @@ final class CanvasHarness {
     defer { h.dispose() }
     h.drag(from: NSPoint(x: 700, y: 200), to: NSPoint(x: 750, y: 230), flags: .control)
     #expect(h.node("b")?.frame == Rect(x: 650, y: 30, width: 300, height: 300))
-    #expect(h.store.editor.undoName == "移动图层")
+    #expect(h.store.editor.undoName == "Move Layers")
     h.store.undo()
     #expect(h.node("b")?.x == 600)
     #expect(!h.store.canUndo)
@@ -175,7 +175,7 @@ final class CanvasHarness {
     h.setTool(.text)
     h.click(NSPoint(x: 700, y: 600))
     let text = try #require(h.store.selection.first.flatMap(h.node))
-    #expect(text.type == .text && text.text?.content == "文字" && text.width > 0)
+    #expect(text.type == .text && text.text?.content == "Text" && text.width > 0)
     #expect(h.store.editor.document.parentID(of: text.id) == .some(nil))
 }
 

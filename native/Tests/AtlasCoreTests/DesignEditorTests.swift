@@ -38,16 +38,16 @@ private func editor() -> DesignEditor {
 
 @Test func gestureIsOneStep() throws {
     var e = editor()
-    e.beginGesture("移动图层")
+    e.beginGesture("Move Layers")
     for x in [11.0, 12, 13] { e.applyLive { try? $0.update("a") { $0.x = x } } }
     e.endGesture()
-    #expect(e.document.node("a")?.x == 13 && e.undoName == "移动图层")
+    #expect(e.document.node("a")?.x == 13 && e.undoName == "Move Layers")
     #expect(e.undo() && e.document.node("a")?.x == 10 && !e.canUndo)
 }
 
 @Test func performEndsOpenGesture() throws {
     var e = editor()
-    e.beginGesture("移动图层")
+    e.beginGesture("Move Layers")
     e.applyLive { try? $0.update("a") { $0.x = 40 } }
     try attempt(&e) { try $0.delete(["b"]) }
     #expect(e.undo() && e.document.node("b") != nil && e.document.node("a")?.x == 40)
@@ -56,12 +56,12 @@ private func editor() -> DesignEditor {
 
 @Test func dragContinuesAsItsOwnStepAfterAnEditArrivesMidGesture() throws {
     var e = editor()
-    e.beginGesture("移动图层")
+    e.beginGesture("Move Layers")
     e.applyLive { try? $0.update("a") { $0.x = 20 } }
     try e.perform("删除") { try $0.delete(["b"]) }
     e.applyLive { try? $0.update("a") { $0.x = 30 } }
     e.endGesture()
-    #expect(e.undoName == "移动图层")
+    #expect(e.undoName == "Move Layers")
     #expect(e.undo() && e.document.node("a")?.x == 20 && e.document.node("b") == nil)
     #expect(e.undo() && e.document.node("b") != nil && e.document.node("a")?.x == 20)
     #expect(e.undo() && e.document.node("a")?.x == 10)

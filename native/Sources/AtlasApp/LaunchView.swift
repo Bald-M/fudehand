@@ -45,15 +45,15 @@ struct LaunchView: View {
                 .resizable()
                 .frame(width: 64, height: 64)
             Text("ui-atlas").font(.title.bold())
-            Text("人和 Agent 共同编辑的设计文档").font(.callout).foregroundStyle(.secondary)
+            Text(L("Design documents edited by people and Agents together")).font(.callout).foregroundStyle(.secondary)
             Spacer().frame(height: 12)
             Button { store.newDocument() } label: {
-                Label("新建设计文档", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
+                Label(L("New Design Document"), systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
             }
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
             Button { store.openDocument() } label: {
-                Label("打开…", systemImage: "folder").frame(maxWidth: .infinity, alignment: .leading)
+                Label(L("Open…"), systemImage: "folder").frame(maxWidth: .infinity, alignment: .leading)
             }
             .controlSize(.large)
             Spacer()
@@ -66,14 +66,14 @@ struct LaunchView: View {
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("最近打开").font(.headline)
+                Text(L("Recent")).font(.headline)
                 Spacer()
                 if !entries.isEmpty {
-                    Button("清除记录") { store.clearRecents() }.buttonStyle(.link)
+                    Button(L("Clear Recents")) { store.clearRecents() }.buttonStyle(.link)
                 }
             }
             if entries.isEmpty {
-                placeholder("还没有打开过的工程文件", systemImage: "clock")
+                placeholder(L("No project files opened yet"), systemImage: "clock")
             } else {
                 List(selection: $selection) {
                     ForEach(entries, id: \.path) { entry in
@@ -99,9 +99,9 @@ struct LaunchView: View {
 
     private var templateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("模板").font(.headline)
+            Text(L("Templates")).font(.headline)
             if templates.isEmpty {
-                placeholder("暂无模板", systemImage: "square.grid.2x2")
+                placeholder(L("No templates"), systemImage: "square.grid.2x2")
                     .frame(height: 96)
             } else {
                 ScrollView(.horizontal) {
@@ -117,7 +117,7 @@ struct LaunchView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .help("从“\(template.name)”新建未命名设计文档")
+                            .help(L("Create an untitled design document from “%@”", template.name))
                         }
                     }
                 }
@@ -141,6 +141,7 @@ private struct RecentRow: View {
     let entry: RecentDocuments.Entry
     let open: () -> Void
     let remove: () -> Void
+    @Environment(\.locale) private var locale
 
     private var url: URL { URL(fileURLWithPath: entry.path) }
 
@@ -152,16 +153,16 @@ private struct RecentRow: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(url.deletingPathExtension().lastPathComponent).font(.body.weight(.medium)).lineLimit(1)
-                Text(entry.available ? (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath : "文件已删除或移动")
+                Text(entry.available ? (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath : L("File deleted or moved"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            Text(entry.openedAt, format: Self.dateFormat).font(.caption).foregroundStyle(.secondary)
+            Text(entry.openedAt, format: Date.FormatStyle(date: .abbreviated, time: .shortened).locale(locale)).font(.caption).foregroundStyle(.secondary)
             if !entry.available {
                 Button(action: remove) { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-                    .help("从列表移除")
+                    .help(L("Remove from List"))
             }
         }
         .opacity(entry.available ? 1 : 0.6)
@@ -170,12 +171,10 @@ private struct RecentRow: View {
         .onTapGesture(perform: open)
         .help(entry.path)
         .contextMenu {
-            Button("打开", action: open).disabled(!entry.available)
-            Button("从列表移除", action: remove)
+            Button(L("Open"), action: open).disabled(!entry.available)
+            Button(L("Remove from List"), action: remove)
         }
     }
-
-    private static let dateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: "zh_CN"))
 }
 
 extension View {
@@ -188,9 +187,9 @@ private struct StoreAlert: ViewModifier {
     @Environment(\.controlActiveState) private var activeState
 
     func body(content: Content) -> some View {
-        content.alert("操作失败", isPresented: Binding(get: { store.alert != nil && activeState == .key },
+        content.alert(L("Operation Failed"), isPresented: Binding(get: { store.alert != nil && activeState == .key },
                                                   set: { if !$0 { store.alert = nil } })) {
-            Button("好", role: .cancel) { store.alert = nil }
+            Button(L("OK"), role: .cancel) { store.alert = nil }
         } message: { Text(store.alert ?? "") }
     }
 }

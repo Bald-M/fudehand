@@ -4,19 +4,22 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Pull requests should first record notable changes under
-`Unreleased`; they are moved into the matching version on release. Write all entries in English. The App UI is
-currently Chinese-only, so when an entry names a menu, panel, or button, describe it in English and keep the App's
-Chinese label in parentheses the first time it appears, e.g. *File menu → Open Recent (打开最近)*. Use the English term
+`Unreleased`; they are moved into the matching version on release. Write all entries in English. When an entry
+names a menu, panel, or button, use its US English label, e.g. *File menu → Open Recent*. Use the English term
 names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
 ### Added
 
+- UI languages: the App now comes in US English, British English, Simplified Chinese, and Traditional Chinese, chosen in the app menu's *Language* submenu. The choice applies immediately, is remembered across launches, and does not follow the system language; system-provided menu items (About, Quit, Edit, Window) switch at the next launch (#89).
 - ui-atlas has a macOS app icon featuring a glass globe, a selection frame, and an AI sparkle (#69).
 
 ### Changed
 
+- **The App now starts in US English.** It used to be Simplified Chinese only; choose *Language → 简体中文* to switch back (#89).
+- New layers get their default name (Frame, Rectangle, …) in the UI language at the time they are created; existing layer names are never changed (#89).
+- The confirmation shown before discarding unsaved changes no longer names the action that triggered it (#89).
 - MCP tool descriptions, parameter descriptions, and the layer field guide are now in English; tool names and parameter schemas are unchanged. The chat panel's system prompt is now in English, and the agent replies in the language of the user's latest message instead of always in Simplified Chinese (#82).
 - The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).
 - Error messages returned to agents and shown in the App are now in English: control channel argument errors, layer field validation, project file loading, editing commands (undo, save, missing layers), snapshots, the Node control client, and model API errors in the chat panel (#83).
