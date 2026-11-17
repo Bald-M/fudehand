@@ -295,7 +295,7 @@ private struct ChatSettingsSheet: View {
                 Text(L("Could not load the model list: %@. You can still enter a model manually.", listError))
             } else if !models.isEmpty {
                 Image(systemName: "checkmark.circle").foregroundStyle(.green)
-                Text(L("%d models available; choose one from the menu next to the model field.", models.count))
+                Text(L("Available models: %d. Choose one from the menu next to the model field.", models.count))
             } else if trimmedKey.isEmpty && !hasSavedKey {
                 Text(L("Available models load automatically once you enter an API key."))
             }

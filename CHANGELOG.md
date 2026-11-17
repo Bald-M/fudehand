@@ -19,7 +19,6 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - **The App now starts in US English.** It used to be Simplified Chinese only; choose *Language → 简体中文* to switch back (#89).
 - New layers get their default name (Frame, Rectangle, …) in the UI language at the time they are created; existing layer names are never changed (#89).
 - The confirmation shown before discarding unsaved changes no longer names the action that triggered it (#89).
-
 - The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).
 - `AGENTS.md` and `GLOSSARY.md` are now in English; each glossary term leads with its English name and keeps the App's Chinese label in parentheses, and serves as the shared translation for the other English docs (#80).
 - `CHANGELOG.md` is now written in English, and future entries must be in English; `GLOSSARY.md` lists an English name for each term (#78).

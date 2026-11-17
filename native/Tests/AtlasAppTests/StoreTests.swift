@@ -223,13 +223,15 @@ private func temporaryFile() -> URL {
 }
 
 @Test @MainActor func languageDefaultsToUSEnglishAndPersists() {
-    let defaults = UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!
+    let suite = "ui-atlas-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
     #expect(AtlasStore(defaults: defaults).language == .enUS)
     AppLanguage.zhHant.save(in: defaults)
     let store = AtlasStore(defaults: defaults)
     #expect(store.language == .zhHant)
-    // Switching back to the default keeps the process-wide language other tests rely on.
+    // Only the default language is assigned here: assigning sets the process-wide `L10n.language`, which tests running in parallel read.
     store.language = .enUS
     #expect(AppLanguage.saved(in: defaults) == .enUS && AtlasStore(defaults: defaults).language == .enUS)
-    #expect(defaults.stringArray(forKey: "AppleLanguages") == ["en-US"])
+    // Read the suite's own domain; `stringArray(forKey:)` would fall through to the system languages.
+    #expect((defaults.persistentDomain(forName: suite)?["AppleLanguages"] as? [String])?.first == "en-US")
 }

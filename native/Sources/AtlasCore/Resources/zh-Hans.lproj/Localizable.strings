@@ -206,7 +206,7 @@
 "Replace" = "更换";
 "Loading available models…" = "正在获取可用模型…";
 "Could not load the model list: %@. You can still enter a model manually." = "获取模型列表失败：%@。仍可手动填写模型。";
-"%d models available; choose one from the menu next to the model field." = "已获取 %d 个可用模型，可在模型右侧的菜单中选择。";
+"Available models: %d. Choose one from the menu next to the model field." = "已获取 %d 个可用模型，可在模型右侧的菜单中选择。";
 "Available models load automatically once you enter an API key." = "填写 API key 后会自动获取可用模型。";
 "Cannot find the ui-atlas source directory, so the model list is unavailable" = "找不到 ui-atlas 源码目录，无法读取模型列表";
 "Cannot start the chat process: %@" = "无法启动对话程序：%@";

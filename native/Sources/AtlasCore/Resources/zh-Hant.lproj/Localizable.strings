@@ -42,7 +42,7 @@
 "OK" = "好";
 "Not a ui-atlas project file" = "不是 ui-atlas 專案檔";
 "The project file has no format version" = "專案檔缺少格式版本號";
-"This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it." = "檔案由較新版本的 ui-atlas 建立（格式版本 %d），請升級後再打開";
+"This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it." = "檔案由較新版本的 ui-atlas 建立（格式版本 %d），請更新後再打開";
 "The project file has no nodes" = "專案檔缺少 nodes";
 
 /* Layer types and tools */
@@ -53,7 +53,7 @@
 "Image" = "圖片";
 "Group" = "群組";
 "Move" = "移動";
-"Hand" = "抓手";
+"Hand" = "手形工具";
 "Tools" = "工具";
 "Canvas tools" = "畫布工具";
 "Zoom Out (⌘−)" = "縮小（⌘−）";
@@ -106,7 +106,7 @@
 /* Properties panel */
 "Design" = "設計";
 "%d layers selected" = "已選 %d 個圖層";
-"Opacity" = "不透明度";
+"Opacity" = "透明度";
 "Document" = "文件";
 "Select a layer to edit its position, size, fill, stroke, text, and auto layout here." = "選取圖層後在這裡修改位置、尺寸、填色、筆畫、文字與自動佈局。";
 "Hex" = "十六進位";
@@ -192,7 +192,7 @@
 "Leave empty to use the default model" = "留空使用預設模型";
 "Base URL" = "API 位址";
 "Leave empty to use the official endpoint" = "留空使用官方位址";
-"The API key is stored only in this Mac’s keychain and passed to the chat process through an environment variable when it starts; it is never written to the repository or logs, and the UI shows only the first and last 4 characters. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API." = "API key 只儲存在本機鑰匙圈，啟動對話程式時經環境變數傳入，不寫入儲存庫或日誌；介面只顯示首尾各 4 位。DeepSeek 使用 OpenAI 相容介面，OpenAI 使用 Responses API。";
+"The API key is stored only in this Mac’s keychain and passed to the chat process through an environment variable when it starts; it is never written to the repository or logs, and the UI shows only the first and last 4 characters. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API." = "API key 只儲存在本機鑰匙圈，啟動對話程式時經環境變數傳入，不寫入儲存庫或記錄；介面只顯示首尾各 4 位。DeepSeek 使用 OpenAI 相容 API，OpenAI 使用 Responses API。";
 "Delete Saved Key" = "刪除已儲存的 key";
 "Default model (%@)" = "預設模型（%@）";
 "Reload Model List" = "重新取得模型列表";
@@ -206,7 +206,7 @@
 "Replace" = "更換";
 "Loading available models…" = "正在取得可用模型…";
 "Could not load the model list: %@. You can still enter a model manually." = "取得模型列表失敗：%@。仍可手動填寫模型。";
-"%d models available; choose one from the menu next to the model field." = "已取得 %d 個可用模型，可在模型右側的選單中選擇。";
+"Available models: %d. Choose one from the menu next to the model field." = "已取得 %d 個可用模型，可在模型右側的選單中選擇。";
 "Available models load automatically once you enter an API key." = "填寫 API key 後會自動取得可用模型。";
 "Cannot find the ui-atlas source directory, so the model list is unavailable" = "找不到 ui-atlas 原始碼目錄，無法讀取模型列表";
 "Cannot start the chat process: %@" = "無法啟動對話程式：%@";
@@ -218,19 +218,19 @@
 "Reply stopped" = "已停止回覆";
 
 /* MCP connectors */
-"Cannot find the ui-atlas source directory, so it cannot connect" = "找不到 ui-atlas 原始碼目錄，無法連接";
-"Connection failed" = "連接失敗";
-"Disconnect failed" = "中斷連接失敗";
-"Could not check the connection status" = "檢查連接狀態失敗";
+"Cannot find the ui-atlas source directory, so it cannot connect" = "找不到 ui-atlas 原始碼目錄，無法連線";
+"Connection failed" = "連線失敗";
+"Disconnect failed" = "中斷連線失敗";
+"Could not check the connection status" = "檢查連線狀態失敗";
 "%1$@ (%2$d)" = "%1$@（%2$d）";
 "%1$@: %2$@" = "%1$@：%2$@";
-"Connect ui-atlas’s design tools to external Agents. Once connected, an Agent can read and edit the design document open in the App." = "把 ui-atlas 的設計工具接入外部 Agent。連接後，在 Agent 中即可讀取和編輯 App 裡打開的設計文件。";
+"Connect ui-atlas’s design tools to external Agents. Once connected, an Agent can read and edit the design document open in the App." = "把 ui-atlas 的設計工具接入外部 Agent。連線後，在 Agent 中即可讀取和編輯 App 裡打開的設計文件。";
 "This changes each Agent’s user-level configuration and applies to new sessions." = "修改的是各 Agent 的使用者層級設定，對新開的工作階段生效。";
 "Refresh" = "重新整理";
 "Checking…" = "正在檢查…";
 "The %1$@ command was not found. Install %2$@ first." = "找不到 %1$@ 指令，請先安裝 %2$@。";
-"Not connected" = "未連接";
-"Connected" = "已連接";
-"Registered to another directory: %@. Disconnect to reconnect it to this one." = "已註冊到其他目錄：%@。中斷後可重新連接到本目錄。";
-"Connect" = "連接";
-"Disconnect" = "中斷連接";
+"Not connected" = "未連線";
+"Connected" = "已連線";
+"Registered to another directory: %@. Disconnect to reconnect it to this one." = "已註冊到其他目錄：%@。中斷後可重新連線到本目錄。";
+"Connect" = "連線";
+"Disconnect" = "中斷連線";

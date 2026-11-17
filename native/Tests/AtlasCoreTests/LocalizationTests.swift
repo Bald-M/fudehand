@@ -29,6 +29,11 @@ private func specifiers(_ text: String) -> [String] {
     }
 }
 
+@Test func appLanguagesPutTheChoiceFirstAndKeepTheSystemOrder() {
+    #expect(AppLanguage.zhHant.preferredLanguages(system: ["ja-JP", "zh-Hant", "en-US"]) == ["zh-Hant", "ja-JP", "en-US"])
+    #expect(AppLanguage.enUS.preferredLanguages(system: []) == ["en-US"])
+}
+
 @Test func supportsExactlyTheFourLanguages() {
     #expect(AppLanguage.allCases.map(\.rawValue) == ["en-US", "en-GB", "zh-Hans", "zh-Hant"])
     #expect(AppLanguage.allCases.map(\.displayName) == ["English (US)", "English (UK)", "简体中文", "繁體中文"])

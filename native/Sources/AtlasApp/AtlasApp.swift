@@ -75,13 +75,15 @@ struct AtlasApp: App {
         // system-provided menu items (About, Quit, Edit, Window) read `AppleLanguages` once at launch.
         let language = AppLanguage.saved(in: .standard)
         L10n.language = language
-        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
+        UserDefaults.standard.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
     }
 
     var body: some Scene {
         // 第一个场景在启动时打开：先显示启动窗口，新建或打开后才进入编辑窗口。
         Window(L("Launch Window"), id: Self.launchWindowID) {
             LaunchView(store: store)
+                // The scene's title is not refreshed while the window is open; this one is.
+                .navigationTitle(L("Launch Window"))
                 .preferredColorScheme(store.colorScheme)
                 .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))

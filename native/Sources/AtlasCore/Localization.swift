@@ -33,6 +33,17 @@ public enum AppLanguage: String, CaseIterable, Sendable {
     public func save(in defaults: UserDefaults) {
         defaults.set(rawValue, forKey: Self.defaultsKey)
     }
+
+    /// The app's `AppleLanguages` value: this language first, so system-provided menu items use it at the next
+    /// launch, then the user's system languages, so font fallback for text on the canvas stays as the system has it.
+    public func preferredLanguages(system: [String]) -> [String] {
+        [rawValue] + system.filter { $0 != rawValue }
+    }
+
+    /// The system-wide preferred languages, read past any per-app override.
+    public static var systemLanguages: [String] {
+        UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
+    }
 }
 
 /// String tables for the UI. Keys are the US English text.
@@ -58,8 +69,12 @@ public enum L10n {
 
     /// The app bundle carries the tables in `Contents/Resources`; `swift test` reads them from the package's resource bundle.
     private static func url(_ language: AppLanguage) -> URL? {
-        Bundle.main.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language.resourceName)
-            ?? Bundle.module.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language.resourceName)
+        if let url = Bundle.main.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language.resourceName) {
+            return url
+        }
+        // The app bundle does not carry the package's resource bundle, and asking for a missing one traps.
+        guard Bundle.main.bundleURL.pathExtension != "app" else { return nil }
+        return Bundle.module.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language.resourceName)
     }
 
     /// A missing key falls back to the key itself, which is readable US English. Text after "|" in a key only
@@ -69,7 +84,7 @@ public enum L10n {
     }
 
     static func string(_ key: String, language: AppLanguage, arguments: [CVarArg]) -> String {
-        let template = table(language)[key] ?? String(key.split(separator: "|", maxSplits: 1)[0])
+        let template = table(language)[key] ?? key.components(separatedBy: "|")[0]
         return arguments.isEmpty ? template : String(format: template, arguments: arguments)
     }
 }

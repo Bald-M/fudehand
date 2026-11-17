@@ -37,7 +37,7 @@ final class AtlasStore: ObservableObject {
             L10n.language = language
             language.save(in: defaults)
             // System-provided menu items follow this at the next launch.
-            defaults.set([language.rawValue], forKey: "AppleLanguages")
+            defaults.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
         }
     }
     let zoomIndicator = ZoomIndicator()

@@ -48,4 +48,3 @@ _Avoid_: control port (控制端口), API service (API 服务)
 **Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Anthropic Claude, and OpenAI. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API.
 
 **UI language (界面语言 / 介面語言)**: The language of the App's own copy, chosen in the app menu's *Language* submenu and remembered across launches. It does not follow the system language and never changes the content of a design document; a new layer's default name is written once, in the UI language at that moment.
-_Avoid_: locale (语言区域) (number and date formats are not customized)

@@ -206,7 +206,7 @@
 "Replace" = "Replace";
 "Loading available models…" = "Loading available models…";
 "Could not load the model list: %@. You can still enter a model manually." = "Could not load the model list: %@. You can still enter a model manually.";
-"%d models available; choose one from the menu next to the model field." = "%d models available; choose one from the menu next to the model field.";
+"Available models: %d. Choose one from the menu next to the model field." = "Available models: %d. Choose one from the menu next to the model field.";
 "Available models load automatically once you enter an API key." = "Available models load automatically once you enter an API key.";
 "Cannot find the ui-atlas source directory, so the model list is unavailable" = "Cannot find the ui-atlas source directory, so the model list is unavailable";
 "Cannot start the chat process: %@" = "Cannot start the chat process: %@";
