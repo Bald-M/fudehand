@@ -24,7 +24,7 @@ struct WorkspaceView: View {
 
     private static let tools: [(CanvasTool, String, String)] = [
         (.move, "移动 V", "cursorarrow"), (.hand, "抓手 H", "hand.raised"), (.frame, "画框 F", "number"),
-        (.rectangle, "矩形 R", "rectangle"), (.ellipse, "椭圆 O", "circle"), (.text, "文字 T", "textformat"),
+        (.rectangle, "矩形 R", "rectangle"), (.ellipse, "椭圆 O", "circle"), (.text, "文字 T", "t.square"),
     ]
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {

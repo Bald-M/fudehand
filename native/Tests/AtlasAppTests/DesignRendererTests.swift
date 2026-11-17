@@ -81,3 +81,21 @@ import Testing
     #expect(wrapped.height >= single.height * 2 - 1)
     #expect(TextMetrics.measure(DesignText(content: ""), nil).height > 0)
 }
+
+/// “▀”的笔画在上半行，“▄”在下半行；文字倒置时两者的上下关系会颠倒。
+@Test @MainActor func snapshotTextIsNotUpsideDown() throws {
+    func inkCenterY(_ content: String) throws -> Double {
+        var frame = DesignNode(id: "f", type: .frame, width: 120, height: 60)
+        frame.fill = .white
+        var text = DesignNode(id: "t", type: .text, width: 120, height: 60)
+        text.text = DesignText(content: content, fontSize: 40, autoResize: .none)
+        frame.children = [text]
+        let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(frame, scale: 1)))
+        var total = 0.0, count = 0.0
+        for y in 0..<60 { for x in 0..<120 where (image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)?.redComponent ?? 1) < 0.5 { total += Double(y); count += 1 } }
+        return count == 0 ? -1 : total / count
+    }
+    let upper = try inkCenterY("▀▀"), lower = try inkCenterY("▄▄")
+    #expect(upper >= 0 && lower >= 0)
+    #expect(upper + 5 < lower)
+}

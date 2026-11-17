@@ -5,7 +5,7 @@ import ImageIO
 /// 把设计文档同步到 Core Animation 图层树：每个节点一个图层，按 id 复用，只更新变化的属性。
 @MainActor
 final class DesignRenderer {
-    /// 所有顶层图层的父层，几何翻转为左上角原点。
+    /// 所有顶层图层的父层。画布把它放进翻转的 world 视图图层，已是左上角原点，这里不再翻转。
     let root = CALayer()
     private var layers: [String: CALayer] = [:]
     /// 每个图层上次应用的节点（不含子节点），用于跳过未变化的节点。
@@ -25,7 +25,6 @@ final class DesignRenderer {
     }
 
     init() {
-        root.isGeometryFlipped = true
         root.actions = Self.noActions
     }
 
@@ -150,13 +149,13 @@ final class DesignRenderer {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw ControlCommandError("无法创建截图画布")
         }
-        // 位图以左下角为原点，翻转后与图层的左上角原点一致。
+        // 位图以左下角为原点，翻转后与图层的左上角原点一致。文字图层的位图在这个翻转的上下文里
+        // 会被整体倒置，所以预先反向绘制。
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
-        renderer.root.isGeometryFlipped = false
         renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
         renderer.root.layoutIfNeeded()
-        for layer in renderer.layers.values where layer is TextLayer { layer.displayIfNeeded() }
+        for case let layer as TextLayer in renderer.layers.values { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
         renderer.root.render(in: context)
         guard let image = context.makeImage() else { throw ControlCommandError("截图失败") }
         let data = NSMutableData()

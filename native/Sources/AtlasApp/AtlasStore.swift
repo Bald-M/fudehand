@@ -23,7 +23,8 @@ final class AtlasStore: ObservableObject {
     @Published var tool: CanvasTool = .move
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
-    @Published private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
+    /// 最近一次视口请求；直接推给画布，不经 SwiftUI，避免每次缩放都重新计算面板。
+    private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
     @Published var inspectorTab: InspectorTab = .design
     @Published var showingInspector = true
     @Published var alert: String?
@@ -163,6 +164,7 @@ final class AtlasStore: ObservableObject {
         viewport = next
         zoomIndicator.update(next)
         viewportRequest = ViewportRequest(viewport: next, animated: animated, token: viewportRequest.token + 1)
+        canvas?.update(viewportRequest: viewportRequest, tool: tool)
     }
 
     private var canvasExtent: Size { Size(width: canvasSize.width, height: canvasSize.height) }

@@ -8,7 +8,7 @@ extension NodeType {
         case .frame: return "number"
         case .rectangle: return "rectangle"
         case .ellipse: return "circle"
-        case .text: return "textformat"
+        case .text: return "t.square"
         case .image: return "photo"
         case .group: return "rectangle.3.group"
         }

@@ -161,10 +161,16 @@ final class AtlasCanvasView: NSView {
         }
     }
 
-    /// Text and images are rasterized for the committed zoom so they stay sharp.
+    /// Text and images are rasterized for the committed zoom so they stay sharp. The zoom is rounded up to a
+    /// power of two, so zooming within one step reuses the existing bitmaps instead of redrawing every text layer.
     func updateContentsScale() {
         let backing = window?.backingScaleFactor ?? 2
-        renderer.contentsScale = backing * CGFloat(min(max(committedViewport.scale, 0.25), CanvasGeometry.maxScale))
+        renderer.contentsScale = backing * CGFloat(Self.rasterZoom(committedViewport.scale))
+    }
+
+    static func rasterZoom(_ scale: Double) -> Double {
+        let clamped = min(max(scale, 0.25), CanvasGeometry.maxScale)
+        return pow(2, (log2(clamped) - 1e-9).rounded(.up))
     }
 
     func refreshOverlay() {

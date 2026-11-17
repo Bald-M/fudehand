@@ -259,6 +259,16 @@ final class CanvasHarness {
     #expect(h.canvas.renderer.contentsScale == 2 * (h.window.backingScaleFactor))
 }
 
+@Test func rasterZoomRoundsUpToPowersOfTwo() {
+    #expect(AtlasCanvasView.rasterZoom(0.05) == 0.25)
+    #expect(AtlasCanvasView.rasterZoom(0.3) == 0.5)
+    #expect(AtlasCanvasView.rasterZoom(0.5) == 0.5)
+    #expect(AtlasCanvasView.rasterZoom(0.9) == 1)
+    #expect(AtlasCanvasView.rasterZoom(1) == 1)
+    #expect(AtlasCanvasView.rasterZoom(1.2) == 2)
+    #expect(AtlasCanvasView.rasterZoom(4) == 4)
+}
+
 @Test @MainActor func pendingZoomHitTestUsesLiveViewport() {
     let h = CanvasHarness()
     defer { h.dispose() }

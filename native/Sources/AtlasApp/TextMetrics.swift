@@ -50,6 +50,8 @@ enum TextMetrics {
 /// 用 CoreText 绘制文字的图层，与 `TextMetrics.measure` 使用同一排版。
 final class TextLayer: CALayer {
     var attributed = NSAttributedString() { didSet { setNeedsDisplay() } }
+    /// 离屏截图把整个图层树画进上下翻转的位图，文字位图会随之倒置；截图时预先反向绘制。
+    var invertedForSnapshot = false { didSet { setNeedsDisplay() } }
 
     override init() {
         super.init()
@@ -58,6 +60,7 @@ final class TextLayer: CALayer {
 
     override init(layer: Any) {
         attributed = (layer as? TextLayer)?.attributed ?? NSAttributedString()
+        invertedForSnapshot = (layer as? TextLayer)?.invertedForSnapshot ?? false
         super.init(layer: layer)
     }
 
@@ -65,17 +68,14 @@ final class TextLayer: CALayer {
 
     override func draw(in context: CGContext) {
         context.saveGState()
-        // CoreText 以左下角为原点；图层在翻转的几何中时上下颠倒绘制。
-        if !contentsAreFlipped() {
+        // CoreText 以左下角为原点、y 向上排版；上下翻转的上下文（翻转几何的图层、截图用的翻转位图）先翻回来。
+        if (context.ctm.d < 0) != invertedForSnapshot {
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
         }
-        // 再翻回 CoreText 的坐标系：文字从顶部开始排。
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
         // 留出余量，避免取整后的宽度让最后一个字换行。
-        let path = CGPath(rect: CGRect(x: 0, y: -10_000, width: bounds.width + 0.5, height: bounds.height + 10_000), transform: nil)
+        let path = CGPath(rect: CGRect(x: 0, y: bounds.height - 10_000, width: bounds.width + 0.5, height: 10_000), transform: nil)
         CTFrameDraw(CTFramesetterCreateFrame(framesetter, CFRange(), path, nil), context)
         context.restoreGState()
     }
