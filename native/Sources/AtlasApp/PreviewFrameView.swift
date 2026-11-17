@@ -31,6 +31,8 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addUserScript(WKUserScript(source: Self.escapeScript,
                                                                        injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.hideScrollbarsScript,
+                                                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: NSRect(x: 0, y: CanvasGeometry.headerHeight, width: frame.width, height: frame.height), configuration: configuration)
         super.init(frame: .zero)
         wantsLayer = true
@@ -263,6 +265,15 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
               let url = message.frameInfo.request.url, isPreviewOrigin(url) else { return }
         canvas?.pageRequestedExit(definition.id)
     }
+
+    /// Frames read like a design board, so the page and its scroll containers show no scrollbar; scrolling still works.
+    private static let hideScrollbarsScript = """
+    (() => {
+      const style = document.createElement('style');
+      style.textContent = '*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}';
+      document.documentElement.appendChild(style);
+    })();
+    """
 
     private static let escapeScript = """
     (() => {
