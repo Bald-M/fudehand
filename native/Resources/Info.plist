@@ -10,7 +10,7 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>ui-atlas 工程文件</string>
+			<string>ui-atlas Project</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -54,7 +54,7 @@
 				<string>public.json</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>ui-atlas 工程文件</string>
+			<string>ui-atlas Project</string>
 			<key>UTTypeIdentifier</key>
 			<string>local.ui-atlas.design</string>
 			<key>UTTypeTagSpecification</key>
