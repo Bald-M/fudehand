@@ -15,25 +15,29 @@ private func object(_ data: Data) throws -> [String: Any] {
 @Test func controlProtocolParsesEveryCommand() throws {
     let cases: [(String, ControlCommand)] = [
         (#"{"id":1,"command":"get_state"}"#, .getState),
-        (#"{"id":2,"command":"select_project","args":{"project":"still"}}"#, .selectProject("still")),
-        (#"{"id":3,"command":"focus_frame","args":{"frame":"mobile"}}"#, .focusFrame("mobile")),
-        (#"{"id":4,"command":"fit_all"}"#, .fitAll),
-        (#"{"id":5,"command":"zoom","args":{"scale":0.5}}"#, .zoom(0.5)),
-        (#"{"id":6,"command":"zoom","args":{"scale":2}}"#, .zoom(2)),
-        (#"{"id":7,"command":"reset","args":{}}"#, .reset),
-        (#"{"id":8,"command":"restart_preview"}"#, .restartPreview),
-        (#"{"id":"s","command":"frame_snapshot","args":{"frame":"web"}}"#, .frameSnapshot("web")),
-        (#"{"id":10,"command":"frame_console","args":{"frame":"web"}}"#, .frameConsole("web", limit: 50)),
-        (#"{"id":11,"command":"frame_console","args":{"frame":"web","limit":200}}"#, .frameConsole("web", limit: 200)),
-        (#"{"id":12,"command":"frame_read","args":{"frame":"web"}}"#, .frameRead("web")),
-        (##"{"id":13,"command":"frame_interact","args":{"frame":"web","action":"click","selector":"#go"}}"##,
-         .frameInteract("web", .click(selector: "#go"))),
-        (#"{"id":14,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input","value":""}}"#,
-         .frameInteract("web", .fill(selector: "input", value: ""))),
-        (##"{"id":15,"command":"frame_interact","args":{"frame":"web","action":"scroll","selector":"#end"}}"##,
-         .frameInteract("web", .scroll(selector: "#end", deltaX: 0, deltaY: 0))),
-        (#"{"id":16,"command":"frame_interact","args":{"frame":"web","action":"scroll","deltaY":600}}"#,
-         .frameInteract("web", .scroll(selector: nil, deltaX: 0, deltaY: 600))),
+        (#"{"id":2,"command":"get_document"}"#, .getDocument),
+        (#"{"id":3,"command":"get_node","args":{"id":"card"}}"#, .getNode("card")),
+        (#"{"id":4,"command":"create_node","args":{"node":{"type":"rectangle"}}}"#,
+         .createNode(parent: nil, index: nil, node: JSONObject(["type": "rectangle"]))),
+        (#"{"id":5,"command":"create_node","args":{"parent":"f","index":0,"node":{"type":"text"}}}"#,
+         .createNode(parent: "f", index: 0, node: JSONObject(["type": "text"]))),
+        (#"{"id":6,"command":"update_node","args":{"id":"a","changes":{"x":3}}}"#, .updateNode("a", changes: JSONObject(["x": 3]))),
+        (#"{"id":7,"command":"delete_nodes","args":{"ids":["a","b"]}}"#, .deleteNodes(["a", "b"])),
+        (#"{"id":8,"command":"move_node","args":{"id":"a","parent":null}}"#, .moveNode("a", parent: nil, index: nil)),
+        (#"{"id":9,"command":"move_node","args":{"id":"a","parent":"f","index":2}}"#, .moveNode("a", parent: "f", index: 2)),
+        (#"{"id":10,"command":"select","args":{"ids":[]}}"#, .select([])),
+        (#"{"id":11,"command":"undo"}"#, .undo),
+        (#"{"id":12,"command":"redo"}"#, .redo),
+        (#"{"id":13,"command":"new_document"}"#, .newDocument(discard: false)),
+        (#"{"id":14,"command":"new_document","args":{"discard":true}}"#, .newDocument(discard: true)),
+        (#"{"id":15,"command":"open_document","args":{"path":"/tmp/a.uiatlas"}}"#, .openDocument("/tmp/a.uiatlas", discard: false)),
+        (#"{"id":16,"command":"save_document"}"#, .saveDocument(nil)),
+        (#"{"id":17,"command":"save_document","args":{"path":"/tmp/b.uiatlas"}}"#, .saveDocument("/tmp/b.uiatlas")),
+        (#"{"id":18,"command":"focus_node","args":{"id":"f"}}"#, .focusNode("f")),
+        (#"{"id":19,"command":"fit_all"}"#, .fitAll),
+        (#"{"id":20,"command":"zoom","args":{"scale":0.5}}"#, .zoom(0.5)),
+        (#"{"id":21,"command":"node_snapshot","args":{"id":"f"}}"#, .nodeSnapshot("f", scale: 2)),
+        (#"{"id":22,"command":"node_snapshot","args":{"id":"f","scale":1}}"#, .nodeSnapshot("f", scale: 1)),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -50,25 +54,22 @@ private func object(_ data: Data) throws -> [String: Any] {
         ("[1,2]", "请求不是有效 JSON"),
         (#"{"id":1}"#, "缺少参数：command"),
         (#"{"id":1,"command":3}"#, "参数类型错误：command"),
-        (#"{"id":1,"command":"drag_frame"}"#, "未知命令：drag_frame"),
-        (#"{"id":1,"command":"focus_frame"}"#, "缺少参数：frame"),
-        (#"{"id":1,"command":"focus_frame","args":{"frame":7}}"#, "参数类型错误：frame"),
-        (#"{"id":1,"command":"select_project","args":{}}"#, "缺少参数：project"),
+        (#"{"id":1,"command":"select_project"}"#, "未知命令：select_project"),
+        (#"{"id":1,"command":"get_node"}"#, "缺少参数：id"),
+        (#"{"id":1,"command":"get_node","args":{"id":7}}"#, "参数类型错误：id"),
+        (#"{"id":1,"command":"create_node","args":{}}"#, "缺少参数：node"),
+        (#"{"id":1,"command":"create_node","args":{"node":[]}}"#, "参数类型错误：node"),
+        (#"{"id":1,"command":"create_node","args":{"node":{},"index":-1}}"#, "参数类型错误：index"),
+        (#"{"id":1,"command":"update_node","args":{"id":"a"}}"#, "缺少参数：changes"),
+        (#"{"id":1,"command":"delete_nodes","args":{"ids":[]}}"#, "参数类型错误：ids"),
+        (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "参数类型错误：ids"),
+        (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "参数类型错误：discard"),
+        (#"{"id":1,"command":"open_document","args":{}}"#, "缺少参数：path"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "参数类型错误：scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "参数类型错误：scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "参数类型错误：scale"),
+        (#"{"id":1,"command":"node_snapshot","args":{"id":"f","scale":5}}"#, "参数类型错误：scale"),
         (#"{"id":1,"command":"fit_all","args":[]}"#, "参数类型错误：args"),
-        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":0}}"#, "参数类型错误：limit"),
-        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":201}}"#, "参数类型错误：limit"),
-        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":1.5}}"#, "参数类型错误：limit"),
-        (#"{"id":1,"command":"frame_read","args":{}}"#, "缺少参数：frame"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web"}}"#, "缺少参数：action"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"hover","selector":"a"}}"#, "不支持的操作：hover"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"click"}}"#, "缺少参数：selector"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input"}}"#, "缺少参数：value"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input","value":3}}"#, "参数类型错误：value"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"scroll"}}"#, "缺少参数：selector 或 deltaX、deltaY"),
-        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"scroll","deltaY":"down"}}"#, "参数类型错误：deltaY"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("应拒绝：\(line)"); continue }
@@ -79,7 +80,7 @@ private func object(_ data: Data) throws -> [String: Any] {
 }
 
 @Test func controlProtocolEncodesSingleLineResponses() throws {
-    let success = try object(ControlProtocol.success(id: .int(3), result: ["project": "still", "text": "a\nb"]))
+    let success = try object(ControlProtocol.success(id: .int(3), result: ["file": "a", "text": "a\nb"]))
     #expect(success["id"] as? Int == 3)
     #expect(success["ok"] as? Bool == true)
     #expect((success["result"] as? [String: Any])?["text"] as? String == "a\nb")

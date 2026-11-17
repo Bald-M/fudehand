@@ -68,7 +68,7 @@ private func leaveStaleSocket(_ path: String) {
     leaveStaleSocket(path)
     #expect(FileManager.default.fileExists(atPath: path))
     let server = ControlServer(path: path) { command in
-        if case .focusFrame(let id) = command { throw ControlCommandError("当前作品没有画框：\(id)") }
+        if case .getNode(let id) = command { throw ControlCommandError("找不到图层：\(id)") }
         return ["handled": "\(command)"]
     }
     try server.start()
@@ -77,14 +77,14 @@ private func leaveStaleSocket(_ path: String) {
     #expect(mode == 0o600)
     let responses = try await exchange(path, [
         #"{"id":1,"command":"get_state"}"#,
-        #"{"id":2,"command":"focus_frame","args":{"frame":"x"}}"#,
+        #"{"id":2,"command":"get_node","args":{"id":"x"}}"#,
         "oops",
     ])
     #expect(responses.count == 3)
     #expect(responses[0]["id"] as? Int == 1)
     #expect(responses[0]["ok"] as? Bool == true)
     #expect((responses[0]["result"] as? [String: Any])?["handled"] as? String == "getState")
-    #expect(responses[1]["error"] as? String == "当前作品没有画框：x")
+    #expect(responses[1]["error"] as? String == "找不到图层：x")
     #expect(responses[2]["error"] as? String == "请求不是有效 JSON")
 }
 
@@ -111,7 +111,7 @@ private func leaveStaleSocket(_ path: String) {
     let server = ControlServer(path: path) { _ in ["data": payload] }
     try server.start()
     defer { server.stop() }
-    let responses = try await exchange(path, [#"{"id":1,"command":"frame_snapshot","args":{"frame":"x"}}"#])
+    let responses = try await exchange(path, [#"{"id":1,"command":"node_snapshot","args":{"id":"x"}}"#])
     #expect((responses.first?["result"] as? [String: Any])?["data"] as? String == payload)
 }
 

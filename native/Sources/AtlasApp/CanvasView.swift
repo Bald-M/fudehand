@@ -1,42 +1,49 @@
 import AppKit
 import AtlasCore
 
+/// 画布向持有文档的一方（`AtlasStore`）报告的编辑与状态；画布本身不修改文档。
+@MainActor
+protocol CanvasHost: AnyObject {
+    func canvasSelect(_ ids: Set<String>)
+    func canvasBeginGesture(_ name: String)
+    /// 拖动中图层的新左上角（画布绝对坐标）。
+    func canvasMove(_ origins: [String: Point])
+    /// 缩放中图层的新矩形（画布绝对坐标）。
+    func canvasResize(_ id: String, to rect: Rect)
+    func canvasEndGesture()
+    func canvasCreate(_ type: NodeType, in rect: Rect)
+    func canvasNudge(_ ids: Set<String>, by delta: Point)
+    func canvasDelete(_ ids: Set<String>)
+    func canvasToolChanged(_ tool: CanvasTool)
+    func canvasCommand(_ command: CanvasCommand)
+    func canvasFocus(_ id: String)
+    func canvasViewportSettled(_ viewport: Viewport)
+    func canvasSizeChanged(_ size: CGSize)
+}
+
 final class AtlasCanvasView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    weak var host: CanvasHost?
     var zoomIndicator: ZoomIndicator?
-    var onViewportSettled: ((Viewport) -> Void)?
-    var onFramesMoved: (([String: Point]) -> Void)?
-    var onSelectionChange: ((Set<String>) -> Void)?
-    var onToolChange: ((CanvasTool) -> Void)?
-    var onFocusFrame: ((String) -> Void)?
-    var onCommand: ((CanvasCommand) -> Void)?
-    var onSizeChange: ((CGSize) -> Void)?
-    /// A frame's page finished loading.
-    var onFrameReady: ((String) -> Void)?
     /// Holds `world`; a pending zoom is shown as its layer's sublayer transform.
     let zoomHost = CanvasFlippedView()
     let world = CanvasFlippedView()
     let gridLayer = CanvasGrid()
     let overlay = CanvasOverlay()
-    private(set) var frames: [String: PreviewFrameView] = [:]
-    private var projectID: String?
-    private var reloadToken: Int?
-    private var positionsToken: Int?
+    let renderer = DesignRenderer()
+    private(set) var document = DesignDocument()
+    private(set) var selection: Set<String> = []
     private var requestToken: Int?
     private(set) var tool = CanvasTool.move {
         didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
     }
-    private var scrollRouter = ScrollRouter()
     /// What is on screen right now; overlay, hit testing and interaction use it.
     var liveViewport = Viewport()
     /// What `world.bounds` reflects; differs from `liveViewport` only while a zoom is pending.
     var committedViewport = Viewport()
     var animation: ViewportAnimationRun?
     var lastIndicatorUpdate: CFTimeInterval = 0
-    private var positions: [String: Point] = [:]
-    /// The active frame (its page receives pointer input) is the only selected frame, once loaded.
-    private var selection: Set<String> = []
     private var interaction = CanvasInteraction()
     private var hover: String?
     private var marquee: Rect?
@@ -44,8 +51,6 @@ final class AtlasCanvasView: NSView {
     /// Set when the current gesture panned, so its end reports the settled viewport.
     private var gesturePanned = false
     var settleWork: DispatchWorkItem?
-    /// Set while a press is sent back through the window, so it cannot loop.
-    private var redeliveringEvent = false
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     var spaceHeld = false
@@ -59,14 +64,16 @@ final class AtlasCanvasView: NSView {
         layer?.masksToBounds = true
         layer?.insertSublayer(gridLayer, at: 0)
         zoomHost.wantsLayer = true
+        world.wantsLayer = true
         zoomHost.addSubview(world)
+        world.layer?.addSublayer(renderer.root)
         addSubview(zoomHost)
         addSubview(overlay)
         updateColors()
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self))
-        setAccessibilityLabel("界面画布")
-        setAccessibilityHelp("点选画框后可直接操作；拖动空白框选；滚动或空格拖动平移；Option 加滚动滚动网页；Command 加滚轮缩放；选择画框后用方向键移动。")
+        setAccessibilityLabel("设计画布")
+        setAccessibilityHelp("点击选中图层，拖动移动，拖动把手调整尺寸；拖动空白框选；滚动或空格拖动平移；Command 加滚轮缩放。")
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -76,6 +83,7 @@ final class AtlasCanvasView: NSView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         updateDisplayLink()
+        updateContentsScale()
         guard let window else { return }
         // The Space key-up goes to whichever app or window is focused when it is released.
         let center = NotificationCenter.default
@@ -87,30 +95,26 @@ final class AtlasCanvasView: NSView {
                 MainActor.assumeIsolated { self?.releaseHeldInput() }
             },
         ]
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify, .flagsChanged, .keyUp]) { [weak self] event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .keyUp]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
-            if event.type == .keyUp, event.keyCode == 49 { self.spaceHeld = false }
-            if event.type == .flagsChanged { return event }
-            let point = self.convert(event.locationInWindow, from: nil)
-            guard self.bounds.contains(point) else { return event }
-            if event.type == .scrollWheel { return self.routeScrollEvent(event, at: point) }
-            if event.type == .magnify {
-                self.magnify(with: event)
-                return nil
-            }
-            return event
+            if event.type == .keyUp, event.keyCode == 49 { self.spaceHeld = false; return event }
+            guard event.type == .magnify, self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else { return event }
+            self.magnify(with: event)
+            return nil
         }
     }
 
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateContentsScale()
+    }
+
     func dispose() {
-        window?.undoManager?.removeAllActions(withTarget: self)
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
         animation = nil
         stopDisplayLink()
-        frames.values.forEach { $0.dispose() }
-        frames.removeAll()
     }
 
     deinit {
@@ -124,119 +128,48 @@ final class AtlasCanvasView: NSView {
     }
 
     /// Clears Space panning and finishes any gesture when focus leaves, since the matching
-    /// key-up or mouse-up will not arrive here. An in-progress frame drag commits where it is.
+    /// key-up or mouse-up will not arrive here. An in-progress move or resize keeps its result.
     func releaseHeldInput() {
         spaceHeld = false
         endGesture(interaction.cancel())
-        // A pinch whose end went elsewhere; a running animation finishes on its own.
         if animation == nil { commitPendingZoom() }
     }
 
-    func update(project: Project, positions: [String: Point], positionsToken: Int,
-                viewportRequest: ViewportRequest, tool: CanvasTool, reloadToken: Int) {
+    // MARK: Updates from the store
+
+    /// Shows the document; called on every document change, including during drags.
+    func show(_ next: DesignDocument) {
+        document = next
+        renderer.sync(next.nodes)
+        let ids = next.allIDs()
+        if !selection.isSubset(of: ids) { selection = selection.intersection(ids) }
+        if let hover, !ids.contains(hover) { self.hover = nil }
+        refreshOverlay()
+    }
+
+    func setSelection(_ next: Set<String>) {
+        guard next != selection else { return }
+        selection = next
+        refreshOverlay()
+    }
+
+    func update(viewportRequest: ViewportRequest, tool: CanvasTool) {
         self.tool = tool
-        var layoutChanged = false
-        if projectID != project.id {
-            frames.values.forEach { $0.dispose(); $0.removeFromSuperview() }
-            frames.removeAll()
-            projectID = project.id
-            scrollRouter = ScrollRouter()
-            for frame in project.frames {
-                let view = PreviewFrameView(frame: frame, baseURL: project.preview.baseUrl)
-                view.canvas = self
-                frames[frame.id] = view
-                world.addSubview(view)
-            }
-            self.reloadToken = reloadToken
-            self.positionsToken = nil
-            layoutChanged = true
-        }
-        // Also runs after every project switch, which resets positionsToken.
-        if self.positionsToken != positionsToken {
-            window?.undoManager?.removeAllActions(withTarget: self)
-            self.positionsToken = positionsToken
-            self.positions = positions
-            layoutChanged = true
-        }
-        if layoutChanged {
-            for frame in project.frames {
-                guard let view = frames[frame.id] else { continue }
-                let position = self.positions[frame.id] ?? Point(x: frame.x, y: frame.y)
-                view.frame = NSRect(x: position.x, y: position.y, width: frame.width,
-                                    height: frame.height + CanvasGeometry.headerHeight)
-            }
-            // Positions were replaced wholesale, so an unfinished gesture is dropped rather than committed.
-            _ = interaction.cancel()
-            gesturePanned = false
-            hover = nil
-            marquee = nil
-            guides = []
-            setSelection([], deferReport: true)
-            refreshOverlay()
-        }
-        if self.reloadToken != reloadToken {
-            frames.values.forEach { $0.reload() }
-            self.reloadToken = reloadToken
-        }
         if requestToken != viewportRequest.token {
             requestToken = viewportRequest.token
             apply(viewportRequest)
         }
     }
 
-    /// `deferReport` is for calls made during a SwiftUI update, where the store must not change synchronously.
-    private func setSelection(_ next: Set<String>, deferReport: Bool = false) {
-        guard next != selection else { return }
-        selection = next
-        // A gesture locked to the previous active page must not carry over.
-        scrollRouter = ScrollRouter()
-        // Keyboard focus never stays in a page whose frame is no longer the active one.
-        if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: world),
-           activeFrameID.flatMap({ frames[$0] }).map({ !responder.isDescendant(of: $0) }) ?? true {
-            window?.makeFirstResponder(self)
-        }
-        updateFrameAccessibility()
-        refreshOverlay()
-        if deferReport {
-            DispatchQueue.main.async { [weak self] in self?.onSelectionChange?(next) }
-        } else {
-            onSelectionChange?(next)
-        }
-    }
-
-    private var activeFrameID: String? {
-        guard selection.count == 1, let id = selection.first, frames[id]?.isReady == true else { return nil }
-        return id
-    }
-
-    func frameReadinessChanged(_ frame: PreviewFrameView) {
-        if selection.contains(frame.frameID) { scrollRouter = ScrollRouter() }
-        // A page that reloads or fails hides its web view, so keyboard focus must not stay inside it.
-        if !frame.isReady, let responder = window?.firstResponder as? NSView, responder.isDescendant(of: frame) {
-            window?.makeFirstResponder(self)
-        }
-        updateFrameAccessibility()
-        refreshOverlay()
-        if frame.isReady { onFrameReady?(frame.frameID) }
-    }
-
-    private func updateFrameAccessibility() {
-        let active = activeFrameID
-        for (id, frame) in frames {
-            frame.updateAccessibility(selected: selection.contains(id), active: id == active)
-        }
-    }
-
-    /// The active page's Escape bridge: leave the page and return keyboard focus to the canvas.
-    func pageRequestedExit(_ id: String) {
-        guard activeFrameID == id else { return }
-        setSelection([])
-        window?.makeFirstResponder(self)
+    /// Text and images are rasterized for the committed zoom so they stay sharp.
+    func updateContentsScale() {
+        let backing = window?.backingScaleFactor ?? 2
+        renderer.contentsScale = backing * CGFloat(min(max(committedViewport.scale, 0.25), CanvasGeometry.maxScale))
     }
 
     func refreshOverlay() {
-        overlay.render(viewport: liveViewport, frames: frameRects(), selection: selection, active: activeFrameID,
-                       hover: hover, marquee: marquee, guides: guides)
+        overlay.render(viewport: liveViewport, document: document, selection: selection, hover: hover,
+                       marquee: marquee, guides: guides, handlesFor: handleTarget)
     }
 
     override func layout() {
@@ -245,7 +178,7 @@ final class AtlasCanvasView: NSView {
         if bounds.size != lastReportedSize, bounds.width > 0, bounds.height > 0 {
             lastReportedSize = bounds.size
             let size = bounds.size
-            DispatchQueue.main.async { [weak self] in self?.onSizeChange?(size) }
+            DispatchQueue.main.async { [weak self] in self?.host?.canvasSizeChanged(size) }
         }
     }
 
@@ -261,53 +194,65 @@ final class AtlasCanvasView: NSView {
         gridLayer.updateColor(for: effectiveAppearance)
     }
 
-    // MARK: Pointer input
+    // MARK: Hit testing
 
-    /// World-space frame rects including the header, keyed by frame id.
-    private func frameRects() -> [String: Rect] {
-        frames.mapValues { Rect(x: $0.frame.minX, y: $0.frame.minY, width: $0.frame.width, height: $0.frame.height) }
+    /// The single selected layer that shows resize handles; groups resize with their children and have none.
+    var handleTarget: String? {
+        guard selection.count == 1, let id = selection.first, let node = document.node(id), node.type != .group, !node.locked else { return nil }
+        return id
+    }
+
+    func worldPoint(_ screen: NSPoint) -> Point {
+        CanvasGeometry.screenToWorld(Point(x: screen.x, y: screen.y), viewport: liveViewport)
+    }
+
+    /// What a press at a canvas (screen-space) point targets: a handle, a top-level frame label, or a layer.
+    func hitTarget(at screen: NSPoint, deep: Bool = false) -> HitTarget {
+        if let id = handleTarget, let rect = document.worldRect(id) {
+            for handle in ResizeHandle.allCases {
+                let anchor = CanvasOverlay.screenPoint(handle, of: rect, viewport: liveViewport)
+                if abs(anchor.x - screen.x) <= CanvasOverlay.handleHitRadius, abs(anchor.y - screen.y) <= CanvasOverlay.handleHitRadius {
+                    return .handle(id, handle)
+                }
+            }
+        }
+        for node in document.nodes.reversed() where node.type == .frame && node.visible && !node.locked {
+            if CanvasOverlay.labelRect(for: node, viewport: liveViewport).contains(screen) { return .label(node.id) }
+        }
+        let path = DesignHitTest.path(at: worldPoint(screen), in: document)
+        return DesignHitTest.selectable(path: path, selection: selection, document: document, deep: deep).map(HitTarget.node) ?? .empty
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(convert(point, from: superview)) ? self : nil
     }
 
     private func interactionContext() -> InteractionContext {
-        InteractionContext(viewport: liveViewport, frames: frameRects(), selection: selection, tool: tool, spaceHeld: spaceHeld,
-                           activatable: Set(frames.filter { $0.value.isReady }.keys))
+        var rects: [String: Rect] = [:]
+        for node in document.nodes { rects[node.id] = document.worldRect(node.id) }
+        var movable = Set<String>()
+        var snapTargets: [Rect] = []
+        var parents = Set<String?>()
+        for id in selection {
+            guard let rect = document.worldRect(id), let node = document.node(id), let parent = document.parentID(of: id) else { continue }
+            rects[id] = rect
+            parents.insert(parent)
+            let parentHasLayout = parent.flatMap { document.node($0)?.layout } != nil
+            if !node.locked, !parentHasLayout { movable.insert(id) }
+        }
+        for parent in parents {
+            let siblings = parent.flatMap { document.node($0)?.children } ?? document.nodes
+            for sibling in siblings where !selection.contains(sibling.id) && sibling.visible {
+                if let rect = document.worldRect(sibling.id) { snapTargets.append(rect) }
+            }
+            if let parent, let rect = document.worldRect(parent) { snapTargets.append(rect) }
+        }
+        let candidates = Set(document.nodes.filter { $0.visible && !$0.locked }.map(\.id))
+        return InteractionContext(viewport: liveViewport, rects: rects, marqueeCandidates: candidates, snapTargets: snapTargets,
+                                  movable: movable, selection: selection, tool: tool, spaceHeld: spaceHeld)
     }
 
-    /// The topmost frame under a canvas (screen-space) point; the header is the top `headerHeight` world units.
-    func hitTarget(at screen: NSPoint) -> HitTarget {
-        let worldPoint = CanvasGeometry.screenToWorld(Point(x: screen.x, y: screen.y), viewport: liveViewport)
-        let point = NSPoint(x: worldPoint.x, y: worldPoint.y)
-        for case let frame as PreviewFrameView in world.subviews.reversed() where frame.frame.contains(point) {
-            return point.y - frame.frame.minY < CanvasGeometry.headerHeight ? .frameHeader(frame.frameID) : .frameContent(frame.frameID)
-        }
-        return .empty
-    }
-
-    /// Only the active frame's page content receives the pointer, and frame controls stay clickable;
-    /// everything else comes to the canvas.
-    override func hitTest(_ point: NSPoint) -> NSView? { hitTest(point, event: NSApp?.currentEvent) }
-
-    /// `event` is the event being routed; Shift-clicks always come to the canvas so they toggle selection,
-    /// and only button 2 counts as the middle (panning) button.
-    func hitTest(_ point: NSPoint, event: NSEvent?) -> NSView? {
-        let local = convert(point, from: superview)
-        guard bounds.contains(local) else { return nil }
-        // AppKit hit testing ignores the pending zoom transform, so the canvas takes the event and commits it.
-        if isZoomPending { return self }
-        let hit = hitTarget(at: local)
-        switch hit {
-        case .frameHeader(let id), .frameContent(let id):
-            if let frame = frames[id], let control = frame.control(at: frame.convert(local, from: self)) { return control }
-        case .empty:
-            break
-        }
-        if event?.type == .leftMouseDown, event?.modifierFlags.contains(.shift) == true { return self }
-        let button: PointerButton = event?.type == .otherMouseDown && event?.buttonNumber == 2 ? .middle : .primary
-        if CanvasInteraction.pageReceivesPointer(hit: hit, button: button, context: interactionContext()) {
-            return super.hitTest(point)
-        }
-        return self
-    }
+    // MARK: Pointer input
 
     private func screenPoint(_ event: NSEvent) -> (NSPoint, Point) {
         let point = convert(event.locationInWindow, from: nil)
@@ -322,37 +267,15 @@ final class AtlasCanvasView: NSView {
     }
 
     private func pointerDown(_ event: NSEvent, button: PointerButton) {
-        // A redelivered press that the hit view passed back up the responder chain is not a canvas press.
-        if redeliveringEvent { return }
-        let wasPending = isZoomPending || animation != nil
         commitPendingZoom()
-        // The canvas took this press only because a zoom was pending; once committed it may belong to the page or a control.
-        if wasPending, let superview,
-           let target = hitTest(superview.convert(event.locationInWindow, from: nil), event: event), target !== self {
-            redeliver(event, to: target)
-            return
-        }
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
-        // A pointer-down while busy finishes the previous gesture, which may have panned.
         let wasBusy = !interaction.isIdle
-        let effects = interaction.pointerDown(at: point, hit: hitTarget(at: screen), button: button, modifiers: modifiers(event),
+        let hit = hitTarget(at: screen, deep: event.modifierFlags.contains(.command))
+        let effects = interaction.pointerDown(at: point, hit: hit, button: button, modifiers: modifiers(event),
                                               clickCount: event.clickCount, context: interactionContext())
         if wasBusy { settlePan() }
         apply(effects)
-    }
-
-    /// Sends the press through the window again, so AppKit routes it and its drags to the hit view.
-    private func redeliver(_ event: NSEvent, to target: NSView) {
-        redeliveringEvent = true
-        defer { redeliveringEvent = false }
-        if let window, window.windowNumber == event.windowNumber, window.isVisible {
-            window.sendEvent(event)
-        } else if event.type == .otherMouseDown {
-            target.otherMouseDown(with: event)
-        } else {
-            target.mouseDown(with: event)
-        }
     }
 
     private func pointerDragged(_ event: NSEvent) {
@@ -396,9 +319,9 @@ final class AtlasCanvasView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let next: String?
-        switch hitTarget(at: screenPoint(event).0) {
-        case .frameHeader(let id), .frameContent(let id): next = id
-        case .empty: next = nil
+        switch hitTarget(at: screenPoint(event).0, deep: event.modifierFlags.contains(.command)) {
+        case .node(let id), .label(let id): next = id
+        case .handle, .empty: next = nil
         }
         setHover(next)
     }
@@ -415,13 +338,15 @@ final class AtlasCanvasView: NSView {
         for effect in effects {
             switch effect {
             case .select(let next):
-                setSelection(next)
-            case .moveFrames(let origins):
-                setOrigins(origins)
-            case .commitMove(let from, let to):
-                setOrigins(to)
-                onFramesMoved?(to)
-                registerMove(from: from, to: to)
+                report(next)
+            case .beginGesture(let name):
+                host?.canvasBeginGesture(name)
+            case .moveNodes(let origins):
+                host?.canvasMove(origins)
+            case .resize(let id, let rect):
+                host?.canvasResize(id, to: rect)
+            case .endGesture:
+                host?.canvasEndGesture()
             case .marquee(let rect):
                 marquee = rect
                 refreshOverlay()
@@ -432,33 +357,16 @@ final class AtlasCanvasView: NSView {
                 if !gesturePanned { gesturePanned = true; NSCursor.closedHand.set() }
                 setLiveViewport(next, zooming: false)
             case .focus(let id):
-                onFocusFrame?(id)
+                host?.canvasFocus(id)
+            case .enter(let id, let point):
+                if let child = DesignHitTest.enter(id, at: point, in: document) { report([child]) }
+            case .create(let type, let rect):
+                host?.canvasCreate(type, in: rect)
             }
         }
     }
 
-    private func setOrigins(_ origins: [String: Point]) {
-        for (id, point) in origins {
-            positions[id] = point
-            frames[id]?.setFrameOrigin(NSPoint(x: point.x, y: point.y))
-        }
-        refreshOverlay()
-    }
-
-    // MARK: Undo
-
-    /// Registers one undo step; undoing applies `from` and registers the reverse as the redo.
-    private func registerMove(from: [String: Point], to: [String: Point]) {
-        guard let undoManager = window?.undoManager else { return }
-        undoManager.registerUndo(withTarget: self) { canvas in
-            MainActor.assumeIsolated {
-                canvas.setOrigins(from)
-                canvas.onFramesMoved?(from)
-                canvas.registerMove(from: to, to: from)
-            }
-        }
-        undoManager.setActionName("移动画框")
-    }
+    // MARK: Scroll and zoom
 
     override func scrollWheel(with event: NSEvent) {
         stopAnimation()
@@ -491,37 +399,46 @@ final class AtlasCanvasView: NSView {
             settleWork?.cancel()
             settleViewport()
         } else {
-            // Also a watchdog for a pinch whose end never arrives.
             settleSoon()
         }
     }
 
+    // MARK: Keyboard
+
+    static let toolKeys: [String: CanvasTool] = ["v": .move, "h": .hand, "f": .frame, "r": .rectangle, "o": .ellipse, "t": .text]
+
     override func keyDown(with event: NSEvent) {
-        // WebKit may pass an unhandled key up the native responder chain after DOM
-        // dispatch. Canvas keys apply only when the canvas itself is first responder.
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
         let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
         let plain = flags.subtracting(.shift).isEmpty
         let action: () -> Void
         // Tool letters follow the typed character, not the physical key, so other layouts work.
-        if flags.isEmpty || flags == .shift, let letter = event.charactersIgnoringModifiers?.lowercased(),
-           letter == "v" || letter == "h" {
-            action = { self.onToolChange?(letter == "v" ? .move : .hand) }
+        if flags.isEmpty, let letter = event.charactersIgnoringModifiers?.lowercased(), let next = Self.toolKeys[letter] {
+            action = { self.host?.canvasToolChanged(next) }
         } else {
             switch event.keyCode {
             case 49: action = { self.spaceHeld = true }
-            case 53: action = { self.setSelection([]) }
-            case 0 where flags == .command: action = { self.setSelection(Set(self.frames.keys)) }
-            case 18 where flags == .shift: action = { self.onCommand?(.fitAll) }
-            case 19 where flags == .shift: action = { self.onCommand?(.zoomToSelection) }
-            case 29 where flags == .shift: action = { self.onCommand?(.actualSize) }
-            case 36 where plain:
-                action = { if self.selection.count == 1, let id = self.selection.first { self.frames[id]?.focusContent() } }
+            case 53: action = { self.selectParent() }
+            case 36 where flags.isEmpty: action = { self.selectChildren() }
+            case 51, 117:
+                guard flags.isEmpty, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }
+                action = { self.host?.canvasDelete(self.selection) }
+            case 0 where flags == .command: action = { self.selectAllSiblings() }
+            case 18 where flags == .shift: action = { self.host?.canvasCommand(.fitAll) }
+            case 19 where flags == .shift: action = { self.host?.canvasCommand(.zoomToSelection) }
+            case 29 where flags == .shift: action = { self.host?.canvasCommand(.actualSize) }
             case 123, 124, 125, 126:
                 guard plain, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }
-                action = { self.nudgeSelection(keyCode: event.keyCode, step: flags.contains(.shift) ? 100 : 10) }
+                let step = flags.contains(.shift) ? 10.0 : 1.0
+                let delta: Point
+                switch event.keyCode {
+                case 123: delta = Point(x: -step, y: 0)
+                case 124: delta = Point(x: step, y: 0)
+                case 125: delta = Point(x: 0, y: step)
+                default: delta = Point(x: 0, y: -step)
+                }
+                action = { self.host?.canvasNudge(self.selection, by: delta) }
             default:
-                // Keys the canvas does not handle leave a running animation alone.
                 super.keyDown(with: event)
                 return
             }
@@ -530,72 +447,38 @@ final class AtlasCanvasView: NSView {
         action()
     }
 
-    /// One key press moves every selected frame and is one undo step.
-    private func nudgeSelection(keyCode: UInt16, step: Double) {
-        var from: [String: Point] = [:]
-        var to: [String: Point] = [:]
-        for id in selection {
-            guard let origin = frames[id]?.frame.origin else { continue }
-            var next = Point(x: origin.x, y: origin.y)
-            switch keyCode {
-            case 123: next.x -= step
-            case 124: next.x += step
-            case 125: next.y += step
-            default: next.y -= step
-            }
-            from[id] = Point(x: origin.x, y: origin.y)
-            to[id] = next
-        }
-        guard !to.isEmpty else { return }
-        setOrigins(to)
-        onFramesMoved?(to)
-        registerMove(from: from, to: to)
+    private func report(_ next: Set<String>) {
+        selection = next
+        host?.canvasSelect(next)
+        refreshOverlay()
     }
 
-    // MARK: Scroll routing
-
-    /// Maps an AppKit scroll event's phases to the router's vocabulary.
-    static func scrollPhase(_ phase: NSEvent.Phase, momentum: NSEvent.Phase) -> ScrollPhase {
-        if !momentum.isEmpty {
-            return momentum.isDisjoint(with: [.ended, .cancelled]) ? .momentum : .momentumEnded
-        }
-        if phase.contains(.ended) || phase.contains(.cancelled) { return .ended }
-        if phase.contains(.began) || phase.contains(.mayBegin) { return .began }
-        if phase.isEmpty { return .discrete }
-        return .changed
+    /// Esc selects the parent layer, or clears the selection at the top level.
+    private func selectParent() {
+        report(Set(selection.compactMap { document.parentID(of: $0) ?? nil }))
     }
 
-    /// The routing decision for one scroll event; the per-gesture lock lives in `scrollRouter`.
-    func routeScroll(phase: NSEvent.Phase, momentum: NSEvent.Phase, overActivePage: Bool, pageModifier: Bool, zoomModifier: Bool) -> ScrollTarget {
-        scrollRouter.route(phase: Self.scrollPhase(phase, momentum: momentum), overActivePage: overActivePage, pageModifier: pageModifier, zoomModifier: zoomModifier)
+    /// Return selects the children of the selected containers.
+    private func selectChildren() {
+        let children = selection.flatMap { id in (document.node(id)?.children ?? []).filter(\.visible).map(\.id) }
+        if !children.isEmpty { report(Set(children)) }
     }
 
-    /// Returns the event when AppKit should deliver it as usual, nil when it was handled here.
-    func routeScrollEvent(_ event: NSEvent, at point: NSPoint) -> NSEvent? {
-        let active = activeFrameID
-        let over: Bool
-        if case .frameContent(let id) = hitTarget(at: point), id == active { over = true } else { over = false }
-        let zoom = !event.modifierFlags.isDisjoint(with: [.command, .control])
-        let pageModifier = event.modifierFlags.contains(.option)
-        switch routeScroll(phase: event.phase, momentum: event.momentumPhase, overActivePage: over, pageModifier: pageModifier, zoomModifier: zoom) {
-        case .canvas:
-            scrollWheel(with: event)
-            return nil
-        case .page:
-            guard let page = active.flatMap({ frames[$0] })?.pageView else { return event }
-            if let hit = hitTest(convert(point, to: superview), event: event), hit.isDescendant(of: page) { return event }
-            page.scrollWheel(with: event)
-            return nil
-        }
+    /// ⌘A selects every layer at the level of the current selection (the top level when nothing is selected).
+    private func selectAllSiblings() {
+        let parent = selection.first.flatMap { document.parentID(of: $0) ?? nil }
+        let siblings = parent.flatMap { document.node($0)?.children } ?? document.nodes
+        report(Set(siblings.filter { $0.visible && !$0.locked }.map(\.id)))
     }
 
     // MARK: Cursor
 
     override func resetCursorRects() {
         if tool == .hand { addCursorRect(bounds, cursor: .openHand) }
+        else if tool.creates != nil { addCursorRect(bounds, cursor: .crosshair) }
     }
 
-    private var restingCursor: NSCursor { tool == .hand ? .openHand : .arrow }
+    private var restingCursor: NSCursor { tool == .hand ? .openHand : tool.creates != nil ? .crosshair : .arrow }
 
     override func keyUp(with event: NSEvent) {
         if window?.firstResponder !== self { super.keyUp(with: event); return }

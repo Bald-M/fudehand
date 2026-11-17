@@ -1,31 +1,36 @@
 import AppKit
 import AtlasCore
 
-/// Screen-space decorations drawn above the frames: hover, selection, active frame, marquee and snap guides.
-/// It never takes pointer input.
+/// 画在图层上方的屏幕空间装饰：悬停、选框、缩放把手、顶层画框名称、框选与吸附参考线。从不接收指针输入。
 final class CanvasOverlay: NSView {
     override var isFlipped: Bool { true }
     private let hoverLayer = CAShapeLayer()
     private let selectionLayer = CAShapeLayer()
-    private let activeLayer = CAShapeLayer()
+    private let handleLayer = CAShapeLayer()
     private let marqueeLayer = CAShapeLayer()
     private let guideLayer = CAShapeLayer()
-    private static let cornerRadius = 10.0
-    private static let activeOutset = 4.0
+    private let labelHost = CALayer()
+    private var labels: [String: CATextLayer] = [:]
+    static let handleSize = 7.0
+    static let handleHitRadius = 6.0
+    static let labelHeight = 16.0
+    static let labelFont = NSFont.systemFont(ofSize: 11, weight: .medium)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         hoverLayer.lineWidth = 1
-        selectionLayer.lineWidth = 2
-        activeLayer.lineWidth = 1
+        selectionLayer.lineWidth = 1.5
+        handleLayer.lineWidth = 1
         marqueeLayer.lineWidth = 1
         guideLayer.lineWidth = 1
-        for shape in [hoverLayer, selectionLayer, activeLayer, marqueeLayer, guideLayer] {
+        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer] {
             shape.fillColor = nil
-            shape.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull()]
+            shape.actions = DesignRenderer.noActions
             layer?.addSublayer(shape)
         }
+        labelHost.actions = DesignRenderer.noActions
+        layer?.insertSublayer(labelHost, at: 0)
         updateColors()
     }
 
@@ -35,12 +40,13 @@ final class CanvasOverlay: NSView {
 
     /// Screen-space bounds of the drawn selection outlines; `.null` when nothing is selected.
     var selectionBounds: CGRect { selectionLayer.path?.boundingBoxOfPath ?? .null }
+    var labelTexts: [String: String] { labels.compactMapValues { $0.string as? String } }
 
     override func layout() {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for shape in [hoverLayer, selectionLayer, activeLayer, marqueeLayer, guideLayer] { shape.frame = bounds }
+        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost] { shape.frame = bounds }
         CATransaction.commit()
     }
 
@@ -49,43 +55,61 @@ final class CanvasOverlay: NSView {
         updateColors()
     }
 
+    private var accent = NSColor.controlAccentColor.cgColor
+    private var secondary = NSColor.secondaryLabelColor.cgColor
+
     private func updateColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let accent = NSColor.controlAccentColor
-            hoverLayer.strokeColor = accent.cgColor
-            selectionLayer.strokeColor = accent.cgColor
-            activeLayer.strokeColor = accent.withAlphaComponent(0.5).cgColor
-            marqueeLayer.strokeColor = accent.cgColor
-            marqueeLayer.fillColor = accent.withAlphaComponent(0.12).cgColor
+            accent = NSColor.controlAccentColor.cgColor
+            secondary = NSColor.secondaryLabelColor.cgColor
+            hoverLayer.strokeColor = accent
+            selectionLayer.strokeColor = accent
+            handleLayer.strokeColor = accent
+            handleLayer.fillColor = NSColor.white.cgColor
+            marqueeLayer.strokeColor = accent
+            marqueeLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
             guideLayer.strokeColor = NSColor.systemRed.cgColor
         }
     }
 
-    /// `frames` and `guides` are in world coordinates; `marquee` is already in screen coordinates.
-    func render(viewport: Viewport, frames: [String: Rect], selection: Set<String>, active: String?, hover: String?,
-                marquee: Rect?, guides: [Guide]) {
-        func screen(_ rect: Rect) -> NSRect {
-            NSRect(x: rect.x * viewport.scale + viewport.x, y: rect.y * viewport.scale + viewport.y,
-                   width: rect.width * viewport.scale, height: rect.height * viewport.scale)
-        }
-        let radius = Self.cornerRadius * viewport.scale
-        func outline(_ ids: [String], outset: Double = 0) -> CGPath {
-            let path = CGMutablePath()
-            for id in ids {
-                guard let rect = frames[id] else { continue }
-                let r = screen(rect).insetBy(dx: -outset, dy: -outset)
-                path.addRoundedRect(in: r, cornerWidth: radius + outset, cornerHeight: radius + outset)
-            }
-            return path
-        }
+    static func screenRect(_ rect: Rect, viewport: Viewport) -> NSRect {
+        NSRect(x: rect.x * viewport.scale + viewport.x, y: rect.y * viewport.scale + viewport.y,
+               width: rect.width * viewport.scale, height: rect.height * viewport.scale)
+    }
+
+    static func screenPoint(_ handle: ResizeHandle, of rect: Rect, viewport: Viewport) -> NSPoint {
+        let r = screenRect(rect, viewport: viewport)
+        return NSPoint(x: r.minX + r.width * handle.anchor.x, y: r.minY + r.height * handle.anchor.y)
+    }
+
+    /// 顶层画框名称标签的屏幕矩形：画框左上角上方，宽度不超过画框。
+    static func labelRect(for node: DesignNode, viewport: Viewport) -> NSRect {
+        let frame = screenRect(node.frame, viewport: viewport)
+        let textWidth = (node.name as NSString).size(withAttributes: [.font: labelFont]).width + 2
+        return NSRect(x: frame.minX, y: frame.minY - labelHeight - 4, width: max(16, min(textWidth, frame.width)), height: labelHeight)
+    }
+
+    func render(viewport: Viewport, document: DesignDocument, selection: Set<String>, hover: String?,
+                marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        func outline(_ ids: [String]) -> CGPath {
+            let path = CGMutablePath()
+            for id in ids { if let rect = document.worldRect(id) { path.addRect(Self.screenRect(rect, viewport: viewport)) } }
+            return path
+        }
         hoverLayer.path = outline(hover.flatMap { selection.contains($0) ? nil : [$0] } ?? [])
         selectionLayer.path = outline(Array(selection))
-        activeLayer.path = outline(active.map { [$0] } ?? [], outset: Self.activeOutset)
-        marqueeLayer.path = marquee.map {
-            CGPath(rect: NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height), transform: nil)
+        let handles = CGMutablePath()
+        if let id = handleTarget, let rect = document.worldRect(id) {
+            let size = Self.handleSize
+            for handle in ResizeHandle.allCases {
+                let point = Self.screenPoint(handle, of: rect, viewport: viewport)
+                handles.addRect(CGRect(x: point.x - size / 2, y: point.y - size / 2, width: size, height: size))
+            }
         }
+        handleLayer.path = handles
+        marqueeLayer.path = marquee.map { CGPath(rect: NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height), transform: nil) }
         let guidePath = CGMutablePath()
         for guide in guides {
             let s = viewport.scale
@@ -101,6 +125,37 @@ final class CanvasOverlay: NSView {
             }
         }
         guideLayer.path = guidePath
+        renderLabels(document: document, viewport: viewport, selection: selection)
         CATransaction.commit()
+    }
+
+    private func renderLabels(document: DesignDocument, viewport: Viewport, selection: Set<String>) {
+        let frames = document.nodes.filter { $0.type == .frame && $0.visible }
+        var seen = Set<String>()
+        let scale = window?.backingScaleFactor ?? 2
+        for node in frames {
+            seen.insert(node.id)
+            let label = labels[node.id] ?? {
+                let layer = CATextLayer()
+                layer.actions = DesignRenderer.noActions
+                layer.font = Self.labelFont
+                layer.fontSize = Self.labelFont.pointSize
+                layer.truncationMode = .end
+                layer.anchorPoint = .zero
+                labelHost.addSublayer(layer)
+                labels[node.id] = layer
+                return layer
+            }()
+            label.contentsScale = scale
+            if label.string as? String != node.name { label.string = node.name }
+            label.foregroundColor = selection.contains(node.id) ? accent : secondary
+            let rect = Self.labelRect(for: node, viewport: viewport)
+            label.position = rect.origin
+            label.bounds = CGRect(origin: .zero, size: rect.size)
+        }
+        for (id, layer) in labels where !seen.contains(id) {
+            layer.removeFromSuperlayer()
+            labels[id] = nil
+        }
     }
 }

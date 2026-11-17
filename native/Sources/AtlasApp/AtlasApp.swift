@@ -24,11 +24,12 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // 先关闭控制通道，退出过程中不再接受命令。
-        control?.stop()
         guard let store else { return .terminateNow }
         guard !quitting else { return .terminateLater }
+        guard store.confirmDiscard("退出") else { return .terminateCancel }
         quitting = true
+        // 先关闭控制通道，退出过程中不再接受命令。
+        control?.stop()
         Task {
             await store.shutdown()
             sender.reply(toApplicationShouldTerminate: true)
@@ -44,15 +45,24 @@ struct AtlasApp: App {
 
     var body: some Scene {
         WindowGroup("ui-atlas") {
-            WorkspaceView(store: store, session: store.session)
-                .frame(minWidth: 900, minHeight: 620)
+            WorkspaceView(store: store)
+                .frame(minWidth: 960, minHeight: 620)
                 .preferredColorScheme(store.colorScheme)
-                .task { delegate.store = store; delegate.startControl(store); await store.bootstrap() }
+                .task { delegate.store = store; store.bootstrap(); delegate.startControl(store) }
         }
         .defaultSize(width: 1440, height: 940)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("打开项目目录…") { store.chooseWorkspace() }.keyboardShortcut("o")
+                Button("新建") { store.newDocument() }.keyboardShortcut("n")
+                Button("打开…") { store.openDocument() }.keyboardShortcut("o")
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("保存") { store.save() }.keyboardShortcut("s")
+                Button("另存为…") { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
+            }
+            CommandGroup(replacing: .undoRedo) {
+                Button("撤销") { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")
+                Button("重做") { undoOrForward(#selector(UndoManager.redo)) { store.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
             CommandMenu("画布") {
                 Button("放大") { store.zoomIn() }.keyboardShortcut("+")
@@ -60,9 +70,18 @@ struct AtlasApp: App {
                 Button("实际大小") { store.zoom(1) }.keyboardShortcut("1")
                 Button("适应全部") { store.fitAll() }.keyboardShortcut("0")
                 Divider()
-                Button("重新加载案例") { store.reloadToken += 1 }.keyboardShortcut("r")
-                Button("恢复默认布局") { store.reset() }
+                Button("插入图片…") { store.insertImage() }.keyboardShortcut("i", modifiers: [.command, .shift])
+                Button("对话") { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
             }
+        }
+    }
+
+    /// 文字输入框有焦点时撤销交给输入框，否则撤销设计文档。
+    private func undoOrForward(_ selector: Selector, document: () -> Void) {
+        if NSApp.keyWindow?.firstResponder is NSText {
+            NSApp.sendAction(selector, to: nil, from: nil)
+        } else {
+            document()
         }
     }
 }

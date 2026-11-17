@@ -2,45 +2,24 @@ import AppKit
 import SwiftUI
 import AtlasCore
 
-/// The document coordinate system scales; each web view keeps its CSS viewport size.
-/// The canvas owns the live viewport and selection and reports only settled values.
+/// 把 AppKit 画布嵌入 SwiftUI。文档由 store 直接推送给画布（拖动时每帧更新，不经 SwiftUI）；
+/// 这里只传递一次性的视口请求与当前工具。
 struct NativeCanvas: NSViewRepresentable {
-    let project: Project
-    let positions: [String: Point]
-    let positionsToken: Int
+    let store: AtlasStore
     let viewportRequest: ViewportRequest
     let tool: CanvasTool
-    let reloadToken: Int
-    let zoomIndicator: ZoomIndicator
-    let onViewportSettled: (Viewport) -> Void
-    let onFramesMoved: ([String: Point]) -> Void
-    let onSelectionChange: (Set<String>) -> Void
-    let onToolChange: (CanvasTool) -> Void
-    let onFocusFrame: (String) -> Void
-    let onCommand: (CanvasCommand) -> Void
-    let onSizeChange: (CGSize) -> Void
-    let onFrameReady: (String) -> Void
-    let onCanvas: (AtlasCanvasView) -> Void
 
     func makeNSView(context: Context) -> AtlasCanvasView {
         let view = AtlasCanvasView()
-        updateNSView(view, context: context)
-        onCanvas(view)
+        view.host = store
+        view.zoomIndicator = store.zoomIndicator
+        store.attach(view)
+        view.update(viewportRequest: viewportRequest, tool: tool)
         return view
     }
 
     func updateNSView(_ view: AtlasCanvasView, context: Context) {
-        view.zoomIndicator = zoomIndicator
-        view.onViewportSettled = onViewportSettled
-        view.onFramesMoved = onFramesMoved
-        view.onSelectionChange = onSelectionChange
-        view.onToolChange = onToolChange
-        view.onFocusFrame = onFocusFrame
-        view.onCommand = onCommand
-        view.onSizeChange = onSizeChange
-        view.onFrameReady = onFrameReady
-        view.update(project: project, positions: positions, positionsToken: positionsToken,
-                    viewportRequest: viewportRequest, tool: tool, reloadToken: reloadToken)
+        view.update(viewportRequest: viewportRequest, tool: tool)
     }
 
     static func dismantleNSView(_ view: AtlasCanvasView, coordinator: ()) {

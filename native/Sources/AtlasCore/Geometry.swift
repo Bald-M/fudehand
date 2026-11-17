@@ -44,6 +44,11 @@ public struct Rect: Equatable {
         minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY
     }
 
+    /// 含边界。
+    public func contains(_ point: Point) -> Bool {
+        point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
+    }
+
     public func offsetBy(_ d: Point) -> Rect {
         Rect(x: x + d.x, y: y + d.y, width: width, height: height)
     }
