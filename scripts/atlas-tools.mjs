@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import { isAbsolute, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { isAbsolute, join, resolve } from 'node:path'
 import { sendControl } from './control-client.mjs'
 
 /**
@@ -9,8 +10,14 @@ import { sendControl } from './control-client.mjs'
 
 const json = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] })
 
-/** Relative paths are resolved against the ui-atlas source directory, to avoid depending on the App process's working directory. */
-const absolute = (path, root) => isAbsolute(path) ? path : resolve(root, path)
+/**
+ * `~` and `~/…` expand to the user's home directory; other relative paths are resolved against the
+ * ui-atlas source directory, so nothing depends on the App process's working directory.
+ */
+const absolute = (path, root) => {
+  if (path === '~' || path.startsWith('~/')) return join(homedir(), path.slice(1))
+  return isAbsolute(path) ? path : resolve(root, path)
+}
 
 /** Reads the PNG/JPEG that `image.path` points to in a node (and its children) into a base64 `image.data`. */
 async function inlineImages(value, root) {
@@ -33,7 +40,7 @@ const NODE_GUIDE = [
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent), ',
   'text {content, fontSize, fontWeight 100–900, fontFamily, color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
-  'image {path or data (base64), fit fill/fit/stretch} (required for image), ',
+  'image {path (~ expands to the home directory) or data (base64), fit fill/fit/stretch} (required for image), ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
@@ -78,9 +85,9 @@ export const tools = [
   controlTool('design_undo', 'undo', 'Undo one step (human and agent edits share one history).'),
   controlTool('design_redo', 'redo', 'Redo one step.'),
   controlTool('design_new_document', 'new_document', 'Create a blank document. Refused when the current document has unsaved changes, unless discard is true.', discard, []),
-  controlTool('design_open_document', 'open_document', 'Open a .uiatlas project file.', { ...path('File path; relative paths are resolved against the ui-atlas source directory'), ...discard }, ['path'],
+  controlTool('design_open_document', 'open_document', 'Open a .uiatlas project file.', { ...path('File path; ~ expands to the home directory, other relative paths are resolved against the ui-atlas source directory'), ...discard }, ['path'],
     async (args, root) => ({ ...args, path: absolute(args.path, root) })),
-  controlTool('design_save_document', 'save_document', 'Save the project file; when path is omitted, save to the current file.', path('Path to save as (.uiatlas); relative paths are resolved against the ui-atlas source directory'), [],
+  controlTool('design_save_document', 'save_document', 'Save the project file; when path is omitted, save to the current file.', path('Path to save as (.uiatlas); ~ expands to the home directory, other relative paths are resolved against the ui-atlas source directory'), [],
     async (args, root) => args.path === undefined ? args : { ...args, path: absolute(args.path, root) }),
   controlTool('canvas_focus_node', 'focus_node', 'Move and zoom the viewport to the given layer.', id),
   controlTool('canvas_fit_all', 'fit_all', 'Zoom the viewport to show all layers.'),
