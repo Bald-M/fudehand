@@ -249,9 +249,11 @@ describe('Agent harness: OpenAI Responses API (Codex series)', () => {
     await chat.ask('Thanks')
     expect(model.requests[0].url).toBe('/responses')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
-    expect(model.requests[0].body.model).toBe('gpt-5-codex')
+    expect(model.requests[0].body.model).toBe('gpt-5.3-codex')
     expect(typeof model.requests[0].body.instructions).toBe('string')
     expect(model.requests[0].body.tools[0]).toMatchObject({ type: 'function', name: 'design_get_state' })
+    // The tool schemas have optional fields and free-form objects, which strict mode rejects.
+    expect(model.requests[0].body.tools.every((tool: any) => tool.strict === false)).toBe(true)
     expect(model.requests[2].body.input).toEqual([
       { role: 'user', content: 'Look at the document' },
       { type: 'function_call', call_id: 'call_1', name: 'design_get_state', arguments: '{}' },
@@ -276,6 +278,7 @@ describe('Agent harness: Anthropic Messages API', () => {
     expect(model.requests[0].body.model).toBe('claude-sonnet-5-5')
     expect(model.requests[0].body.tools.map((tool: any) => tool.name)).toContain('design_snapshot')
     expect(typeof model.requests[0].body.system).toBe('string')
+    expect(model.requests[0].body.max_tokens).toBe(16000)
     const messages = model.requests[2].body.messages
     expect(messages.map((message: any) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user'])
     expect(messages[1].content.at(-1)).toMatchObject({ type: 'tool_use', id: 'toolu_1', name: 'design_get_state' })
@@ -296,6 +299,37 @@ describe('Agent harness: Anthropic Messages API', () => {
     expect(truncated.map(event => event.type)).toEqual(['error', 'done'])
     expect(truncated[0].message).toBe('The model reply was cut off by the length limit; stopped this reply')
     expect(app.received.map(request => request.command)).toEqual(['get_node'])
+  })
+
+  it('sends thinking blocks back unchanged during the tool loop', async () => {
+    const app = await startApp()
+    const content = [
+      { type: 'thinking', thinking: '', signature: 'sig_1' },
+      { type: 'text', text: 'Let me check.' },
+      { type: 'tool_use', id: 'toolu_1', name: 'design_get_state', input: {} },
+    ]
+    const model = await fakeModel([{ body: { content, stop_reason: 'tool_use' } }, anthropicText('One frame.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('look at the document')
+    expect(model.requests[1].body.messages[1]).toEqual({ role: 'assistant', content })
+  })
+
+  it('reports refusal and pause_turn instead of ending the reply silently', async () => {
+    const model = await fakeModel([
+      { body: { content: [], stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'cyber' } } },
+      { body: { content: [{ type: 'text', text: 'Working on it' }], stop_reason: 'pause_turn' } },
+      anthropicText('Hello.'),
+    ])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const refused = await chat.ask('one')
+    expect(refused.map(event => event.type)).toEqual(['error', 'done'])
+    expect(refused[0].message).toBe('The model declined this request; stopped this reply')
+    const paused = await chat.ask('two')
+    expect(paused.map(event => event.type)).toEqual(['error', 'done'])
+    expect(paused[0].message).toBe('The model paused before finishing; stopped this reply')
+    // Neither failed reply is written to the history, so the next request is still valid.
+    await chat.ask('three')
+    expect(model.requests[2].body.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'one' }, { type: 'text', text: 'two' }, { type: 'text', text: 'three' }] }])
   })
 
   it('HTTP errors are shown in English', async () => {
@@ -326,9 +360,9 @@ describe('Agent harness: listing available models', () => {
   })
 
   it('reads /models for the OpenAI Responses provider too', async () => {
-    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5-codex' }] } }])
+    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5.3-codex' }] } }])
     const result = await listModels({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    expect(result.event).toEqual({ type: 'models', models: ['gpt-5-codex'], default: 'gpt-5-codex' })
+    expect(result.event).toEqual({ type: 'models', models: ['gpt-5.3-codex'], default: 'gpt-5.3-codex' })
     expect(model.requests[0].url).toBe('/models')
   })
 

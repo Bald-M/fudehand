@@ -117,7 +117,7 @@ In the panel's Model Settings (模型设置), choose a model provider (模型提
 | --- | --- | --- | --- |
 | DeepSeek | OpenAI-compatible | `https://api.deepseek.com` | `deepseek-chat` |
 | Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
-| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5-codex` |
+| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
 When Model (模型) and API URL (接口地址) are left empty, the defaults in the table above are used. OpenAI's Codex models support only the Responses API; for other services compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name. The API key is stored only in the local Keychain (service name `ui-atlas.agent`) and is passed by the App through an environment variable when it starts the chat program (the Agent harness, `scripts/agent-chat.mjs`); it is never written to the repository, project files, preferences, or logs.
 

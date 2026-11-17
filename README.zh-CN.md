@@ -111,7 +111,7 @@ Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人�
 | --- | --- | --- | --- |
 | DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-chat` |
 | Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
-| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5-codex` |
+| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
 “模型”和“接口地址”留空时使用上表默认值；OpenAI 的 Codex 系列模型只支持 Responses API；其他兼容 OpenAI Chat Completions 的服务可以选 DeepSeek 并填写自己的接口地址和模型名。API key 只保存在本机钥匙串（服务名 `ui-atlas.agent`），由 App 在启动对话程序（Agent harness，`scripts/agent-chat.mjs`）时经环境变量传入，不写入仓库、工程文件、偏好设置或日志。
 

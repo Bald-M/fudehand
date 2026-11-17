@@ -75,7 +75,7 @@ async function reply(text, controller) {
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
-      log.push({ role: 'assistant', text: answer.text, toolCalls: answer.toolCalls })
+      log.push({ role: 'assistant', text: answer.text, toolCalls: answer.toolCalls, blocks: answer.blocks })
       if (answer.text) emit({ type: 'assistant', text: answer.text })
       if (!answer.toolCalls.length) break
       for (const call of answer.toolCalls) {
