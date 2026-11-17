@@ -11,11 +11,19 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- ui-atlas has a macOS app icon featuring a glass globe, a selection frame, and an AI sparkle (#69).
+
 ### Changed
 
 - MCP tool descriptions, parameter descriptions, and the layer field guide are now in English; tool names and parameter schemas are unchanged. The chat panel's system prompt is now in English, and the agent replies in the language of the user's latest message instead of always in Simplified Chinese (#82).
+- The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).
+- `AGENTS.md` and `GLOSSARY.md` are now in English; each glossary term leads with its English name and keeps the App's Chinese label in parentheses, and serves as the shared translation for the other English docs (#80).
 - `CHANGELOG.md` is now written in English, and future entries must be in English; `GLOSSARY.md` lists an English name for each term (#78).
 - `README.md` is now in English and is the repository's default README; the Chinese version moved to `README.zh-CN.md`, and both link to each other at the top (#72).
+- `CLAUDE.md` is now in English and states the project language convention: docs, code comments, test descriptions, MCP tool descriptions, and error messages in English; App UI copy stays Chinese for now (#79).
+- Build script output (`pnpm build:native`, `pnpm test:native`), the non-macOS error, and the control channel startup log are now in English; the `.uiatlas` file kind shown in Finder is now `ui-atlas Project` (#84).
 
 ## [0.0.1] - 2026-11-17
 

@@ -1,5 +1,5 @@
-# macOS 原生画布保留网页案例
+# Native macOS Canvas Keeps the Web Examples
 
-2026-11-06，用户选择先交付 macOS App：SwiftUI 提供作品侧栏、工具栏和主题，AppKit 承载精确画布输入，WKWebView 展示现有 Vue/React 案例。这样保留导入前端源码的能力，同时移除浏览器标签页与 Vue 外壳服务的运行要求；重写所有案例为 SwiftUI 会改变项目的学习和导入边界。
+2026-11-06: the user chose to deliver a macOS App first. SwiftUI provides the web-project sidebar, toolbar, and theme; AppKit handles precise canvas input; WKWebView displays the existing Vue/React examples. This keeps the ability to import front-end source code while removing the need to run a browser tab and the Vue shell server; rewriting every example in SwiftUI would change what the project teaches and what it can import.
 
-`catalog.json` 继续是作品、画框与启动配置的唯一来源。Node 仅管理案例开发服务，App 负责其生命周期。原生偏好独立保存，不自动迁移浏览器 localStorage。保留实时网页意味着仍有 WebKit 渲染开销；此决策不承诺未经测量的内存或性能改善。
+`catalog.json` remains the single source of web projects, frames, and launch configuration. Node only manages the example dev servers, and the App owns their lifecycle. Native preferences are stored separately, and browser localStorage is not migrated automatically. Keeping live web pages means WebKit rendering overhead remains; this decision does not promise unmeasured memory or performance improvements.

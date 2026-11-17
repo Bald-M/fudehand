@@ -1,27 +1,27 @@
-# 画框控制台、页面读取与基础交互（#21）
+# Frame Console, Page Reading, and Basic Interaction (#21)
 
-## 目的
+## Purpose
 
-Agent 经 MCP 修改作品源码后，需要确认改动生效、没有运行时错误，并能操作页面验证交互。此前只能 `frame_snapshot` 后肉眼判断。
+After an agent modifies web project source via MCP, it needs to confirm that the change took effect, that there are no runtime errors, and to operate the page to verify interactions. Previously it could only call `frame_snapshot` and judge by eye.
 
-## 目标
+## Goals
 
-- `frame_console`：读取画框最近的控制台日志和未捕获错误。
-- `frame_read`：读取画框页面的精简文本大纲，可交互元素附带 CSS 选择器。
-- `frame_interact`：按选择器点击、填值、滚动。
+- `frame_console`: read a frame's recent console logs and uncaught errors.
+- `frame_read`: read a condensed text outline of the frame's page, with CSS selectors attached to interactive elements.
+- `frame_interact`: click, fill values, and scroll by selector.
 
-## 非目标
+## Non-goals
 
-完整浏览器自动化（多标签、网络拦截、上传）、远程控制、替代作品自己的测试、等待重载后截图（可选项，本次不做）。
+Full browser automation (multiple tabs, network interception, uploads), remote control, replacing the web project's own tests, waiting for a reload before taking a screenshot (optional, not done this time).
 
-## 做法
+## Approach
 
-- **控制台记录**：`PreviewFrameView` 在页面世界注入脚本（document start、仅主框架），包装 `console.log/info/warn/error/debug`，监听 `error` 与 `unhandledrejection`，经 `atlasConsole` 消息通道发回原生。原生侧只接受主框架、预览同源的消息，按画框存入 `FrameConsole`（AtlasCore，环形，最多 200 条，单条最多 2000 字）。记录在原生侧，因此页面重载后仍保留；每次加载完成追加一条 `atlas` 来源的“页面已加载”记录作为分界。
-- **读取与交互**：在独立的 `WKContentWorld`（页面脚本改不到我们的函数）里 `callAsyncJavaScript`，10 秒超时。读取输出缩进大纲，最多 20000 字并标记截断。交互：点击依次派发 pointer/mouse 事件再 `click()`；填值在隔离世界直接设置 value（不经页面对属性的改写）再派发 `input`、`change`（兼容 React 受控组件）；滚动可滚到元素或按 `deltaX/deltaY` 滚动页面。
-- **边界**：不新增导航能力。点击目标位于指向非预览源的链接（含 SVG `<a>`、`<area>`）内时拒绝；交互进行中及结束后 1 秒内，页面脚本代为触发的外站链接与新窗口不打开系统浏览器。
-- **错误**：App 未运行沿用“界面图鉴未运行”；画框未加载返回“画框尚未加载：<id>”；选择器无效或找不到元素返回中文错误。
+- **Console capture**: `PreviewFrameView` injects a script into the page world (at document start, main frame only) that wraps `console.log/info/warn/error/debug`, listens for `error` and `unhandledrejection`, and sends messages back to native code through the `atlasConsole` message channel. The native side accepts only messages from the main frame and the preview's origin, and stores them per frame in `FrameConsole` (AtlasCore; a ring buffer of at most 200 entries, each at most 2000 characters). Because records live on the native side, they survive page reloads; each time loading finishes, an entry from the `atlas` source saying "Page loaded" (页面已加载) is appended as a separator.
+- **Reading and interaction**: `callAsyncJavaScript` in a separate `WKContentWorld` (page scripts cannot modify our functions), with a 10-second timeout. Reading outputs an indented outline of at most 20000 characters and marks truncation. Interaction: click dispatches pointer/mouse events in order and then calls `click()`; fill sets value directly in the isolated world (bypassing any property overrides by the page) and then dispatches `input` and `change` (compatible with React controlled components); scroll can scroll to an element or scroll the page by `deltaX/deltaY`.
+- **Boundaries**: no new navigation capability. Clicks are refused when the target is inside a link (including SVG `<a>` and `<area>`) pointing to a non-preview origin; during an interaction and for 1 second afterwards, external links and new windows triggered by page scripts do not open the system browser.
+- **Errors**: App not running keeps "App is not running" (界面图鉴未运行); a frame that has not loaded returns "Frame not loaded yet: <id>" (画框尚未加载：<id>); invalid selectors or missing elements return Chinese errors.
 
-## 考虑过的方案
+## Alternatives considered
 
-- 日志存在页面 JS 全局变量、读取时取回：页面重载即丢失，恰好错过热更新后的报错，否决。
-- 用 Agent 自带浏览器访问预览 URL：拿不到 App 内画框的实际状态，且 Agent 未必有浏览器工具；这正是 #21 要补的。
+- Store logs in a page JS global and fetch them on read: lost on page reload, which misses exactly the errors after a hot update; rejected.
+- Use the agent's own browser to visit the preview URL: cannot get the actual state of the frame inside the App, and the agent may not have browser tools; this is precisely what #21 fills in.

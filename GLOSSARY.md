@@ -1,46 +1,48 @@
 # ui-atlas
 
-原生的 AI 设计工具：人和 Agent 在同一张画布上编辑同一份设计文档。
+A native AI design tool: people and agents edit the same design document on the same canvas.
 
-## 术语
+## Terms
 
-**设计文档**（design document）：一棵由图层组成的树，是画布上显示的全部内容。App 是它唯一的持有者；人和 Agent 的修改都作用于它，并共用一条撤销历史。
-_避免_：作品、项目目录（指已移除的网页作品链路）
+The App UI is Chinese-only, so each term keeps its Chinese name from the App in parentheses.
 
-**工程文件**（project file）：设计文档保存成的文件，扩展名 `.uiatlas`，内容是带格式名（`ui-atlas.design`）和格式版本号的公开 JSON。
+**Design document (设计文档)**: A tree of layers; everything shown on the canvas. The App is its only owner; changes from people and agents both apply to it and share one undo history.
+_Avoid_: work (作品), project directory (项目目录) (these refer to the removed web-project pipeline)
 
-**图层**（layer）：设计文档中的一个节点，类型为画框、矩形、椭圆、文字、图片或分组。坐标相对父图层。
-_避免_：元素、组件（组件另有含义，本期不做）
+**Project file (工程文件)**: The file a design document is saved as, with the extension `.uiatlas`; its content is public JSON with a format name (`ui-atlas.design`) and a format version.
 
-**画框**（frame）：可以容纳子图层的图层，可设置填充、圆角、裁剪内容和自动布局。放在顶层的画框通常代表一个屏幕，画布上在它上方显示名称标签。
-_避免_：设备模拟器、网页框
+**Layer (图层)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer.
+_Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
-**分组**（group）：用来组织子图层的图层，不能自动布局、不能用把手缩放，尺寸始终等于子图层的并集。
+**Frame (画框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
+_Avoid_: device simulator (设备模拟器), web frame (网页框)
 
-**自动布局**（auto layout）：画框按方向、间距、内边距和对齐方式自动排列子图层；子图层的尺寸模式可以是固定、包裹内容（hug）或填满容器（fill）。
+**Group (分组)**: A layer used to organize child layers. It cannot use auto layout or be resized with handles, and its size always equals the union of its child layers.
 
-**画布**（canvas）：显示设计文档的可平移、缩放工作空间。
+**Auto layout (自动布局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
 
-**图层面板**（layers panel）：左侧栏中的图层树，可选中、重命名、显示/隐藏、锁定图层。
+**Canvas (画布)**: The pannable, zoomable workspace that displays the design document.
 
-**属性面板**（properties panel）：右侧检查器的“设计”页，编辑选中图层的位置、尺寸、填充、描边、文字与自动布局。
+**Layers panel (图层面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
-**MCP server**：供外部 AI Agent（Claude Code、Codex 等）按需启动的本地工具进程（`scripts/mcp-server.mjs`），把设计工具转发给正在运行的 App。
+**Properties panel (属性面板)**: The Design (设计) tab of the right inspector, which edits the selected layer's position, size, fill, stroke, text, and auto layout.
 
-**启动窗口**（launch window）：App 启动时显示的窗口，包含新建、最近打开和模板三个区域；进入编辑后关闭，可从“窗口 › 启动窗口”重新打开。
-_避免_：欢迎页、首页
+**MCP server**: A local tool process (`scripts/mcp-server.mjs`) that external AI agents (Claude Code, Codex, and others) start on demand; it forwards design tools to the running App.
 
-**模板**（template）：App 自带的 `.uiatlas` 设计稿（`native/Resources/Templates/`），在启动窗口中用来新建一份未命名的设计文档；新文档不关联模板文件，保存时不会覆盖模板。
-_避免_：示例、作品模板（指已移除的网页作品链路）
+**Launch window (启动窗口)**: The window shown when the App starts, with three areas: New, Recent, and Templates. It closes once editing begins and can be reopened from *Window → Launch Window (窗口 › 启动窗口)*.
+_Avoid_: welcome page (欢迎页), home page (首页)
 
-**MCP 连接器**（MCP connector）：应用菜单“MCP 连接器…”打开的窗口，检测 MCP server 是否已注册到 Claude Code、Codex 的用户级配置，并用它们的 CLI 一键连接或断开连接。
-_避免_：插件、集成
+**Template (模板)**: A `.uiatlas` design bundled with the App (`native/Resources/Templates/`), used in the launch window to create a new untitled design document; the new document is not linked to the template file, so saving never overwrites the template.
+_Avoid_: example (示例), work template (作品模板) (these refer to the removed web-project pipeline)
 
-**控制通道**（control channel）：App 运行时只对当前用户开放的本地 Unix socket，外部进程经它读取和编辑设计文档、操作视口和截图。
-_避免_：控制端口、API 服务
+**MCP connector (MCP 连接器)**: The window opened from the app menu's *MCP Connectors… (MCP 连接器…)*. It detects whether the MCP server is registered in the user-level configuration of Claude Code and Codex, and connects or disconnects it with one click through their CLIs.
+_Avoid_: plugin (插件), integration (集成)
 
-**对话面板**（chat panel）：右侧检查器的“对话”页，AI 通过与 MCP server 相同的工具读取和编辑设计文档。
+**Control channel (控制通道)**: A local Unix socket, open only to the current user while the App is running, through which external processes read and edit the design document, control the viewport, and take screenshots.
+_Avoid_: control port (控制端口), API service (API 服务)
 
-**Agent harness**：对话面板背后的 Node 子进程（`scripts/agent-chat.mjs`），负责对话循环、调用模型 API 和执行工具；只在发送消息时启动。
+**Chat panel (对话面板)**: The Chat (对话) tab of the right inspector, where AI reads and edits the design document with the same tools as the MCP server.
 
-**模型提供方**（model provider）：对话面板可选的模型 API 来源：DeepSeek、Anthropic Claude、OpenAI。DeepSeek 使用 OpenAI 兼容接口，OpenAI 使用 Responses API。
+**Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
+
+**Model provider (模型提供方)**: The model API sources available in the chat panel: DeepSeek, Anthropic Claude, and OpenAI. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API.

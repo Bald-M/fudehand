@@ -1,5 +1,5 @@
-# 移除浏览器兼容版
+# Remove the Browser-Compatible Version
 
-2026-11-06，用户要求完整移除浏览器兼容版。原生 macOS App（见 [0001](0001-native-macos-shell.md)）是唯一外壳：删除 `apps/atlas` Vue 画布、`pnpm dev:web` 入口与 `scripts/dev.mjs`，以及只服务于 iframe 画布的 `packages/preview-bridge` Esc 通信桥。原生 App 自行向 WKWebView 注入 Esc 退出脚本，案例无需接入任何桥。
+2026-11-06: the user asked to remove the browser-compatible version completely. The native macOS App (see [0001](0001-native-macos-shell.md)) is the only shell: delete the `apps/atlas` Vue canvas, the `pnpm dev:web` entry point and `scripts/dev.mjs`, and the `packages/preview-bridge` Esc bridge that only served the iframe canvas. The native App injects its own Esc exit script into WKWebView, so examples do not need to integrate any bridge.
 
-`catalog.json` 不再包含 `shell`（4400 画布端口）字段，版本号仍为 1；旧配置里残留的 `shell` 会被两端校验忽略。浏览器 localStorage 中的偏好不迁移。原浏览器版的需求基线与验收记录（`docs/implementation-plan.md`、`docs/verification.md`）随之删除，可在 Git 历史中查阅。
+`catalog.json` no longer contains the `shell` field (the 4400 canvas port), and its version stays 1; a leftover `shell` in old configurations is ignored by both validators. Preferences in browser localStorage are not migrated. The browser version's requirements baseline and acceptance record (`docs/implementation-plan.md`, `docs/verification.md`) are deleted along with it and remain available in Git history.

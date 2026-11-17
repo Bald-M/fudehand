@@ -1,3 +1,3 @@
-# 领域文档
+# Domain Docs
 
-探索项目前阅读根目录 `GLOSSARY.md` 与当前模块涉及的 `docs/adr/`。术语以词汇表为准；与已有决策冲突时先明确说明。文档缺失时继续工作，实际形成术语或架构决策后再创建。
+Before exploring the project, read the root `GLOSSARY.md` and the `docs/adr/` entries relevant to the current module. Terms follow the glossary; if something conflicts with an existing decision, say so explicitly first. If the docs are missing, keep working, and create them once a term or architectural decision has actually taken shape.

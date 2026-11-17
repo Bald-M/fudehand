@@ -1,24 +1,24 @@
-# Agent 经 Node MCP 与本地控制通道接入
+# Agents Connect Through a Node MCP Server and a Local Control Channel
 
-> 部分已被 [ADR 0006](0006-native-design-document.md) 取代：MCP server、控制通道与对话面板的结构保留，作品数据层（`catalog.json`）与画框工具已移除，工具改为编辑设计文档。
+> Partially superseded by [ADR 0006](0006-native-design-document.md): the structure of the MCP server, the control channel, and the chat panel is kept, while the web-project data layer (`catalog.json`) and the frame tools were removed, and the tools now edit the design document.
 
-2026-11-17。为了让 AI Agent 不必手改 `catalog.json` 就能整理作品与画框，并在 App 运行时操作画布、获取画框截图（#2），接入分为三部分：
+2026-11-17. So that AI agents can organize web projects and frames without hand-editing `catalog.json`, and can operate the canvas and take frame screenshots while the App is running (#2), the integration has three parts:
 
-- **MCP server**（`scripts/mcp-server.mjs`）：Node stdio 进程，由 Claude Code、Codex 等外部 Agent 按需启动。作品数据层直接读写 `catalog.json`，写入前调用 launcher 的 `servicesFromCatalog` 校验，再经临时文件与 rename 原子替换；校验失败时不改文件。
-- **控制通道**：App 运行时在 `~/Library/Application Support/ui-atlas/control.sock` 监听 Unix domain socket（权限 0600、目录 0700、校验对端 uid），协议为行分隔 JSON。MCP 的画布工具经 `scripts/control-client.mjs` 转发到 App，命令在主线程分发到 `AtlasStore`。协议编解码在 `AtlasCore`，不依赖 AppKit。
-- **对话面板与 Agent harness**：App 内的对话面板启动 `scripts/agent-chat.mjs`，经 stdin/stdout 交换 JSON 行。harness 负责对话循环和工具调用，调用 DeepSeek（OpenAI 兼容的 Chat Completions）、OpenAI（Responses API，Codex 系列模型只支持它）或 Anthropic Messages API。API key 保存在钥匙串，只经环境变量传给 harness。
+- **MCP server** (`scripts/mcp-server.mjs`): a Node stdio process that external agents such as Claude Code and Codex start on demand. The web-project data layer reads and writes `catalog.json` directly; before writing it validates with the launcher's `servicesFromCatalog`, then atomically replaces the file via a temporary file and rename. If validation fails, the file is not changed.
+- **Control channel**: while the App runs it listens on a Unix domain socket at `~/Library/Application Support/ui-atlas/control.sock` (permissions 0600, directory 0700, peer uid checked), with a newline-delimited JSON protocol. The MCP canvas tools are forwarded to the App through `scripts/control-client.mjs`, and commands are dispatched to `AtlasStore` on the main thread. Protocol encoding and decoding live in `AtlasCore` and do not depend on AppKit.
+- **Chat panel and Agent harness**: the in-App chat panel starts `scripts/agent-chat.mjs` and exchanges JSON lines over stdin/stdout. The harness runs the conversation loop and tool calls, and calls DeepSeek (OpenAI-compatible Chat Completions), OpenAI (the Responses API, the only one Codex-series models support), or the Anthropic Messages API. The API key is stored in the Keychain and passed to the harness only through an environment variable.
 
-所有工具只有一份实现：`scripts/atlas-tools.mjs`，被 MCP server 和 harness 共用。catalog 校验仍只有 Node 与 Swift 两份（见 `tests/fixtures/catalog-conformance.json`），不新增第三份。
+All tools have a single implementation, `scripts/atlas-tools.mjs`, shared by the MCP server and the harness. Catalog validation still exists only in two copies, Node and Swift (see `tests/fixtures/catalog-conformance.json`); no third copy is added.
 
-## 否决的方案
+## Rejected Alternatives
 
-- **在 Swift 内实现 MCP server**：要么手写 MCP 协议，要么引入第三方 Swift 包，违背“不依赖第三方 Swift 包”的约定；写入 catalog 时还需要在 Swift 内复用或重写 Node 的校验与原子写入。
-- **HTTP 控制端口**：会监听网络地址，即使只绑定回环也需要额外鉴权防止同机其他用户或网页访问。Unix socket 借助文件权限和对端 uid 即可只对当前用户开放。
-- **Swift 直接调用模型 API**：需要在 Swift 内再实现一套工具调用循环和工具，无法与 MCP 共用；放在 Node 端后，App 只负责界面、进程和钥匙串。
+- **Implement the MCP server in Swift**: this would mean either hand-writing the MCP protocol or adding a third-party Swift package, which violates the "no third-party Swift packages" convention; writing the catalog would also require reusing or rewriting Node's validation and atomic writes in Swift.
+- **HTTP control port**: it would listen on a network address, and even bound only to loopback it would need extra authentication to keep other users on the same machine or web pages out. A Unix socket can be restricted to the current user with file permissions and the peer uid alone.
+- **Call the model APIs directly from Swift**: this would require a second tool-calling loop and set of tools in Swift that could not be shared with MCP; with this in Node, the App only handles the UI, processes, and the Keychain.
 
-## 影响
+## Consequences
 
-- MCP server 和 harness 都依赖本检出目录与 Node 安装，与 App 的预览启动方式一致。
-- 画布工具只在 App 运行时可用，否则返回“ui-atlas 未运行”。App 只在打开项目时读取 `catalog.json`，写入工具的结果会提示重启预览后生效。
-- 不支持远程访问。
-- 画框页面层（#21）：`frame_console`、`frame_read`、`frame_interact` 让 Agent 修改作品后确认没有运行时错误并验证交互。控制台由画框在页面世界注入的脚本收集，记录保存在 App 内（每个画框 200 条，重载后仍在）；读取和交互在独立的脚本世界执行。能力只限于基础点击、填值、滚动和读取可见内容，不提供导航、多标签、网络拦截或上传；点击指向其他站点（含 SVG 链接与图像热区）或在新窗口打开的链接会被拒绝；页面脚本代为触发的外站导航与新窗口由画框的导航策略取消，任何时候都不打开系统浏览器。控制台内容来自页面本身，页面也能伪造记录，Agent 应把它当作页面数据而非 App 的判断。预览只在 App 画框中打开（见 [0005](0005-preview-only-in-app.md)），浏览器直接访问预览 URL 会得到 403。
+- Both the MCP server and the harness depend on this checkout and on the Node installation, consistent with how the App launches previews.
+- The canvas tools are available only while the App is running; otherwise they return "ui-atlas is not running" (ui-atlas 未运行). The App reads `catalog.json` only when opening a project, so results of write tools note that they take effect after restarting the preview.
+- Remote access is not supported.
+- Frame page layer (#21): `frame_console`, `frame_read`, and `frame_interact` let an agent confirm there are no runtime errors after modifying a web project and verify interactions. Console output is collected by a script the frame injects into the page world, and records are kept in the App (200 per frame, surviving reloads); reading and interaction run in an isolated script world. Capabilities are limited to basic clicking, filling values, scrolling, and reading visible content, with no navigation, multiple tabs, network interception, or uploads; clicking a link that points to another site (including SVG links and image map areas) or that opens in a new window is rejected; off-site navigations and new windows triggered by page scripts are cancelled by the frame's navigation policy, and the system browser is never opened. Console content comes from the page itself and the page can forge records, so the agent should treat it as page data rather than the App's judgment. Previews open only in App frames (see [0005](0005-preview-only-in-app.md)), and accessing a preview URL directly from a browser returns 403.

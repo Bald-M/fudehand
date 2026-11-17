@@ -1,81 +1,81 @@
-# macOS 使用说明
+# macOS Usage Guide
 
-ui-atlas 是 SwiftUI/AppKit 原生设计工具。画布直接用 Core Animation 渲染设计文档中的图层，不依赖网页服务（见 [ADR 0006](adr/0006-native-design-document.md)）。
+ui-atlas is a native SwiftUI/AppKit design tool. The canvas renders the layers of the design document directly with Core Animation and does not depend on a web server (see [ADR 0006](adr/0006-native-design-document.md)).
 
-## 启动与构建
+## Launching and Building
 
-需要 macOS 14+、Swift 6+、Node.js 22.12+、pnpm 11.7.0。安装 Xcode Command Line Tools 即可，不需要完整 Xcode，也没有第三方 Swift 包依赖。
+Requires macOS 14+, Swift 6+, Node.js 22.12+, and pnpm 11.7.0. Installing the Xcode Command Line Tools is enough; full Xcode is not needed, and there are no third-party Swift package dependencies.
 
 ```bash
 pnpm install
-pnpm dev                 # Debug 构建并打开 App
-pnpm build:native        # Release 构建并进行本地 ad-hoc 签名
+pnpm dev                 # Debug build, then open the App
+pnpm build:native        # Release build with local ad-hoc signing
 open dist/ui-atlas.app
 ```
 
-App 启动时先显示启动窗口，不启动任何 Node 进程：
+When the App starts it first shows the launch window and starts no Node processes:
 
-- 左侧“新建设计文档”（⌘N）打开空白的未命名文档，“打开…”（⌘O）弹出打开面板。
-- “最近打开”按时间倒序列出最近打开或保存过的工程文件（最多 10 条），显示文件名、所在目录和时间。单击或选中后回车打开；已删除或移动的文件显示为不可用，点击时提示并可从列表移除，“清除记录”清空列表。
-- “模板”列出 App 自带的模板，没有模板时显示“暂无模板”。点击模板得到一份未命名文档，不关联模板文件，保存时询问位置。
+- On the left, New Design Document (新建设计文档, ⌘N) opens a blank untitled document, and Open… (打开…, ⌘O) shows the open panel.
+- Recent (最近打开) lists recently opened or saved project files in reverse chronological order (up to 10), showing the file name, its folder, and the time. Click an item, or select it and press Return, to open it; files that were deleted or moved are shown as unavailable, and clicking one shows a notice and offers to remove it from the list; Clear Recents (清除记录) empties the list.
+- Templates (模板) lists the templates bundled with the App, and shows No Templates (暂无模板) when there are none. Clicking a template gives an untitled document that is not linked to the template file; saving asks for a location.
 
-通过新建、打开、最近记录、模板、Finder 打开文件或 Agent 的 `new_document` / `open_document` 进入编辑后，编辑窗口打开、启动窗口关闭；窗口 › 启动窗口可重新打开它。退出时不恢复编辑窗口，下次启动仍先显示启动窗口。对话面板第一次发送消息时才启动 Agent harness。
+Once editing starts — via New, Open, a recent item, a template, opening a file from Finder, or the Agent's `new_document` / `open_document` — the editor window opens and the launch window closes; Window › Launch Window (窗口 › 启动窗口) reopens it. The editor window is not restored on quit, so the next launch shows the launch window first again. The Agent harness starts only when the chat panel sends its first message.
 
-模板放在 `native/Resources/Templates/`：把 `.uiatlas` 文件放进去，重新构建后即出现在模板区，名称取文件名，不需要改代码。
+Templates live in `native/Resources/Templates/`: put a `.uiatlas` file there and rebuild, and it appears in the Templates section, named after the file, with no code changes.
 
-构建脚本把本机源码目录、Node 路径和启动时 PATH 写进 App 的 `Contents/Resources/workspace.json`，对话面板据此找到 `scripts/agent-chat.mjs` 和 Node。画布、图层与工程文件不依赖源码目录；复制 App 到另一台机器后只有对话面板不可用。
+The build script writes the local source directory, the Node path, and the PATH at launch time into the App's `Contents/Resources/workspace.json`; the chat panel uses it to find `scripts/agent-chat.mjs` and Node. The canvas, layers, and project files do not depend on the source directory; if the App is copied to another machine, only the chat panel stops working.
 
-SwiftPM 构建和模块缓存默认写到系统临时目录。`UI_ATLAS_SWIFT_SCRATCH` 可覆盖构建目录，`UI_ATLAS_SWIFT_MODULE_CACHE` 可覆盖模块缓存目录。不要同时在同一 scratch 目录运行两个 Swift 构建。
+SwiftPM build output and the module cache go to the system temporary directory by default. `UI_ATLAS_SWIFT_SCRATCH` overrides the build directory, and `UI_ATLAS_SWIFT_MODULE_CACHE` overrides the module cache directory. Do not run two Swift builds in the same scratch directory at the same time.
 
-## 文件
+## Files
 
-- 文件菜单：新建 ⌘N、打开 ⌘O、打开最近、保存 ⌘S、另存为 ⇧⌘S。“打开最近”与启动窗口的最近打开列表共用同一份记录（打开或保存成功即写入，去重、置顶、最多 10 条），子菜单末尾可清除记录。工程文件扩展名为 `.uiatlas`，内容是带版本号的 JSON（格式见 [设计文档](superpowers/specs/2026-11-17-native-design-document-design.md#文档格式atlascoredesigndocumentswift)）。
-- 有未保存修改时，窗口标题带“已编辑”；新建、打开或退出前会询问是否保存。
-- 打开格式错误或由更新版本创建的文件时显示具体原因，当前文档保持不变。
-- App 在 Info.plist 中导出 `.uiatlas` 文件类型（`local.ui-atlas.design`，符合 JSON）并登记为它的编辑器：构建后 Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开工程文件；App 只有一个窗口，打开文件时替换当前文档（有未保存修改先询问）。
+- File menu (文件): New ⌘N, Open ⌘O, Open Recent (打开最近), Save ⌘S, Save As ⇧⌘S. Open Recent shares one record with the launch window's Recent list (written on every successful open or save, deduplicated, moved to the top, up to 10 items), and the record can be cleared at the end of the submenu. Project files use the `.uiatlas` extension and contain versioned JSON (see the [design spec](superpowers/specs/2026-11-17-native-design-document-design.md#document-format-atlascoredesigndocumentswift) for the format).
+- With unsaved changes, the window title shows Edited (已编辑); New, Open, or quitting first asks whether to save.
+- Opening a malformed file, or one created by a newer version, shows the specific reason and leaves the current document unchanged.
+- The App exports the `.uiatlas` file type in Info.plist (`local.ui-atlas.design`, conforming to JSON) and registers itself as its editor: after building, double-clicking in Finder, dragging onto the Dock icon, or Open With all open project files in ui-atlas. The App has only one window, so opening a file replaces the current document (asking first if there are unsaved changes).
 
-## 画布操作
+## Canvas Interaction
 
-交互参照 Figma。
+Interaction follows Figma.
 
-**选择**
+**Selection**
 
-- 点击顶层画框里的内容选中其直接子图层；点击画框空白处或画框上方的名称标签选中画框；点击顶层的其他图层直接选中。
-- 已选中某个图层时，点击它的兄弟图层直接选中兄弟；双击已选图层选中指针下的下一层子图层；⌘ + 点击直接选中最深一层。
-- 分组只能经子图层点中，点击选中整个分组。锁定或隐藏的图层不能在画布上点中，只能在图层面板选择。
-- Shift + 点击加入或移出选择；拖动空白画布框选顶层图层，Shift 追加。悬停时显示细描边。
-- Esc 选中父图层，在顶层时取消选择；Return 选中所选画框或分组的子图层；⌘A 选中当前层级的全部图层。
+- Clicking content inside a top-level frame selects its direct child layer; clicking empty space in the frame, or the name label above the frame, selects the frame; clicking any other top-level layer selects it directly.
+- When a layer is selected, clicking one of its siblings selects that sibling directly; double-clicking the selected layer selects the next child layer under the pointer; ⌘ + click selects the deepest layer directly.
+- A group can only be hit through its child layers, and clicking selects the whole group. Locked or hidden layers cannot be hit on the canvas and can only be selected in the layers panel.
+- Shift + click adds to or removes from the selection; dragging on empty canvas does a marquee selection of top-level layers, and Shift adds to it. Hovering shows a thin outline.
+- Esc selects the parent layer, or clears the selection at the top level; Return selects the children of the selected frame or group; ⌘A selects all layers at the current level.
 
-**移动与缩放**
+**Moving and Resizing**
 
-- 拖动选中图层移动（3pt 阈值后开始），多选时整组移动；一次拖动是一步撤销。自动布局画框里的子图层位置由布局决定，不随拖动移动。
-- 拖动时图层边缘与中线靠近兄弟图层或父画框 6 屏幕点内会吸附并显示红色参考线；按住 ⌃ 拖动关闭吸附。
-- 单选（分组除外）时显示 8 个缩放把手，拖动改变尺寸并把对应方向的尺寸模式设为固定；文字改宽度后变为“自动高度”，改高度后变为“固定”。
-- 方向键移动 1，Shift + 方向键移动 10，每次按键一步撤销。Delete 删除所选图层。
+- Drag selected layers to move them (starting after a 3pt threshold); with multiple layers selected they move together. One drag is one undo step. The position of a child layer in an auto layout frame is determined by the layout and does not follow the drag.
+- While dragging, layer edges and center lines snap when within 6 screen points of a sibling layer or the parent frame, and red guides appear; hold ⌃ while dragging to turn snapping off.
+- With a single selection (except groups), 8 resize handles appear; dragging one changes the size and sets the sizing mode in that direction to fixed. For text, changing the width switches it to Auto Height (自动高度), and changing the height switches it to Fixed (固定).
+- Arrow keys move by 1 and Shift + arrow keys by 10, each key press being one undo step. Delete removes the selected layers.
 
-**创建**
+**Creating**
 
-- 工具栏切换工具：移动 V、抓手 H、画框 F、矩形 R、椭圆 O、文字 T。创建工具在画布上拖出尺寸，单击使用默认尺寸（文字为自动宽高）；起点落在顶层画框内时新图层放进该画框。创建后回到移动工具。
-- 工具栏或“画布 › 插入图片…”（⇧⌘I）插入 PNG/JPEG：选中一个画框时放进该画框，否则放在视口中央。
+- The toolbar switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas, and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move.
+- The toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG/JPEG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport.
 
-**导航**
+**Navigation**
 
-- 滚轮或触控板滚动、空格 + 拖动、鼠标中键拖动或抓手工具拖动平移画布。按下空格时光标立即变为抓手，松开后恢复。
-- ⌘ / ⌃ + 滚轮或触控板捏合，以指针为锚点缩放，范围 5%–400%。
-- 工具栏提供缩小、缩放百分比（点击回到 100%）、放大与适应全部。菜单快捷键：⌘+ 放大、⌘− 缩小、⌘1 100%、⌘0 适应全部。
-- 画布持有焦点时：Shift+1 适应全部，Shift+2 缩放至选择，Shift+0 回到 100%。双击顶层画框的名称标签缩放聚焦到该画框。这些过渡使用 200ms 动画，新的输入会立即打断。
+- Scroll wheel or trackpad scrolling, Space + drag, middle-mouse drag, or dragging with the Hand tool pans the canvas. The cursor turns into a hand as soon as Space is pressed, and reverts on release.
+- ⌘ / ⌃ + scroll wheel, or trackpad pinch, zooms anchored at the pointer, within 5%–400%.
+- The toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, and Fit All. Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
+- When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately.
 
-**撤销**
+**Undo**
 
-- ⌘Z / ⇧⌘Z 撤销、重做设计文档的修改，人工与 Agent 的修改共用一条历史；文字输入框有焦点时交给输入框。新建或打开文件会清空历史。
+- ⌘Z / ⇧⌘Z undo and redo changes to the design document; human and Agent changes share one history. When a text field has focus, these go to the text field. Creating or opening a file clears the history.
 
-## 面板
+## Panels
 
-- **图层面板**（左侧栏）：层级树，上层在前；点击选中，⌘ 点击加入或移出，Shift 点击加入；双击重命名；眼睛与锁按钮切换显示和锁定；右键可上移或下移一层、移到最上层或最下层、缩放至图层、删除。
-- **检查器**（右侧，⌥⌘I 显示或隐藏）：“设计”页编辑选中图层的名称、位置与尺寸、尺寸模式、透明度、圆角、裁剪内容、填充、描边、文字、自动布局和图片适应方式；多选时可统一修改透明度。“对话”页是 Agent 对话面板（⇧⌘A）。
-- 右上角外观菜单选择跟随系统、浅色或深色。
+- **Layers panel** (left sidebar): a hierarchy tree with upper layers first. Click to select, ⌘-click to add or remove, Shift-click to add; double-click to rename; the eye and lock buttons toggle visibility and locking; the context menu can move a layer up or down one level, bring it to the front or send it to the back, zoom to the layer, or delete it.
+- **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit; with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A).
+- The appearance menu in the top right chooses Follow System, Light, or Dark.
 
-## 验证
+## Verification
 
 ```bash
 pnpm test:native
@@ -84,8 +84,8 @@ pnpm build:native
 codesign --verify --deep --strict dist/ui-atlas.app
 ```
 
-Swift 测试覆盖文档读写与版本校验、字段补丁、自动布局、编辑历史、点击选择规则、画布交互状态机、渲染器增量更新与截图、控制命令。Node 测试覆盖 MCP 工具转发、图片读取与对话 harness。
+The Swift tests cover document reading/writing and version checks, field patches, auto layout, edit history, click-selection rules, the canvas interaction state machine, incremental renderer updates and snapshots, and control commands. The Node tests cover MCP tool forwarding, image reading, and the chat harness.
 
-## 性能排查
+## Performance Troubleshooting
 
-设置 `UI_ATLAS_FRAME_LOG=1` 启动 App，会每秒向 stderr 输出一行 `[frame] hitches=N frames=M`，用于对比平移和缩放时的掉帧次数。
+Launch the App with `UI_ATLAS_FRAME_LOG=1` and it prints one line per second to stderr, `[frame] hitches=N frames=M`, for comparing dropped frames while panning and zooming.

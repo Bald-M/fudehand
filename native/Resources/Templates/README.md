@@ -1,5 +1,5 @@
-# 模板
+# Templates
 
-把 `.uiatlas` 工程文件放进本目录，重新构建（`pnpm dev` 或 `pnpm build:native`）后，它会出现在启动窗口的“模板”区，名称取文件名。
+Put `.uiatlas` project files in this directory and rebuild (`pnpm dev` or `pnpm build:native`); each then appears in the launch window's Templates (模板) section, named after the file.
 
-从模板新建得到一份未命名的设计文档，不关联模板文件，保存时询问位置。构建脚本只复制 `.uiatlas` 文件，本说明不会进入 App 包。
+Creating from a template gives an untitled design document that is not linked to the template file; saving asks for a location. The build script copies only `.uiatlas` files, so this README does not end up in the App bundle.

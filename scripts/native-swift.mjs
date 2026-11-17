@@ -9,12 +9,12 @@ export function runCommand(executable, args, options = {}) {
   return new Promise((done, reject) => {
     const child = spawn(executable, args, { stdio: 'inherit', shell: false, ...options })
     child.once('error', reject)
-    child.once('exit', (code, signal) => code === 0 ? done() : reject(new Error(`${executable} ${args[0]} 失败（${signal || code}）`)))
+    child.once('exit', (code, signal) => code === 0 ? done() : reject(new Error(`${executable} ${args[0]} failed (${signal || code})`)))
   })
 }
 
 export async function runSwift(operation, { configuration = 'debug' } = {}) {
-  if (process.platform !== 'darwin') throw new Error('原生 App 需要在 macOS 上构建和测试。')
+  if (process.platform !== 'darwin') throw new Error('The native app must be built and tested on macOS.')
   const configured = process.env.UI_ATLAS_SWIFT_SCRATCH
   const scratch = configured
     ? resolve(configured, operation === 'test' ? 'tests' : '.')
