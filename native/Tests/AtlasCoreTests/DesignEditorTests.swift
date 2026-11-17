@@ -119,3 +119,40 @@ private func editor() -> DesignEditor {
 private func attempt(_ e: inout DesignEditor, _ change: (inout DesignDocument) throws -> Void) throws {
     try e.perform("操作", change)
 }
+
+// MARK: Coordinate range (#56)
+
+/// Edited documents must survive a save → reopen round trip; opening lays the document out again.
+private func reopened(_ e: DesignEditor) throws -> DesignDocument {
+    DesignEditor(document: try DesignDocument.decode(try e.document.encoded()), measure: fakeMeasure).document
+}
+
+@Test func movingOutOfAFarFrameStaysWithinRange() throws {
+    var p = DesignNode(id: "p", type: .frame, x: 900_000, y: 0, width: 200_000, height: 100)
+    p.children = [DesignNode(id: "c", type: .rectangle, x: 150_000, y: 0)]
+    var e = DesignEditor(document: DesignDocument(nodes: [p]), measure: fakeMeasure)
+    try e.perform("Move") { try $0.move("c", parent: nil, index: nil) }
+    #expect(e.document.node("c")?.x == DesignJSON.maximumMagnitude)
+    #expect(try reopened(e) == e.document)
+}
+
+@Test func hugFrameWiderThanTheRangeStaysWithinRange() throws {
+    var f = DesignNode(id: "f", type: .frame)
+    f.layout = AutoLayout(direction: .horizontal)
+    f.sizing = Sizing(horizontal: .hug, vertical: .hug)
+    f.children = ["a", "b", "c"].map { DesignNode(id: $0, type: .rectangle, width: 600_000, height: 100) }
+    let e = DesignEditor(document: DesignDocument(nodes: [f]), measure: fakeMeasure)
+    #expect(e.document.node("f")?.width == DesignJSON.maximumMagnitude)
+    #expect(try reopened(e) == e.document)
+}
+
+@Test func groupShrinkAndLiveDragStayWithinRange() throws {
+    var g = DesignNode(id: "g", type: .group, x: 900_000, y: 0)
+    g.children = [DesignNode(id: "a", type: .rectangle, x: 0, y: 0), DesignNode(id: "b", type: .rectangle, x: 0, y: 0)]
+    var e = DesignEditor(document: DesignDocument(nodes: [g]), measure: fakeMeasure)
+    e.beginGesture("Move")
+    e.applyLive { try? $0.update("a") { $0.x = 500_000; $0.y = -3_000_000 } }
+    e.applyLive { try? $0.update("b") { $0.x = 2_500_000 } }
+    e.endGesture()
+    #expect(try reopened(e) == e.document)
+}

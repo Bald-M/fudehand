@@ -13,6 +13,18 @@ public enum DesignLayout {
                 layoutDown(&nodes[index])
             }
         }
+        // Moves, hug sizes, and group shrinking derive geometry that file reading would reject (#56); every edit ends here.
+        for index in nodes.indices { clamp(&nodes[index]) }
+    }
+
+    /// Keeps position and size within the range `DesignJSON` accepts when reading.
+    static func clamp(_ node: inout DesignNode) {
+        let limit = DesignJSON.maximumMagnitude
+        node.x = min(max(node.x, -limit), limit)
+        node.y = min(max(node.y, -limit), limit)
+        node.width = min(max(node.width, 0), limit)
+        node.height = min(max(node.height, 0), limit)
+        for index in node.children.indices { clamp(&node.children[index]) }
     }
 
     /// 自底向上：文字尺寸、分组并集、hug 画框尺寸。
