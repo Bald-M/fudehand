@@ -10,6 +10,17 @@ public enum ControlCommand: Equatable, Sendable {
     case reset
     case restartPreview
     case frameSnapshot(String)
+    case frameConsole(String, limit: Int)
+    case frameRead(String)
+    case frameInteract(String, FrameAction)
+}
+
+/// 画框内的基础交互，只作用于该画框已加载的本机预览页面。
+public enum FrameAction: Equatable, Sendable {
+    case click(selector: String)
+    case fill(selector: String, value: String)
+    /// 给了 selector 时把元素滚动到可见区域，否则按 deltaX、deltaY 滚动页面。
+    case scroll(selector: String?, deltaX: Double, deltaY: Double)
 }
 
 /// 请求 id 原样回传，便于调用方匹配响应。
@@ -94,6 +105,38 @@ public enum ControlProtocol {
         case "reset": return .reset
         case "restart_preview": return .restartPreview
         case "frame_snapshot": return .frameSnapshot(try string("frame"))
+        case "frame_console":
+            let frame = try string("frame")
+            guard let value = args["limit"] else { return .frameConsole(frame, limit: 50) }
+            guard let limit = integer(value), (1...200).contains(limit) else { throw Message(text: "参数类型错误：limit") }
+            return .frameConsole(frame, limit: limit)
+        case "frame_read": return .frameRead(try string("frame"))
+        case "frame_interact":
+            let frame = try string("frame")
+            let action = try string("action")
+            switch action {
+            case "click": return .frameInteract(frame, .click(selector: try string("selector")))
+            case "fill":
+                let selector = try string("selector")
+                guard let value = args["value"] else { throw Message(text: "缺少参数：value") }
+                guard let text = value as? String else { throw Message(text: "参数类型错误：value") }
+                return .frameInteract(frame, .fill(selector: selector, value: text))
+            case "scroll":
+                func delta(_ key: String) throws -> Double? {
+                    guard let value = args[key] else { return nil }
+                    guard let number = value as? NSNumber, !isBool(number), number.doubleValue.isFinite else {
+                        throw Message(text: "参数类型错误：\(key)")
+                    }
+                    return number.doubleValue
+                }
+                let selector = args["selector"] == nil ? nil : try string("selector")
+                let deltaX = try delta("deltaX"), deltaY = try delta("deltaY")
+                guard selector != nil || deltaX != nil || deltaY != nil else {
+                    throw Message(text: "缺少参数：selector 或 deltaX、deltaY")
+                }
+                return .frameInteract(frame, .scroll(selector: selector, deltaX: deltaX ?? 0, deltaY: deltaY ?? 0))
+            default: throw Message(text: "不支持的操作：\(action)")
+            }
         default: throw Message(text: "未知命令：\(name)")
         }
     }

@@ -164,16 +164,18 @@ export const tools = [
 ]
 
 /** 画布控制层：经本地控制通道转发给正在运行的 App。 */
-function canvasTool(name, command, description, properties = {}) {
+function canvasTool(name, command, description, properties = {}, required = Object.keys(properties)) {
   return {
     name, description: `${description}需要界面图鉴正在运行。`,
-    inputSchema: { type: 'object', properties, required: Object.keys(properties) },
+    inputSchema: { type: 'object', properties, required },
     async run(args, { socketPath }) {
       const forwarded = Object.fromEntries(Object.keys(properties).map(key => [key, args[key]]))
       return json(await sendControl(command, forwarded, { socketPath }))
     },
   }
 }
+
+const frameArg = { frame: { type: 'string', description: '当前作品的画框 id' } }
 
 tools.push(
   canvasTool('canvas_get_state', 'get_state', '读取画布状态：当前作品、选择、视口、画框位置与预览阶段。'),
@@ -195,6 +197,32 @@ tools.push(
       ] }
     },
   },
+)
+
+// 画框页面层：只作用于画框中已加载的本机预览页面，不提供导航到其他站点的能力。
+tools.push(
+  canvasTool('frame_console', 'frame_console',
+    '读取画框网页最近的控制台输出（console.*）和未捕获错误，按时间先后排列；source 为 exception 的是未捕获错误，atlas 记录标出每次页面加载完成。记录在网页重载后仍保留，每个画框最多保留 200 条。',
+    { ...frameArg, limit: { type: 'integer', minimum: 1, maximum: 200, description: '返回最近多少条，默认 50' } }, ['frame']),
+  {
+    name: 'frame_read',
+    description: '读取画框网页当前可见内容的精简大纲：标题、文本和可交互元素；可交互元素后的 → 是可用于 frame_interact 的 CSS 选择器。最多约 20000 字。需要界面图鉴正在运行且画框已加载。',
+    inputSchema: { type: 'object', properties: frameArg, required: ['frame'] },
+    async run({ frame }, { socketPath }) {
+      const page = await sendControl('frame_read', { frame }, { socketPath })
+      const note = page.truncated ? '\n\n（内容过长，已截断）' : ''
+      return { content: [{ type: 'text', text: `${page.title || '（无标题）'}\n${page.url}\n\n${page.outline}${note}` }] }
+    },
+  },
+  canvasTool('frame_interact', 'frame_interact',
+    '在画框网页中执行基础交互：click 按选择器点击；fill 向输入框、文本框、下拉框或可编辑元素填值并触发 input、change；scroll 给了 selector 时把元素滚到可见区域（同时给 deltaX/deltaY 则滚动该元素），否则按 deltaX/deltaY 滚动页面。不能点击指向其他站点或在新窗口打开的链接。',
+    {
+      ...frameArg,
+      action: { type: 'string', enum: ['click', 'fill', 'scroll'] },
+      selector: { type: 'string', description: 'CSS 选择器，可取自 frame_read' },
+      value: { type: 'string', description: 'fill 时填入的值' },
+      deltaX: { type: 'number' }, deltaY: { type: 'number' },
+    }, ['frame', 'action']),
 )
 
 /** 调用工具；任何错误都转为带中文消息的错误结果，而不是抛出。 */
