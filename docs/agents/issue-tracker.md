@@ -2,7 +2,7 @@
 
 任务使用 GitHub Issues（`Bald-M/ui-atlas`）跟踪，用 `gh issue` 读取、创建和更新。
 
-- 标题：`[类型][优先级] 领域：简述`。类型为 `Bug`、`Enhancement`（新功能和重构）或 `Documentation`；优先级 `P0`–`P3`，未确认时写 `[P?]`。
+- 标题：`[类型][优先级] 领域：简述`。类型为 `Bug`、`Enhancement`（新功能和重构）或 `Documentation`；优先级 `P0`–`P3` 按影响和紧急程度自行判定，不写 `[P?]`：P0 服务不可用、数据丢失或安全问题；P1 核心流程受损且无绕行；P2 有绕行的缺陷或常规改进；P3 体验细节、可延后。
 - 标签：`bug`、`enhancement` 或 `documentation`。
 - 正文用中文，按类型分章节：
   - Bug：问题、复现、证据、影响、验收标准、非目标
