@@ -59,6 +59,6 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 ## 约定
 
 - 远端：`origin` → https://github.com/Bald-M/ui-atlas（默认分支 `main`）。未配置 CI 或部署，本地检查即门禁。在任务分支上交付，推送后向 `main` 发起 PR。
-- 任务记录在 GitHub Issues，标题、标签与正文格式遵循 `docs/agents/issue-tracker.md`；`.scratch/<feature>/` 只用于起草较长的规格或计划。
+- 任务直接用 `gh issue` 在 GitHub Issues 创建和跟踪，不在本地维护任务记录；`.scratch/<feature>/` 只用于起草较长的规格或计划。
 - 新术语记入 `GLOSSARY.md`，架构决策记入 `docs/adr/`。ADR 0002 已彻底移除浏览器外壳——不要重新引入 `apps/atlas`、`dev:web`、4400 外壳端口或 iframe 桥接。
 - 界面改动需在真实应用中按浅色和深色两种外观检查；证据截图放在 `docs/evidence/`。
