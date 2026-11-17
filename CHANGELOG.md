@@ -28,6 +28,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - `README.md` is now in English and is the repository's default README; the Chinese version moved to `README.zh-CN.md`, and both link to each other at the top (#72).
 - `CLAUDE.md` is now in English and states the project language convention: docs, code comments, test descriptions, MCP tool descriptions, and error messages in English; App UI copy stays Chinese for now (#79).
 - Code comments, test names, and test data in `native/`, `scripts/`, and `tests/` are now in English; Chinese test data remains only where a test checks Chinese or multi-byte text, with a comment saying so (#85).
+- The text that accompanies a `design_snapshot` image and the placeholder that stands in for image data when a layer is read (`<N bytes>`) are now in English.
 - Build script output (`pnpm build:native`, `pnpm test:native`), the non-macOS error, and the control channel startup log are now in English; the `.uiatlas` file kind shown in Finder is now `ui-atlas Project` (#84).
 
 ### Fixed

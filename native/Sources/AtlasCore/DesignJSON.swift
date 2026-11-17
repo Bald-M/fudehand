@@ -204,7 +204,7 @@ public enum DesignJSON {
             object["text"] = value
         }
         if let image = node.image {
-            object["image"] = ["data": includeImageData ? image.data.base64EncodedString() : "<\(image.data.count) 字节>",
+            object["image"] = ["data": includeImageData ? image.data.base64EncodedString() : "<\(image.data.count) bytes>",
                                "fit": image.fit.rawValue]
         }
         if let layout = node.layout {

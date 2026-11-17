@@ -137,8 +137,7 @@ describe('design tools', () => {
     expect(fake.received[0]).toMatchObject({ command: 'node_snapshot', args: { id: 'home' } })
     expect(result.content).toEqual([
       { type: 'image', data: PNG, mimeType: 'image/png' },
-      // Chinese kept: this is the text the tool currently returns; tool output is out of scope here.
-      { type: 'text', text: '图层 home 的截图（390×844）' },
+      { type: 'text', text: 'Snapshot of layer home (390×844)' },
     ])
   })
 
