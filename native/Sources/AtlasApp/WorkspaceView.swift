@@ -21,6 +21,10 @@ struct WorkspaceView: View {
                 .navigationTitle(store.project?.title ?? "界面图鉴")
                 .navigationSubtitle("本地界面学习画布")
         }
+        .inspector(isPresented: $store.showingChat) {
+            ChatPanel(chat: store.chat) { store.chat.send($0, root: store.root, runtime: store.runtime) }
+                .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
+        }
         .toolbar { toolbar }
         .alert("无法打开项目", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("好", role: .cancel) { store.error = nil }
@@ -206,6 +210,8 @@ struct WorkspaceView: View {
                 Button("重新读取目录并启动服务") { store.restart() }.disabled(store.root == nil || store.opening)
                 Button("打开项目目录…") { store.chooseWorkspace() }.disabled(store.opening)
             } label: { Image(systemName: "slider.horizontal.3") }.help("外观与布局").accessibilityLabel("外观与布局")
+            Toggle(isOn: $store.showingChat) { Image(systemName: "bubble.left.and.text.bubble.right") }
+                .help("对话（⌘⇧A）").accessibilityLabel("对话").keyboardShortcut("a", modifiers: [.command, .shift])
         }
     }
 }
