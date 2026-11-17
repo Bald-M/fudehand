@@ -73,7 +73,7 @@ tests/                     Node 测试（Vitest）
 ui-atlas 为 AI Agent 提供一组设计工具（`scripts/atlas-tools.mjs`），MCP server 和 App 内对话面板共用，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md) 与 [ADR 0006](docs/adr/0006-native-design-document.md)。所有工具都转发给正在运行的 App，App 是设计文档的唯一持有者；App 未运行时返回“ui-atlas 未运行”。
 
 - **读取**：`design_get_state`（文件、选择、可否撤销、顶层图层摘要）、`design_get_document`（完整图层树）、`design_get_node`。
-- **编辑**：`design_create_node`（可用 `children` 一次创建整棵子树）、`design_update_node`（部分字段补丁，嵌套对象逐字段合并）、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo`。每次调用是一步撤销，画布立即更新；字段错误返回中文说明且文档不变。图片可以给 `image.path`（本机 PNG/JPEG 路径），由工具读成 base64。
+- **编辑**：`design_create_node`（可用 `children` 一次创建整棵子树）、`design_update_node`（部分字段补丁，嵌套对象逐字段合并）、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo`。每次调用是一步撤销，画布立即更新；字段错误返回中文说明且文档不变。图片可以给 `image.path`（本机 PNG/JPEG 路径），由工具读成 base64。单个请求上限 32 MB，约可容纳 24 MB 的图片文件。
 - **文件**：`design_new_document`、`design_open_document`、`design_save_document`。有未保存修改时新建或打开会被拒绝，除非传 `discard: true`。
 - **视口与核对**：`canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`，以及按实际渲染返回 PNG 的 `design_snapshot`。
 

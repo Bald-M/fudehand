@@ -98,6 +98,18 @@ describe('设计工具', () => {
     }
   })
 
+  it('sends a 10 MB image to the App in full', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'uia-image-'))
+    cleanup.push(() => rm(dir, { recursive: true, force: true }))
+    const image = Buffer.alloc(10 << 20, 7)
+    await writeFile(join(dir, 'big.png'), image)
+    const fake = await app(echo)
+    const created = await callTool('design_create_node', { node: { type: 'image', image: { path: 'big.png' } } }, { root: dir, socketPath: fake.socketPath })
+    expect(created.isError).toBeUndefined()
+    const sent = (fake.received[0].args.node as { image: { data: string } }).image.data
+    expect(Buffer.from(sent, 'base64').equals(image)).toBe(true)
+  })
+
   it('design_snapshot 以 MCP image 内容返回截图', async () => {
     const fake = await app(() => ({ ok: true, result: { id: 'home', mimeType: 'image/png', data: PNG, width: 390, height: 844 } }))
     const result = await callTool('design_snapshot', { id: 'home' }, { root: '/repo', socketPath: fake.socketPath })

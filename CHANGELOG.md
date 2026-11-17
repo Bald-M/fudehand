@@ -29,6 +29,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - `CLAUDE.md` is now in English and states the project language convention: docs, code comments, test descriptions, MCP tool descriptions, and error messages in English; App UI copy stays Chinese for now (#79).
 - Build script output (`pnpm build:native`, `pnpm test:native`), the non-macOS error, and the control channel startup log are now in English; the `.uiatlas` file kind shown in Finder is now `ui-atlas Project` (#84).
 
+### Fixed
+
+- Agents can insert images of up to about 24 MB through `design_create_node` / `design_update_node`: the control channel's request limit rose from 1 MB to 32 MB (about 760 KB of image before). A request over the limit now gets an error that says it is too large and carries the request id, and the connection stays usable (#53).
+
 ## [0.0.1] - 2026-11-17
 
 ### Summary
