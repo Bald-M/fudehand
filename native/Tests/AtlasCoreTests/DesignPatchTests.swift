@@ -63,7 +63,6 @@ private func textNode() -> DesignNode {
     let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")!
     let node = try DesignJSON.node(from: ["id": "i", "type": "image", "image": ["data": png.base64EncodedString()]])
     let summary = DesignJSON.object(node, includeImageData: false)["image"] as? [String: Any]
-    // Chinese kept: this is the placeholder `DesignJSON.object` currently produces; App output is out of scope here.
-    #expect(summary?["data"] as? String == "<\(png.count) 字节>")
+    #expect(summary?["data"] as? String == "<\(png.count) bytes>")
     #expect(throws: DesignError.self) { try DesignJSON.node(from: ["id": "i", "type": "image", "image": ["data": "aGVsbG8="]]) }
 }

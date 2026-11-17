@@ -100,7 +100,7 @@ export const tools = [
       const shot = await sendControl('node_snapshot', { id: args.id, ...(args.scale === undefined ? {} : { scale: args.scale }) }, { socketPath })
       return { content: [
         { type: 'image', data: shot.data, mimeType: shot.mimeType },
-        { type: 'text', text: `图层 ${shot.id} 的截图（${shot.width}×${shot.height}）` },
+        { type: 'text', text: `Snapshot of layer ${shot.id} (${shot.width}×${shot.height})` },
       ] }
     },
   },
