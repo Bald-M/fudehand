@@ -37,6 +37,11 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
         catch { FileHandle.standardError.write(Data("[ui-atlas] 控制通道未启动：\(error.localizedDescription)\n".utf8)) }
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // 冷启动总是先显示启动窗口，不恢复上次退出时打开的编辑窗口。
+        UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": false])
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -62,20 +67,31 @@ struct AtlasApp: App {
     @NSApplicationDelegateAdaptor(AtlasAppDelegate.self) private var delegate
     @StateObject private var store = AtlasStore()
 
+    static let launchWindowID = "launch"
+    static let editorWindowID = "main"
+
     var body: some Scene {
-        // 单窗口：一次编辑一份文档；WindowGroup 会为 Finder 打开文件等外部事件再开新窗口。
-        Window("ui-atlas", id: "main") {
-            WorkspaceView(store: store)
-                .frame(minWidth: 960, minHeight: 620)
+        // 第一个场景在启动时打开：先显示启动窗口，新建或打开后才进入编辑窗口。
+        Window("启动窗口", id: Self.launchWindowID) {
+            LaunchView(store: store)
                 .preferredColorScheme(store.colorScheme)
-                .task { store.bootstrap(); delegate.attach(store); delegate.startControl(store) }
+                .modifier(WindowActions(store: store, start: start))
         }
-        .defaultSize(width: 1440, height: 940)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
         .commands {
             CommandGroup(after: .appInfo) { ConnectorsMenuItem() }
             CommandGroup(replacing: .newItem) {
                 Button("新建") { store.newDocument() }.keyboardShortcut("n")
                 Button("打开…") { store.openDocument() }.keyboardShortcut("o")
+                Menu("打开最近") {
+                    ForEach(store.recentEntries, id: \.path) { entry in
+                        Button(URL(fileURLWithPath: entry.path).deletingPathExtension().lastPathComponent) { store.openRecent(entry.path) }
+                    }
+                    if !store.recents.items.isEmpty { Divider() }
+                    Button("清除记录") { store.clearRecents() }.disabled(store.recents.items.isEmpty)
+                }
             }
             CommandGroup(replacing: .saveItem) {
                 Button("保存") { store.save() }.keyboardShortcut("s")
@@ -96,11 +112,28 @@ struct AtlasApp: App {
             }
         }
 
+        // 单窗口：一次编辑一份文档；WindowGroup 会为 Finder 打开文件等外部事件再开新窗口。
+        Window("ui-atlas", id: Self.editorWindowID) {
+            WorkspaceView(store: store)
+                .frame(minWidth: 960, minHeight: 620)
+                .preferredColorScheme(store.colorScheme)
+                .modifier(WindowActions(store: store, start: start))
+        }
+        .defaultSize(width: 1440, height: 940)
+
         Window("MCP 连接器", id: ConnectorsMenuItem.windowID) {
             ConnectorsView(model: store.connectors)
                 .preferredColorScheme(store.colorScheme)
         }
         .windowResizability(.contentSize)
+    }
+
+    /// 第一个窗口出现时读取源码位置、打开启动过程中收到的文件并启动控制通道。
+    private func start() {
+        guard delegate.store == nil else { return }
+        store.bootstrap()
+        delegate.attach(store)
+        delegate.startControl(store)
     }
 
     /// 文字输入框有焦点时撤销交给输入框，否则撤销设计文档。
@@ -120,5 +153,24 @@ private struct ConnectorsMenuItem: View {
 
     var body: some View {
         Button("MCP 连接器…") { openWindow(id: Self.windowID) }
+    }
+}
+
+/// 向 store 登记切换窗口的动作：打开编辑窗口，再关闭启动窗口。
+private struct WindowActions: ViewModifier {
+    let store: AtlasStore
+    let start: () -> Void
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            store.presentEditor = { [openWindow, dismissWindow] in
+                openWindow(id: AtlasApp.editorWindowID)
+                // 编辑窗口出现后再关闭启动窗口，避免一瞬间没有窗口而退出 App。
+                DispatchQueue.main.async { dismissWindow(id: AtlasApp.launchWindowID) }
+            }
+            start()
+        }
     }
 }
