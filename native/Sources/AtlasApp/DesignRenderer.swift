@@ -17,7 +17,7 @@ final class DesignRenderer {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             for layer in layers.values where layer is TextLayer || layer.contents != nil {
-                layer.contentsScale = contentsScale
+                layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
                 if layer is TextLayer { layer.setNeedsDisplay() }
             }
             CATransaction.commit()
@@ -65,7 +65,7 @@ final class DesignRenderer {
             var shallow = node
             shallow.children = []
             if applied[node.id] != shallow {
-                Self.apply(node, to: target, previous: applied[node.id])
+                Self.apply(node, to: target, previous: applied[node.id], scale: contentsScale)
                 applied[node.id] = shallow
             }
             syncChildren(of: target, node.children, seen: &seen)
@@ -94,9 +94,18 @@ final class DesignRenderer {
         color.map { CGColor(srgbRed: $0.r, green: $0.g, blue: $0.b, alpha: $0.a) }
     }
 
-    static func apply(_ node: DesignNode, to layer: CALayer, previous: DesignNode?) {
+    /// 位图边长上限：放大很多倍时，大尺寸文字或图片不按完整倍率光栅化，避免巨大的位图。
+    static let maximumRasterSide: CGFloat = 8192
+
+    static func rasterScale(_ scale: CGFloat, for size: CGSize) -> CGFloat {
+        let side = max(size.width, size.height, 1)
+        return max(1, min(scale, maximumRasterSide / side))
+    }
+
+    static func apply(_ node: DesignNode, to layer: CALayer, previous: DesignNode?, scale: CGFloat) {
         layer.position = CGPoint(x: node.x, y: node.y)
         layer.bounds = CGRect(x: 0, y: 0, width: node.width, height: node.height)
+        if node.type == .text || node.type == .image { layer.contentsScale = rasterScale(scale, for: layer.bounds.size) }
         layer.isHidden = !node.visible
         layer.opacity = Float(node.opacity)
         let stroke = node.stroke.flatMap { $0.width > 0 ? $0 : nil }
@@ -142,8 +151,11 @@ final class DesignRenderer {
         placed.y = 0
         placed.visible = true
         renderer.sync([placed])
-        let width = max(1, Int((node.width * scale).rounded(.up)))
-        let height = max(1, Int((node.height * scale).rounded(.up)))
+        let pixels = (width: (node.width * scale).rounded(.up), height: (node.height * scale).rounded(.up))
+        guard pixels.width <= 16_384, pixels.height <= 16_384 else {
+            throw ControlCommandError("截图过大（\(Int(pixels.width))×\(Int(pixels.height)) 像素），请减小 scale")
+        }
+        let width = max(1, Int(pixels.width)), height = max(1, Int(pixels.height))
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {

@@ -99,3 +99,9 @@ import Testing
     #expect(upper >= 0 && lower >= 0)
     #expect(upper + 5 < lower)
 }
+
+@Test @MainActor func largeLayersAreRasterizedBelowTheBitmapLimit() {
+    #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 100, height: 20)) == 8)
+    #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 4096, height: 100)) == 2)
+    #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 100_000, height: 100)) == 1)
+}

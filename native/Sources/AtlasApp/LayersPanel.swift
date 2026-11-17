@@ -23,23 +23,26 @@ struct LayersPanel: View {
     @State private var draftName = ""
     @FocusState private var renameFocused: Bool
 
+    /// 一行只带自身属性（不含子树），列表比较的开销与图层数成线性关系。
     private struct Row: Identifiable {
         let node: DesignNode
+        let hasChildren: Bool
         let depth: Int
-        let parentLayout: Bool
         var id: String { node.id }
     }
 
     private var rows: [Row] {
         var result: [Row] = []
-        func visit(_ nodes: [DesignNode], depth: Int, parentLayout: Bool) {
+        func visit(_ nodes: [DesignNode], depth: Int) {
             // 列表里上层在前。
             for node in nodes.reversed() {
-                result.append(Row(node: node, depth: depth, parentLayout: parentLayout))
-                if !collapsed.contains(node.id) { visit(node.children, depth: depth + 1, parentLayout: node.layout != nil) }
+                var shallow = node
+                shallow.children = []
+                result.append(Row(node: shallow, hasChildren: !node.children.isEmpty, depth: depth))
+                if !collapsed.contains(node.id) { visit(node.children, depth: depth + 1) }
             }
         }
-        visit(store.document.nodes, depth: 0, parentLayout: false)
+        visit(store.document.nodes, depth: 0)
         return result
     }
 
@@ -78,7 +81,7 @@ struct LayersPanel: View {
                     .font(.system(size: 9, weight: .semibold)).frame(width: 12)
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
-            .opacity(node.children.isEmpty ? 0 : 1).disabled(node.children.isEmpty)
+            .opacity(row.hasChildren ? 1 : 0).disabled(!row.hasChildren)
             .accessibilityLabel(collapsed.contains(node.id) ? "展开" : "折叠")
             Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
                 .font(.system(size: 11)).frame(width: 16).foregroundStyle(selected ? Color.accentColor : .secondary)

@@ -145,3 +145,16 @@ private func temporaryFile() -> URL {
     store.canvasEndGesture()
     #expect(store.document.node("r")?.x == 50)
 }
+
+@Test @MainActor func movingAParentWithItsSelectedChildMovesTheChildOnce() throws {
+    let store = makeStore()
+    var frame = DesignNode(id: "f", type: .frame, width: 300, height: 300)
+    frame.children = [DesignNode(id: "c", type: .rectangle, x: 10, y: 10)]
+    try store.perform("新建") { try $0.insert(frame, parent: nil, index: nil) }
+    store.canvasNudge(["f", "c"], by: Point(x: 5, y: 0))
+    #expect(store.editor.document.node("f")?.x == 5 && store.editor.document.node("c")?.x == 10)
+    store.canvasBeginGesture("移动图层")
+    store.canvasMove(["f": Point(x: 25, y: 0), "c": Point(x: 35, y: 10)])
+    store.canvasEndGesture()
+    #expect(store.editor.document.node("f")?.x == 25 && store.editor.document.worldRect("c")?.x == 35)
+}

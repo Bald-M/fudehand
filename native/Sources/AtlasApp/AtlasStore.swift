@@ -94,8 +94,9 @@ final class AtlasStore: ObservableObject {
         edit(name, coalescing: coalescing.map { "\(id).\($0)" }) { try $0.update(id, change) }
     }
 
-    func undo() { if editor.undo() { changed() } }
-    func redo() { if editor.redo() { changed() } }
+    /// 撤销、重做先结束画布上进行中的拖动，避免之后的拖动不再记录。
+    func undo() { canvas?.releaseHeldInput(); if editor.undo() { changed() } }
+    func redo() { canvas?.releaseHeldInput(); if editor.redo() { changed() } }
 
     func setSelection(_ ids: Set<String>) {
         guard ids != selection else { return }
@@ -132,7 +133,7 @@ final class AtlasStore: ObservableObject {
         let node = Self.newNode(type, id: id, rect: Rect(x: rect.x - origin.x, y: rect.y - origin.y, width: rect.width, height: rect.height),
                                 clicked: clicked)
         edit("新建\(type.title)") { try $0.insert(node, parent: parent?.id, index: nil) }
-        setSelection([id])
+        if editor.document.node(id) != nil { setSelection([id]) }
         tool = .move
     }
 
@@ -217,11 +218,12 @@ final class AtlasStore: ObservableObject {
     }
 
     func openDocument() {
-        guard confirmDiscard("打开其他文件") else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [Self.contentType]
         panel.title = "打开工程文件"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // 选好文件后再询问：选择期间 Agent 可能修改了文档。
+        guard confirmDiscard("打开其他文件") else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
 
@@ -260,7 +262,6 @@ final class AtlasStore: ObservableObject {
     }
 
     func write(to url: URL) throws {
-        editor.endGesture()
         try editor.document.encoded().write(to: url, options: .atomic)
         fileURL = url
         savedRevision = editor.revision
@@ -283,9 +284,15 @@ extension AtlasStore: CanvasHost {
         inGesture = true
     }
 
+    /// 选择中同时有父图层与其子图层时，只移动最外层的图层，子图层随父图层移动。
+    private func outermost(_ ids: Set<String>, in document: DesignDocument) -> Set<String> {
+        ids.filter { id in !document.ancestry(of: id).dropLast().contains(where: ids.contains) }
+    }
+
     func canvasMove(_ origins: [String: Point]) {
+        let roots = outermost(Set(origins.keys), in: editor.document)
         editor.applyLive { document in
-            for (id, target) in origins {
+            for (id, target) in origins where roots.contains(id) {
                 guard let current = document.worldRect(id) else { continue }
                 try? document.update(id) { $0.x += target.x - current.x; $0.y += target.y - current.y }
             }
@@ -326,7 +333,7 @@ extension AtlasStore: CanvasHost {
 
     func canvasNudge(_ ids: Set<String>, by delta: Point) {
         let document = editor.document
-        let movable = ids.filter { id in
+        let movable = outermost(ids, in: document).filter { id in
             guard let node = document.node(id), !node.locked, let parent = document.parentID(of: id) else { return false }
             return parent.flatMap { document.node($0)?.layout } == nil
         }

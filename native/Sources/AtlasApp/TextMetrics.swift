@@ -39,7 +39,20 @@ enum TextMetrics {
                                   attributes: [.font: font(text), .foregroundColor: color, .paragraphStyle: paragraph])
     }
 
+    private struct MeasureKey: Hashable { let text: DesignText; let maxWidth: Double? }
+    /// 布局在每次修改后都会重新测量全部文字；相同文字与宽度直接复用结果。只在主线程使用。
+    nonisolated(unsafe) private static var cache: [MeasureKey: Size] = [:]
+
     static let measure: TextMeasure = { text, maxWidth in
+        let key = MeasureKey(text: text, maxWidth: maxWidth)
+        if let hit = cache[key] { return hit }
+        let size = uncachedMeasure(text, maxWidth)
+        if cache.count >= 5000 { cache.removeAll(keepingCapacity: true) }
+        cache[key] = size
+        return size
+    }
+
+    private static func uncachedMeasure(_ text: DesignText, _ maxWidth: Double?) -> Size {
         let framesetter = CTFramesetterCreateWithAttributedString(attributed(text))
         let constraint = CGSize(width: maxWidth.map { CGFloat(max($0, 1)) } ?? .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRange(), nil, constraint, nil)

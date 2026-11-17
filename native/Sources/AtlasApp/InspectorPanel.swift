@@ -37,7 +37,7 @@ private struct DesignInspector: View {
                 } else if selected.count > 1 {
                     Section(title: "已选 \(selected.count) 个图层") {
                         SliderRow(label: "透明度", value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
-                            store.edit("修改透明度", coalescing: "selection.opacity") { document in
+                            store.edit("修改透明度", coalescing: "\(selected.map(\.id).sorted().joined(separator: ",")).opacity") { document in
                                 for node in selected { try document.update(node.id) { $0.opacity = value } }
                             }
                         }
@@ -102,13 +102,14 @@ private struct NumberField: View {
 
     private func submit() {
         guard let number = Double(text.trimmingCharacters(in: .whitespaces)), number.isFinite else { text = Self.format(value); return }
-        let clamped = minimum.map { max($0, number) } ?? number
+        let limit = DesignJSON.maximumMagnitude
+        let clamped = min(limit, max(minimum ?? -limit, number))
         if clamped != value { commit(clamped) }
         text = Self.format(clamped)
     }
 
     static func format(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+        value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.1f", value)
     }
 }
 

@@ -22,6 +22,7 @@ private func textNode() -> DesignNode {
     let rect = DesignNode(id: "r", type: .rectangle)
     #expect(patchMessage(["opacity": 2], on: rect) == "图层 r：opacity 不能大于 1")
     #expect(patchMessage(["x": "3"], on: rect) == "图层 r：x 应为数字")
+    #expect(patchMessage(["x": 1e20], on: rect) == "图层 r：x 超出范围（绝对值不能大于 1000000）")
     #expect(patchMessage(["visible": 1], on: rect) == "图层 r：visible 应为 true 或 false")
     #expect(patchMessage(["layout": ["spacing": 4]], on: DesignNode(id: "e", type: .ellipse)) == "图层 e：ellipse 不支持 layout")
     #expect(patchMessage(["id": "x"], on: rect) == "图层 r：不能修改 id")

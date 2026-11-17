@@ -8,6 +8,9 @@ public enum DesignJSON {
     /// 修改时逐字段合并的嵌套对象。
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
+    /// 所有数值字段的绝对值上限。
+    public static let maximumMagnitude = 1_000_000.0
+
     static func isBool(_ number: NSNumber) -> Bool { CFGetTypeID(number) == CFBooleanGetTypeID() }
 
     // MARK: Reading
@@ -39,6 +42,8 @@ public enum DesignJSON {
                 throw fail("\(name(key)) 应为数字")
             }
             let result = number.doubleValue
+            // 坐标与尺寸限制在合理范围内，避免极端值让渲染和界面换算溢出。
+            guard abs(result) <= DesignJSON.maximumMagnitude else { throw fail("\(name(key)) 超出范围（绝对值不能大于 1000000）") }
             if let min, result < min { throw fail(min == 0 ? "\(name(key)) 不能为负数" : "\(name(key)) 不能小于 \(format(min))") }
             if let max, result > max { throw fail("\(name(key)) 不能大于 \(format(max))") }
             return result
@@ -93,7 +98,8 @@ public enum DesignJSON {
     /// 从 JSON 对象构建并校验一个节点（含子节点）。`id` 必须已存在。
     public static func node(from value: Any) throws -> DesignNode {
         guard let object = value as? [String: Any] else { throw DesignError("图层应为 JSON 对象") }
-        guard let id = object["id"] as? String, !id.isEmpty else { throw DesignError("图层缺少 id") }
+        guard let raw = object["id"] else { throw DesignError("图层缺少 id") }
+        guard let id = raw as? String, !id.isEmpty else { throw DesignError("图层 id 应为非空字符串") }
         let reader = Reader(object: object, owner: id, path: "")
         try reader.checkKeys(nodeKeys)
         let typeName = try reader.string("type")

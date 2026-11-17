@@ -9,22 +9,22 @@ public enum DesignLayout {
         // 宽度在自顶向下阶段才确定，会影响折行文字的高度和 hug 父节点，所以运行两遍。
         for _ in 0..<2 {
             for index in nodes.indices {
-                measureUp(&nodes[index], inAutoLayout: false, measure: measure)
+                measureUp(&nodes[index], parentLayout: nil, measure: measure)
                 layoutDown(&nodes[index])
             }
         }
     }
 
     /// 自底向上：文字尺寸、分组并集、hug 画框尺寸。
-    static func measureUp(_ node: inout DesignNode, inAutoLayout: Bool, measure: TextMeasure) {
-        let childrenInLayout = node.layout != nil
+    static func measureUp(_ node: inout DesignNode, parentLayout: AutoLayout?, measure: TextMeasure) {
         for index in node.children.indices {
-            measureUp(&node.children[index], inAutoLayout: childrenInLayout, measure: measure)
+            measureUp(&node.children[index], parentLayout: node.layout, measure: measure)
         }
         switch node.type {
         case .text:
             guard let text = node.text else { return }
-            let fillsWidth = inAutoLayout && node.sizing.horizontal == .fill
+            // 宽度由自动布局父图层决定（fill，或竖向布局的交叉轴拉伸）时不按内容收缩宽度。
+            let fillsWidth = parentLayout.map { $0.direction == .vertical && $0.crossAlign == .stretch || node.sizing.horizontal == .fill } ?? false
             let hugWidth = !fillsWidth && (text.autoResize == .widthAndHeight || node.sizing.horizontal == .hug)
             let hugHeight = text.autoResize != .none || node.sizing.vertical == .hug
             if hugWidth { node.width = measure(text, nil).width }

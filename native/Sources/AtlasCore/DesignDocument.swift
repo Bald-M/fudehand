@@ -8,7 +8,7 @@ public struct DesignError: LocalizedError, Equatable, Sendable {
 }
 
 /// sRGB 颜色，分量 0–1；文件中写作 `#RRGGBB` 或 `#RRGGBBAA`。
-public struct DesignColor: Equatable, Sendable {
+public struct DesignColor: Hashable, Sendable {
     public var r: Double, g: Double, b: Double, a: Double
     public init(r: Double, g: Double, b: Double, a: Double = 1) { self.r = r; self.g = g; self.b = b; self.a = a }
 
@@ -40,7 +40,7 @@ public struct DesignStroke: Equatable, Sendable {
 public enum TextAlign: String, Sendable, CaseIterable { case left, center, right }
 public enum TextAutoResize: String, Sendable, CaseIterable { case none, height, widthAndHeight = "width-and-height" }
 
-public struct DesignText: Equatable, Sendable {
+public struct DesignText: Hashable, Sendable {
     public var content: String
     public var fontSize: Double
     public var fontWeight: Int

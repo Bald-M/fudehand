@@ -138,7 +138,7 @@ extension DesignDocument {
     /// 给 JSON 形式的新节点及其子节点补上缺少的 id，用于 Agent 创建图层。
     public static func assigningIDs(_ object: [String: Any], existing: inout Set<String>) -> [String: Any] {
         var result = object
-        if (result["id"] as? String)?.isEmpty ?? true {
+        if result["id"] == nil || result["id"] is NSNull || (result["id"] as? String)?.isEmpty == true {
             let id = newID(existing: existing)
             result["id"] = id
             existing.insert(id)
@@ -163,7 +163,10 @@ public struct DesignEditor {
         let name: String
         let before: DesignDocument
         let coalescing: String?
+        var time = Date()
     }
+    /// 相同合并键的修改在这段时间内连续发生才合并为一步。
+    public static let coalescingWindow: TimeInterval = 1.5
 
     public private(set) var document: DesignDocument
     /// 每次文档变化（含撤销、重做、替换）递增。
@@ -197,8 +200,12 @@ public struct DesignEditor {
         let result = try change(&next)
         DesignLayout.apply(to: &next.nodes, measure: measure)
         guard next != document else { return result }
-        if coalescing == nil || undoStack.last?.coalescing != coalescing || !redoStack.isEmpty {
-            push(Step(name: name, before: document, coalescing: coalescing))
+        let now = Date()
+        if coalescing == nil || undoStack.last?.coalescing != coalescing || !redoStack.isEmpty
+            || now.timeIntervalSince(undoStack.last?.time ?? .distantPast) > Self.coalescingWindow {
+            push(Step(name: name, before: document, coalescing: coalescing, time: now))
+        } else {
+            undoStack[undoStack.count - 1].time = now
         }
         redoStack.removeAll()
         document = next

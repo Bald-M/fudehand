@@ -87,6 +87,13 @@ private func laidOut(_ node: DesignNode) -> DesignNode {
     #expect(narrow.children[0].width == 50 && narrow.children[0].height == 40 && narrow.height == 40)
 }
 
+@Test func stretchedTextWrapsAtParentWidth() {
+    var text = DesignNode(id: "t", type: .text)
+    text.text = DesignText(content: String(repeating: "字", count: 50))
+    let frame = laidOut(autoFrame(AutoLayout(direction: .vertical, crossAlign: .stretch), sizing: Sizing(vertical: .hug), children: [text]))
+    #expect(frame.children[0].width == 200 && frame.children[0].height == 60 && frame.height == 60)
+}
+
 @Test func groupShrinksToChildren() {
     var group = DesignNode(id: "g", type: .group, x: 100, y: 100, width: 1, height: 1)
     var a = box("a", 10, 10); a.x = 20; a.y = 30
