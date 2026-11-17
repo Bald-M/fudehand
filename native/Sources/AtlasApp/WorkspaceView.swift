@@ -155,23 +155,17 @@ struct WorkspaceView: View {
                                      onSizeChange: store.resize,
                                      onCanvas: { store.canvas = $0 })
                             .clipped()
-                        canvasFooter(project)
+                        canvasFooter
                     }
                 }
             }
         }
     }
 
-    private func canvasFooter(_ project: Project) -> some View {
+    private var canvasFooter: some View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 16) {
-                ForEach(project.frames) { frame in
-                    Button { store.focusFrame(frame.id) } label: {
-                        Label(frame.platform == "mobile" ? "移动端" : frame.platform == "desktop" ? "桌面端" : "网页端",
-                              systemImage: frame.platform == "mobile" ? "iphone" : frame.platform == "desktop" ? "desktopcomputer" : "globe")
-                    }.buttonStyle(.borderless).help("聚焦 \(frame.title)")
-                }
                 Spacer()
                 Text("点选画框后可直接操作 · 空格拖动平移 · ⌘滚轮或捏合缩放 · Shift+1 适应全部").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }.padding(.horizontal, 20).padding(.vertical, 12)
