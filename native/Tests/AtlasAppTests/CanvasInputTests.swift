@@ -453,7 +453,7 @@ private final class CanvasHarness {
     // Sleeping yields the main actor so the 150ms idle timer can fire.
     try await Task.sleep(for: .milliseconds(300))
     #expect(settled.count == 1)
-    #expect((settled.first?.scale ?? 1) < 1)
+    #expect((settled.first?.scale ?? 1) > 1)
     #expect(abs(harness.canvas.worldBounds.width - 1000 / (settled.first?.scale ?? 1)) < 1e-6)
 }
 

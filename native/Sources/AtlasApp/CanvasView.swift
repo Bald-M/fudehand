@@ -466,7 +466,7 @@ final class AtlasCanvasView: NSView {
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
             let point = convert(event.locationInWindow, from: nil)
             setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y),
-                                                  scale: viewport.scale * exp(-delta.y * 0.01)), zooming: true)
+                                                  scale: CanvasGeometry.wheelZoomScale(viewport.scale, deltaY: delta.y)), zooming: true)
         } else {
             setLiveViewport(Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale), zooming: false)
         }
