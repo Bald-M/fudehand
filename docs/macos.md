@@ -24,6 +24,7 @@ SwiftPM 构建和模块缓存默认写到系统临时目录。`UI_ATLAS_SWIFT_SC
 - 文件菜单：新建 ⌘N、打开 ⌘O、保存 ⌘S、另存为 ⇧⌘S。工程文件扩展名为 `.uiatlas`，内容是带版本号的 JSON（格式见 [设计文档](superpowers/specs/2026-11-17-native-design-document-design.md#文档格式atlascoredesigndocumentswift)）。
 - 有未保存修改时，窗口标题带“已编辑”；新建、打开或退出前会询问是否保存。
 - 打开格式错误或由更新版本创建的文件时显示具体原因，当前文档保持不变。
+- App 在 Info.plist 中导出 `.uiatlas` 文件类型（`local.ui-atlas.design`，符合 JSON）并登记为它的编辑器：构建后 Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开工程文件；App 只有一个窗口，打开文件时替换当前文档（有未保存修改先询问）。
 
 ## 画布操作
 

@@ -272,8 +272,20 @@ final class AtlasStore: ObservableObject {
         savedRevision = editor.revision
     }
 
+    /// 工程文件的统一类型标识，在 Info.plist 中导出（扩展名 .uiatlas，符合 public.json）。
+    /// 必须用已导出的类型：按扩展名临时合成的动态类型与系统给文件的类型不同，打开面板会把文件判为不可选（#50）。
+    static let contentTypeIdentifier = "local.ui-atlas.design"
+
     static var contentType: UTType {
-        UTType(filenameExtension: DesignDocument.fileExtension, conformingTo: .json) ?? .json
+        UTType(exportedAs: contentTypeIdentifier, conformingTo: .json)
+    }
+
+    /// Finder 双击或“打开方式”传来的工程文件：有未保存修改时先询问，打不开时显示原因。
+    func openFromSystem(_ url: URL) {
+        let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
+        guard !current || isDirty else { return }
+        guard confirmDiscard(current ? "重新打开文件" : "打开其他文件") else { return }
+        do { try open(url) } catch { alert = error.localizedDescription }
     }
 
     func shutdown() async { await chat.shutdown() }
