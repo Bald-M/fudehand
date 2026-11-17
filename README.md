@@ -128,4 +128,15 @@ pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
 
 `pnpm test:native` runs the Swift tests (AtlasCoreTests and AtlasAppTests); `pnpm check` runs Vitest (MCP tools, the MCP server, and the chat harness). The Node tests start child processes and local sockets, so they need loopback networking; a sandbox that forbids listening on local ports makes them fail spuriously.
 
+## Releasing
+
+Before a release, unify the version number, then archive the release in the [CHANGELOG](CHANGELOG.md) by hand and update the current version at the top of this README:
+
+```bash
+pnpm version:set 0.0.2   # set the version in package.json and Info.plist; bump the build number (CFBundleVersion) by 1
+pnpm version:check       # check that every location agrees; lists the differences and exits non-zero otherwise
+```
+
+The MCP server reads its version from `package.json` at runtime; the App's About window shows the version from `native/Resources/Info.plist`.
+
 The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas) and released under the Apache-2.0 license. The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.
