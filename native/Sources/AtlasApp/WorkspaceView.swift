@@ -18,7 +18,7 @@ struct WorkspaceView: View {
             sidebar.navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         } detail: {
             detail
-                .navigationTitle(store.project?.title ?? "界面图鉴")
+                .navigationTitle(store.project?.title ?? "ui-atlas")
                 .navigationSubtitle("本地界面学习画布")
         }
         .inspector(isPresented: $store.showingChat) {
@@ -36,7 +36,7 @@ struct WorkspaceView: View {
             HStack(spacing: 10) {
                 Image(systemName: "square.stack.3d.up.fill").font(.title2).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("界面图鉴").font(.headline)
+                    Text("ui-atlas").font(.headline)
                     Text("收集界面，拆解设计").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -142,7 +142,7 @@ struct WorkspaceView: View {
     @ViewBuilder private var detail: some View {
         if store.catalog == nil {
             ContentUnavailableView {
-                Label("打开你的界面图鉴", systemImage: "square.stack.3d.up")
+                Label("打开你的 ui-atlas", systemImage: "square.stack.3d.up")
             } description: { Text("选择包含 catalog.json 的项目目录，开始浏览和比较界面。") }
             actions: { Button("打开项目目录…") { store.chooseWorkspace() }.buttonStyle(.borderedProminent) }
         } else if store.project == nil {

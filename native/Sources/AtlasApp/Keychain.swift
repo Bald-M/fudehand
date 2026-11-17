@@ -3,7 +3,7 @@ import Security
 
 /// 模型 API key 只保存在当前用户的钥匙串中，按模型提供方区分。
 enum Keychain {
-    private static let service = "界面图鉴.agent"
+    private static let service = "ui-atlas.agent"
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]

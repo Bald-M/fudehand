@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 
 export async function buildNativeApp({ configuration = 'release' } = {}) {
   const scratch = await runSwift('build', { configuration })
-  const app = join(root, 'dist', '界面图鉴.app')
+  const app = join(root, 'dist', 'ui-atlas.app')
   const contents = join(app, 'Contents')
   await mkdir(join(contents, 'MacOS'), { recursive: true })
   await mkdir(join(contents, 'Resources'), { recursive: true })

@@ -1,6 +1,6 @@
 import Foundation
 
-/// 画框网页的一条控制台记录。`source` 为 console（console.*）、exception（未捕获错误）或 atlas（界面图鉴自己的分界记录）。
+/// 画框网页的一条控制台记录。`source` 为 console（console.*）、exception（未捕获错误）或 atlas（ui-atlas 自己的分界记录）。
 public struct ConsoleEntry: Equatable, Sendable {
     public let level: String
     public let source: String

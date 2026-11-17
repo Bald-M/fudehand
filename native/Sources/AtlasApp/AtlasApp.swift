@@ -11,11 +11,11 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     func startControl(_ store: AtlasStore) {
         guard control == nil else { return }
         let server = ControlServer { [weak store] command in
-            guard let store else { throw ControlCommandError("界面图鉴正在退出") }
+            guard let store else { throw ControlCommandError("ui-atlas 正在退出") }
             return try await store.handleControl(command)
         }
         do { try server.start(); control = server }
-        catch { FileHandle.standardError.write(Data("[界面图鉴] 控制通道未启动：\(error.localizedDescription)\n".utf8)) }
+        catch { FileHandle.standardError.write(Data("[ui-atlas] 控制通道未启动：\(error.localizedDescription)\n".utf8)) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -43,7 +43,7 @@ struct AtlasApp: App {
     @StateObject private var store = AtlasStore()
 
     var body: some Scene {
-        WindowGroup("界面图鉴") {
+        WindowGroup("ui-atlas") {
             WorkspaceView(store: store, session: store.session)
                 .frame(minWidth: 900, minHeight: 620)
                 .preferredColorScheme(store.colorScheme)

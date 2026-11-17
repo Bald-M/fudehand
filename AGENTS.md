@@ -8,7 +8,7 @@
 
 任务直接用 `gh issue` 在 GitHub Issues（`Bald-M/ui-atlas`）创建和跟踪，不在本地维护任务记录。
 
-### 界面图鉴 MCP
+### ui-atlas MCP
 
 本仓库提供 `ui-atlas` MCP server（`scripts/mcp-server.mjs`），可读写作品与画框，并在 App 运行时操作画布、截取画框。Codex 在 `~/.codex/config.toml` 中配置：
 

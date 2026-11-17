@@ -128,7 +128,7 @@ final class AtlasStore: ObservableObject {
 
     func chooseWorkspace() {
         let panel = NSOpenPanel()
-        panel.title = "选择界面图鉴项目目录"
+        panel.title = "选择 ui-atlas 项目目录"
         panel.message = "选择包含 catalog.json 和 examples 的仓库目录。"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
