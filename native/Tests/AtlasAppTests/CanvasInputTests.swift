@@ -300,16 +300,38 @@ private final class CanvasHarness {
     defer { harness.dispose() }
     let canvas = harness.canvas
     // A gesture that starts over empty canvas stays on the canvas as it slides over the active page.
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: .ended, momentum: [], overActivePage: true, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: [], momentum: .changed, overActivePage: true, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, zoomModifier: false) == .canvas)
-    // The next gesture starts over the page and keeps scrolling it, even with zoom held only for its own events.
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, zoomModifier: false) == .page)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, zoomModifier: true) == .canvas)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .page)
-    #expect(canvas.routeScroll(phase: [], momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .ended, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: [], momentum: .changed, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    // A plain gesture over the active page still pans the canvas; ⌥ at gesture start scrolls the page.
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
+    // A ⌥ gesture over the page keeps scrolling it after ⌥ is released, even with zoom held only for its own events.
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: true, zoomModifier: false) == .page)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: true) == .canvas)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .page)
+    #expect(canvas.routeScroll(phase: [], momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
+}
+
+@Test @MainActor func wheelOverActivePagePansCanvasUnlessOptionHeld() throws {
+    let harness = CanvasHarness()
+    defer { harness.dispose() }
+    select(harness)
+    try #require(harness.canvas.frames["a"]).isReady = true
+    let point = NSPoint(x: 100, y: 150)
+    func wheel(_ flags: CGEventFlags) throws -> NSEvent {
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -40, wheel2: 0, wheel3: 0))
+        cg.flags = flags
+        return try #require(NSEvent(cgEvent: cg))
+    }
+    let start = harness.canvas.worldBounds
+    #expect(harness.canvas.routeScrollEvent(try wheel([]), at: point) == nil)
+    let panned = harness.canvas.worldBounds
+    #expect(panned != start)
+    _ = harness.canvas.routeScrollEvent(try wheel(.maskAlternate), at: point)
+    #expect(harness.canvas.worldBounds == panned)
 }
 
 @Test @MainActor func arrowKeysAreIgnoredDuringADrag() throws {
@@ -329,9 +351,9 @@ private final class CanvasHarness {
     defer { harness.dispose() }
     let canvas = harness.canvas
     select(harness)
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, zoomModifier: false) == .page)
+    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: true, zoomModifier: false) == .page)
     select(harness, at: NSPoint(x: 500, y: 600))
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, zoomModifier: false) == .canvas)
+    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
 }
 
 @Test func frameIntervalLogCountsHitchesOncePerSecond() {
