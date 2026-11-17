@@ -34,7 +34,7 @@ native/                    SwiftUI + AppKit 原生 App 与 Swift 测试
 examples/still/            Vue 三端案例
 examples/form/             React 案例
 catalog.json               作品资料、画框与启动配置的权威来源
-scripts/                   原生构建、测试，以及案例服务的启动与清理
+scripts/                   原生构建、测试、案例服务的启动与清理，以及 MCP server 与 Agent harness
 ```
 
 新增案例时，把源码放到 `examples/<作品名>/`，在 `catalog.json` 的 `projects` 中加入一项：
@@ -118,6 +118,45 @@ export default defineConfig({
 App 直接访问案例端口，不把案例代理到统一子路径，从而保留静态资源路径、前端路由和热更新连接。依赖真实业务服务的源码应先改为本地模拟或准备其原有运行环境；本项目不创建业务后端。
 
 任意网上链接可能被目标网站的嵌入策略阻止。这里用于展示已经在本地运行的页面，不提供绕过网站限制的功能。
+
+## AI Agent 接入
+
+界面图鉴为 AI Agent 提供一组工具，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md)：
+
+- **作品数据层**（无需 App 运行）：`list_projects`、`get_project`、`get_preview_urls`、`add_frame`、`update_frame`、`remove_frame`、`set_project_enabled`。写入 `catalog.json` 前使用与启动器相同的校验，失败时返回中文错误且不改文件。App 只在打开项目时读取目录，改完后用 `canvas_restart_preview` 或“重新读取目录并启动服务”生效。
+- **画布控制层**（需要 App 正在运行）：`canvas_get_state`、`canvas_select_project`、`canvas_focus_frame`、`canvas_fit_all`、`canvas_zoom`、`canvas_reset`、`canvas_restart_preview`，以及返回画框实际渲染截图的 `frame_snapshot`。App 未运行时返回“界面图鉴未运行”。
+
+画布工具经 App 的**控制通道**通信：`~/Library/Application Support/界面图鉴/control.sock`，只对当前用户开放，不监听网络地址。
+
+### Claude Code
+
+仓库根目录的 `.mcp.json` 已注册 `ui-atlas`。在仓库根目录启动 `claude`，首次会询问是否启用项目 MCP server，同意后即可在 `/mcp` 中看到它。
+
+### Codex
+
+在 `~/.codex/config.toml` 中加入（路径换成本检出目录的绝对路径）：
+
+```toml
+[mcp_servers.ui-atlas]
+command = "node"
+args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+```
+
+也可以执行 `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`。MCP server 默认使用脚本所在的仓库目录，需要指向其他检出目录时追加 `--root <目录>`。
+
+### App 内对话面板
+
+点击工具栏的“对话”按钮（⌘⇧A）打开对话面板，可以直接让 AI 列出作品、增删画框或聚焦画框；每次工具调用和结果都显示在面板中，可展开查看详情。回复过程中可以停止，停止后不再执行后续工具调用。
+
+在面板的“模型设置”中选择模型提供方并填写 API key：
+
+| 模型提供方 | 接口 | 默认接口地址 | 默认模型 |
+| --- | --- | --- | --- |
+| DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-chat` |
+| Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
+| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5-codex` |
+
+“模型”和“接口地址”留空时使用上表默认值；OpenAI 的 Codex 系列模型只支持 Responses API；其他兼容 OpenAI Chat Completions 的服务可以选 DeepSeek 并填写自己的接口地址和模型名。API key 只保存在本机钥匙串（服务名 `界面图鉴.agent`），由 App 在启动对话程序（Agent harness，`scripts/agent-chat.mjs`）时经环境变量传入，不写入仓库、`catalog.json`、偏好设置或日志。
 
 ## 验证与排查
 
