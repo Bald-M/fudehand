@@ -65,11 +65,11 @@ private func temporaryFile() -> URL {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "e", "type": "ellipse"])))
     let revision = store.editor.revision
-    #expect(await failure(store, .updateNode("e", changes: JSONObject(["layout": ["spacing": 4]]))) == "图层 e：ellipse 不支持 layout")
-    #expect(await failure(store, .createNode(parent: "e", index: nil, node: JSONObject(["type": "rectangle"]))) == "图层 e 不能包含子图层")
-    #expect(await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "star"])))?.contains("未知类型 star") == true)
-    #expect(await failure(store, .getNode("zz")) == "找不到图层：zz")
-    #expect(await failure(store, .select(["zz"])) == "找不到图层：zz")
+    #expect(await failure(store, .updateNode("e", changes: JSONObject(["layout": ["spacing": 4]]))) == "Layer e: ellipse does not support layout")
+    #expect(await failure(store, .createNode(parent: "e", index: nil, node: JSONObject(["type": "rectangle"]))) == "Layer e cannot contain child layers")
+    #expect(await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "star"])))?.contains("unknown type star") == true)
+    #expect(await failure(store, .getNode("zz")) == "Layer not found: zz")
+    #expect(await failure(store, .select(["zz"])) == "Layer not found: zz")
     #expect(store.editor.revision == revision)
 }
 
@@ -80,7 +80,7 @@ private func temporaryFile() -> URL {
     ])))
     let url = temporaryFile()
     defer { try? FileManager.default.removeItem(at: url) }
-    #expect(await failure(store, .saveDocument(nil)) == "文档还没有保存过，请提供 path")
+    #expect(await failure(store, .saveDocument(nil)) == "The document has never been saved; provide path")
     let saved = try await control(store, .saveDocument(url.path))
     #expect(saved["dirty"] as? Bool == false && saved["file"] as? String == url.path)
     let expected = store.editor.document
@@ -88,7 +88,7 @@ private func temporaryFile() -> URL {
     #expect(text.contains("\"format\" : \"ui-atlas.design\"") && text.contains("\"version\" : 1"))
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "ellipse"])))
-    #expect(await failure(store, .newDocument(discard: false)) == "当前文档有未保存的修改；先保存，或传 discard: true 放弃修改")
+    #expect(await failure(store, .newDocument(discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
     _ = try await control(store, .newDocument(discard: true))
     #expect(store.editor.document.nodes.isEmpty && !store.canUndo)
 
@@ -104,7 +104,7 @@ private func temporaryFile() -> URL {
     let bad = temporaryFile()
     try Data(#"{"format":"ui-atlas.design","version":9,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "文件由更新版本的 ui-atlas 创建（格式版本 9），请升级后再打开")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of ui-atlas (format version 9); upgrade ui-atlas to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 

@@ -159,7 +159,7 @@ final class AtlasStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
-            guard let image = DesignRenderer.cgImage(data) else { throw DesignError("无法读取图片：\(url.lastPathComponent)") }
+            guard let image = DesignRenderer.cgImage(data) else { throw DesignError("Could not read image: \(url.lastPathComponent)") }
             let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
             let width = Double(image.width) / 2, height = Double(image.height) / 2
             let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
@@ -244,7 +244,7 @@ final class AtlasStore: ObservableObject {
     /// 读取并校验工程文件；失败时当前文档不变。
     func open(_ url: URL) throws {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw DesignError("无法读取文件：\(url.lastPathComponent)") }
+        do { data = try Data(contentsOf: url) } catch { throw DesignError("Could not read file: \(url.lastPathComponent)") }
         replace(try DesignDocument.decode(data), url: url)
     }
 
@@ -327,7 +327,7 @@ final class AtlasStore: ObservableObject {
 
     func openTemplate(_ url: URL) throws {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw DesignError("无法读取模板：\(url.lastPathComponent)") }
+        do { data = try Data(contentsOf: url) } catch { throw DesignError("Could not read template: \(url.lastPathComponent)") }
         replace(try DesignDocument.decode(data), url: nil)
     }
 

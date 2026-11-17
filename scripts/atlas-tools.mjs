@@ -20,7 +20,7 @@ async function inlineImages(value, root) {
   if (result.image && typeof result.image === 'object' && typeof result.image.path === 'string') {
     const { path, ...image } = result.image
     let data
-    try { data = await readFile(absolute(path, root)) } catch { throw new Error(`无法读取图片：${path}`) }
+    try { data = await readFile(absolute(path, root)) } catch { throw new Error(`Could not read image: ${path}`) }
     result.image = { ...image, data: data.toString('base64') }
   }
   if (Array.isArray(result.children)) result.children = await inlineImages(result.children, root)
@@ -99,11 +99,11 @@ export const tools = [
   },
 ]
 
-/** 调用工具；任何错误都转为带中文消息的错误结果，而不是抛出。 */
+/** Calls a tool; any error becomes an error result carrying its message instead of being thrown. */
 export async function callTool(name, args, ctx) {
   const tool = tools.find(item => item.name === name)
   try {
-    if (!tool) throw new Error(`未知工具：${name}`)
+    if (!tool) throw new Error(`Unknown tool: ${name}`)
     return await tool.run(args ?? {}, ctx)
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }

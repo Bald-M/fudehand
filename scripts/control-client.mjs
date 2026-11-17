@@ -25,10 +25,10 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
     }
     // StringDecoder 保证多字节字符跨数据块时不被截断。
     socket.setEncoding('utf8')
-    socket.setTimeout(timeoutMs, () => finish(new Error('ui-atlas 没有响应')))
+    socket.setTimeout(timeoutMs, () => finish(new Error('ui-atlas did not respond')))
     socket.once('error', error => finish(new Error(
-      ['ENOENT', 'ECONNREFUSED', 'ENOTSOCK'].includes(error.code) ? 'ui-atlas 未运行'
-        : ['ECONNRESET', 'EPIPE'].includes(error.code) ? 'ui-atlas 提前关闭了连接' : error.message,
+      ['ENOENT', 'ECONNREFUSED', 'ENOTSOCK'].includes(error.code) ? 'ui-atlas is not running'
+        : ['ECONNRESET', 'EPIPE'].includes(error.code) ? 'ui-atlas closed the connection early' : error.message,
     )))
     socket.once('connect', () => socket.write(JSON.stringify({ id, command, args }) + '\n'))
     socket.on('data', chunk => {
@@ -36,10 +36,10 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
       if (end < 0) { chunks.push(chunk); return }
       chunks.push(chunk.slice(0, end))
       let response
-      try { response = JSON.parse(chunks.join('')) } catch { return finish(new Error('ui-atlas 返回了无法解析的响应')) }
+      try { response = JSON.parse(chunks.join('')) } catch { return finish(new Error('ui-atlas returned an unparseable response')) }
       if (response.ok) finish(null, response.result)
-      else finish(new Error(response.error || 'ui-atlas 返回了错误'))
+      else finish(new Error(response.error || 'ui-atlas returned an error'))
     })
-    socket.once('end', () => finish(new Error('ui-atlas 提前关闭了连接')))
+    socket.once('end', () => finish(new Error('ui-atlas closed the connection early')))
   })
 }

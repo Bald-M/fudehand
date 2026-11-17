@@ -21,11 +21,11 @@ public enum DesignJSON {
         let owner: String
         let path: String
 
-        func fail(_ text: String) -> DesignError { DesignError("图层 \(owner)：\(text)") }
+        func fail(_ text: String) -> DesignError { DesignError("Layer \(owner): \(text)") }
         func name(_ key: String) -> String { path.isEmpty ? key : "\(path).\(key)" }
 
         func checkKeys(_ allowed: Set<String>) throws {
-            if let unknown = object.keys.filter({ !allowed.contains($0) }).sorted().first { throw fail("不支持字段 \(name(unknown))") }
+            if let unknown = object.keys.filter({ !allowed.contains($0) }).sorted().first { throw fail("unsupported field \(name(unknown))") }
         }
 
         func value(_ key: String) -> Any? {
@@ -36,16 +36,16 @@ public enum DesignJSON {
         func number(_ key: String, default fallback: Double? = nil, min: Double? = nil, max: Double? = nil) throws -> Double {
             guard let raw = value(key) else {
                 if let fallback { return fallback }
-                throw fail("缺少 \(name(key))")
+                throw fail("missing \(name(key))")
             }
             guard let number = raw as? NSNumber, !DesignJSON.isBool(number), number.doubleValue.isFinite else {
-                throw fail("\(name(key)) 应为数字")
+                throw fail("\(name(key)) must be a number")
             }
             let result = number.doubleValue
             // 坐标与尺寸限制在合理范围内，避免极端值让渲染和界面换算溢出。
-            guard abs(result) <= DesignJSON.maximumMagnitude else { throw fail("\(name(key)) 超出范围（绝对值不能大于 1000000）") }
-            if let min, result < min { throw fail(min == 0 ? "\(name(key)) 不能为负数" : "\(name(key)) 不能小于 \(format(min))") }
-            if let max, result > max { throw fail("\(name(key)) 不能大于 \(format(max))") }
+            guard abs(result) <= DesignJSON.maximumMagnitude else { throw fail("\(name(key)) is out of range (absolute value must not exceed 1000000)") }
+            if let min, result < min { throw fail(min == 0 ? "\(name(key)) must not be negative" : "\(name(key)) must not be less than \(format(min))") }
+            if let max, result > max { throw fail("\(name(key)) must not be greater than \(format(max))") }
             return result
         }
 
@@ -55,16 +55,16 @@ public enum DesignJSON {
 
         func bool(_ key: String, default fallback: Bool) throws -> Bool {
             guard let raw = value(key) else { return fallback }
-            guard let number = raw as? NSNumber, DesignJSON.isBool(number) else { throw fail("\(name(key)) 应为 true 或 false") }
+            guard let number = raw as? NSNumber, DesignJSON.isBool(number) else { throw fail("\(name(key)) must be true or false") }
             return number.boolValue
         }
 
         func string(_ key: String, default fallback: String? = nil) throws -> String {
             guard let raw = value(key) else {
                 if let fallback { return fallback }
-                throw fail("缺少 \(name(key))")
+                throw fail("missing \(name(key))")
             }
-            guard let text = raw as? String else { throw fail("\(name(key)) 应为字符串") }
+            guard let text = raw as? String else { throw fail("\(name(key)) must be a string") }
             return text
         }
 
@@ -72,7 +72,7 @@ public enum DesignJSON {
             guard value(key) != nil else { return fallback }
             let text = try string(key)
             guard let result = T(rawValue: text) else {
-                throw fail("\(name(key)) 应为 \(T.allCases.map(\.rawValue).joined(separator: "、")) 之一，收到 \(text)")
+                throw fail("\(name(key)) must be one of \(T.allCases.map(\.rawValue).joined(separator: ", ")); got \(text)")
             }
             return result
         }
@@ -86,7 +86,7 @@ public enum DesignJSON {
 
         func child(_ key: String) throws -> Reader? {
             guard let raw = value(key) else { return nil }
-            guard let object = raw as? [String: Any] else { throw fail("\(name(key)) 应为对象") }
+            guard let object = raw as? [String: Any] else { throw fail("\(name(key)) must be an object") }
             return Reader(object: object, owner: owner, path: name(key))
         }
 
@@ -97,17 +97,17 @@ public enum DesignJSON {
 
     /// 从 JSON 对象构建并校验一个节点（含子节点）。`id` 必须已存在。
     public static func node(from value: Any) throws -> DesignNode {
-        guard let object = value as? [String: Any] else { throw DesignError("图层应为 JSON 对象") }
-        guard let raw = object["id"] else { throw DesignError("图层缺少 id") }
-        guard let id = raw as? String, !id.isEmpty else { throw DesignError("图层 id 应为非空字符串") }
+        guard let object = value as? [String: Any] else { throw DesignError("Layer must be a JSON object") }
+        guard let raw = object["id"] else { throw DesignError("Layer is missing id") }
+        guard let id = raw as? String, !id.isEmpty else { throw DesignError("Layer id must be a non-empty string") }
         let reader = Reader(object: object, owner: id, path: "")
         try reader.checkKeys(nodeKeys)
         let typeName = try reader.string("type")
         guard let type = NodeType(rawValue: typeName) else {
-            throw reader.fail("未知类型 \(typeName)，应为 \(NodeType.allCases.map(\.rawValue).joined(separator: "、")) 之一")
+            throw reader.fail("unknown type \(typeName); must be one of \(NodeType.allCases.map(\.rawValue).joined(separator: ", "))")
         }
         func unsupported(_ key: String, _ allowed: Bool) throws {
-            if !allowed, reader.value(key) != nil { throw reader.fail("\(type.rawValue) 不支持 \(key)") }
+            if !allowed, reader.value(key) != nil { throw reader.fail("\(type.rawValue) does not support \(key)") }
         }
         try unsupported("children", type.hasChildren)
         try unsupported("cornerRadius", type.hasCornerRadius)
@@ -135,7 +135,7 @@ public enum DesignJSON {
             node.sizing = Sizing(horizontal: try sizing.choice("horizontal", default: .fixed), vertical: try sizing.choice("vertical", default: .fixed))
         }
         if type == .text {
-            guard let text = try reader.child("text") else { throw reader.fail("文字图层缺少 text") }
+            guard let text = try reader.child("text") else { throw reader.fail("text layer is missing text") }
             try text.checkKeys(["content", "fontSize", "fontWeight", "fontFamily", "color", "align", "lineHeight", "autoResize"])
             let family = try text.string("fontFamily", default: "")
             node.text = DesignText(content: try text.string("content", default: ""),
@@ -148,11 +148,11 @@ public enum DesignJSON {
                                    autoResize: try text.choice("autoResize", default: .widthAndHeight))
         }
         if type == .image {
-            guard let image = try reader.child("image") else { throw reader.fail("图片图层缺少 image") }
+            guard let image = try reader.child("image") else { throw reader.fail("image layer is missing image") }
             try image.checkKeys(["data", "fit"])
             let encoded = try image.string("data")
             guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), isImage(data) else {
-                throw reader.fail("image.data 应为 base64 编码的 PNG 或 JPEG")
+                throw reader.fail("image.data must be a base64-encoded PNG or JPEG")
             }
             node.image = DesignImage(data: data, fit: try image.choice("fit", default: .fill))
         }
@@ -171,7 +171,7 @@ public enum DesignJSON {
                                      crossAlign: try layout.choice("crossAlign", default: .start))
         }
         if let children = reader.value("children") {
-            guard let list = children as? [Any] else { throw reader.fail("children 应为数组") }
+            guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
         }
         return node
@@ -224,7 +224,7 @@ public enum DesignJSON {
     /// 把部分字段补丁应用到节点：嵌套对象逐字段合并，null 清除字段；整体重新校验，失败时节点不变。
     public static func apply(_ changes: [String: Any], to node: inout DesignNode) throws {
         for key in ["id", "type", "children"] where changes[key] != nil {
-            throw DesignError("图层 \(node.id)：不能修改 \(key)")
+            throw DesignError("Layer \(node.id): cannot change \(key)")
         }
         var object = self.object(node, includeImageData: true, includeChildren: false)
         merge(changes, into: &object)

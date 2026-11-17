@@ -60,7 +60,7 @@ public struct ControlFailure: Error, Equatable, Sendable {
 public enum ControlProtocol {
     public static func parse(_ line: Data) -> Result<ControlRequest, ControlFailure> {
         guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
-            return .failure(ControlFailure(id: nil, message: "请求不是有效 JSON"))
+            return .failure(ControlFailure(id: nil, message: "Request is not valid JSON"))
         }
         let id: ControlID? = (object["id"] as? String).map(ControlID.string) ?? integer(object["id"]).map(ControlID.int)
         do {
@@ -83,22 +83,22 @@ public enum ControlProtocol {
     private struct Message: Error { let text: String }
 
     private static func command(_ object: [String: Any]) throws -> ControlCommand {
-        guard let name = object["command"] else { throw Message(text: "缺少参数：command") }
-        guard let name = name as? String else { throw Message(text: "参数类型错误：command") }
+        guard let name = object["command"] else { throw Message(text: "Missing argument: command") }
+        guard let name = name as? String else { throw Message(text: "Invalid argument type: command") }
         let args: [String: Any]
         switch object["args"] {
         case nil, is NSNull: args = [:]
         case let value as [String: Any]: args = value
-        default: throw Message(text: "参数类型错误：args")
+        default: throw Message(text: "Invalid argument type: args")
         }
         func string(_ key: String) throws -> String {
-            guard let value = args[key] else { throw Message(text: "缺少参数：\(key)") }
-            guard let text = value as? String, !text.isEmpty else { throw Message(text: "参数类型错误：\(key)") }
+            guard let value = args[key] else { throw Message(text: "Missing argument: \(key)") }
+            guard let text = value as? String, !text.isEmpty else { throw Message(text: "Invalid argument type: \(key)") }
             return text
         }
         func jsonObject(_ key: String) throws -> JSONObject {
-            guard let value = args[key] else { throw Message(text: "缺少参数：\(key)") }
-            guard let dictionary = value as? [String: Any] else { throw Message(text: "参数类型错误：\(key)") }
+            guard let value = args[key] else { throw Message(text: "Missing argument: \(key)") }
+            guard let dictionary = value as? [String: Any] else { throw Message(text: "Invalid argument type: \(key)") }
             return JSONObject(dictionary)
         }
         func optionalString(_ key: String) throws -> String? {
@@ -111,29 +111,29 @@ public enum ControlProtocol {
             switch args[key] {
             case nil, is NSNull: return nil
             case let value:
-                guard let index = integer(value), index >= 0 else { throw Message(text: "参数类型错误：\(key)") }
+                guard let index = integer(value), index >= 0 else { throw Message(text: "Invalid argument type: \(key)") }
                 return index
             }
         }
         func strings(_ key: String) throws -> [String] {
-            guard let value = args[key] else { throw Message(text: "缺少参数：\(key)") }
+            guard let value = args[key] else { throw Message(text: "Missing argument: \(key)") }
             guard let list = value as? [Any], list.allSatisfy({ ($0 as? String)?.isEmpty == false }) else {
-                throw Message(text: "参数类型错误：\(key)")
+                throw Message(text: "Invalid argument type: \(key)")
             }
             return list.map { $0 as! String }
         }
         func flag(_ key: String) throws -> Bool {
             guard let value = args[key], !(value is NSNull) else { return false }
-            guard let number = value as? NSNumber, isBool(number) else { throw Message(text: "参数类型错误：\(key)") }
+            guard let number = value as? NSNumber, isBool(number) else { throw Message(text: "Invalid argument type: \(key)") }
             return number.boolValue
         }
         func positive(_ key: String, default fallback: Double? = nil) throws -> Double {
             guard let value = args[key], !(value is NSNull) else {
                 if let fallback { return fallback }
-                throw Message(text: "缺少参数：\(key)")
+                throw Message(text: "Missing argument: \(key)")
             }
             guard let number = value as? NSNumber, !isBool(number), number.doubleValue.isFinite, number.doubleValue > 0 else {
-                throw Message(text: "参数类型错误：\(key)")
+                throw Message(text: "Invalid argument type: \(key)")
             }
             return number.doubleValue
         }
@@ -145,7 +145,7 @@ public enum ControlProtocol {
         case "update_node": return .updateNode(try string("id"), changes: try jsonObject("changes"))
         case "delete_nodes":
             let ids = try strings("ids")
-            guard !ids.isEmpty else { throw Message(text: "参数类型错误：ids") }
+            guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
             return .deleteNodes(ids)
         case "move_node": return .moveNode(try string("id"), parent: try optionalString("parent"), index: try optionalIndex("index"))
         case "select": return .select(try strings("ids"))
@@ -159,9 +159,9 @@ public enum ControlProtocol {
         case "zoom": return .zoom(try positive("scale"))
         case "node_snapshot":
             let scale = try positive("scale", default: 2)
-            guard scale <= 4 else { throw Message(text: "参数类型错误：scale") }
+            guard scale <= 4 else { throw Message(text: "Invalid argument type: scale") }
             return .nodeSnapshot(try string("id"), scale: scale)
-        default: throw Message(text: "未知命令：\(name)")
+        default: throw Message(text: "Unknown command: \(name)")
         }
     }
 
@@ -176,7 +176,7 @@ public enum ControlProtocol {
 
     private static func line(_ object: [String: Any]) -> Data {
         // JSONSerialization escapes newlines inside strings, so each response stays on one line.
-        var data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data(#"{"ok":false,"error":"响应无法编码"}"#.utf8)
+        var data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data(#"{"ok":false,"error":"Response could not be encoded"}"#.utf8)
         data.append(UInt8(ascii: "\n"))
         return data
     }
