@@ -5,6 +5,18 @@ import SwiftUI
 final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AtlasStore?
     private var quitting = false
+    private var control: ControlServer?
+
+    /// 启动本地控制通道；失败只影响外部控制，不影响 App 使用。
+    func startControl(_ store: AtlasStore) {
+        guard control == nil else { return }
+        let server = ControlServer { [weak store] command in
+            guard let store else { throw ControlCommandError("界面图鉴正在退出") }
+            return try await store.handleControl(command)
+        }
+        do { try server.start(); control = server }
+        catch { FileHandle.standardError.write(Data("[界面图鉴] 控制通道未启动：\(error.localizedDescription)\n".utf8)) }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -12,6 +24,8 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // 先关闭控制通道，退出过程中不再接受命令。
+        control?.stop()
         guard let store else { return .terminateNow }
         guard !quitting else { return .terminateLater }
         quitting = true
@@ -33,7 +47,7 @@ struct AtlasApp: App {
             WorkspaceView(store: store, session: store.session)
                 .frame(minWidth: 900, minHeight: 620)
                 .preferredColorScheme(store.colorScheme)
-                .task { delegate.store = store; await store.bootstrap() }
+                .task { delegate.store = store; delegate.startControl(store); await store.bootstrap() }
         }
         .defaultSize(width: 1440, height: 940)
         .commands {

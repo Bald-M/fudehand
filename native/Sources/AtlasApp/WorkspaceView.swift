@@ -148,7 +148,8 @@ struct WorkspaceView: View {
                                          case .actualSize: store.zoom(1)
                                          }
                                      },
-                                     onSizeChange: store.resize)
+                                     onSizeChange: store.resize,
+                                     onCanvas: { store.canvas = $0 })
                             .clipped()
                         canvasFooter(project)
                     }
