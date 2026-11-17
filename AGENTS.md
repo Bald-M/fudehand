@@ -6,7 +6,7 @@
 
 ### Issue tracker
 
-任务记录在 GitHub Issues，格式见 `docs/agents/issue-tracker.md`。
+任务直接用 `gh issue` 在 GitHub Issues（`Bald-M/ui-atlas`）创建和跟踪，不在本地维护任务记录。
 
 ### Domain docs
 
