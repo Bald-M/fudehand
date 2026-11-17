@@ -1,3 +1,15 @@
-# 本地任务记录
+# 任务记录
 
-任务记录不使用 GitHub Issues。规格保存到 `.scratch/<feature>/spec.md`；需要拆分的任务独立保存到 `.scratch/<feature>/issues/NN-slug.md`，用 `Status:` 和 `Blocked by:` 记录状态与依赖。读取、发布任务都通过这些本地文件完成。
+任务使用 GitHub Issues（`Bald-M/ui-atlas`）跟踪，用 `gh issue` 读取、创建和更新。
+
+- 标题：`[类型][优先级] 领域：简述`。类型为 `Bug`、`Enhancement`（新功能和重构）或 `Documentation`；优先级 `P0`–`P3`，未确认时写 `[P?]`。
+- 标签：`bug`、`enhancement` 或 `documentation`。
+- 正文用中文，按类型分章节：
+  - Bug：问题、复现、证据、影响、验收标准、非目标
+  - 功能：背景、当前行为、期望行为、验收标准、非目标、参考
+  - 重构：背景、当前问题、目标、实施范围、验收标准、非目标、主要代码位置
+- 验收标准写成可验证的 `- [ ]` 清单，必须有“非目标”。正文只写长期有效的事实，进度和一次性输出写进评论或 PR。
+- 大功能开一个跟踪 Issue，拆分的子 Issue 在「参考」中写明跟踪 Issue 与依赖（如 `跟踪：#2；依赖：#3`）。
+- PR 用 `Closes #n` 或 `Refs #n` 关联 Issue。
+
+较长的规格或实施计划可以先写在 `.scratch/<feature>/` 中起草，定稿后以 Issue 为准，不再在本地文件里维护状态。
