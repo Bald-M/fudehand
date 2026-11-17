@@ -71,10 +71,10 @@ private func editor() -> DesignEditor {
     var e = editor()
     try e.perform("新建") { try $0.insert(DesignNode(id: "c", type: .text), parent: "f", index: 0) }
     #expect(e.document.node("f")?.children.map(\.id) == ["c", "a"])
-    #expect(throws: DesignError("图层 id 重复：a")) { try attempt(&e) { try $0.insert(DesignNode(id: "a", type: .rectangle), parent: nil, index: nil) } }
-    #expect(throws: DesignError("图层 b 不能包含子图层")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "b", index: nil) } }
-    #expect(throws: DesignError("找不到图层：nope")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "nope", index: nil) } }
-    #expect(throws: DesignError("index 超出范围：0–2")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "f", index: 5) } }
+    #expect(throws: DesignError("Duplicate layer id: a")) { try attempt(&e) { try $0.insert(DesignNode(id: "a", type: .rectangle), parent: nil, index: nil) } }
+    #expect(throws: DesignError("Layer b cannot contain child layers")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "b", index: nil) } }
+    #expect(throws: DesignError("Layer not found: nope")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "nope", index: nil) } }
+    #expect(throws: DesignError("index out of range: 0–2")) { try attempt(&e) { try $0.insert(DesignNode(id: "z", type: .rectangle), parent: "f", index: 5) } }
 }
 
 @Test func moveKeepsWorldPositionAndRejectsCycles() throws {
@@ -85,13 +85,13 @@ private func editor() -> DesignEditor {
     #expect(e.document.node("a")?.frame == Rect(x: 110, y: 70, width: 50, height: 50))
     try e.perform("移动") { try $0.move("b", parent: "f", index: 0) }
     #expect(e.document.node("b").map { Point(x: $0.x, y: $0.y) } == Point(x: 400, y: -50))
-    #expect(throws: DesignError("不能把图层移动到它自己或子图层中")) { try attempt(&e) { try $0.move("f", parent: "b", index: nil) } }
+    #expect(throws: DesignError("Cannot move a layer into itself or its descendants")) { try attempt(&e) { try $0.move("f", parent: "b", index: nil) } }
     #expect(e.document.parentID(of: "b") == .some("f") && e.document.parentID(of: "f") == .some(nil))
 }
 
 @Test func deleteRemovesNestedAndReportsMissing() throws {
     var e = editor()
-    #expect(throws: DesignError("找不到图层：zz")) { try attempt(&e) { try $0.delete(["a", "zz"]) } }
+    #expect(throws: DesignError("Layer not found: zz")) { try attempt(&e) { try $0.delete(["a", "zz"]) } }
     #expect(e.document.node("a") != nil)
     try attempt(&e) { try $0.delete(["a", "f"]) }
     #expect(e.document.allIDs() == ["b"])

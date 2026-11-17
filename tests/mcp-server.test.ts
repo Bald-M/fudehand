@@ -48,10 +48,10 @@ describe('MCP server', () => {
     expect(app.received[0].command).toBe('create_node')
   })
 
-  it('App 未运行时返回中文错误', async () => {
+  it('returns an English error when the App is not running', async () => {
     const client = await connect('/tmp/ui-atlas-missing.sock')
     const result = await client.callTool({ name: 'design_get_state', arguments: {} })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('ui-atlas 未运行')
+    expect(text(result)).toBe('ui-atlas is not running')
   })
 })

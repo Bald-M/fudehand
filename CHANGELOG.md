@@ -18,6 +18,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Changed
 
 - The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).
+- Error messages returned to agents and shown in the App are now in English: control channel argument errors, layer field validation, project file loading, editing commands (undo, save, missing layers), snapshots, the Node control client, and model API errors in the chat panel (#83).
 - `AGENTS.md` and `GLOSSARY.md` are now in English; each glossary term leads with its English name and keeps the App's Chinese label in parentheses, and serves as the shared translation for the other English docs (#80).
 - `CHANGELOG.md` is now written in English, and future entries must be in English; `GLOSSARY.md` lists an English name for each term (#78).
 - `README.md` is now in English and is the repository's default README; the Chinese version moved to `README.zh-CN.md`, and both link to each other at the top (#72).

@@ -15,7 +15,7 @@ public struct DesignColor: Hashable, Sendable {
     public init(hex: String) throws {
         let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : ""
         guard digits.count == 6 || digits.count == 8, let value = UInt64(digits, radix: 16) else {
-            throw DesignError("颜色格式应为 #RRGGBB 或 #RRGGBBAA：\(hex)")
+            throw DesignError("Color must be #RRGGBB or #RRGGBBAA: \(hex)")
         }
         let rgba = digits.count == 6 ? value << 8 | 0xFF : value
         func channel(_ shift: UInt64) -> Double { Double((rgba >> shift) & 0xFF) / 255 }
@@ -165,15 +165,15 @@ public struct DesignDocument: Equatable, Sendable {
 
     public static func decode(_ data: Data) throws -> DesignDocument {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              object["format"] as? String == format else { throw DesignError("不是 ui-atlas 工程文件") }
+              object["format"] as? String == format else { throw DesignError("Not a ui-atlas project file") }
         guard let version = object["version"] as? NSNumber, !DesignJSON.isBool(version), version.doubleValue == version.doubleValue.rounded(),
               version.intValue >= 1 else {
-            throw DesignError("工程文件缺少格式版本号")
+            throw DesignError("Project file is missing its format version")
         }
         if version.intValue > formatVersion {
-            throw DesignError("文件由更新版本的 ui-atlas 创建（格式版本 \(version.intValue)），请升级后再打开")
+            throw DesignError("File was created by a newer version of ui-atlas (format version \(version.intValue)); upgrade ui-atlas to open it")
         }
-        guard let nodes = object["nodes"] as? [Any] else { throw DesignError("工程文件缺少 nodes") }
+        guard let nodes = object["nodes"] as? [Any] else { throw DesignError("Project file is missing nodes") }
         let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) })
         try document.validateUniqueIDs()
         return document
@@ -191,7 +191,7 @@ public struct DesignDocument: Equatable, Sendable {
         var seen = Set<String>()
         var duplicate: String?
         forEach { node in if !seen.insert(node.id).inserted, duplicate == nil { duplicate = node.id } }
-        if let duplicate { throw DesignError("图层 id 重复：\(duplicate)") }
+        if let duplicate { throw DesignError("Duplicate layer id: \(duplicate)") }
     }
 
     /// 深度优先遍历全部节点。

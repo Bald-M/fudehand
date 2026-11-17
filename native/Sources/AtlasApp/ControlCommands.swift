@@ -33,11 +33,11 @@ extension AtlasStore {
             setSelection(Set(ids))
             return controlState()
         case .undo:
-            guard canUndo else { throw ControlCommandError("没有可撤销的修改") }
+            guard canUndo else { throw ControlCommandError("Nothing to undo") }
             undo()
             return controlState()
         case .redo:
-            guard canRedo else { throw ControlCommandError("没有可重做的修改") }
+            guard canRedo else { throw ControlCommandError("Nothing to redo") }
             redo()
             return controlState()
         case .newDocument(let discard):
@@ -50,9 +50,9 @@ extension AtlasStore {
             return controlState()
         case .saveDocument(let path):
             guard let url = path.map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }) ?? fileURL else {
-                throw ControlCommandError("文档还没有保存过，请提供 path")
+                throw ControlCommandError("The document has never been saved; provide path")
             }
-            do { try write(to: url) } catch { throw ControlCommandError("无法保存：\(error.localizedDescription)") }
+            do { try write(to: url) } catch { throw ControlCommandError("Could not save: \(error.localizedDescription)") }
             return controlState()
         case .focusNode(let id):
             _ = try requireNode(id)
@@ -72,12 +72,12 @@ extension AtlasStore {
     }
 
     private func requireNode(_ id: String) throws -> DesignNode {
-        guard let node = editor.document.node(id) else { throw ControlCommandError("找不到图层：\(id)") }
+        guard let node = editor.document.node(id) else { throw ControlCommandError("Layer not found: \(id)") }
         return node
     }
 
     private func requireDiscardable(_ discard: Bool) throws {
-        if isDirty, !discard { throw ControlCommandError("当前文档有未保存的修改；先保存，或传 discard: true 放弃修改") }
+        if isDirty, !discard { throw ControlCommandError("The current document has unsaved changes; save it first, or pass discard: true to discard them") }
     }
 
     func controlState() -> [String: Any] {

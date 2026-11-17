@@ -14,20 +14,20 @@ private func textNode() -> DesignNode {
 }
 
 @Test func patchRejectsUnknownField() {
-    #expect(patchMessage(["foo": 1], on: DesignNode(id: "r", type: .rectangle)) == "图层 r：不支持字段 foo")
-    #expect(patchMessage(["text": ["size": 3]], on: textNode()) == "图层 t：不支持字段 text.size")
+    #expect(patchMessage(["foo": 1], on: DesignNode(id: "r", type: .rectangle)) == "Layer r: unsupported field foo")
+    #expect(patchMessage(["text": ["size": 3]], on: textNode()) == "Layer t: unsupported field text.size")
 }
 
 @Test func patchRejectsOutOfRangeAndWrongType() {
     let rect = DesignNode(id: "r", type: .rectangle)
-    #expect(patchMessage(["opacity": 2], on: rect) == "图层 r：opacity 不能大于 1")
-    #expect(patchMessage(["x": "3"], on: rect) == "图层 r：x 应为数字")
-    #expect(patchMessage(["x": 1e20], on: rect) == "图层 r：x 超出范围（绝对值不能大于 1000000）")
-    #expect(patchMessage(["visible": 1], on: rect) == "图层 r：visible 应为 true 或 false")
-    #expect(patchMessage(["layout": ["spacing": 4]], on: DesignNode(id: "e", type: .ellipse)) == "图层 e：ellipse 不支持 layout")
-    #expect(patchMessage(["id": "x"], on: rect) == "图层 r：不能修改 id")
+    #expect(patchMessage(["opacity": 2], on: rect) == "Layer r: opacity must not be greater than 1")
+    #expect(patchMessage(["x": "3"], on: rect) == "Layer r: x must be a number")
+    #expect(patchMessage(["x": 1e20], on: rect) == "Layer r: x is out of range (absolute value must not exceed 1000000)")
+    #expect(patchMessage(["visible": 1], on: rect) == "Layer r: visible must be true or false")
+    #expect(patchMessage(["layout": ["spacing": 4]], on: DesignNode(id: "e", type: .ellipse)) == "Layer e: ellipse does not support layout")
+    #expect(patchMessage(["id": "x"], on: rect) == "Layer r: cannot change id")
     #expect(patchMessage(["sizing": ["horizontal": "grow"]], on: rect)
-            == "图层 r：sizing.horizontal 应为 fixed、hug、fill 之一，收到 grow")
+            == "Layer r: sizing.horizontal must be one of fixed, hug, fill; got grow")
 }
 
 @Test func patchMergesNestedFields() throws {

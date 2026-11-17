@@ -38,11 +38,11 @@ function emit(event) {
 
 if (values['list-models']) {
   try {
-    if (!apiKey) throw new Error('尚未配置 API key')
+    if (!apiKey) throw new Error('No API key configured')
     const settings = { provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }
     emit({ type: 'models', ...await listModels(settings, AbortSignal.timeout(15000)) })
   } catch (error) {
-    emit({ type: 'error', message: error?.name === 'TimeoutError' ? '获取模型列表超时' : String(error?.message ?? error) })
+    emit({ type: 'error', message: error?.name === 'TimeoutError' ? 'Timed out fetching the model list' : String(error?.message ?? error) })
   }
   // macOS 上管道写入是异步的，等输出写完再退出，避免模型很多时被截断。
   await new Promise(resolve => process.stdout.write('', resolve))
@@ -68,9 +68,9 @@ async function reply(text, controller) {
   log.push({ role: 'user', text })
   try {
     if (providerError) throw new Error(providerError)
-    if (!apiKey) throw new Error('尚未配置 API key')
+    if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
-      if (round === maximumRounds) throw new Error('工具调用轮数过多，已停止本次回复')
+      if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(system, log, tools, signal)
       if (signal.aborted) break
       // 空回复两家接口都不接受写回历史，直接结束本轮。
@@ -80,7 +80,7 @@ async function reply(text, controller) {
       if (!answer.toolCalls.length) break
       for (const call of answer.toolCalls) {
         // 停止后不再执行任何后续工具调用，只为模型补上占位结果，保持历史完整。
-        if (signal.aborted) { log.push({ role: 'tool', id: call.id, name: call.name, text: '使用者已停止本次回复，未执行。' }); continue }
+        if (signal.aborted) { log.push({ role: 'tool', id: call.id, name: call.name, text: 'The user stopped this reply; not executed.' }); continue }
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] } : await callTool(call.name, call.args, ctx)
         const output = toolText(result)
@@ -100,9 +100,9 @@ async function reply(text, controller) {
 const input = createInterface({ input: process.stdin })
 input.on('line', line => {
   let message
-  try { message = JSON.parse(line) } catch { return emit({ type: 'error', message: '收到无法解析的消息' }) }
+  try { message = JSON.parse(line) } catch { return emit({ type: 'error', message: 'Received an unparseable message' }) }
   if (message.type === 'user' && typeof message.text === 'string') {
-    if (current) return emit({ type: 'error', message: '上一条回复尚未结束' })
+    if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
     current = new AbortController()
     void reply(message.text, current)
   } else if (message.type === 'stop') {
