@@ -24,11 +24,13 @@ final class AtlasStore: ObservableObject {
         didSet { defaults.set(theme, forKey: "native.theme") }
     }
     let session = PreviewSession()
+    let chat = ChatSession()
+    @Published var showingChat = false
     /// 当前画布，供控制通道截取画框。
     weak var canvas: AtlasCanvasView?
     private let defaults = UserDefaults.standard
     private var layouts: LayoutStore?
-    private var runtime: WorkspaceLocation?
+    private(set) var runtime: WorkspaceLocation?
     private var bootstrapped = false
     private var pendingSave: DispatchWorkItem?
     private var needsInitialFit = false
@@ -189,5 +191,5 @@ final class AtlasStore: ObservableObject {
         pendingSave = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: work)
     }
-    func shutdown() async { saveNow(); await session.stop() }
+    func shutdown() async { saveNow(); await chat.shutdown(); await session.stop() }
 }
