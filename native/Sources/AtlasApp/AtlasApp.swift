@@ -20,7 +20,8 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
 
     /// Finder 双击、拖到 Dock 图标或“打开方式”打开 .uiatlas 文件。
     func application(_ application: NSApplication, open urls: [URL]) {
-        let files = urls.filter { $0.pathExtension == DesignDocument.fileExtension }
+        // 扩展名不区分大小写，与系统识别文件类型的方式一致。
+        let files = urls.filter { $0.pathExtension.lowercased() == DesignDocument.fileExtension }
         guard let store else { pendingFiles += files; return }
         files.last.map(store.openFromSystem)
     }

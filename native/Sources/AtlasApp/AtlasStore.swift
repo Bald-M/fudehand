@@ -277,8 +277,9 @@ final class AtlasStore: ObservableObject {
 
     /// Finder 双击或“打开方式”传来的工程文件：有未保存修改时先询问，打不开时显示原因。
     func openFromSystem(_ url: URL) {
-        guard url.standardizedFileURL != fileURL?.standardizedFileURL || isDirty else { return }
-        guard confirmDiscard("打开其他文件") else { return }
+        let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
+        guard !current || isDirty else { return }
+        guard confirmDiscard(current ? "重新打开文件" : "打开其他文件") else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
 

@@ -45,3 +45,14 @@ private func infoPlist() throws -> [String: Any] {
     delegate.application(NSApplication.shared, open: [bad])
     #expect(store.alert == "不是 ui-atlas 工程文件" && store.fileURL == url)
 }
+
+@Test @MainActor func uppercaseExtensionsOpenToo() throws {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-\(UUID().uuidString).UIATLAS")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try DesignDocument(nodes: [DesignNode(id: "u", type: .ellipse)]).encoded().write(to: url)
+    let delegate = AtlasAppDelegate()
+    let store = AtlasStore(defaults: UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!)
+    delegate.attach(store)
+    delegate.application(NSApplication.shared, open: [url, URL(fileURLWithPath: "/tmp/readme.txt")])
+    #expect(store.fileURL == url && store.editor.document.node("u") != nil)
+}
