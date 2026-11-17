@@ -41,13 +41,12 @@ struct AtlasApp: App {
                 Button("打开项目目录…") { store.chooseWorkspace() }.keyboardShortcut("o")
             }
             CommandMenu("画布") {
-                Button("放大") { store.zoom(store.viewport.scale * 1.2) }.keyboardShortcut("+")
-                Button("缩小") { store.zoom(store.viewport.scale / 1.2) }.keyboardShortcut("-")
+                Button("放大") { store.zoomIn() }.keyboardShortcut("+")
+                Button("缩小") { store.zoomOut() }.keyboardShortcut("-")
                 Button("实际大小") { store.zoom(1) }.keyboardShortcut("1")
                 Button("适应全部") { store.fitAll() }.keyboardShortcut("0")
                 Divider()
                 Button("重新加载案例") { store.reloadToken += 1 }.keyboardShortcut("r")
-                Button("退出网页交互") { store.interactingFrameID = nil }.keyboardShortcut(.return, modifiers: [.command, .shift])
                 Button("恢复默认布局") { store.reset() }
             }
         }

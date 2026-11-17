@@ -27,7 +27,7 @@ import AtlasCore
     let project = try sampleCatalog().projects[0]
     store.save(Layout(layoutVersion: 2, viewport: Viewport(), positions: [:]), project: project)
     #expect(store.load(project: project) == nil)
-    store.save(Layout(layoutVersion: 1, viewport: Viewport(scale: 3), positions: [:]), project: project)
+    store.save(Layout(layoutVersion: 1, viewport: Viewport(scale: 5), positions: [:]), project: project)
     #expect(store.load(project: project) == nil)
     defaults.set(Data(#"{"layoutVersion":1,"viewport":{"x":0,"y":0,"scale":1},"positions":{"mobile":{"x":true,"y":0}}}"#.utf8), forKey: "test.layout.demo")
     #expect(store.load(project: project) == nil)
