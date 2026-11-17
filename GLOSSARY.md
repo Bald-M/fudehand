@@ -27,6 +27,9 @@ _避免_：设备模拟器、网页框
 
 **MCP server**：供外部 AI Agent（Claude Code、Codex 等）按需启动的本地工具进程（`scripts/mcp-server.mjs`），把设计工具转发给正在运行的 App。
 
+**MCP 连接器**：应用菜单“MCP 连接器…”打开的窗口，检测 MCP server 是否已注册到 Claude Code、Codex 的用户级配置，并用它们的 CLI 一键连接或断开连接。
+_避免_：插件、集成
+
 **控制通道**：App 运行时只对当前用户开放的本地 Unix socket，外部进程经它读取和编辑设计文档、操作视口和截图。
 _避免_：控制端口、API 服务
 

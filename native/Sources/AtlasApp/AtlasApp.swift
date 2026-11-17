@@ -52,6 +52,7 @@ struct AtlasApp: App {
         }
         .defaultSize(width: 1440, height: 940)
         .commands {
+            CommandGroup(after: .appInfo) { ConnectorsMenuItem() }
             CommandGroup(replacing: .newItem) {
                 Button("新建") { store.newDocument() }.keyboardShortcut("n")
                 Button("打开…") { store.openDocument() }.keyboardShortcut("o")
@@ -74,6 +75,12 @@ struct AtlasApp: App {
                 Button("对话") { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
             }
         }
+
+        Window("MCP 连接器", id: ConnectorsMenuItem.windowID) {
+            ConnectorsView(model: store.connectors)
+                .preferredColorScheme(store.colorScheme)
+        }
+        .windowResizability(.contentSize)
     }
 
     /// 文字输入框有焦点时撤销交给输入框，否则撤销设计文档。
@@ -83,5 +90,15 @@ struct AtlasApp: App {
         } else {
             document()
         }
+    }
+}
+
+/// 应用菜单中的“MCP 连接器…”；commands 里取得 openWindow 需要放在 View 中。
+private struct ConnectorsMenuItem: View {
+    static let windowID = "connectors"
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("MCP 连接器…") { openWindow(id: Self.windowID) }
     }
 }
