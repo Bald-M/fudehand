@@ -173,7 +173,7 @@ struct WorkspaceView: View {
                     }.buttonStyle(.borderless).help("聚焦 \(frame.title)")
                 }
                 Spacer()
-                Text("点选画框后可直接操作 · 空格拖动平移 · ⌘滚轮或捏合缩放 · Shift+1 适应全部").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text("点选画框后可直接操作 · 空格拖动平移 · ⌥滚动网页 · ⌘滚轮或捏合缩放 · Shift+1 适应全部").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }.padding(.horizontal, 20).padding(.vertical, 12)
         }.background(.bar)
     }
