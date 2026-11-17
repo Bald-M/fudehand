@@ -45,7 +45,7 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 
 ## 架构
 
-**App 是设计文档的唯一持有者**（ADR 0006）。`AtlasStore` 持有 `DesignEditor`（文档 + 撤销历史）；画布、图层面板、属性面板和控制通道的修改都经它进行，人工与 Agent 的修改共用一条撤销历史。启动时是空白文档，不启动任何 Node 进程；只有对话面板发送消息时才启动 harness。`native-build.mjs` 把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，供对话面板找到 `scripts/agent-chat.mjs`。
+**App 是设计文档的唯一持有者**（ADR 0006）。`AtlasStore` 持有 `DesignEditor`（文档 + 撤销历史）；画布、图层面板、属性面板和控制通道的修改都经它进行，人工与 Agent 的修改共用一条撤销历史。启动时先显示启动窗口（新建、最近打开、模板），进入编辑后才打开编辑窗口并关闭启动窗口（见 `docs/macos.md`“启动与构建”）；启动时不启动任何 Node 进程，只有对话面板发送消息时才启动 harness。`native-build.mjs` 把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，供对话面板找到 `scripts/agent-chat.mjs`。
 
 **原生 target**（`native/Package.swift`，Swift 5 语言模式）：
 - `AtlasCore` —— 纯逻辑、不依赖 AppKit：`DesignDocument`（图层模型、`.uiatlas` 读写与版本校验）、`DesignJSON`（JSON 与节点互转、字段校验、部分字段补丁——文件读取、Agent 创建与修改共用这唯一一份校验）、`DesignLayout`（自动布局、文字自适应、分组收缩；文字测量由 App 注入）、`DesignEditor`（树操作与撤销历史，连续手势记为一步）、`DesignHitTest`（Figma 式点击选中规则）、`CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机：移动、缩放把手、框选、创建、平移）、几何与视口、吸附、视口动画、`ControlProtocol`。可测试的规则放在这里。
