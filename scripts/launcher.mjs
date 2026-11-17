@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import net from 'node:net'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { PREVIEW_COOKIE, PREVIEW_TOKEN_ENV } from './preview-gate.mjs'
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(`配置错误：${message}`)
@@ -100,14 +101,14 @@ export async function assertPortsAvailable(services) {
   }
 }
 
-export async function waitForHttp(url, { timeoutMs = 30000, intervalMs = 100, signal } = {}) {
+export async function waitForHttp(url, { timeoutMs = 30000, intervalMs = 100, signal, headers } = {}) {
   const deadline = Date.now() + timeoutMs
   let lastStatus = '尚未响应'
   while (Date.now() < deadline) {
     signal?.throwIfAborted()
     try {
       const requestSignal = AbortSignal.timeout(Math.max(1, Math.min(1000, deadline - Date.now())))
-      const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, requestSignal]) : requestSignal })
+      const response = await fetch(url, { headers, signal: signal ? AbortSignal.any([signal, requestSignal]) : requestSignal })
       lastStatus = `HTTP ${response.status}`
       await response.body?.cancel()
       if (response.ok) return
@@ -149,50 +150,89 @@ async function stopGroups(children, graceMs) {
   ))
 }
 
-/** HTTP 就绪后持续运行，仅在主动停止后结束。 */
-export async function runServices(services, { signal, timeoutMs = 30000, shutdownGraceMs = 1500, stdio = 'inherit', onReady = () => {}, log = console.log } = {}) {
-  if (signal?.aborted) return
-  await assertPortsAvailable(services)
-  if (signal?.aborted) return
-  const children = []
-  const startup = new AbortController()
-  let stopping = false
-  let stop
-  const stopped = new Promise(resolveStop => { stop = resolveStop })
-  function requestStop(error = null) {
-    if (stopping) return
-    stopping = true
-    startup.abort()
-    stop(error)
-  }
-  const onAbort = () => requestStop()
-  signal?.addEventListener('abort', onAbort, { once: true })
-  try {
-    for (const service of services) {
-      if (stopping || signal?.aborted) break
-      log(`[启动] ${service.title} → ${service.url}`)
-      const child = spawn(service.command[0], service.command.slice(1), {
-        cwd: service.cwd, stdio, detached: process.platform !== 'win32', shell: false,
-      })
-      children.push(child)
-      child.once('error', error => requestStop(new Error(`${service.title} 无法启动：${error.message}`)))
-      child.once('exit', (code, exitSignal) => {
-        if (!stopping) requestStop(new Error(`${service.title} 意外退出（${exitSignal || code}），已停止本次启动的全部服务。`))
-      })
-    }
-    if (signal?.aborted) requestStop()
+/**
+ * 按需启动案例服务：start(id) 拉起并等待 HTTP 就绪，重复请求复用同一次启动；
+ * 失败或意外退出只影响该服务，并清理它的进程组，之后可以再次 start。close() 停止全部服务。
+ */
+export function createServicePool(services, { timeoutMs = 30000, shutdownGraceMs = 1500, stdio = 'inherit', log = console.log, onReady = () => {}, onFailed = () => {}, previewToken = process.env[PREVIEW_TOKEN_ENV] } = {}) {
+  // previewToken 来自 App（见 preview-gate.mjs）：传给每个案例服务，就绪检查也带上对应 Cookie。
+  const env = previewToken ? { ...process.env, [PREVIEW_TOKEN_ENV]: previewToken } : process.env
+  const headers = previewToken ? { cookie: `${PREVIEW_COOKIE}=${previewToken}` } : undefined
+  const byId = new Map(services.map(service => [service.id, service]))
+  const running = new Map()
+  let closed = false
+
+  async function launch(service, entry) {
+    await assertPortsAvailable([service])
+    if (entry.abort.signal.aborted) throw entry.failure ?? new Error(`${service.title} 已停止`)
+    log(`[启动] ${service.title} → ${service.url}`)
+    const child = spawn(service.command[0], service.command.slice(1), {
+      cwd: service.cwd, stdio, env, detached: process.platform !== 'win32', shell: false,
+    })
+    entry.child = child
+    child.once('error', error => fail(entry, new Error(`${service.title} 无法启动：${error.message}`)))
+    child.once('exit', (code, exitSignal) => fail(entry, new Error(`${service.title} 意外退出（${exitSignal || code}）。`)))
     try {
-      await Promise.all(services.map(service => waitForHttp(service.url, { timeoutMs, signal: startup.signal })))
-      if (!stopping) onReady()
+      await waitForHttp(service.url, { timeoutMs, signal: entry.abort.signal, headers })
     } catch (error) {
-      if (!stopping) requestStop(error)
+      throw entry.failure ?? error
     }
-    const error = await stopped
-    if (error) throw error
-  } finally {
-    stopping = true
-    startup.abort()
-    signal?.removeEventListener('abort', onAbort)
-    await stopGroups(children, shutdownGraceMs)
+  }
+
+  function fail(entry, error) {
+    if (entry.stopping || entry.failure) return
+    entry.failure = error
+    entry.abort.abort()
+    // 已就绪的服务没有等待中的启动流程，在这里收尾。
+    if (entry.ready) void settleFailure(entry)
+  }
+
+  async function settleFailure(entry) {
+    if (running.get(entry.service.id) === entry) running.delete(entry.service.id)
+    if (entry.child) await stopGroups([entry.child], shutdownGraceMs)
+    onFailed(entry.service.id, entry.failure)
+  }
+
+  function start(id) {
+    const service = byId.get(id)
+    if (!service || closed) {
+      const error = new Error(closed ? '启动器正在退出' : `找不到已启用的作品：${id}`)
+      onFailed(id, error)
+      return Promise.reject(error)
+    }
+    const existing = running.get(id)
+    if (existing) return existing.promise
+    const entry = { service, abort: new AbortController(), child: null, ready: false, stopping: false, failure: null }
+    running.set(id, entry)
+    entry.promise = launch(service, entry).then(() => {
+      entry.ready = true
+      onReady(id)
+    }, async error => {
+      if (entry.stopping) throw error
+      entry.failure ??= error
+      await settleFailure(entry)
+      throw entry.failure
+    })
+    return entry.promise
+  }
+
+  async function stopEntry(entry) {
+    entry.stopping = true
+    entry.abort.abort()
+    if (running.get(entry.service.id) === entry) running.delete(entry.service.id)
+    await entry.promise.catch(() => {})
+    if (entry.child) await stopGroups([entry.child], shutdownGraceMs)
+  }
+
+  return {
+    start,
+    async stop(id) {
+      const entry = running.get(id)
+      if (entry) await stopEntry(entry)
+    },
+    async close() {
+      closed = true
+      await Promise.all([...running.values()].map(stopEntry))
+    },
   }
 }

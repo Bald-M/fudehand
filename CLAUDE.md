@@ -2,7 +2,7 @@
 
 本文件为 Claude Code（claude.ai/code）在本仓库中工作提供指引。
 
-界面图鉴（UI Atlas）是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
+ui-atlas 是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
 
 ## 工作方式：superpowers 技能
 
@@ -26,7 +26,7 @@
 ```bash
 pnpm install
 pnpm dev               # 以 debug 构建应用并打开
-pnpm build:native      # release 构建 + ad-hoc 签名 → dist/界面图鉴.app
+pnpm build:native      # release 构建 + ad-hoc 签名 → dist/ui-atlas.app
 pnpm test:native       # 对 native/ 运行 swift test（AtlasCoreTests + AtlasAppTests）
 pnpm check             # 示例类型检查 + Vitest（tests/）+ 构建全部示例
 pnpm mcp               # 以 stdio 启动 ui-atlas MCP server（通常由 Agent 自动启动）
@@ -47,7 +47,7 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 
 **`catalog.json` 是唯一事实来源**，记录作品、画框、默认布局和预览启动配置（`preview.cwd/command/port/baseUrl`）。每个示例的 `vite.config.ts` 用 `readFileSync`（而不是 `import`，以免修改 catalog 时 Vite 重启所有服务）从中读取自己的端口和主机。catalog 校验实现了两份——`scripts/launcher.mjs`（Node）和 `native/Sources/AtlasCore/Catalog.swift`（Swift）——两边的测试套件都会运行 `tests/fixtures/catalog-conformance.json` 中的共享用例。任何规则变更都必须同时更新两边和该 fixture。
 
-**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者借助 `launcher.mjs` 启动每个 `enabled` 示例的开发服务，等到 HTTP 返回 2xx 后打印 `UI_ATLAS_READY`。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
+**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者校验 catalog 后打印 `UI_ATLAS_LISTENING`，之后按需启动案例服务（ADR 0004）：应用选中作品时向 stdin 写 `start <id>`，启动器借助 `launcher.mjs` 的 `createServicePool` 拉起该示例的开发服务，HTTP 返回 2xx 后在 stdout 打印 `UI_ATLAS_READY <id>`，失败打印 `UI_ATLAS_FAILED <id> <JSON 消息>`（只影响该作品，可再次 `start` 重试）；日志只写 stderr。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
 
 **原生 target**（`native/Package.swift`，Swift 5 语言模式）：
 - `AtlasCore` —— 纯逻辑、不依赖 AppKit：catalog 模型与校验、几何与视口计算、布局持久化、吸附、滚动路由、视口动画，以及 `CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机）。可测试的交互规则放在这里。
@@ -55,7 +55,7 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 
 画布持有实时视口和选区，只把稳定后的值回报给 `AtlasStore`；store 通过带 token 的请求（`ViewportRequest`、`positionsToken`、`reloadToken`）向下推送一次性变更——新 token 表示“应用一次”。画框整体做视觉缩放；每个 web view 保持其配置的 CSS 视口尺寸，因此响应式断点不会随缩放改变。
 
-**Agent 接入**（ADR 0003）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。写 `catalog.json` 的工具先调用 `servicesFromCatalog` 再原子写入，不要另写校验。画布工具经 `scripts/control-client.mjs` 连接 App 的控制通道（`~/Library/Application Support/界面图鉴/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
+**Agent 接入**（ADR 0003）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。写 `catalog.json` 的工具先调用 `servicesFromCatalog` 再原子写入，不要另写校验。画布工具经 `scripts/control-client.mjs` 连接 App 的控制通道（`~/Library/Application Support/ui-atlas/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
 
 **示例**位于 `examples/*`（pnpm workspace）。应用直接从各自端口加载它们（不经代理）。没有后端，也没有静态站点打包产物。
 

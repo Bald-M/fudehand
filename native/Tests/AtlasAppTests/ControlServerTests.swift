@@ -101,7 +101,7 @@ private func leaveStaleSocket(_ path: String) {
 
 @Test func controlSocketPathDefaultsToApplicationSupport() {
     let path = ControlServer.defaultPath(environment: [:])
-    #expect(path.hasSuffix("/Library/Application Support/界面图鉴/control.sock"))
+    #expect(path.hasSuffix("/Library/Application Support/ui-atlas/control.sock"))
     #expect(ControlServer.defaultPath(environment: ["UI_ATLAS_CONTROL_SOCKET": "/tmp/x.sock"]) == "/tmp/x.sock")
 }
 

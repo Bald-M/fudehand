@@ -52,7 +52,7 @@ async function writeCatalog(root, change) {
     throw error
   }
   // App 只在打开项目时读取 catalog.json。
-  return { content: [{ type: 'text', text: `${message}。界面图鉴正在运行时，需要重启预览后生效。` }] }
+  return { content: [{ type: 'text', text: `${message}。ui-atlas 正在运行时，需要重启预览后生效。` }] }
 }
 
 const frameFields = ['title', 'platform', 'path', 'width', 'height', 'x', 'y']
@@ -68,7 +68,7 @@ const frameProperties = {
 export const tools = [
   {
     name: 'list_projects',
-    description: '列出界面图鉴中的全部作品摘要（id、标题、框架、是否启用、画框数、预览 baseUrl）。',
+    description: '列出 ui-atlas 中的全部作品摘要（id、标题、框架、是否启用、画框数、预览 baseUrl）。',
     inputSchema: { type: 'object', properties: {} },
     async run(_args, { root }) {
       const catalog = await loadCatalog(root)
@@ -88,7 +88,7 @@ export const tools = [
   },
   {
     name: 'get_preview_urls',
-    description: '返回作品每个画框的预览 URL、宽高与平台，可用浏览器工具直接访问。',
+    description: '返回作品每个画框的预览 URL、宽高与平台。预览只在 App 画框中打开（浏览器直接访问返回 403）；要看渲染结果用 frame_snapshot。',
     inputSchema: { type: 'object', properties: projectArg, required: ['project'] },
     async run({ project }, { root }) {
       const found = findProject(await loadCatalog(root), project)
@@ -164,10 +164,10 @@ export const tools = [
 ]
 
 /** 画布控制层：经本地控制通道转发给正在运行的 App。 */
-function canvasTool(name, command, description, properties = {}) {
+function canvasTool(name, command, description, properties = {}, required = Object.keys(properties)) {
   return {
-    name, description: `${description}需要界面图鉴正在运行。`,
-    inputSchema: { type: 'object', properties, required: Object.keys(properties) },
+    name, description: `${description}需要 ui-atlas 正在运行。`,
+    inputSchema: { type: 'object', properties, required },
     async run(args, { socketPath }) {
       const forwarded = Object.fromEntries(Object.keys(properties).map(key => [key, args[key]]))
       return json(await sendControl(command, forwarded, { socketPath }))
@@ -175,17 +175,19 @@ function canvasTool(name, command, description, properties = {}) {
   }
 }
 
+const frameArg = { frame: { type: 'string', description: '当前作品的画框 id' } }
+
 tools.push(
   canvasTool('canvas_get_state', 'get_state', '读取画布状态：当前作品、选择、视口、画框位置与预览阶段。'),
-  canvasTool('canvas_select_project', 'select_project', '在画布中切换到指定作品（必须已启用）。', projectArg),
+  canvasTool('canvas_select_project', 'select_project', '在画布中切换到指定作品（必须已启用）。该作品的案例服务按需启动：phase 为 starting 时稍后用 canvas_get_state 查看，就绪后才能使用 frame_* 工具；对启动失败的当前作品再次调用即重试。', projectArg),
   canvasTool('canvas_focus_frame', 'focus_frame', '把视口移动并缩放到当前作品的指定画框。', { frame: { type: 'string', description: '画框 id' } }),
   canvasTool('canvas_fit_all', 'fit_all', '缩放视口以显示当前作品的全部画框。'),
   canvasTool('canvas_zoom', 'zoom', '以画布中心为基准缩放到指定比例（1 为实际大小，范围 0.05～4）。', { scale: { type: 'number' } }),
   canvasTool('canvas_reset', 'reset', '恢复当前作品的默认布局，撤销保存的画框位置和视角。'),
-  canvasTool('canvas_restart_preview', 'restart_preview', '重新读取 catalog.json 并重启全部预览服务；修改 catalog 后用它让 App 生效。'),
+  canvasTool('canvas_restart_preview', 'restart_preview', '重新读取 catalog.json 并重启预览服务（之后按需启动当前作品）；修改 catalog 后用它让 App 生效。'),
   {
     name: 'frame_snapshot',
-    description: '截取当前作品中某个画框在 App 内实际渲染的网页，返回 PNG。需要界面图鉴正在运行且画框已加载。',
+    description: '截取当前作品中某个画框在 App 内实际渲染的网页，返回 PNG。需要 ui-atlas 正在运行且画框已加载。',
     inputSchema: { type: 'object', properties: { frame: { type: 'string', description: '画框 id' } }, required: ['frame'] },
     async run({ frame }, { socketPath }) {
       const shot = await sendControl('frame_snapshot', { frame }, { socketPath })
@@ -195,6 +197,32 @@ tools.push(
       ] }
     },
   },
+)
+
+// 画框页面层：只作用于画框中已加载的本机预览页面，不提供导航到其他站点的能力。
+tools.push(
+  canvasTool('frame_console', 'frame_console',
+    '读取画框网页最近的控制台输出（console.*）和未捕获错误，按时间先后排列；source 为 exception 的是未捕获错误，atlas 记录标出每次页面加载完成。记录在网页重载后仍保留，每个画框最多保留 200 条。',
+    { ...frameArg, limit: { type: 'integer', minimum: 1, maximum: 200, description: '返回最近多少条，默认 50' } }, ['frame']),
+  {
+    name: 'frame_read',
+    description: '读取画框网页当前可见内容的精简大纲：标题、文本和可交互元素；可交互元素后的 → 是可用于 frame_interact 的 CSS 选择器。最多约 20000 字。需要 ui-atlas 正在运行且画框已加载。',
+    inputSchema: { type: 'object', properties: frameArg, required: ['frame'] },
+    async run({ frame }, { socketPath }) {
+      const page = await sendControl('frame_read', { frame }, { socketPath })
+      const note = page.truncated ? '\n\n（内容过长，已截断）' : ''
+      return { content: [{ type: 'text', text: `${page.title || '（无标题）'}\n${page.url}\n\n${page.outline}${note}` }] }
+    },
+  },
+  canvasTool('frame_interact', 'frame_interact',
+    '在画框网页中执行基础交互：click 按选择器点击；fill 向输入框、文本框、下拉框或可编辑元素填值并触发 input、change；scroll 给了 selector 时把元素滚到可见区域（同时给 deltaX/deltaY 则滚动该元素），否则按 deltaX/deltaY 滚动页面。不能点击指向其他站点或在新窗口打开的链接。',
+    {
+      ...frameArg,
+      action: { type: 'string', enum: ['click', 'fill', 'scroll'] },
+      selector: { type: 'string', description: 'CSS 选择器，可取自 frame_read' },
+      value: { type: 'string', description: 'fill 时填入的值' },
+      deltaX: { type: 'number' }, deltaY: { type: 'number' },
+    }, ['frame', 'action']),
 )
 
 /** 调用工具；任何错误都转为带中文消息的错误结果，而不是抛出。 */

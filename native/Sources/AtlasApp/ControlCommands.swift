@@ -36,7 +36,26 @@ extension AtlasStore {
             let png = try await view.snapshotPNG()
             return ["frame": id, "mimeType": "image/png", "data": png.base64EncodedString(),
                     "width": frame.width, "height": frame.height]
+        case .frameConsole(let id, let limit):
+            try requireFrame(id)
+            guard let view = canvas?.frames[id] else { throw ControlCommandError("画框尚未加载：\(id)") }
+            return ["frame": id, "ready": view.isReady, "dropped": view.console.dropped,
+                    "entries": view.console.recent(limit).map(\.json)]
+        case .frameRead(let id):
+            var page = try await loadedFrame(id).readPage()
+            page["frame"] = id
+            return page
+        case .frameInteract(let id, let action):
+            var result = try await loadedFrame(id).interact(action)
+            result["frame"] = id
+            return result
         }
+    }
+
+    private func loadedFrame(_ id: String) throws -> PreviewFrameView {
+        try requireFrame(id)
+        guard let view = canvas?.frames[id], view.isReady else { throw ControlCommandError("画框尚未加载：\(id)") }
+        return view
     }
 
     @discardableResult
@@ -48,7 +67,7 @@ extension AtlasStore {
     private func controlState() -> [String: Any] {
         let phase: String
         var failure: Any = NSNull()
-        switch session.phase {
+        switch session.phase(for: project?.id) {
         case .stopped: phase = "stopped"
         case .starting: phase = "starting"
         case .ready: phase = "ready"

@@ -8,7 +8,7 @@
 
 任务直接用 `gh issue` 在 GitHub Issues（`Bald-M/ui-atlas`）创建和跟踪，不在本地维护任务记录。
 
-### 界面图鉴 MCP
+### ui-atlas MCP
 
 本仓库提供 `ui-atlas` MCP server（`scripts/mcp-server.mjs`），可读写作品与画框，并在 App 运行时操作画布、截取画框。Codex 在 `~/.codex/config.toml` 中配置：
 
@@ -18,7 +18,7 @@ command = "node"
 args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 ```
 
-工具说明见 README 的“AI Agent 接入”，设计见 `docs/adr/0003-agent-mcp.md`。
+Codex 默认每次调用 MCP 工具前请求批准；无人值守运行时可在该段加 `default_tools_approval_mode = "approve"`。工具说明见 README 的“AI Agent 接入”，设计见 `docs/adr/0003-agent-mcp.md`。
 
 ### Domain docs
 

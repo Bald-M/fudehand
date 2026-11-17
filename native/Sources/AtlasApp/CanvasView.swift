@@ -12,6 +12,8 @@ final class AtlasCanvasView: NSView {
     var onFocusFrame: ((String) -> Void)?
     var onCommand: ((CanvasCommand) -> Void)?
     var onSizeChange: ((CGSize) -> Void)?
+    /// A frame's page finished loading.
+    var onFrameReady: ((String) -> Void)?
     /// Holds `world`; a pending zoom is shown as its layer's sublayer transform.
     let zoomHost = CanvasFlippedView()
     let world = CanvasFlippedView()
@@ -71,7 +73,7 @@ final class AtlasCanvasView: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self))
         setAccessibilityLabel("界面画布")
-        setAccessibilityHelp("点选画框后可直接操作；拖动空白框选；空格拖动平移；Command 加滚轮缩放；选择画框后用方向键移动。")
+        setAccessibilityHelp("点选画框后可直接操作；拖动空白框选；滚动或空格拖动平移；Option 加滚动滚动网页；Command 加滚轮缩放；选择画框后用方向键移动。")
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -222,6 +224,7 @@ final class AtlasCanvasView: NSView {
         }
         updateFrameAccessibility()
         refreshOverlay()
+        if frame.isReady { onFrameReady?(frame.frameID) }
     }
 
     private func updateFrameAccessibility() {
@@ -473,8 +476,9 @@ final class AtlasCanvasView: NSView {
         let viewport = liveViewport
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
             let point = convert(event.locationInWindow, from: nil)
-            setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y),
-                                                  scale: viewport.scale * exp(-delta.y * 0.01)), zooming: true)
+            let scale = CanvasGeometry.wheelZoomScale(viewport.scale, deltaY: delta.y,
+                                                      invertedFromDevice: event.isDirectionInvertedFromDevice)
+            setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y), scale: scale), zooming: true)
         } else {
             setLiveViewport(Viewport(x: viewport.x + delta.x, y: viewport.y + delta.y, scale: viewport.scale), zooming: false)
         }
@@ -570,8 +574,8 @@ final class AtlasCanvasView: NSView {
     }
 
     /// The routing decision for one scroll event; the per-gesture lock lives in `scrollRouter`.
-    func routeScroll(phase: NSEvent.Phase, momentum: NSEvent.Phase, overActivePage: Bool, zoomModifier: Bool) -> ScrollTarget {
-        scrollRouter.route(phase: Self.scrollPhase(phase, momentum: momentum), overActivePage: overActivePage, zoomModifier: zoomModifier)
+    func routeScroll(phase: NSEvent.Phase, momentum: NSEvent.Phase, overActivePage: Bool, pageModifier: Bool, zoomModifier: Bool) -> ScrollTarget {
+        scrollRouter.route(phase: Self.scrollPhase(phase, momentum: momentum), overActivePage: overActivePage, pageModifier: pageModifier, zoomModifier: zoomModifier)
     }
 
     /// Returns the event when AppKit should deliver it as usual, nil when it was handled here.
@@ -580,7 +584,8 @@ final class AtlasCanvasView: NSView {
         let over: Bool
         if case .frameContent(let id) = hitTarget(at: point), id == active { over = true } else { over = false }
         let zoom = !event.modifierFlags.isDisjoint(with: [.command, .control])
-        switch routeScroll(phase: event.phase, momentum: event.momentumPhase, overActivePage: over, zoomModifier: zoom) {
+        let pageModifier = event.modifierFlags.contains(.option)
+        switch routeScroll(phase: event.phase, momentum: event.momentumPhase, overActivePage: over, pageModifier: pageModifier, zoomModifier: zoom) {
         case .canvas:
             scrollWheel(with: event)
             return nil

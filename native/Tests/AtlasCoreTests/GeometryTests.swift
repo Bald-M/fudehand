@@ -21,6 +21,16 @@ import AtlasCore
     #expect(CanvasGeometry.wheelDelta(Point(x: 3.5, y: -7), precise: true) == Point(x: 3.5, y: -7))
 }
 
+@Test func commandWheelUpZoomsInWhateverTheNaturalScrollingSetting() {
+    // Natural scrolling off: scrolling up reports a positive delta.
+    #expect(CanvasGeometry.wheelZoomScale(1, deltaY: 50, invertedFromDevice: false) > 1)
+    #expect(CanvasGeometry.wheelZoomScale(1, deltaY: -50, invertedFromDevice: false) < 1)
+    // Natural scrolling on: scrolling up reports a negative delta.
+    #expect(CanvasGeometry.wheelZoomScale(1, deltaY: -50, invertedFromDevice: true) > 1)
+    #expect(CanvasGeometry.wheelZoomScale(1, deltaY: 50, invertedFromDevice: true) < 1)
+    #expect(abs(CanvasGeometry.wheelZoomScale(0.5, deltaY: 100, invertedFromDevice: false) - 0.5 * 2.718281828459045) < 1e-12)
+}
+
 @Test func rectHelpers() {
     let a = Rect(x: 0, y: 0, width: 100, height: 50)
     #expect(a.midX == 50 && a.maxY == 50)

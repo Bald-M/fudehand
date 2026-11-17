@@ -85,6 +85,18 @@ function functionCall(id, name, raw) {
   return { id, name, args: {}, error: '工具参数不是合法 JSON' }
 }
 
+/** 读取提供方的模型列表，返回 { models: [id], default }；用于设置面板的下拉菜单。 */
+export async function listModels({ provider, baseUrl, apiKey }, signal) {
+  const defaults = providerDefaults[provider]
+  if (!defaults) throw new Error(`未知的模型提供方：${provider}`)
+  const base = (baseUrl || defaults.baseUrl).replace(/\/+$/, '')
+  const body = defaults.kind === 'anthropic'
+    ? await request(`${base}/v1/models?limit=1000`, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } }, signal)
+    : await request(`${base}/models`, { headers: { authorization: `Bearer ${apiKey}` } }, signal)
+  const ids = (Array.isArray(body.data) ? body.data : []).map(item => item?.id).filter(id => typeof id === 'string' && id)
+  return { models: [...new Set(ids)], default: defaults.model }
+}
+
 /** 返回 { model, turn(system, history, tools, signal) → { text, toolCalls } }。 */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]

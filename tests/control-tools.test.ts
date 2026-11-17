@@ -43,6 +43,7 @@ describe('画布控制工具', () => {
     expect(tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
       'canvas_get_state', 'canvas_select_project', 'canvas_focus_frame', 'canvas_fit_all',
       'canvas_zoom', 'canvas_reset', 'canvas_restart_preview', 'frame_snapshot',
+      'frame_console', 'frame_read', 'frame_interact',
     ]))
   })
 
@@ -79,11 +80,11 @@ describe('画布控制工具', () => {
     expect(text(result)).toBe('当前作品没有画框：tv')
   })
 
-  it('App 未运行时返回“界面图鉴未运行”', async () => {
+  it('App 未运行时返回“ui-atlas 未运行”', async () => {
     const socketPath = join(tmpdir(), `uia-missing-${randomUUID().slice(0, 8)}.sock`)
     const result = await callTool('canvas_get_state', {}, { root: '/unused', socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('界面图鉴未运行')
+    expect(text(result)).toBe('ui-atlas 未运行')
   })
 
   it('frame_snapshot 以 MCP image 内容返回截图', async () => {
@@ -94,6 +95,28 @@ describe('画布控制工具', () => {
       { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
       { type: 'text', text: '画框 mobile 的截图（390×844）' },
     ])
+  })
+
+  it('转发画框控制台与交互命令，只传定义过的参数', async () => {
+    const app = await fakeApp(request => ({ ok: true, result: { frame: 'web', echo: request.command } }))
+    const ctx = { root: '/unused', socketPath: app.socketPath }
+    expect((await callTool('frame_console', { frame: 'web' }, ctx)).isError).toBeFalsy()
+    await callTool('frame_console', { frame: 'web', limit: 20 }, ctx)
+    await callTool('frame_interact', { frame: 'web', action: 'fill', selector: '#q', value: '猫', extra: 1 }, ctx)
+    await callTool('frame_interact', { frame: 'web', action: 'scroll', deltaY: 400 }, ctx)
+    expect(app.received.map(request => (request as { args: object }).args)).toEqual([
+      { frame: 'web' },
+      { frame: 'web', limit: 20 },
+      { frame: 'web', action: 'fill', selector: '#q', value: '猫' },
+      { frame: 'web', action: 'scroll', deltaY: 400 },
+    ])
+  })
+
+  it('frame_read 以文本大纲返回页面内容', async () => {
+    const app = await fakeApp(() => ({ ok: true, result: { frame: 'web', url: 'http://127.0.0.1:4401/', title: '首页', outline: 'h1 你好\nbutton "提交" → #go', truncated: true } }))
+    const result = await callTool('frame_read', { frame: 'web' }, { root: '/unused', socketPath: app.socketPath })
+    expect(result.isError).toBeFalsy()
+    expect(text(result)).toBe('首页\nhttp://127.0.0.1:4401/\n\nh1 你好\nbutton "提交" → #go\n\n（内容过长，已截断）')
   })
 
   it('响应跨数据块且切在中文字符中间时仍完整解析', async () => {

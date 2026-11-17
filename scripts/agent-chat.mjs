@@ -3,26 +3,27 @@ import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
 import { callTool, tools } from './atlas-tools.mjs'
-import { createProvider } from './agent-providers.mjs'
+import { createProvider, listModels } from './agent-providers.mjs'
 
 /**
- * App 内对话面板的 Agent harness。由界面图鉴按需启动，经 stdin/stdout 交换 JSON 行：
+ * App 内对话面板的 Agent harness。由 ui-atlas 按需启动，经 stdin/stdout 交换 JSON 行：
  *   输入：{type:'user',text} | {type:'stop'} | {type:'clear'}
  *   输出：{type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
  *        | {type:'error',message} | {type:'done',stopped}
  * 提供方、模型、baseUrl 与 API key 只经环境变量传入；stdin 关闭时退出。
+ * 带 --list-models 时只输出一行 {type:'models',models,default} 或 {type:'error',message} 后退出。
  */
 
-const { values } = parseArgs({ options: { root: { type: 'string' } } })
+const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
 const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
 const maximumRounds = 8
 
 const system = [
-  '你是界面图鉴（UI Atlas）内置的助手，帮助使用者整理作品与画框、操作画布。',
+  '你是 ui-atlas 内置的助手，帮助使用者整理作品与画框、操作画布。',
   '作品与画框保存在 catalog.json，用 list_projects、get_project 等工具读取，用 add_frame、update_frame、remove_frame、set_project_enabled 修改。',
   '修改 catalog.json 后，App 需要重启预览才会显示变更，可以调用 canvas_restart_preview。',
-  '画布工具（canvas_*、frame_snapshot）直接操作正在运行的 App。',
+  '画布工具（canvas_*、frame_*）直接操作正在运行的 App；修改作品后可用 frame_console 查看报错、frame_read 读取页面、frame_interact 验证交互。',
   '回答使用简体中文，简洁说明做了什么。',
 ].join('\n')
 
@@ -33,6 +34,19 @@ function redact(text) {
 
 function emit(event) {
   process.stdout.write(JSON.stringify(event, (_key, value) => typeof value === 'string' ? redact(value) : value) + '\n')
+}
+
+if (values['list-models']) {
+  try {
+    if (!apiKey) throw new Error('尚未配置 API key')
+    const settings = { provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }
+    emit({ type: 'models', ...await listModels(settings, AbortSignal.timeout(15000)) })
+  } catch (error) {
+    emit({ type: 'error', message: error?.name === 'TimeoutError' ? '获取模型列表超时' : String(error?.message ?? error) })
+  }
+  // macOS 上管道写入是异步的，等输出写完再退出，避免模型很多时被截断。
+  await new Promise(resolve => process.stdout.write('', resolve))
+  process.exit(0)
 }
 
 let provider = null

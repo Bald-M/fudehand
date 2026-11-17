@@ -4,6 +4,8 @@ import SwiftUI
 /// 对话面板：与 App 内 Agent 对话，Agent 通过与 MCP 相同的工具整理作品和操作画布。
 struct ChatPanel: View {
     @ObservedObject var chat: ChatSession
+    let root: URL?
+    let runtime: WorkspaceLocation?
     let send: (String) -> Void
     @State private var draft = ""
     @State private var showingSettings = false
@@ -19,7 +21,7 @@ struct ChatPanel: View {
             composer
         }
         .frame(minWidth: 300)
-        .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat) }
+        .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat, root: root, runtime: runtime) }
     }
 
     private var header: some View {
@@ -163,13 +165,24 @@ private struct ChatEntryRow: View {
 
 private struct ChatSettingsSheet: View {
     @ObservedObject var chat: ChatSession
+    let root: URL?
+    let runtime: WorkspaceLocation?
     @Environment(\.dismiss) private var dismiss
     @State private var provider = ""
     @State private var model = ""
     @State private var baseUrl = ""
     @State private var key = ""
     @State private var hasSavedKey = false
+    @State private var editingKey = false
     @State private var error: String?
+    @State private var models: [String] = []
+    @State private var defaultModel: String?
+    @State private var listing = false
+    @State private var listError: String?
+    @State private var listToken = UUID()
+    @FocusState private var keyFocused: Bool
+
+    private var trimmedKey: String { key.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -178,11 +191,17 @@ private struct ChatSettingsSheet: View {
                 Picker("模型提供方", selection: $provider) {
                     ForEach(ChatSettings.providers, id: \.id) { Text($0.title).tag($0.id) }
                 }
-                TextField("模型", text: $model, prompt: Text("留空使用默认模型"))
-                TextField("接口地址", text: $baseUrl, prompt: Text("留空使用官方地址"))
-                SecureField("API key", text: $key, prompt: Text(hasSavedKey ? "已保存，留空不修改" : "必填"))
+                LabeledContent("模型") {
+                    HStack(spacing: 4) {
+                        TextField("模型", text: $model, prompt: Text(defaultModel.map { "默认：\($0)" } ?? "留空使用默认模型")).labelsHidden()
+                        modelMenu
+                    }
+                }
+                TextField("接口地址", text: $baseUrl, prompt: Text("留空使用官方地址")).onSubmit(refreshModels)
+                LabeledContent("API key") { keyField }
             }
-            Text("API key 只保存在本机钥匙串，启动对话程序时经环境变量传入，不写入仓库或日志。DeepSeek 使用 OpenAI 兼容接口，OpenAI 使用 Responses API。")
+            listStatus
+            Text("API key 只保存在本机钥匙串，启动对话程序时经环境变量传入，不写入仓库或日志；界面只显示首尾各 4 位。DeepSeek 使用 OpenAI 兼容接口，OpenAI 使用 Responses API。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             HStack {
@@ -190,7 +209,9 @@ private struct ChatSettingsSheet: View {
                     Button("删除已保存的 key", role: .destructive) {
                         Keychain.delete(provider)
                         chat.keyUpdated(provider: provider, saved: false)
-                        key = ""; hasSavedKey = false
+                        key = ""; hasSavedKey = false; editingKey = false
+                        // 丢弃仍在进行、用旧 key 发出的请求。
+                        listToken = UUID(); listing = false; models = []; listError = nil
                     }
                 }
                 Spacer()
@@ -198,15 +219,82 @@ private struct ChatSettingsSheet: View {
                 Button("保存", action: save).keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20).frame(width: 440)
-        .onAppear { load(chat.settings) }
+        .padding(20).frame(width: 460)
+        .onAppear { load(chat.settings); refreshModels() }
         .onChange(of: provider) { previous, next in
             // 首次载入时 previous 为空，保留 onAppear 读到的值；之后每次切换都换成该提供方保存的设置。
             hasSavedKey = chat.savedKey(for: next)
             guard !previous.isEmpty else { return }
             let stored = ChatSession.stored(next, .standard)
-            model = stored.model; baseUrl = stored.baseUrl; key = ""
+            model = stored.model; baseUrl = stored.baseUrl; key = ""; editingKey = false
+            models = []; defaultModel = nil
+            refreshModels()
         }
+        .onChange(of: keyFocused) { _, focused in
+            // 输入期间保持明文框；离开输入框后改为遮蔽显示，并用新 key 重新获取模型。
+            if focused { editingKey = true; return }
+            guard editingKey, !trimmedKey.isEmpty || hasSavedKey else { return }
+            editingKey = false
+            if !trimmedKey.isEmpty { refreshModels() }
+        }
+    }
+
+    private var modelMenu: some View {
+        Menu {
+            Button { model = "" } label: { menuLabel(defaultModel.map { "默认模型（\($0)）" } ?? "默认模型", selected: model.isEmpty) }
+            if !models.isEmpty {
+                Divider()
+                ForEach(models, id: \.self) { id in
+                    Button { model = id } label: { menuLabel(id, selected: model == id) }
+                }
+            }
+            Divider()
+            Button("重新获取模型列表", action: refreshModels).disabled(listing)
+        } label: {
+            Image(systemName: "chevron.up.chevron.down")
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("选择模型").accessibilityLabel("选择模型")
+    }
+
+    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
+        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
+    }
+
+    @ViewBuilder private var keyField: some View {
+        if editingKey || (trimmedKey.isEmpty && !hasSavedKey) {
+            SecureField("API key", text: $key, prompt: Text(hasSavedKey ? "输入新的 key，留空不修改" : "必填"))
+                .labelsHidden().focused($keyFocused).onSubmit { keyFocused = false }
+        } else {
+            HStack(spacing: 8) {
+                Text(trimmedKey.isEmpty ? chat.keyHint(for: provider) ?? "已保存" : ChatSettings.maskedKey(trimmedKey))
+                    .font(.body.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    .accessibilityLabel(trimmedKey.isEmpty ? "已保存的 API key" : "新输入的 API key")
+                Spacer()
+                Button("更换") {
+                    key = ""; editingKey = true
+                    DispatchQueue.main.async { keyFocused = true }
+                }.controlSize(.small)
+            }
+        }
+    }
+
+    @ViewBuilder private var listStatus: some View {
+        HStack(spacing: 6) {
+            if listing {
+                ProgressView().controlSize(.small)
+                Text("正在获取可用模型…")
+            } else if let listError {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                Text("获取模型列表失败：\(listError)。仍可手动填写模型。")
+            } else if !models.isEmpty {
+                Image(systemName: "checkmark.circle").foregroundStyle(.green)
+                Text("已获取 \(models.count) 个可用模型，可在模型右侧的菜单中选择。")
+            } else if trimmedKey.isEmpty && !hasSavedKey {
+                Text("填写 API key 后会自动获取可用模型。")
+            }
+        }
+        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     private func load(_ settings: ChatSettings) {
@@ -214,15 +302,36 @@ private struct ChatSettingsSheet: View {
         hasSavedKey = chat.savedKey(for: settings.provider)
     }
 
+    /// 用输入框里的新 key（没有时用钥匙串里的 key）读取当前提供方的模型列表；只采用最后一次请求的结果。
+    private func refreshModels() {
+        let token = UUID()
+        listToken = token
+        listError = nil
+        guard let root else { listing = false; listError = "尚未打开项目目录"; return }
+        let typed = trimmedKey
+        guard !typed.isEmpty || hasSavedKey else { listing = false; models = []; return }
+        let settings = ChatSettings(provider: provider, model: "", baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))
+        listing = true
+        Task {
+            let apiKey = typed.isEmpty ? chat.savedKeyValue(for: settings.provider) : typed
+            let result = await ChatSession.listModels(root: root, runtime: runtime, settings: settings, apiKey: apiKey)
+            guard listToken == token else { return }
+            listing = false
+            switch result {
+            case .success(let list): models = list.models; defaultModel = list.defaultModel.isEmpty ? nil : list.defaultModel
+            case .failure(let failure): models = []; listError = failure.message
+            }
+        }
+    }
+
     private func save() {
-        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             if !trimmedKey.isEmpty { try Keychain.save(trimmedKey, account: provider) }
         } catch { self.error = error.localizedDescription; return }
         // 设置变化时 ChatSession 自己会重启；只有确实保存了新 key 才通知。
         chat.settings = ChatSettings(provider: provider, model: model.trimmingCharacters(in: .whitespaces),
                                      baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))
-        if !trimmedKey.isEmpty { chat.keyUpdated(provider: provider, saved: true) }
+        if !trimmedKey.isEmpty { chat.keyUpdated(provider: provider, saved: true, key: trimmedKey) }
         dismiss()
     }
 }

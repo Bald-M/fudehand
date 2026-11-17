@@ -38,7 +38,7 @@ import Testing
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-session-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
-    let message = "[界面图鉴] 端口 4401 已被占用"
+    let message = "[ui-atlas] 端口 4401 已被占用"
     // The launcher exits first; a grandchild still holding the pipe writes the last line afterwards,
     // so the failure must wait for end of output instead of using what arrived before the exit.
     let grandchild = "setTimeout(() => process.stderr.write(\(String(reflecting: message))), 300)"

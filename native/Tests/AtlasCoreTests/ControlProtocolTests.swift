@@ -23,6 +23,17 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":7,"command":"reset","args":{}}"#, .reset),
         (#"{"id":8,"command":"restart_preview"}"#, .restartPreview),
         (#"{"id":"s","command":"frame_snapshot","args":{"frame":"web"}}"#, .frameSnapshot("web")),
+        (#"{"id":10,"command":"frame_console","args":{"frame":"web"}}"#, .frameConsole("web", limit: 50)),
+        (#"{"id":11,"command":"frame_console","args":{"frame":"web","limit":200}}"#, .frameConsole("web", limit: 200)),
+        (#"{"id":12,"command":"frame_read","args":{"frame":"web"}}"#, .frameRead("web")),
+        (##"{"id":13,"command":"frame_interact","args":{"frame":"web","action":"click","selector":"#go"}}"##,
+         .frameInteract("web", .click(selector: "#go"))),
+        (#"{"id":14,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input","value":""}}"#,
+         .frameInteract("web", .fill(selector: "input", value: ""))),
+        (##"{"id":15,"command":"frame_interact","args":{"frame":"web","action":"scroll","selector":"#end"}}"##,
+         .frameInteract("web", .scroll(selector: "#end", deltaX: 0, deltaY: 0))),
+        (#"{"id":16,"command":"frame_interact","args":{"frame":"web","action":"scroll","deltaY":600}}"#,
+         .frameInteract("web", .scroll(selector: nil, deltaX: 0, deltaY: 600))),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -47,6 +58,17 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "参数类型错误：scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "参数类型错误：scale"),
         (#"{"id":1,"command":"fit_all","args":[]}"#, "参数类型错误：args"),
+        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":0}}"#, "参数类型错误：limit"),
+        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":201}}"#, "参数类型错误：limit"),
+        (#"{"id":1,"command":"frame_console","args":{"frame":"web","limit":1.5}}"#, "参数类型错误：limit"),
+        (#"{"id":1,"command":"frame_read","args":{}}"#, "缺少参数：frame"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web"}}"#, "缺少参数：action"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"hover","selector":"a"}}"#, "不支持的操作：hover"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"click"}}"#, "缺少参数：selector"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input"}}"#, "缺少参数：value"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"fill","selector":"input","value":3}}"#, "参数类型错误：value"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"scroll"}}"#, "缺少参数：selector 或 deltaX、deltaY"),
+        (#"{"id":1,"command":"frame_interact","args":{"frame":"web","action":"scroll","deltaY":"down"}}"#, "参数类型错误：deltaY"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("应拒绝：\(line)"); continue }
