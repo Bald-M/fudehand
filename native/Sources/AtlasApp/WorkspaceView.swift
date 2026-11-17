@@ -8,7 +8,7 @@ struct WorkspaceView: View {
     @State private var search = ""
 
     private var projects: [Project] {
-        (store.catalog?.projects ?? []).filter {
+        store.orderedProjects.filter {
             search.isEmpty || ([$0.title, $0.subtitle, $0.framework] + $0.tags).joined(separator: " ").localizedCaseInsensitiveContains(search)
         }
     }
@@ -45,29 +45,49 @@ struct WorkspaceView: View {
                 .textFieldStyle(.roundedBorder).padding(.horizontal, 16).padding(.bottom, 12)
                 .accessibilityLabel("搜索作品")
             List {
-                Section("作品 · \(store.catalog?.projects.count ?? 0)") {
+                Section {
                     ForEach(projects) { project in
+                        let pinned = store.pinned.contains(project.id)
                         Button { store.select(project) } label: {
                             HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: "square.grid.2x2").foregroundStyle(project.id == store.project?.id ? Color.accentColor : Color.secondary).padding(.top, 2)
+                                ProjectThumbnail(image: store.thumbnails[project.id], selected: project.id == store.project?.id)
                                 VStack(alignment: .leading, spacing: 5) {
-                                    HStack {
-                                        Text(project.title).font(.system(size: 13, weight: .semibold))
+                                    HStack(spacing: 4) {
+                                        Text(project.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                                        if pinned {
+                                            Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("已置顶")
+                                        }
                                         Spacer()
                                         if !project.enabled { Text("已停用").font(.caption2).foregroundStyle(.secondary) }
                                     }
                                     Text(project.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                    Text("\(project.framework) · \(project.frames.count) 个画框").font(.caption2).foregroundStyle(.secondary)
+                                    Text(detailLine(project)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                                 }
                             }.padding(.vertical, 6).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .disabled(!project.enabled)
+                        .contextMenu {
+                            Button(pinned ? "取消置顶" : "置顶") { store.togglePin(project.id) }
+                        }
                         .listRowBackground(project.id == store.project?.id ? Color.accentColor.opacity(0.12) : Color.clear)
                         .accessibilityAddTraits(project.id == store.project?.id ? .isSelected : [])
                     }
                     if projects.isEmpty {
                         Text(search.isEmpty ? "目录中还没有作品" : "没有匹配的作品").font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
+                    }
+                } header: {
+                    HStack {
+                        Text("作品 · \(store.catalog?.projects.count ?? 0)")
+                        Spacer()
+                        Menu {
+                            Picker("排序", selection: $store.projectOrder) {
+                                Text("目录顺序").tag(ProjectOrder.catalog)
+                                Text("最近修改").tag(ProjectOrder.recent)
+                            }.pickerStyle(.inline)
+                        } label: { Image(systemName: "arrow.up.arrow.down") }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                            .help("排序：\(store.projectOrder == .recent ? "最近修改" : "目录顺序")").accessibilityLabel("作品排序")
                     }
                 }
             }.listStyle(.sidebar).frame(minHeight: 120)
@@ -96,6 +116,19 @@ struct WorkspaceView: View {
             }.foregroundStyle(.secondary).padding(16)
         }
     }
+
+    private func detailLine(_ project: Project) -> String {
+        var parts = [project.framework, "\(project.frames.count) 个画框"]
+        if let date = store.modified[project.id] { parts.append(Self.relative.localizedString(for: date, relativeTo: Date())) }
+        return parts.joined(separator: " · ")
+    }
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.unitsStyle = .short
+        return formatter
+    }()
 
     private var statusLabel: String {
         switch session.phase {
@@ -153,6 +186,7 @@ struct WorkspaceView: View {
                                          }
                                      },
                                      onSizeChange: store.resize,
+                                     onFrameReady: store.frameBecameReady,
                                      onCanvas: { store.canvas = $0 })
                             .clipped()
                         canvasFooter(project)
@@ -213,6 +247,27 @@ struct WorkspaceView: View {
             Toggle(isOn: $store.showingChat) { Image(systemName: "bubble.left.and.text.bubble.right") }
                 .help("对话（⌘⇧A）").accessibilityLabel("对话").keyboardShortcut("a", modifiers: [.command, .shift])
         }
+    }
+}
+
+/// 作品缩略图；尚未生成时显示占位图。
+private struct ProjectThumbnail: View {
+    let image: NSImage?
+    let selected: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(.quaternary.opacity(0.6))
+            .overlay(alignment: .top) {
+                // 长页面显示顶部，与画框首屏一致。
+                if let image { Image(nsImage: image).resizable().aspectRatio(contentMode: .fill) }
+            }
+            .overlay { if image == nil { Image(systemName: "photo").foregroundStyle(.tertiary) } }
+            .frame(width: 64, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.1),
+                                                                   lineWidth: selected ? 1.5 : 0.5))
+            .accessibilityHidden(true)
     }
 }
 
