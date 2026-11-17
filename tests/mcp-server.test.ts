@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
+import { readFile } from 'node:fs/promises'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { fakeApp } from './helpers/fake-app'
@@ -29,6 +30,12 @@ describe('MCP server', () => {
     const { tools } = await client.listTools()
     expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['design_create_node', 'design_update_node', 'design_snapshot']))
     expect(tools.find(tool => tool.name === 'design_create_node')?.inputSchema.required).toEqual(['node'])
+  })
+
+  it('reports the version from package.json', async () => {
+    const client = await connect('/tmp/unused.sock')
+    const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+    expect(client.getServerVersion()?.version).toBe(version)
   })
 
   it('经 UI_ATLAS_CONTROL_SOCKET 把调用转发给 App', async () => {

@@ -12,6 +12,8 @@
     "build:native": "node scripts/native-build.mjs",
     "test:native": "node scripts/native-test.mjs",
     "mcp": "node scripts/mcp-server.mjs",
+    "version:set": "node scripts/version.mjs set",
+    "version:check": "node scripts/version.mjs check",
     "test": "vitest run",
     "check": "pnpm test"
   },
