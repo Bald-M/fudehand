@@ -15,6 +15,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   await copyFile(join(scratch, configuration, 'AtlasApp'), join(contents, 'MacOS', 'AtlasApp'))
   await chmod(join(contents, 'MacOS', 'AtlasApp'), 0o755)
   await copyFile(join(root, 'native', 'Resources', 'Info.plist'), join(contents, 'Info.plist'))
+  await copyFile(join(root, 'native', 'Resources', 'AppIcon.icns'), join(contents, 'Resources', 'AppIcon.icns'))
   await copyTemplates(join(contents, 'Resources', 'Templates'))
   // Local build metadata: the chat panel starts the source workspace's Agent harness with this Node.
   await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))

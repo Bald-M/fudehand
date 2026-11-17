@@ -11,6 +11,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- ui-atlas has a macOS app icon featuring a glass globe, a selection frame, and an AI sparkle (#69).
+
 ### Changed
 
 - The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).

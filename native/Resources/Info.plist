@@ -23,6 +23,8 @@
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>AtlasApp</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.ui-atlas.native</string>
 	<key>CFBundleName</key>
