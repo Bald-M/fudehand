@@ -9,3 +9,4 @@ coverage/
 !.env.example
 native/.build/
 native/.swiftpm/
+catalog.json.*.tmp

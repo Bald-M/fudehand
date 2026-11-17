@@ -1,34 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { atlasWorkspace, sampleCatalog } from './helpers/atlas-workspace'
 
 const server = fileURLToPath(new URL('../scripts/mcp-server.mjs', import.meta.url))
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
 
-function sampleCatalog() {
-  return {
-    version: 1,
-    projects: [{
-      id: 'demo', title: '演示作品', subtitle: '', description: '', author: '原创作者', sourceUrl: null, framework: 'HTML', tags: [], enabled: true, layoutVersion: 1,
-      preview: { cwd: 'examples/demo', command: ['pnpm', 'dev'], port: 31002, baseUrl: 'http://127.0.0.1:31002/demo/' },
-      frames: [
-        { id: 'home', title: '首页', platform: 'web', path: 'home', width: 1440, height: 900, x: 0, y: 0 },
-        { id: 'phone', title: '手机', platform: 'mobile', path: '/demo/m?x=1', width: 390, height: 844, x: 1600, y: 0 },
-      ],
-    }],
-  }
-}
-
 async function workspace(catalog: unknown = sampleCatalog()) {
-  const root = await mkdtemp(join(tmpdir(), 'ui-atlas-mcp-'))
-  cleanup.push(() => rm(root, { recursive: true, force: true }))
-  await mkdir(join(root, 'examples/demo'), { recursive: true })
-  await writeFile(join(root, 'catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
+  const { root, dispose } = await atlasWorkspace(catalog)
+  cleanup.push(dispose)
   return root
 }
 
