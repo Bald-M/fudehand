@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { servicesFromCatalog } from './launcher.mjs'
+import { sendControl } from './control-client.mjs'
 
 /** 读取并用与 launcher 相同的规则校验 catalog.json。 */
 export async function loadCatalog(root) {
@@ -161,6 +162,40 @@ export const tools = [
     },
   },
 ]
+
+/** 画布控制层：经本地控制通道转发给正在运行的 App。 */
+function canvasTool(name, command, description, properties = {}) {
+  return {
+    name, description: `${description}需要界面图鉴正在运行。`,
+    inputSchema: { type: 'object', properties, required: Object.keys(properties) },
+    async run(args, { socketPath }) {
+      const forwarded = Object.fromEntries(Object.keys(properties).map(key => [key, args[key]]))
+      return json(await sendControl(command, forwarded, { socketPath }))
+    },
+  }
+}
+
+tools.push(
+  canvasTool('canvas_get_state', 'get_state', '读取画布状态：当前作品、选择、视口、画框位置与预览阶段。'),
+  canvasTool('canvas_select_project', 'select_project', '在画布中切换到指定作品（必须已启用）。', projectArg),
+  canvasTool('canvas_focus_frame', 'focus_frame', '把视口移动并缩放到当前作品的指定画框。', { frame: { type: 'string', description: '画框 id' } }),
+  canvasTool('canvas_fit_all', 'fit_all', '缩放视口以显示当前作品的全部画框。'),
+  canvasTool('canvas_zoom', 'zoom', '以画布中心为基准缩放到指定比例（1 为实际大小，范围 0.05～4）。', { scale: { type: 'number' } }),
+  canvasTool('canvas_reset', 'reset', '恢复当前作品的默认布局，撤销保存的画框位置和视角。'),
+  canvasTool('canvas_restart_preview', 'restart_preview', '重新读取 catalog.json 并重启全部预览服务；修改 catalog 后用它让 App 生效。'),
+  {
+    name: 'frame_snapshot',
+    description: '截取当前作品中某个画框在 App 内实际渲染的网页，返回 PNG。需要界面图鉴正在运行且画框已加载。',
+    inputSchema: { type: 'object', properties: { frame: { type: 'string', description: '画框 id' } }, required: ['frame'] },
+    async run({ frame }, { socketPath }) {
+      const shot = await sendControl('frame_snapshot', { frame }, { socketPath })
+      return { content: [
+        { type: 'image', data: shot.data, mimeType: shot.mimeType },
+        { type: 'text', text: `画框 ${shot.frame} 的截图（${shot.width}×${shot.height}）` },
+      ] }
+    },
+  },
+)
 
 /** 调用工具；任何错误都转为带中文消息的错误结果，而不是抛出。 */
 export async function callTool(name, args, ctx) {
