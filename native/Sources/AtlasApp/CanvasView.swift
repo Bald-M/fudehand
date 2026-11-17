@@ -53,7 +53,14 @@ final class AtlasCanvasView: NSView {
     var settleWork: DispatchWorkItem?
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
-    var spaceHeld = false
+    /// Holding Space shows the hand right away, before any drag starts.
+    var spaceHeld = false {
+        didSet {
+            guard spaceHeld != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+            if !gesturePanned { restingCursor.set() }
+        }
+    }
     private var lastReportedSize = CGSize.zero
     var activeDisplayLink: CADisplayLink?
     var frameLog = FrameIntervalLog()
@@ -324,6 +331,7 @@ final class AtlasCanvasView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        if spaceHeld, !gesturePanned { NSCursor.openHand.set() }
         let next: String?
         switch hitTarget(at: screenPoint(event).0, deep: event.modifierFlags.contains(.command)) {
         case .node(let id), .label(let id): next = id
@@ -480,11 +488,11 @@ final class AtlasCanvasView: NSView {
     // MARK: Cursor
 
     override func resetCursorRects() {
-        if tool == .hand { addCursorRect(bounds, cursor: .openHand) }
+        if tool == .hand || spaceHeld { addCursorRect(bounds, cursor: .openHand) }
         else if tool.creates != nil { addCursorRect(bounds, cursor: .crosshair) }
     }
 
-    private var restingCursor: NSCursor { tool == .hand ? .openHand : tool.creates != nil ? .crosshair : .arrow }
+    private var restingCursor: NSCursor { tool == .hand || spaceHeld ? .openHand : tool.creates != nil ? .crosshair : .arrow }
 
     override func keyUp(with event: NSEvent) {
         if window?.firstResponder !== self { super.keyUp(with: event); return }
