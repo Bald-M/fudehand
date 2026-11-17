@@ -6,7 +6,7 @@
 
 ### Issue tracker
 
-任务和规格记录在本地 `.scratch/`，见 `docs/agents/issue-tracker.md`。
+任务记录在 GitHub Issues，格式见 `docs/agents/issue-tracker.md`。
 
 ### Domain docs
 
