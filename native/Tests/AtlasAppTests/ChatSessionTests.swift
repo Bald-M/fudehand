@@ -86,3 +86,46 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.entries.isEmpty)
     await session.shutdown()
 }
+
+@Test func apiKeysAreMaskedKeepingOnlyTheEnds() {
+    #expect(ChatSettings.maskedKey("sk-0123456789abcdef") == "sk-0••••••••cdef")
+    #expect(ChatSettings.maskedKey("  sk-0123456789abcdef\n") == "sk-0••••••••cdef")
+    #expect(ChatSettings.maskedKey("short-key") == "••••••••")
+    #expect(ChatSettings.maskedKey("") == "")
+}
+
+@Test @MainActor func chatKeyHintIsStoredMaskedAndBackfilledFromTheKeychain() {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    var reads: [String] = []
+    let session = ChatSession(defaults: defaults, readKey: { reads.append($0); return "sk-legacy-0000-9999" })
+    session.keyUpdated(provider: "openai", saved: true, key: "sk-0123456789abcdef")
+    #expect(session.keyHint(for: "openai") == "sk-0••••••••cdef")
+    #expect(!defaults.dictionaryRepresentation().values.contains { ($0 as? String)?.contains("0123456789") == true })
+    session.keyUpdated(provider: "openai", saved: false)
+    #expect(session.keyHint(for: "openai") == nil)
+    #expect(session.savedKeyValue(for: "openai") == nil)
+    #expect(reads.isEmpty)
+
+    // 旧版本保存的 key 没有提示，第一次读取钥匙串时补上。
+    session.keyUpdated(provider: "anthropic", saved: true)
+    #expect(session.keyHint(for: "anthropic") == nil)
+    #expect(session.savedKeyValue(for: "anthropic") == "sk-legacy-0000-9999")
+    #expect(session.keyHint(for: "anthropic") == "sk-l••••••••9999")
+}
+
+@Test func modelListingIsParsedFromTheHarnessOutput() {
+    #expect(ChatSession.parseModelListing(Data(#"{"type":"models","models":["a","b"],"default":"a"}"#.utf8) + Data("\n".utf8))
+            == .success(ModelListing(models: ["a", "b"], defaultModel: "a")))
+    #expect(ChatSession.parseModelListing(Data(#"{"type":"error","message":"API key 无效或无权限"}"#.utf8))
+            == .failure(ModelListError(message: "API key 无效或无权限")))
+    #expect(ChatSession.parseModelListing(Data()) == .failure(ModelListError(message: "对话程序没有返回模型列表，请确认已在项目目录执行 pnpm install。")))
+}
+
+@Test func modelListingRunsTheRealHarnessWithoutPuttingTheKeyInArguments() async {
+    let settings = ChatSettings(provider: "deepseek", model: "", baseUrl: "http://127.0.0.1:9")
+    let launch = ChatSession.launch(root: repository, runtime: nil, settings: settings, apiKey: "sk-secret", environment: [:], listModels: true)
+    #expect(launch.arguments.last == "--list-models")
+    #expect(!launch.arguments.joined().contains("sk-secret"))
+    let missing = await ChatSession.listModels(root: repository, runtime: nil, settings: settings, apiKey: nil)
+    #expect(missing == .failure(ModelListError(message: "尚未配置 API key")))
+}

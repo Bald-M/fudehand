@@ -272,3 +272,50 @@ describe('Agent harness：Anthropic Messages API', () => {
     expect((await chat.ask('你好')).find(event => event.type === 'error')?.message).toBe('模型 API 报错（HTTP 529）：Overloaded')
   })
 })
+
+/** 以 --list-models 运行 harness，返回唯一一行输出和退出码。 */
+async function listModels(env: Record<string, string>) {
+  const child = spawn(process.execPath, [harness, '--list-models'], { env: { PATH: process.env.PATH ?? '', ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
+  let output = ''
+  child.stdout!.setEncoding('utf8')
+  child.stdout!.on('data', chunk => { output += chunk })
+  const code = await new Promise<number | null>(resolve => child.once('exit', resolve))
+  return { code, output, event: JSON.parse(output.trim()) }
+}
+
+describe('Agent harness：列出可用模型', () => {
+  it('OpenAI 兼容接口读取 /models 并带上默认模型', async () => {
+    const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] } }])
+    const result = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: `${model.baseUrl}/`, UI_ATLAS_API_KEY: KEY })
+    expect(result.code).toBe(0)
+    expect(result.event).toEqual({ type: 'models', models: ['deepseek-chat', 'deepseek-reasoner'], default: 'deepseek-chat' })
+    expect(model.requests[0].url).toBe('/models')
+    expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
+  })
+
+  it('OpenAI Responses 提供方同样读取 /models', async () => {
+    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5-codex' }] } }])
+    const result = await listModels({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect(result.event).toEqual({ type: 'models', models: ['gpt-5-codex'], default: 'gpt-5-codex' })
+    expect(model.requests[0].url).toBe('/models')
+  })
+
+  it('Anthropic 读取 /v1/models 并使用自己的鉴权头', async () => {
+    const model = await fakeModel([{ body: { data: [{ id: 'claude-opus-5-5', type: 'model' }, { id: 'claude-sonnet-5-5', type: 'model' }], has_more: false } }])
+    const result = await listModels({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect(result.event).toEqual({ type: 'models', models: ['claude-opus-5-5', 'claude-sonnet-5-5'], default: 'claude-sonnet-5-5' })
+    expect(model.requests[0].url).toBe('/v1/models?limit=1000')
+    expect(model.requests[0].headers['x-api-key']).toBe(KEY)
+    expect(model.requests[0].headers['anthropic-version']).toBe('2023-06-01')
+  })
+
+  it('错误显示中文，且 key 不出现在输出中', async () => {
+    const model = await fakeModel([{ status: 401, body: { error: { message: `bad key ${KEY}` } } }, { status: 404, body: { error: { message: `no route for ${KEY}` } } }])
+    const unauthorized = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect(unauthorized.event).toEqual({ type: 'error', message: 'API key 无效或无权限' })
+    const missing = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect(missing.event.type).toBe('error')
+    expect(missing.output).not.toContain(KEY)
+    expect((await listModels({ UI_ATLAS_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: '尚未配置 API key' })
+  })
+})
