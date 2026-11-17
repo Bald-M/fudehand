@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ui-atlas": {
+      "command": "node",
+      "args": ["scripts/mcp-server.mjs"]
+    }
+  }
+}

@@ -11,6 +11,7 @@
     "dev": "node scripts/native-dev.mjs",
     "build:native": "node scripts/native-build.mjs",
     "test:native": "node scripts/native-test.mjs",
+    "mcp": "node scripts/mcp-server.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "build": "pnpm -r --if-present build",
@@ -21,5 +22,8 @@
     "typescript": "~5.9.3",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2"
   }
 }
