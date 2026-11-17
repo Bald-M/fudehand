@@ -36,6 +36,13 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         wantsLayer = true
         layer?.masksToBounds = true
         layer?.cornerRadius = 10
+        // In a full-size-content window WebKit treats the part of a frame panned under the toolbar as obscured and
+        // pushes the page down, shrinking its viewport. Frames always show their whole CSS viewport (#14).
+        let setAutomaticInsets = NSSelectorFromString("_setAutomaticallyAdjustsContentInsets:")
+        if webView.responds(to: setAutomaticInsets) {
+            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+            unsafeBitCast(webView.method(for: setAutomaticInsets), to: Setter.self)(webView, setAutomaticInsets, false)
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: "atlasExit")
