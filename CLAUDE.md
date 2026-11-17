@@ -1,49 +1,49 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code（claude.ai/code）在本仓库中工作提供指引。
 
-界面图鉴 (UI Atlas) is a local macOS app for studying UI designs: a SwiftUI + AppKit shell shows Vue/React/HTML study projects ("作品") as fixed-size web frames ("画框") on a pannable, zoomable canvas ("画布"). Docs, UI strings and error messages are in Chinese; terms follow `GLOSSARY.md`. Read `GLOSSARY.md` and the relevant `docs/adr/` before exploring; `docs/macos.md` is the authoritative spec for canvas interaction behavior.
+界面图鉴（UI Atlas）是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
 
-## Commands
+## 命令
 
-Requires macOS 14+, Swift 6 (Command Line Tools are enough, no third-party Swift packages), Node 22.12+, pnpm 11.7.0.
+需要 macOS 14+、Swift 6（装 Command Line Tools 即可，不依赖第三方 Swift 包）、Node 22.12+、pnpm 11.7.0。
 
 ```bash
 pnpm install
-pnpm dev               # debug-build the app and open it
-pnpm build:native      # release build + ad-hoc sign → dist/界面图鉴.app
-pnpm test:native       # swift test for native/ (AtlasCoreTests + AtlasAppTests)
-pnpm check             # typecheck examples + Vitest (tests/) + build every example
+pnpm dev               # 以 debug 构建应用并打开
+pnpm build:native      # release 构建 + ad-hoc 签名 → dist/界面图鉴.app
+pnpm test:native       # 对 native/ 运行 swift test（AtlasCoreTests + AtlasAppTests）
+pnpm check             # 示例类型检查 + Vitest（tests/）+ 构建全部示例
 ```
 
-Single tests:
+运行单个测试：
 
 ```bash
 pnpm vitest run tests/launcher.test.ts -t "<name>"
 swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 ```
 
-`pnpm test:native` goes through `scripts/native-swift.mjs`, which pins SwiftPM scratch/cache dirs under `/private/tmp/ui-atlas-native-*` (override with `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE`) and passes `--disable-sandbox`; never run two Swift builds on the same scratch dir. Node tests spawn real HTTP servers and child processes, so they need loopback networking — a sandbox that blocks listening on localhost makes them fail spuriously.
+`pnpm test:native` 经由 `scripts/native-swift.mjs` 执行，它把 SwiftPM 的 scratch/cache 目录固定在 `/private/tmp/ui-atlas-native-*` 下（可用 `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE` 覆盖），并传入 `--disable-sandbox`；不要在同一个 scratch 目录上同时跑两个 Swift 构建。Node 测试会启动真实的 HTTP 服务和子进程，因此需要回环网络——禁止监听 localhost 的沙箱会让它们误报失败。
 
-`UI_ATLAS_FRAME_LOG=1` makes the app print `[frame] hitches=N frames=M` once a second for pan/zoom performance work.
+设置 `UI_ATLAS_FRAME_LOG=1` 后，应用每秒打印一次 `[frame] hitches=N frames=M`，用于平移/缩放的性能调优。
 
-## Architecture
+## 架构
 
-**`catalog.json` is the single source of truth** for projects, frames, default layout and preview launch config (`preview.cwd/command/port/baseUrl`). Each example's `vite.config.ts` reads its own port/host from it with `readFileSync` (not `import`, to avoid Vite restarting every service on catalog edits). Catalog validation is implemented twice — `scripts/launcher.mjs` (Node) and `native/Sources/AtlasCore/Catalog.swift` (Swift) — and both test suites run the shared cases in `tests/fixtures/catalog-conformance.json`. Any rule change must update both sides and the fixture.
+**`catalog.json` 是唯一事实来源**，记录作品、画框、默认布局和预览启动配置（`preview.cwd/command/port/baseUrl`）。每个示例的 `vite.config.ts` 用 `readFileSync`（而不是 `import`，以免修改 catalog 时 Vite 重启所有服务）从中读取自己的端口和主机。catalog 校验实现了两份——`scripts/launcher.mjs`（Node）和 `native/Sources/AtlasCore/Catalog.swift`（Swift）——两边的测试套件都会运行 `tests/fixtures/catalog-conformance.json` 中的共享用例。任何规则变更都必须同时更新两边和该 fixture。
 
-**Process model.** The Swift app (`PreviewSession`) spawns `node scripts/native-preview.mjs --root <repo>`, which uses `launcher.mjs` to start every `enabled` example's dev server, waits for HTTP 2xx, then prints `UI_ATLAS_READY`. The app owns that child's stdin pipe; EOF (quit or crash) tears down all preview process groups. The launcher never kills foreign processes holding a port and never picks another port. `native-build.mjs` writes the repo path, Node path and PATH into the bundle's `Contents/Resources/workspace.json`, so the built app depends on this checkout and its Node install.
+**进程模型。** Swift 应用（`PreviewSession`）启动 `node scripts/native-preview.mjs --root <repo>`，后者借助 `launcher.mjs` 启动每个 `enabled` 示例的开发服务，等到 HTTP 返回 2xx 后打印 `UI_ATLAS_READY`。应用持有该子进程的 stdin 管道；一旦 EOF（退出或崩溃），所有预览进程组都会被关闭。启动器从不杀掉占用端口的外部进程，也从不改用其他端口。`native-build.mjs` 会把仓库路径、Node 路径和 PATH 写入应用包的 `Contents/Resources/workspace.json`，所以构建出的应用依赖本检出目录及其 Node 安装。
 
-**Native targets** (`native/Package.swift`, Swift 5 language mode):
-- `AtlasCore` — pure, AppKit-free logic: catalog model/validation, geometry and viewport math, layout persistence, snapping, scroll routing, viewport animation, and `CanvasInteraction` (a state machine that turns pointer events + `HitTarget` into `InteractionEffect`s). Put testable interaction rules here.
-- `AtlasApp` — SwiftUI shell (`AtlasApp`, `WorkspaceView`), `AtlasStore` (app state, UserDefaults persistence of theme/workspace/per-project positions and viewport), and the AppKit canvas: `NativeCanvas` (NSViewRepresentable bridge) → `AtlasCanvasView` (input handling, applies interaction effects), `CanvasViewport` (pans move `world.bounds`; zooms render as a GPU transform and commit when settled), `CanvasGrid`, `CanvasOverlay` (selection/marquee/guides, never takes input), and `PreviewFrameView` (one WKWebView per frame, injected Esc script).
+**原生 target**（`native/Package.swift`，Swift 5 语言模式）：
+- `AtlasCore` —— 纯逻辑、不依赖 AppKit：catalog 模型与校验、几何与视口计算、布局持久化、吸附、滚动路由、视口动画，以及 `CanvasInteraction`（把指针事件 + `HitTarget` 转换为 `InteractionEffect` 的状态机）。可测试的交互规则放在这里。
+- `AtlasApp` —— SwiftUI 外壳（`AtlasApp`、`WorkspaceView`）、`AtlasStore`（应用状态，用 UserDefaults 持久化主题、工作区、每个作品的位置和视口），以及 AppKit 画布：`NativeCanvas`（NSViewRepresentable 桥接）→ `AtlasCanvasView`（处理输入、应用交互效果）、`CanvasViewport`（平移移动 `world.bounds`；缩放以 GPU 变换渲染，稳定后再提交）、`CanvasGrid`、`CanvasOverlay`（选区/框选/参考线，从不接收输入），以及 `PreviewFrameView`（每个画框一个 WKWebView，注入 Esc 脚本）。
 
-The canvas owns the live viewport and selection and reports only settled values back to `AtlasStore`; the store pushes one-off changes down via token-bearing requests (`ViewportRequest`, `positionsToken`, `reloadToken`) — a new token means "apply once". Frames are scaled visually as a whole; each web view keeps its configured CSS viewport size, so responsive breakpoints don't change with zoom.
+画布持有实时视口和选区，只把稳定后的值回报给 `AtlasStore`；store 通过带 token 的请求（`ViewportRequest`、`positionsToken`、`reloadToken`）向下推送一次性变更——新 token 表示“应用一次”。画框整体做视觉缩放；每个 web view 保持其配置的 CSS 视口尺寸，因此响应式断点不会随缩放改变。
 
-**Examples** live in `examples/*` (pnpm workspace). The app loads them directly from their own ports (no proxy). There is no backend and no static site bundle.
+**示例**位于 `examples/*`（pnpm workspace）。应用直接从各自端口加载它们（不经代理）。没有后端，也没有静态站点打包产物。
 
-## Conventions
+## 约定
 
-- Remote: `origin` → https://github.com/Bald-M/ui-atlas (default branch `main`). No CI or deploy is configured, so local checks are the gate. Deliver on a task branch, push it and open a PR into `main`.
-- Specs and task records go in `.scratch/<feature>/spec.md` and `.scratch/<feature>/issues/NN-slug.md` (with `Status:` / `Blocked by:` lines), per `docs/agents/issue-tracker.md`.
-- Record new terms in `GLOSSARY.md` and architectural decisions in `docs/adr/`. ADR 0002 removed the browser shell entirely — don't reintroduce `apps/atlas`, `dev:web`, a 4400 shell port or an iframe bridge.
-- UI changes should be checked in the real app in both light and dark appearance; evidence screenshots go in `docs/evidence/`.
+- 远端：`origin` → https://github.com/Bald-M/ui-atlas（默认分支 `main`）。未配置 CI 或部署，本地检查即门禁。在任务分支上交付，推送后向 `main` 发起 PR。
+- 规格和任务记录放在 `.scratch/<feature>/spec.md` 与 `.scratch/<feature>/issues/NN-slug.md`（含 `Status:` / `Blocked by:` 行），遵循 `docs/agents/issue-tracker.md`。
+- 新术语记入 `GLOSSARY.md`，架构决策记入 `docs/adr/`。ADR 0002 已彻底移除浏览器外壳——不要重新引入 `apps/atlas`、`dev:web`、4400 外壳端口或 iframe 桥接。
+- 界面改动需在真实应用中按浅色和深色两种外观检查；证据截图放在 `docs/evidence/`。
