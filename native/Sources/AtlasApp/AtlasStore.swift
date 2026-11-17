@@ -268,7 +268,8 @@ final class AtlasStore: ObservableObject {
     private static let recentsKey = "native.recentDocuments"
 
     private func recordRecent(_ url: URL) {
-        updateRecents { $0.record(url.standardizedFileURL.path, at: Date()) }
+        // 解析符号链接，与 openFromSystem 判断“当前文件”的方式一致，避免同一文件出现两条。
+        updateRecents { $0.record(url.resolvingSymlinksInPath().path, at: Date()) }
     }
 
     func removeRecent(_ path: String) { updateRecents { $0.remove(path) } }
@@ -364,7 +365,7 @@ final class AtlasStore: ObservableObject {
     /// Finder 双击或“打开方式”传来的工程文件：有未保存修改时先询问，打不开时显示原因。
     func openFromSystem(_ url: URL) {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
-        guard !current || isDirty else { presentEditor(); return }
+        guard !current || isDirty else { recordRecent(url); presentEditor(); return }
         guard confirmDiscard(current ? "重新打开文件" : "打开其他文件") else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }

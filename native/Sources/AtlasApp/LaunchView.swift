@@ -52,12 +52,10 @@ struct LaunchView: View {
             }
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
-            .keyboardShortcut("n")
             Button { store.openDocument() } label: {
                 Label("打开…", systemImage: "folder").frame(maxWidth: .infinity, alignment: .leading)
             }
             .controlSize(.large)
-            .keyboardShortcut("o")
             Spacer()
         }
         .padding(24)

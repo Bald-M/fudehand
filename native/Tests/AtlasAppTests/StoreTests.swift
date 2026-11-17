@@ -160,9 +160,12 @@ private func temporaryFile() -> URL {
 }
 
 @Test @MainActor func openingAndSavingRecordRecentDocumentsThatPersist() async throws {
-    let defaults = UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!
+    let suite = "ui-atlas-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
     let store = AtlasStore(defaults: defaults)
-    let first = temporaryFile(), second = temporaryFile()
+    // 记录中的路径解析了符号链接（临时目录 /var → /private/var）。
+    let first = temporaryFile().resolvingSymlinksInPath(), second = temporaryFile().resolvingSymlinksInPath()
     _ = try await control(store, .saveDocument(first.path))
     _ = try await control(store, .saveDocument(second.path))
     _ = try await control(store, .openDocument(first.path, discard: false))
@@ -193,8 +196,12 @@ private func temporaryFile() -> URL {
     try document.encoded().write(to: directory.appendingPathComponent("移动端.uiatlas"))
     try document.encoded().write(to: directory.appendingPathComponent("桌面端.uiatlas"))
     try Data().write(to: directory.appendingPathComponent("说明.md"))
+    try document.encoded().write(to: directory.appendingPathComponent("模板 10.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("模板 2.uiatlas"))
     let templates = AtlasStore.templates(in: directory)
-    #expect(templates.map(\.name) == ["桌面端", "移动端"].sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }))
+    // 按访达的方式排序：数字按数值比较。
+    #expect(templates.map(\.name).filter { $0.hasPrefix("模板") } == ["模板 2", "模板 10"])
+    #expect(templates.count == 4)
 
     let store = makeStore()
     var presented = 0
