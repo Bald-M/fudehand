@@ -30,6 +30,8 @@ When the App starts it first shows the launch window (启动窗口): create a ne
 
 For canvas operations, panels, files, and keyboard shortcuts, see the [macOS guide (macOS 使用说明)](docs/macos.md).
 
+Before contributing, read the [contributing guide](CONTRIBUTING.md).
+
 ## `.uiatlas` project files
 
 Use Save (保存, ⌘S) and Save As (另存为…, ⇧⌘S) in the File menu (文件) to save a design as a `.uiatlas` project file, and Open (⌘O) or Open Recent (打开最近) to reopen it. The App exports the `.uiatlas` file type, so double-clicking in Finder, dragging onto the Dock icon, or Open With all open the file with ui-atlas; if there are unsaved changes, the App first asks whether to save them.
