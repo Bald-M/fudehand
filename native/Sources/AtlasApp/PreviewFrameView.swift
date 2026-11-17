@@ -8,7 +8,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private let definition: Frame
     private let previewURL: URL?
     private let webView: WKWebView
-    private let externalButton = NSButton()
     private let retryButton = NSButton()
     private let status = NSTextField(labelWithString: "正在加载预览…")
     private let progress = NSProgressIndicator()
@@ -21,11 +20,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private(set) var console = FrameConsole()
     /// 读取和交互脚本在独立的脚本世界执行，页面自己的脚本改不到它们。
     private static let agentWorld = WKContentWorld.world(name: "ui-atlas")
-    /// Agent 交互进行中及结束后片刻，页面脚本代为触发的外站导航一律取消，不打开系统浏览器。
-    private var agentInteractionUntil = Date.distantPast
-    private var agentInteracting: Bool { Date() < agentInteractionUntil }
-    /// 打开系统浏览器；测试可替换。
-    var openInBrowser: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// True once the page has loaded; only a ready frame can become the active frame that receives web input.
     /// Set only by navigation callbacks; settable internally so tests can simulate a loaded page.
     var isReady = false {
@@ -61,15 +55,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         webView.configuration.userContentController.add(self, name: "atlasExit")
         webView.configuration.userContentController.add(self, name: "atlasConsole")
         addSubview(webView)
-        externalButton.bezelStyle = .inline
-        externalButton.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "在浏览器打开")
-        externalButton.imagePosition = .imageOnly
-        externalButton.target = self
-        externalButton.action = #selector(openExternal)
-        externalButton.toolTip = "在浏览器打开这个画框"
-        externalButton.setAccessibilityLabel("在浏览器打开\(frame.title)")
-        externalButton.isEnabled = previewURL != nil
-        addSubview(externalButton)
         status.alignment = .center
         status.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 14)
@@ -108,7 +93,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         super.layout()
         // Content bounds remain in CSS pixels even when the ancestor is magnified.
         webView.frame = NSRect(x: 0, y: CanvasGeometry.headerHeight, width: definition.width, height: definition.height)
-        externalButton.frame = NSRect(x: max(0, bounds.width - 36), y: 12, width: 24, height: 22)
         status.frame = NSRect(x: 24, y: CanvasGeometry.headerHeight + min(200, definition.height * 0.38), width: max(1, bounds.width - 48), height: 58)
         progress.frame = NSRect(x: bounds.midX - 12, y: status.frame.minY - 38, width: 24, height: 24)
         retryButton.frame = NSRect(x: bounds.midX - 52, y: status.frame.maxY + 12, width: 104, height: 32)
@@ -120,11 +104,11 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         NSColor.windowBackgroundColor.setFill()
         NSRect(x: 0, y: 0, width: bounds.width, height: CanvasGeometry.headerHeight).fill()
         let title = definition.title as NSString
-        title.draw(in: NSRect(x: 14, y: 8, width: max(1, bounds.width - 155), height: 17),
+        title.draw(in: NSRect(x: 14, y: 8, width: max(1, bounds.width - 28), height: 17),
                    withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor])
         let platform = ["mobile": "移动端", "web": "网页端", "desktop": "桌面端"][definition.platform] ?? definition.platform
         let detail = "\(platform) · \(Self.dimensions(definition))" as NSString
-        detail.draw(in: NSRect(x: 14, y: 26, width: max(1, bounds.width - 155), height: 14),
+        detail.draw(in: NSRect(x: 14, y: 26, width: max(1, bounds.width - 28), height: 14),
                     withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor])
         let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 10, yRadius: 10)
         NSColor.separatorColor.setStroke()
@@ -144,7 +128,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
 
     /// The frame's own control under `point` (frame coordinates); these stay clickable in every state.
     func control(at point: NSPoint) -> NSView? {
-        if externalButton.frame.contains(point) { return externalButton }
         if !retryButton.isHidden, retryButton.frame.contains(point) { return retryButton }
         return nil
     }
@@ -198,8 +181,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
             arguments["action"] = "scroll"; arguments["selector"] = selector ?? NSNull()
             arguments["deltaX"] = deltaX; arguments["deltaY"] = deltaY
         }
-        agentInteractionUntil = .distantFuture
-        defer { agentInteractionUntil = Date().addingTimeInterval(1) }
         let result = try await runAgentScript(FramePageScripts.interact, arguments: arguments)
         if let message = result["error"] as? String { throw ControlCommandError(message) }
         return result
@@ -224,12 +205,6 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         }
         guard let object = value as? [String: Any] else { throw ControlCommandError("页面脚本返回了无法识别的结果") }
         return object
-    }
-
-    @objc private func openExternal() {
-        guard let previewURL else { return }
-        let current = webView.url.flatMap { isPreviewOrigin($0) ? $0 : nil } ?? previewURL
-        openInBrowser(current)
     }
 
     func reload() {
@@ -293,14 +268,12 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
             && url.user == nil && url.password == nil
     }
 
+    /// Works open only inside their frame: the main frame stays on the work's own preview service, and
+    /// navigation elsewhere is dropped rather than handed to a browser.
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if navigationAction.targetFrame?.isMainFrame == false { decisionHandler(.allow); return }
-        if isPreviewOrigin(url) { decisionHandler(.allow); return }
-        if navigationAction.navigationType == .linkActivated, !agentInteracting, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            openInBrowser(url)
-        }
-        decisionHandler(.cancel)
+        decisionHandler(isPreviewOrigin(url) ? .allow : .cancel)
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
@@ -312,11 +285,9 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         } else { decisionHandler(.allow) }
     }
 
+    /// `window.open` and `target=_blank` open nothing: no new window and no browser.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if !agentInteracting, let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            openInBrowser(url)
-        }
-        return nil
+        nil
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

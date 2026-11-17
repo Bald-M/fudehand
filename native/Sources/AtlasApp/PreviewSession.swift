@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+@preconcurrency import WebKit
 
 /// 持有 `native-preview.mjs` 启动器进程，按需请求各作品的开发服务。
 /// 协议见该脚本：stdin 写 `start <id>`，stdout 读 `UI_ATLAS_LISTENING` / `UI_ATLAS_READY <id>` /
@@ -25,12 +26,34 @@ final class PreviewSession: ObservableObject {
     private var stopping = false
     private var exitStatus: Int32?
     private var logsClosed = false
+    /// Set once this launch's token is in the frames' cookie store; until then no work is reported ready.
+    @Published private var accessCookiesSet = false
+    /// The frames' cookie store; tests pass a private one.
+    private let cookieStore: WKHTTPCookieStore
+
+    init(cookieStore: WKHTTPCookieStore = WKWebsiteDataStore.default().httpCookieStore) {
+        self.cookieStore = cookieStore
+    }
+
+    /// Cookie name and environment variable shared with scripts/preview-gate.mjs.
+    static let accessCookieName = "ui_atlas_preview"
+    static let accessTokenEnvironmentKey = "UI_ATLAS_PREVIEW_TOKEN"
+
+    /// One session cookie per loopback host a catalog may use; cookies ignore ports, so each covers every work.
+    static func accessCookies(token: String) -> [HTTPCookie] {
+        ["127.0.0.1", "localhost", "::1"].compactMap { host in
+            HTTPCookie(properties: [.name: accessCookieName, .value: token, .domain: host, .path: "/"])
+        }
+    }
 
     /// 某个作品的状态：启动器失败或未运行时，作品随之失败或停止。
     func phase(for id: String?) -> Phase {
         switch phase {
         case .failed, .stopped: return phase
-        case .starting, .ready: return id.flatMap { services[$0] } ?? .stopped
+        case .starting, .ready:
+            let service = id.flatMap { services[$0] } ?? .stopped
+            // A frame created before the cookie is in place would be refused by the preview service.
+            return service == .ready && !accessCookiesSet ? .starting : service
         }
     }
 
@@ -54,13 +77,28 @@ final class PreviewSession: ObservableObject {
         logs = ""
         exitStatus = nil
         logsClosed = false
+        accessCookiesSet = false
         let token = UUID()
         generation = token
+        // Random per launch. Preview services answer only requests carrying it as a cookie, which only the
+        // frames' web views have, so a browser cannot open the preview ports (docs/adr/0005).
+        let accessToken = (0..<32).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max)) }.joined()
+        let cookies = Self.accessCookies(token: accessToken)
+        let store = cookieStore
+        Task { [weak self] in
+            for cookie in cookies {
+                // A restart replaces the token; a stale launch must not overwrite the new cookie.
+                guard let self, self.generation == token else { return }
+                await store.setCookie(cookie)
+            }
+            if let self, self.generation == token { self.accessCookiesSet = true }
+        }
         let child = Process()
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         var environment = ProcessInfo.processInfo.environment
+        environment[Self.accessTokenEnvironmentKey] = accessToken
         environment["PATH"] = [runtime?.path, environment["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"].compactMap { $0 }.joined(separator: ":")
         if let node = runtime?.node, FileManager.default.isExecutableFile(atPath: node) {
             child.executableURL = URL(fileURLWithPath: node)

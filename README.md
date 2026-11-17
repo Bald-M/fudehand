@@ -90,6 +90,7 @@ scripts/                   原生构建、测试、案例服务的启动与清�
 ```ts
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
+import { previewGate } from "../../scripts/preview-gate.mjs";
 
 type Catalog = { projects: { id: string; preview: { port: number; baseUrl: string } }[] };
 const catalog: Catalog = JSON.parse(readFileSync(new URL("../../catalog.json", import.meta.url), "utf8"));
@@ -97,11 +98,12 @@ const project = catalog.projects.find((item) => item.id === "demo");
 if (!project) throw new Error('catalog.json 中没有 id 为 "demo" 的作品，无法确定预览端口。');
 
 export default defineConfig({
+  plugins: [previewGate()],
   server: { host: new URL(project.preview.baseUrl).hostname.replace(/^\[|\]$/g, ""), port: project.preview.port, strictPort: true },
 });
 ```
 
-配置用 `readFileSync` 而不是 `import` 读取 `catalog.json`，这样编辑目录不会让 Vite 重启所有案例服务；修改端口后需在 App 中重新读取目录并启动服务。Vue 案例另加 `plugins: [vue()]`。
+配置用 `readFileSync` 而不是 `import` 读取 `catalog.json`，这样编辑目录不会让 Vite 重启所有案例服务；修改端口后需在 App 中重新读取目录并启动服务。`previewGate()` 让案例只在 App 画框中打开：App 启动案例时生成一次性预览令牌并写入画框的 Cookie，没有该 Cookie 的请求（例如浏览器直接访问端口）得到 403；不经 App、单独运行 `pnpm dev` 时不拦截。Vue 案例使用 `plugins: [previewGate(), vue()]`。
 
 `package.json` 中使用 `"dev": "vite"` 和 `"build": "vite build"`。
 
@@ -113,7 +115,7 @@ export default defineConfig({
 
 ### 接入现成源码
 
-保留项目原有技术栈和路由，将源码放入本仓的案例目录，按实际启动命令登记 `preview`。纳入工作区的项目使用根 pnpm 安装依赖；已有锁文件、特殊目录结构或工具链可能需要少量适配。非 Vite 项目自行配置监听地址和固定端口，启动器不会向所有命令附加 Vite 参数。
+保留项目原有技术栈和路由，将源码放入本仓的案例目录，按实际启动命令登记 `preview`。纳入工作区的项目使用根 pnpm 安装依赖；已有锁文件、特殊目录结构或工具链可能需要少量适配。非 Vite 项目自行配置监听地址和固定端口，启动器不会向所有命令附加 Vite 参数。非 Vite 项目用不了 `previewGate()`，需自行校验环境变量 `UI_ATLAS_PREVIEW_TOKEN` 对应的 `ui_atlas_preview` Cookie，否则浏览器仍可直接访问其端口。
 
 App 直接访问案例端口，不把案例代理到统一子路径，从而保留静态资源路径、前端路由和热更新连接。依赖真实业务服务的源码应先改为本地模拟或准备其原有运行环境；本项目不创建业务后端。
 
@@ -174,7 +176,7 @@ Node 测试使用真实 HTTP/子进程测试样例，覆盖按需启动与停止
 
 - **端口已占用**：关闭你确认占用该端口的程序，或修改 `catalog.json` 中的端口（非 Vite 案例还需同步其启动命令）。App 显示具体错误并提供重试，不会结束其它项目的进程，也不会悄悄换端口。
 - **启动超时**：确认依赖、启动命令与本地模拟环境。默认在 30 秒内等待 HTTP 2xx；失败只影响该作品，其它作品继续运行，可在 App 中单独重试。
-- **画框空白或加载失败**：使用标题栏按钮在浏览器打开画框的本地地址，核对路径，再重载当前作品。
+- **画框空白或加载失败**：核对 `catalog.json` 中的画框路径和案例启动命令，再重载当前作品。画框只能在 App 中查看，浏览器直接访问预览端口会得到 403；需要单独调试时在案例目录执行 `pnpm dev`（不经 App 启动时不拦截）。
 - **位置与配置不一致**：使用恢复默认布局，或在修改默认布局后递增 `layoutVersion`。
 
 源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)，以 Apache-2.0 许可发布。App 仅在本机构建和运行，不配置 CI、云同步或生产部署。

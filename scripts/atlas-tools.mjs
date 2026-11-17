@@ -88,7 +88,7 @@ export const tools = [
   },
   {
     name: 'get_preview_urls',
-    description: '返回作品每个画框的预览 URL、宽高与平台，可用浏览器工具直接访问。',
+    description: '返回作品每个画框的预览 URL、宽高与平台。预览只在 App 画框中打开（浏览器直接访问返回 403）；要看渲染结果用 frame_snapshot。',
     inputSchema: { type: 'object', properties: projectArg, required: ['project'] },
     async run({ project }, { root }) {
       const found = findProject(await loadCatalog(root), project)

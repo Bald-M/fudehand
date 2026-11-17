@@ -183,6 +183,23 @@ describe('作品目录与本地服务', () => {
     expect(await (await fetch(first.service.url)).text()).toBe('fixture')
   })
 
+  it('带预览令牌时传给子进程，并带 Cookie 检查就绪', async () => {
+    const { service } = await fixture()
+    const script = join(service.cwd, 'gated.mjs')
+    await writeFile(script, `
+import http from 'node:http'
+const token = process.env.UI_ATLAS_PREVIEW_TOKEN
+http.createServer((request, response) => {
+  response.writeHead(token && request.headers.cookie === 'ui_atlas_preview=' + token ? 200 : 403)
+  response.end()
+}).listen(${service.port}, '127.0.0.1')`)
+    service.command = [process.execPath, script]
+    const { pool, events } = supervised([service], { previewToken: 'launch-token', timeoutMs: 5000 })
+    await pool.start('fixture')
+    expect(events).toEqual(['ready fixture'])
+    expect((await fetch(service.url)).status).toBe(403)
+  })
+
   it('拒绝未知作品', async () => {
     const { pool, events } = supervised([])
     await expect(pool.start('missing')).rejects.toThrow('missing')

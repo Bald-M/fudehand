@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import net from 'node:net'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { PREVIEW_COOKIE, PREVIEW_TOKEN_ENV } from './preview-gate.mjs'
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(`配置错误：${message}`)
@@ -100,14 +101,14 @@ export async function assertPortsAvailable(services) {
   }
 }
 
-export async function waitForHttp(url, { timeoutMs = 30000, intervalMs = 100, signal } = {}) {
+export async function waitForHttp(url, { timeoutMs = 30000, intervalMs = 100, signal, headers } = {}) {
   const deadline = Date.now() + timeoutMs
   let lastStatus = '尚未响应'
   while (Date.now() < deadline) {
     signal?.throwIfAborted()
     try {
       const requestSignal = AbortSignal.timeout(Math.max(1, Math.min(1000, deadline - Date.now())))
-      const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, requestSignal]) : requestSignal })
+      const response = await fetch(url, { headers, signal: signal ? AbortSignal.any([signal, requestSignal]) : requestSignal })
       lastStatus = `HTTP ${response.status}`
       await response.body?.cancel()
       if (response.ok) return
@@ -153,7 +154,10 @@ async function stopGroups(children, graceMs) {
  * 按需启动案例服务：start(id) 拉起并等待 HTTP 就绪，重复请求复用同一次启动；
  * 失败或意外退出只影响该服务，并清理它的进程组，之后可以再次 start。close() 停止全部服务。
  */
-export function createServicePool(services, { timeoutMs = 30000, shutdownGraceMs = 1500, stdio = 'inherit', log = console.log, onReady = () => {}, onFailed = () => {} } = {}) {
+export function createServicePool(services, { timeoutMs = 30000, shutdownGraceMs = 1500, stdio = 'inherit', log = console.log, onReady = () => {}, onFailed = () => {}, previewToken = process.env[PREVIEW_TOKEN_ENV] } = {}) {
+  // previewToken 来自 App（见 preview-gate.mjs）：传给每个案例服务，就绪检查也带上对应 Cookie。
+  const env = previewToken ? { ...process.env, [PREVIEW_TOKEN_ENV]: previewToken } : process.env
+  const headers = previewToken ? { cookie: `${PREVIEW_COOKIE}=${previewToken}` } : undefined
   const byId = new Map(services.map(service => [service.id, service]))
   const running = new Map()
   let closed = false
@@ -163,13 +167,13 @@ export function createServicePool(services, { timeoutMs = 30000, shutdownGraceMs
     if (entry.abort.signal.aborted) throw entry.failure ?? new Error(`${service.title} 已停止`)
     log(`[启动] ${service.title} → ${service.url}`)
     const child = spawn(service.command[0], service.command.slice(1), {
-      cwd: service.cwd, stdio, detached: process.platform !== 'win32', shell: false,
+      cwd: service.cwd, stdio, env, detached: process.platform !== 'win32', shell: false,
     })
     entry.child = child
     child.once('error', error => fail(entry, new Error(`${service.title} 无法启动：${error.message}`)))
     child.once('exit', (code, exitSignal) => fail(entry, new Error(`${service.title} 意外退出（${exitSignal || code}）。`)))
     try {
-      await waitForHttp(service.url, { timeoutMs, signal: entry.abort.signal })
+      await waitForHttp(service.url, { timeoutMs, signal: entry.abort.signal, headers })
     } catch (error) {
       throw entry.failure ?? error
     }
