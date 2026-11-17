@@ -1,8 +1,8 @@
 # ui-atlas
 
-一个放在本机的界面学习画布。把喜欢的设计复刻为可交互的页面，或接入现成前端源码，在同一张画布里比较移动、网页和桌面界面。
+一个放在本机的原生 AI 设计工具。画布上是由图层组成的设计文档，交互参照 Figma；你和 AI Agent 编辑同一份文档，每次修改都立即显示在画布上，设计稿保存为 ui-atlas 自己的工程文件（`.uiatlas`）。
 
-外壳是 **SwiftUI + AppKit 原生 macOS App**：作品侧栏、工具栏、画布和偏好由 Swift 实现，Vue/React/HTML 案例保留各自的工具链，通过系统 WebKit 展示。Node 脚本只负责启动和清理案例开发服务。
+App 是 **SwiftUI + AppKit 原生 macOS App**，画布用 Core Animation 直接渲染图层，不依赖网页服务。Node 只用于 MCP server 和 App 内对话面板的 Agent harness。
 
 ## 开始使用
 
@@ -13,125 +13,55 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 构建并打开 App，App 按需启动当前作品的案例服务（切换作品时再启动对应服务），退出时清理服务。
-
-| 案例 | 地址 | 内容 |
-| --- | --- | --- |
-| 留白 | `http://127.0.0.1:4401/` | Vue 原创三端日常计划工具 |
-| 灵感原野 | `http://127.0.0.1:4402/` | React 原创灵感收集器 |
+`pnpm dev` 构建并打开 App，启动时是一份空白文档。用工具栏的画框（F）、矩形（R）、椭圆（O）、文字（T）工具在画布上创建图层，在左侧图层面板和右侧属性面板中编辑，或让 Agent 搭建界面。
 
 - 发布优化构建：`pnpm build:native`，然后双击 `dist/ui-atlas.app`。
-- 原生测试：`pnpm test:native`；案例与启动器检查：`pnpm check`。
+- 原生测试：`pnpm test:native`；Node 测试：`pnpm check`。
 
-画布操作、构建、保存和边界说明见 [macOS 使用说明](docs/macos.md)。App 使用本地源码目录和 Node/pnpm，当前是本机构建，不是脱离源码的独立分发包。网页案例仍有 WebKit 渲染开销。
+画布操作、面板、文件与快捷键见 [macOS 使用说明](docs/macos.md)。
 
-手机、网页、桌面是不同尺寸的 **CSS 视口**，不模拟设备系统、像素密度或原生能力。
+## 设计文档
 
-## 目录与配置
-
-```text
-native/                    SwiftUI + AppKit 原生 App 与 Swift 测试
-examples/still/            Vue 三端案例
-examples/form/             React 案例
-catalog.json               作品资料、画框与启动配置的权威来源
-scripts/                   原生构建、测试、案例服务的启动与清理，以及 MCP server 与 Agent harness
-```
-
-新增案例时，把源码放到 `examples/<作品名>/`，在 `catalog.json` 的 `projects` 中加入一项：
+设计文档是一棵图层树，支持画框、矩形、椭圆、文字、图片、分组，以及填充、描边、圆角、透明度、显示/隐藏、锁定和画框的自动布局。工程文件是带格式版本号的公开 JSON：
 
 ```json
 {
-  "id": "my-study",
-  "title": "我的设计习作",
-  "subtitle": "一句简短介绍",
-  "description": "记录复刻目标、值得学习的设计点。",
-  "author": "原作者姓名",
-  "sourceUrl": "https://example.com/original-design",
-  "framework": "Vue 3",
-  "tags": ["移动端", "交互设计"],
-  "enabled": true,
-  "layoutVersion": 1,
-  "preview": {
-    "cwd": "examples/my-study",
-    "command": ["pnpm", "dev"],
-    "port": 4403,
-    "baseUrl": "http://127.0.0.1:4403/"
-  },
-  "frames": [
-    {
-      "id": "mobile-home",
-      "title": "首页 / 移动端",
-      "platform": "mobile",
-      "path": "/?view=mobile",
-      "width": 390,
-      "height": 844,
-      "x": 0,
-      "y": 0
-    }
+  "format": "ui-atlas.design",
+  "version": 1,
+  "nodes": [
+    { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
+      "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
+                  "align": "start", "crossAlign": "stretch" },
+      "children": [
+        { "id": "title", "type": "text", "name": "标题", "x": 16, "y": 16, "width": 358, "height": 30,
+          "text": { "content": "今日计划", "fontSize": 24, "fontWeight": 700, "color": "#111111", "align": "left", "autoResize": "height" } }
+      ] }
   ]
 }
 ```
 
-- `id` 是稳定标识，作品之间不重复，使用小写字母、数字或连字符；同一作品的画框 ID 也须唯一。
-- `sourceUrl` 是原作出处，可使用 HTTP/HTTPS 地址；原创演示没有外部出处时填 `null`。不要把原作链接填进本地预览地址。
-- `enabled` 控制 App 是否启动该案例。所有作品的端口仍须独立，包括暂时停用的作品。
-- `preview.cwd` 是相对仓库根目录的现存目录；`command` 是直接执行的参数数组，不支持 shell 管道、`&&` 或环境变量展开。
-- `port` 是端口的唯一来源。内置案例的 `vite.config.ts` 直接读取 `catalog.json` 中对应的 `preview.port` 和 `preview.baseUrl` 主机名，并开启严格端口检查，修改配置即可。非 Vite 案例的命令需自行监听同一端口。
-- `baseUrl` 使用与端口一致的本机 HTTP 地址。可使用 `127.0.0.1`、`localhost` 或 `::1`，但日常固定使用 `127.0.0.1`。
-- 画框 `width/height` 是正数，`x/y` 是画布中的有限坐标。`platform` 使用 `mobile`、`web` 或 `desktop`。
-- 修改案例目录、命令、端口、启用状态或画框配置后，在 App 中使用“重新读取目录并启动服务”。
+坐标相对父图层；数组顺序即层叠顺序，后者在上。保存的是自动布局计算后的几何。完整字段与校验规则见 [设计文档](docs/superpowers/specs/2026-11-17-native-design-document-design.md) 和 [ADR 0006](docs/adr/0006-native-design-document.md)。本期不与 Figma 互通。
 
-画框路径使用 `new URL(path, baseUrl)` 解析：当基础地址是 `http://127.0.0.1:4403/demo/` 时，`login` 指向 `/demo/login`，`/login` 指向站点根目录的 `/login`。支持查询参数与哈希路由；画框应指向该作品自己的本地服务。多个画框共享一个案例进程。
+## 目录
 
-### 添加 Vue 或 React 案例
-
-复制对应的内置案例到新目录，修改包名、页面内容，以及 `vite.config.ts` 里查找的作品 `id`，再增加配置项。`vite.config.ts` 从 `catalog.json` 读取端口和主机名：
-
-```ts
-import { readFileSync } from "node:fs";
-import { defineConfig } from "vite";
-import { previewGate } from "../../scripts/preview-gate.mjs";
-
-type Catalog = { projects: { id: string; preview: { port: number; baseUrl: string } }[] };
-const catalog: Catalog = JSON.parse(readFileSync(new URL("../../catalog.json", import.meta.url), "utf8"));
-const project = catalog.projects.find((item) => item.id === "demo");
-if (!project) throw new Error('catalog.json 中没有 id 为 "demo" 的作品，无法确定预览端口。');
-
-export default defineConfig({
-  plugins: [previewGate()],
-  server: { host: new URL(project.preview.baseUrl).hostname.replace(/^\[|\]$/g, ""), port: project.preview.port, strictPort: true },
-});
+```text
+native/                    SwiftUI + AppKit 原生 App 与 Swift 测试
+  Sources/AtlasCore/       文档模型、校验、自动布局、编辑历史、交互规则、控制协议（不依赖 AppKit）
+  Sources/AtlasApp/        画布渲染、图层与属性面板、对话面板、控制通道
+scripts/                   原生构建与测试、MCP server、Agent harness 与共用工具
+tests/                     Node 测试（Vitest）
 ```
-
-配置用 `readFileSync` 而不是 `import` 读取 `catalog.json`，这样编辑目录不会让 Vite 重启所有案例服务；修改端口后需在 App 中重新读取目录并启动服务。`previewGate()` 让案例只在 App 画框中打开：App 启动案例时生成一次性预览令牌并写入画框的 Cookie，没有该 Cookie 的请求（例如浏览器直接访问端口）得到 403；不经 App、单独运行 `pnpm dev` 时不拦截。Vue 案例使用 `plugins: [previewGate(), vue()]`。
-
-`package.json` 中使用 `"dev": "vite"` 和 `"build": "vite build"`。
-
-新目录由 pnpm 工作区管理。改完依赖后在根目录执行 `pnpm install`。同一作品可用不同路径或查询参数实现多个页面；不需要为每个画框启动一个服务器。
-
-### 添加纯 HTML 案例
-
-在新目录放入 `index.html`、CSS 和 JS，再增加一个带上述 `dev/build` 脚本的私有 `package.json` 和上面的 `vite.config.ts`。根目录已有 Vite，无需引入界面框架。多个 HTML 文件可分别作为画框路径。
-
-### 接入现成源码
-
-保留项目原有技术栈和路由，将源码放入本仓的案例目录，按实际启动命令登记 `preview`。纳入工作区的项目使用根 pnpm 安装依赖；已有锁文件、特殊目录结构或工具链可能需要少量适配。非 Vite 项目自行配置监听地址和固定端口，启动器不会向所有命令附加 Vite 参数。非 Vite 项目用不了 `previewGate()`，需自行校验环境变量 `UI_ATLAS_PREVIEW_TOKEN` 对应的 `ui_atlas_preview` Cookie，否则浏览器仍可直接访问其端口。
-
-App 直接访问案例端口，不把案例代理到统一子路径，从而保留静态资源路径、前端路由和热更新连接。依赖真实业务服务的源码应先改为本地模拟或准备其原有运行环境；本项目不创建业务后端。
-
-任意网上链接可能被目标网站的嵌入策略阻止。这里用于展示已经在本地运行的页面，不提供绕过网站限制的功能。
 
 ## AI Agent 接入
 
-ui-atlas 为 AI Agent 提供一组工具，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md)：
+ui-atlas 为 AI Agent 提供一组设计工具（`scripts/atlas-tools.mjs`），MCP server 和 App 内对话面板共用，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md) 与 [ADR 0006](docs/adr/0006-native-design-document.md)。所有工具都转发给正在运行的 App，App 是设计文档的唯一持有者；App 未运行时返回“ui-atlas 未运行”。
 
-- **作品数据层**（无需 App 运行）：`list_projects`、`get_project`、`get_preview_urls`、`add_frame`、`update_frame`、`remove_frame`、`set_project_enabled`。写入 `catalog.json` 前使用与启动器相同的校验，失败时返回中文错误且不改文件。App 只在打开项目时读取目录，改完后用 `canvas_restart_preview` 或“重新读取目录并启动服务”生效。
-- **画布控制层**（需要 App 正在运行）：`canvas_get_state`、`canvas_select_project`、`canvas_focus_frame`、`canvas_fit_all`、`canvas_zoom`、`canvas_reset`、`canvas_restart_preview`，以及返回画框实际渲染截图的 `frame_snapshot`。
-- **画框页面层**（需要 App 正在运行且画框已加载）：`frame_console` 读取画框网页最近的控制台输出与未捕获错误（每个画框保留 200 条，网页重载后仍在）；`frame_read` 读取页面可见内容的精简大纲，可交互元素附 CSS 选择器；`frame_interact` 按选择器点击、填值或滚动。它们只作用于该作品的本机预览页面，不能点击指向其他站点或在新窗口打开的链接。
+- **读取**：`design_get_state`（文件、选择、可否撤销、顶层图层摘要）、`design_get_document`（完整图层树）、`design_get_node`。
+- **编辑**：`design_create_node`（可用 `children` 一次创建整棵子树）、`design_update_node`（部分字段补丁，嵌套对象逐字段合并）、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo`。每次调用是一步撤销，画布立即更新；字段错误返回中文说明且文档不变。图片可以给 `image.path`（本机 PNG/JPEG 路径），由工具读成 base64。
+- **文件**：`design_new_document`、`design_open_document`、`design_save_document`。有未保存修改时新建或打开会被拒绝，除非传 `discard: true`。
+- **视口与核对**：`canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`，以及按实际渲染返回 PNG 的 `design_snapshot`。
 
-App 未运行时画布与画框工具返回“ui-atlas 未运行”，画框未加载时返回“画框尚未加载：<画框 id>”。
-
-画布工具经 App 的**控制通道**通信：`~/Library/Application Support/ui-atlas/control.sock`，只对当前用户开放，不监听网络地址。
+工具经 App 的**控制通道**通信：`~/Library/Application Support/ui-atlas/control.sock`（可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖），只对当前用户开放，不监听网络地址。
 
 ### Claude Code
 
@@ -149,11 +79,11 @@ args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 
 也可以执行 `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`。MCP server 默认使用脚本所在的仓库目录，需要指向其他检出目录时追加 `--root <目录>`。
 
-Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人值守模式下会直接拒绝调用。需要免批准时，在上面的配置中加一行 `default_tools_approval_mode = "approve"`（写工具会直接修改 `catalog.json`，按需开启）。
+Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人值守模式下会直接拒绝调用。需要免批准时，在上面的配置中加一行 `default_tools_approval_mode = "approve"`（写工具会直接修改设计文档，按需开启）。
 
 ### App 内对话面板
 
-点击工具栏的“对话”按钮（⌘⇧A）打开对话面板，可以直接让 AI 列出作品、增删画框或聚焦画框；每次工具调用和结果都显示在面板中，可展开查看详情。回复过程中可以停止，停止后不再执行后续工具调用。
+在右侧检查器切换到“对话”页（⇧⌘A），可以直接让 AI 搭建或修改界面；每次工具调用和结果都显示在面板中，可展开查看详情。回复过程中可以停止，停止后不再执行后续工具调用。
 
 在面板的“模型设置”中选择模型提供方并填写 API key：
 
@@ -163,20 +93,15 @@ Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人�
 | Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5-codex` |
 
-“模型”和“接口地址”留空时使用上表默认值；OpenAI 的 Codex 系列模型只支持 Responses API；其他兼容 OpenAI Chat Completions 的服务可以选 DeepSeek 并填写自己的接口地址和模型名。API key 只保存在本机钥匙串（服务名 `ui-atlas.agent`），由 App 在启动对话程序（Agent harness，`scripts/agent-chat.mjs`）时经环境变量传入，不写入仓库、`catalog.json`、偏好设置或日志。
+“模型”和“接口地址”留空时使用上表默认值；OpenAI 的 Codex 系列模型只支持 Responses API；其他兼容 OpenAI Chat Completions 的服务可以选 DeepSeek 并填写自己的接口地址和模型名。API key 只保存在本机钥匙串（服务名 `ui-atlas.agent`），由 App 在启动对话程序（Agent harness，`scripts/agent-chat.mjs`）时经环境变量传入，不写入仓库、工程文件、偏好设置或日志。
 
-## 验证与排查
+## 验证
 
 ```bash
 pnpm test:native
-pnpm check   # 类型检查、Vitest 与案例构建
+pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
 ```
 
-Node 测试使用真实 HTTP/子进程测试样例，覆盖按需启动与停止、就绪、超时、异常退出、端口占用和进程组清理。目录校验规则写在 `tests/fixtures/catalog-conformance.json`，Node 启动器与原生 App 的测试都执行这份用例，修改规则时两端需同时通过。构建输出各案例的 `dist/`；画框中的预览地址仍是本地服务地址，此项目没有整站静态发布打包流程。
-
-- **端口已占用**：关闭你确认占用该端口的程序，或修改 `catalog.json` 中的端口（非 Vite 案例还需同步其启动命令）。App 显示具体错误并提供重试，不会结束其它项目的进程，也不会悄悄换端口。
-- **启动超时**：确认依赖、启动命令与本地模拟环境。默认在 30 秒内等待 HTTP 2xx；失败只影响该作品，其它作品继续运行，可在 App 中单独重试。
-- **画框空白或加载失败**：核对 `catalog.json` 中的画框路径和案例启动命令，再重载当前作品。画框只能在 App 中查看，浏览器直接访问预览端口会得到 403；需要单独调试时在案例目录执行 `pnpm dev`（不经 App 启动时不拦截）。
-- **位置与配置不一致**：使用恢复默认布局，或在修改默认布局后递增 `layoutVersion`。
+Node 测试会启动子进程和本机 socket，需要回环网络；禁止监听本机端口的沙箱会让它们误报失败。
 
 源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)，以 Apache-2.0 许可发布。App 仅在本机构建和运行，不配置 CI、云同步或生产部署。

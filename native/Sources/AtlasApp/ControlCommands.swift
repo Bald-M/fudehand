@@ -1,20 +1,62 @@
 import AtlasCore
 import Foundation
 
-/// 控制通道命令在主线程上分发到 store；结果是可编码为 JSON 的字典。
+/// 控制通道命令在主线程上分发到 store；结果是可编码为 JSON 的字典。Agent 的修改与人工修改共用撤销历史。
 extension AtlasStore {
     func handleControl(_ command: ControlCommand) async throws -> Any {
         switch command {
         case .getState:
             return controlState()
-        case .selectProject(let id):
-            guard let next = catalog?.projects.first(where: { $0.id == id }) else { throw ControlCommandError("找不到作品：\(id)") }
-            guard next.enabled else { throw ControlCommandError("作品已停用：\(id)") }
-            select(next)
+        case .getDocument:
+            return ["format": DesignDocument.format, "version": DesignDocument.formatVersion,
+                    "nodes": editor.document.nodes.map { DesignJSON.object($0, includeImageData: false) }]
+        case .getNode(let id):
+            return DesignJSON.object(try requireNode(id), includeImageData: false)
+        case .createNode(let parent, let index, let object):
+            var existing = editor.document.allIDs()
+            let node = try DesignJSON.node(from: DesignDocument.assigningIDs(object.value, existing: &existing))
+            try perform("Agent 新建图层") { try $0.insert(node, parent: parent, index: index) }
+            var ids: [String] = []
+            DesignDocument(nodes: [node]).forEach { ids.append($0.id) }
+            return ["id": node.id, "ids": ids, "node": DesignJSON.object(try requireNode(node.id), includeImageData: false)]
+        case .updateNode(let id, let changes):
+            try perform("Agent 修改图层") { try $0.update(id) { try DesignJSON.apply(changes.value, to: &$0) } }
+            return DesignJSON.object(try requireNode(id), includeImageData: false)
+        case .deleteNodes(let ids):
+            try perform("Agent 删除图层") { try $0.delete(Set(ids)) }
+            return ["deleted": ids]
+        case .moveNode(let id, let parent, let index):
+            try perform("Agent 移动图层") { try $0.move(id, parent: parent, index: index) }
+            return DesignJSON.object(try requireNode(id), includeImageData: false)
+        case .select(let ids):
+            for id in ids { _ = try requireNode(id) }
+            setSelection(Set(ids))
             return controlState()
-        case .focusFrame(let id):
-            try requireFrame(id)
-            focusFrame(id)
+        case .undo:
+            guard canUndo else { throw ControlCommandError("没有可撤销的修改") }
+            undo()
+            return controlState()
+        case .redo:
+            guard canRedo else { throw ControlCommandError("没有可重做的修改") }
+            redo()
+            return controlState()
+        case .newDocument(let discard):
+            try requireDiscardable(discard)
+            replace(DesignDocument(), url: nil)
+            return controlState()
+        case .openDocument(let path, let discard):
+            try requireDiscardable(discard)
+            try open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+            return controlState()
+        case .saveDocument(let path):
+            guard let url = path.map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }) ?? fileURL else {
+                throw ControlCommandError("文档还没有保存过，请提供 path")
+            }
+            do { try write(to: url) } catch { throw ControlCommandError("无法保存：\(error.localizedDescription)") }
+            return controlState()
+        case .focusNode(let id):
+            _ = try requireNode(id)
+            focus(id)
             return controlState()
         case .fitAll:
             fitAll()
@@ -22,71 +64,37 @@ extension AtlasStore {
         case .zoom(let scale):
             zoom(scale)
             return controlState()
-        case .reset:
-            reset()
-            return controlState()
-        case .restartPreview:
-            guard root != nil else { throw ControlCommandError("尚未打开项目目录") }
-            guard !opening else { throw ControlCommandError("正在打开项目，请稍后再试") }
-            restart()
-            return ["restarting": true]
-        case .frameSnapshot(let id):
-            let frame = try requireFrame(id)
-            guard let view = canvas?.frames[id], view.isReady else { throw ControlCommandError("画框尚未加载：\(id)") }
-            let png = try await view.snapshotPNG()
-            return ["frame": id, "mimeType": "image/png", "data": png.base64EncodedString(),
-                    "width": frame.width, "height": frame.height]
-        case .frameConsole(let id, let limit):
-            try requireFrame(id)
-            guard let view = canvas?.frames[id] else { throw ControlCommandError("画框尚未加载：\(id)") }
-            return ["frame": id, "ready": view.isReady, "dropped": view.console.dropped,
-                    "entries": view.console.recent(limit).map(\.json)]
-        case .frameRead(let id):
-            var page = try await loadedFrame(id).readPage()
-            page["frame"] = id
-            return page
-        case .frameInteract(let id, let action):
-            var result = try await loadedFrame(id).interact(action)
-            result["frame"] = id
-            return result
+        case .nodeSnapshot(let id, let scale):
+            let node = try requireNode(id)
+            let png = try DesignRenderer.snapshotPNG(node, scale: scale)
+            return ["id": id, "mimeType": "image/png", "data": png.base64EncodedString(), "width": node.width, "height": node.height]
         }
     }
 
-    private func loadedFrame(_ id: String) throws -> PreviewFrameView {
-        try requireFrame(id)
-        guard let view = canvas?.frames[id], view.isReady else { throw ControlCommandError("画框尚未加载：\(id)") }
-        return view
+    private func requireNode(_ id: String) throws -> DesignNode {
+        guard let node = editor.document.node(id) else { throw ControlCommandError("找不到图层：\(id)") }
+        return node
     }
 
-    @discardableResult
-    private func requireFrame(_ id: String) throws -> Frame {
-        guard let frame = project?.frames.first(where: { $0.id == id }) else { throw ControlCommandError("当前作品没有画框：\(id)") }
-        return frame
+    private func requireDiscardable(_ discard: Bool) throws {
+        if isDirty, !discard { throw ControlCommandError("当前文档有未保存的修改；先保存，或传 discard: true 放弃修改") }
     }
 
-    private func controlState() -> [String: Any] {
-        let phase: String
-        var failure: Any = NSNull()
-        switch session.phase(for: project?.id) {
-        case .stopped: phase = "stopped"
-        case .starting: phase = "starting"
-        case .ready: phase = "ready"
-        case .failed(let message): phase = "failed"; failure = message
-        }
-        // 视口取画布最近一次请求或稳定后的值。
+    func controlState() -> [String: Any] {
         let current = zoomIndicator.viewport
         return [
-            "project": project?.id ?? NSNull(),
-            "projects": (catalog?.projects ?? []).map { ["id": $0.id, "title": $0.title, "enabled": $0.enabled] },
+            "file": fileURL?.path ?? NSNull(),
+            "name": title,
+            "dirty": isDirty,
             "selection": selection.sorted(),
             "viewport": ["x": current.x, "y": current.y, "scale": current.scale],
-            "frames": (project?.frames ?? []).map { frame -> [String: Any] in
-                let point = positions[frame.id] ?? Point(x: frame.x, y: frame.y)
-                return ["id": frame.id, "title": frame.title, "platform": frame.platform,
-                        "x": point.x, "y": point.y, "width": frame.width, "height": frame.height]
+            "canUndo": canUndo,
+            "canRedo": canRedo,
+            "nodeCount": editor.document.nodeCount,
+            "nodes": editor.document.nodes.map { node -> [String: Any] in
+                ["id": node.id, "type": node.type.rawValue, "name": node.name, "x": node.x, "y": node.y,
+                 "width": node.width, "height": node.height, "children": node.children.count]
             },
-            "phase": phase,
-            "error": failure,
         ]
     }
 }

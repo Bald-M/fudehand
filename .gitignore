@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.vite/
 coverage/
 .DS_Store
 *.local
@@ -9,4 +8,3 @@ coverage/
 !.env.example
 native/.build/
 native/.swiftpm/
-catalog.json.*.tmp

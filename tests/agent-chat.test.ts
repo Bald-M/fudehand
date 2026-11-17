@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { atlasWorkspace } from './helpers/atlas-workspace'
+import { fakeApp, type ControlRequest } from './helpers/fake-app'
 
 const harness = fileURLToPath(new URL('../scripts/agent-chat.mjs', import.meta.url))
 const cleanup: (() => Promise<unknown>)[] = []
@@ -37,10 +38,19 @@ async function fakeModel(replies: Reply[]) {
 
 type Event = { type: string, [key: string]: any }
 
+const STATE = { file: null, dirty: false, selection: [], layers: [{ id: 'home', type: 'frame', name: '演示页面' }] }
+
+/** 启动假 App：get_state 返回演示文档，其余命令交给 respond（默认报错）。 */
+async function startApp(respond: (request: ControlRequest) => object = request => ({ ok: false, error: `未处理的命令：${request.command}` })) {
+  const app = await fakeApp(request => request.command === 'get_state' ? { ok: true, result: STATE } : respond(request))
+  cleanup.push(app.close)
+  return app
+}
+
 /** 启动 harness，返回发送消息与按需等待事件的方法。 */
 async function startHarness(env: Record<string, string>) {
-  const { root, dispose } = await atlasWorkspace()
-  cleanup.push(dispose)
+  const root = await mkdtemp(join(tmpdir(), 'uia-chat-'))
+  cleanup.push(() => rm(root, { recursive: true, force: true }))
   const child: ChildProcess = spawn(process.execPath, [harness, '--root', root], {
     env: { PATH: process.env.PATH ?? '', UI_ATLAS_CONTROL_SOCKET: join(root, 'missing.sock'), ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -95,41 +105,43 @@ const anthropicText = (text: string) => ({ body: { content: [{ type: 'text', tex
 const anthropicTool = (id: string, name: string, input: object) => ({ body: { content: [{ type: 'text', text: '我来查一下。' }, { type: 'tool_use', id, name, input }], stop_reason: 'tool_use' } })
 
 describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
-  it('多轮对话并通过工具列出作品', async () => {
-    const model = await fakeModel([openaiTool('call_1', 'list_projects', {}), openaiText('共有 1 个作品：演示作品。'), openaiText('不客气。')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const first = await chat.ask('列出作品')
+  it('多轮对话并通过工具读取设计文档', async () => {
+    const app = await startApp()
+    const model = await fakeModel([openaiTool('call_1', 'design_get_state', {}), openaiText('文档里有 1 个画框：演示页面。'), openaiText('不客气。')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const first = await chat.ask('看看文档')
     expect(first.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
-    expect(first[0]).toMatchObject({ name: 'list_projects', args: {} })
-    expect(first[1]).toMatchObject({ name: 'list_projects', ok: true })
-    expect(first[1].text).toContain('演示作品')
-    expect(first[2].text).toBe('共有 1 个作品：演示作品。')
+    expect(first[0]).toMatchObject({ name: 'design_get_state', args: {} })
+    expect(first[1]).toMatchObject({ name: 'design_get_state', ok: true })
+    expect(first[1].text).toContain('演示页面')
+    expect(first[2].text).toBe('文档里有 1 个画框：演示页面。')
+    expect(app.received.map(request => request.command)).toEqual(['get_state'])
     await chat.ask('谢谢')
     expect(model.requests[0].url).toBe('/chat/completions')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
     expect(model.requests[0].body.model).toBe('deepseek-chat')
-    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toContain('add_frame')
+    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toContain('design_create_node')
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
     expect(third[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })
   })
 
-  it('add_frame 校验失败时把中文错误交给模型且不改文件', async () => {
+  it('App 拒绝修改时把中文错误交给模型，且只发出这一条命令', async () => {
+    const app = await startApp(() => ({ ok: false, error: '找不到图层：nope' }))
     const model = await fakeModel([
-      openaiTool('call_1', 'add_frame', { project: 'demo', frame: { id: 'home', title: '重复', platform: 'mobile', path: '/demo/x', width: 390, height: 844 } }),
-      openaiText('画框 id 重复了。'),
+      openaiTool('call_1', 'design_update_node', { id: 'nope', changes: { name: '标题' } }),
+      openaiText('没有这个图层。'),
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const before = await readFile(join(chat.root, 'catalog.json'), 'utf8')
-    const events = await chat.ask('给 demo 加一个 390×844 画框')
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('把 nope 改名为标题')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false })
-    expect(events[1].text).toContain('画框 id 必须非空且唯一')
-    expect(model.requests[1].body.messages.at(-1).content).toContain('画框 id 必须非空且唯一')
-    expect(await readFile(join(chat.root, 'catalog.json'), 'utf8')).toBe(before)
+    expect(events[1].text).toContain('找不到图层：nope')
+    expect(model.requests[1].body.messages.at(-1).content).toContain('找不到图层：nope')
+    expect(app.received).toEqual([{ id: expect.anything(), command: 'update_node', args: { id: 'nope', changes: { name: '标题' } } }])
   })
 
   it('画布工具在 App 未运行时返回中文错误', async () => {
-    const model = await fakeModel([openaiTool('call_1', 'canvas_focus_frame', { frame: 'home' }), openaiText('App 没有运行。')])
+    const model = await fakeModel([openaiTool('call_1', 'canvas_focus_node', { id: 'home' }), openaiText('App 没有运行。')])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     const events = await chat.ask('聚焦首页')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'ui-atlas 未运行' })
@@ -155,28 +167,28 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
   })
 
   it('停止后不再执行后续工具调用', async () => {
-    const model = await fakeModel([{ ...openaiTool('call_1', 'set_project_enabled', { project: 'demo', enabled: false }), delayMs: 800 }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const before = await readFile(join(chat.root, 'catalog.json'), 'utf8')
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const model = await fakeModel([{ ...openaiTool('call_1', 'design_delete_nodes', { ids: ['home'] }), delayMs: 800 }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
-    chat.send({ type: 'user', text: '停用 demo' })
+    chat.send({ type: 'user', text: '删除首页' })
     await new Promise(resolve => setTimeout(resolve, 200))
     chat.send({ type: 'stop' })
     const done = await chat.until(event => event.type === 'done', from)
     expect(done.stopped).toBe(true)
     await new Promise(resolve => setTimeout(resolve, 1000))
     expect(chat.events.slice(from).some(event => event.type === 'tool_call')).toBe(false)
-    expect(await readFile(join(chat.root, 'catalog.json'), 'utf8')).toBe(before)
+    expect(app.received).toEqual([])
   })
 
   it('参数不是合法 JSON 时不执行工具', async () => {
-    const malformed = { body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'set_project_enabled', arguments: '{"project":' } }] } }] } }
+    const malformed = { body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'design_delete_nodes', arguments: '{"ids":' } }] } }] } }
     const model = await fakeModel([malformed, openaiText('参数有误。')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const before = await readFile(join(chat.root, 'catalog.json'), 'utf8')
-    const events = await chat.ask('停用 demo')
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('删除首页')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: '工具参数不是合法 JSON' })
-    expect(await readFile(join(chat.root, 'catalog.json'), 'utf8')).toBe(before)
+    expect(app.received).toEqual([])
   })
 
   it('空回复不写入历史，清空后从新会话开始', async () => {
@@ -191,15 +203,26 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
   })
 
   it('停止后下一轮请求的历史格式有效', async () => {
-    const model = await fakeModel([{ ...openaiTool('call_1', 'list_projects', {}), delayMs: 600 }, openaiText('好的')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const app = await startApp()
+    const model = await fakeModel([{ ...openaiTool('call_1', 'design_get_state', {}), delayMs: 600 }, openaiText('好的')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
-    chat.send({ type: 'user', text: '列出作品' })
+    chat.send({ type: 'user', text: '看看文档' })
     await new Promise(resolve => setTimeout(resolve, 150))
     chat.send({ type: 'stop' })
     await chat.until(event => event.type === 'done', from)
     await chat.ask('继续')
     expect(model.requests.at(-1)!.body.messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
+  })
+
+  it('工具调用超过 16 轮时停止本次回复', async () => {
+    const app = await startApp()
+    const model = await fakeModel(Array.from({ length: 17 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})))
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('一直查')
+    expect(events.at(-2)).toEqual({ type: 'error', message: '工具调用轮数过多，已停止本次回复' })
+    expect(model.requests).toHaveLength(16)
+    expect(app.received).toHaveLength(16)
   })
 
   it('stdin 关闭后进程退出，key 不出现在输出中', async () => {
@@ -213,57 +236,62 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
 })
 
 describe('Agent harness：OpenAI Responses API（Codex 系列）', () => {
-  it('多轮对话并通过工具列出作品', async () => {
-    const model = await fakeModel([responsesTool('call_1', 'list_projects', {}), responsesText('共有 1 个作品。'), responsesText('好的。')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const first = await chat.ask('列出作品')
+  it('多轮对话并通过工具读取设计文档', async () => {
+    const app = await startApp()
+    const model = await fakeModel([responsesTool('call_1', 'design_get_state', {}), responsesText('有 1 个画框。'), responsesText('好的。')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const first = await chat.ask('看看文档')
     expect(first.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
     await chat.ask('谢谢')
     expect(model.requests[0].url).toBe('/responses')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
     expect(model.requests[0].body.model).toBe('gpt-5-codex')
     expect(typeof model.requests[0].body.instructions).toBe('string')
-    expect(model.requests[0].body.tools[0]).toMatchObject({ type: 'function', name: 'list_projects' })
+    expect(model.requests[0].body.tools[0]).toMatchObject({ type: 'function', name: 'design_get_state' })
     expect(model.requests[2].body.input).toEqual([
-      { role: 'user', content: '列出作品' },
-      { type: 'function_call', call_id: 'call_1', name: 'list_projects', arguments: '{}' },
-      { type: 'function_call_output', call_id: 'call_1', output: expect.stringContaining('演示作品') },
-      { role: 'assistant', content: '共有 1 个作品。' },
+      { role: 'user', content: '看看文档' },
+      { type: 'function_call', call_id: 'call_1', name: 'design_get_state', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_1', output: expect.stringContaining('演示页面') },
+      { role: 'assistant', content: '有 1 个画框。' },
       { role: 'user', content: '谢谢' },
     ])
   })
 })
 
 describe('Agent harness：Anthropic Messages API', () => {
-  it('多轮对话并通过工具列出作品', async () => {
-    const model = await fakeModel([anthropicTool('toolu_1', 'list_projects', {}), anthropicText('共有 1 个作品。'), anthropicText('好的。')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    const first = await chat.ask('列出作品')
+  it('多轮对话并通过工具读取设计文档', async () => {
+    const app = await startApp()
+    const model = await fakeModel([anthropicTool('toolu_1', 'design_get_state', {}), anthropicText('有 1 个画框。'), anthropicText('好的。')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const first = await chat.ask('看看文档')
     expect(first.map(event => event.type)).toEqual(['assistant', 'tool_call', 'tool_result', 'assistant', 'done'])
     await chat.ask('谢谢')
     expect(model.requests[0].url).toBe('/v1/messages')
     expect(model.requests[0].headers['x-api-key']).toBe(KEY)
     expect(model.requests[0].headers['anthropic-version']).toBe('2023-06-01')
     expect(model.requests[0].body.model).toBe('claude-sonnet-5-5')
-    expect(model.requests[0].body.tools.map((tool: any) => tool.name)).toContain('frame_snapshot')
+    expect(model.requests[0].body.tools.map((tool: any) => tool.name)).toContain('design_snapshot')
     expect(typeof model.requests[0].body.system).toBe('string')
     const messages = model.requests[2].body.messages
     expect(messages.map((message: any) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user'])
-    expect(messages[1].content.at(-1)).toMatchObject({ type: 'tool_use', id: 'toolu_1', name: 'list_projects' })
+    expect(messages[1].content.at(-1)).toMatchObject({ type: 'tool_use', id: 'toolu_1', name: 'design_get_state' })
+    expect(messages[2].content[0].content).toContain('演示页面')
     expect(messages[2].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_1' })
   })
 
   it('工具失败时标记 is_error，回复被截断时报错', async () => {
     const model = await fakeModel([
-      anthropicTool('toolu_1', 'get_project', { project: 'nope' }), anthropicText('没有这个作品。'),
-      { body: { content: [{ type: 'tool_use', id: 'toolu_2', name: 'list_projects', input: {} }], stop_reason: 'max_tokens' } },
+      anthropicTool('toolu_1', 'design_get_node', { id: 'nope' }), anthropicText('没有这个图层。'),
+      { body: { content: [{ type: 'tool_use', id: 'toolu_2', name: 'design_get_state', input: {} }], stop_reason: 'max_tokens' } },
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const app = await startApp(() => ({ ok: false, error: '找不到图层：nope' }))
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     await chat.ask('看看 nope')
     expect(model.requests[1].body.messages[2].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true })
-    const truncated = await chat.ask('列出作品')
+    const truncated = await chat.ask('看看文档')
     expect(truncated.map(event => event.type)).toEqual(['error', 'done'])
     expect(truncated[0].message).toBe('模型回复因长度限制被截断，已停止本次回复')
+    expect(app.received.map(request => request.command)).toEqual(['get_node'])
   })
 
   it('HTTP 错误显示中文', async () => {

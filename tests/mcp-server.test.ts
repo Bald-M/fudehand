@@ -2,21 +2,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { atlasWorkspace, sampleCatalog } from './helpers/atlas-workspace'
+import { fakeApp } from './helpers/fake-app'
 
 const server = fileURLToPath(new URL('../scripts/mcp-server.mjs', import.meta.url))
 const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
 
-async function workspace(catalog: unknown = sampleCatalog()) {
-  const { root, dispose } = await atlasWorkspace(catalog)
-  cleanup.push(dispose)
-  return root
-}
-
-async function connect(root: string) {
+async function connect(socketPath: string) {
   const client = new Client({ name: 'ui-atlas-test', version: '0.0.0' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [server, '--root', root], stderr: 'ignore' }))
+  const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
+  await client.connect(new StdioClientTransport({
+    command: process.execPath, args: [server, '--root', '/repo'], stderr: 'ignore',
+    env: { ...env, UI_ATLAS_CONTROL_SOCKET: socketPath },
+  }))
   cleanup.push(() => client.close())
   return client
 }
@@ -25,55 +23,28 @@ function text(result: { content: unknown }) {
   return (result.content as { type: string, text: string }[]).map(item => item.text).join('\n')
 }
 
-describe('MCP server：只读作品工具', () => {
-  it('列出三个只读工具', async () => {
-    const client = await connect(await workspace())
+describe('MCP server', () => {
+  it('列出设计工具并附带输入结构', async () => {
+    const client = await connect('/tmp/unused.sock')
     const { tools } = await client.listTools()
-    expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['list_projects', 'get_project', 'get_preview_urls']))
+    expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['design_create_node', 'design_update_node', 'design_snapshot']))
+    expect(tools.find(tool => tool.name === 'design_create_node')?.inputSchema.required).toEqual(['node'])
   })
 
-  it('list_projects 返回作品摘要', async () => {
-    const client = await connect(await workspace())
-    const result = await client.callTool({ name: 'list_projects', arguments: {} })
+  it('经 UI_ATLAS_CONTROL_SOCKET 把调用转发给 App', async () => {
+    const app = await fakeApp(request => ({ ok: true, result: { id: 'abc', got: request.args } }))
+    cleanup.push(app.close)
+    const client = await connect(app.socketPath)
+    const result = await client.callTool({ name: 'design_create_node', arguments: { node: { type: 'text', text: { content: '你好' } } } })
     expect(result.isError).toBeFalsy()
-    expect(JSON.parse(text(result))).toEqual([{ id: 'demo', title: '演示作品', framework: 'HTML', enabled: true, frameCount: 2, baseUrl: 'http://127.0.0.1:31002/demo/' }])
+    expect(JSON.parse(text(result))).toEqual({ id: 'abc', got: { node: { type: 'text', text: { content: '你好' } } } })
+    expect(app.received[0].command).toBe('create_node')
   })
 
-  it('get_project 返回完整配置', async () => {
-    const client = await connect(await workspace())
-    const result = await client.callTool({ name: 'get_project', arguments: { project: 'demo' } })
-    expect(JSON.parse(text(result))).toEqual(sampleCatalog().projects[0])
-  })
-
-  it('get_preview_urls 按 baseUrl 解析画框地址', async () => {
-    const client = await connect(await workspace())
-    const result = await client.callTool({ name: 'get_preview_urls', arguments: { project: 'demo' } })
-    expect(JSON.parse(text(result))).toEqual([
-      { frame: 'home', title: '首页', url: 'http://127.0.0.1:31002/demo/home', width: 1440, height: 900, platform: 'web' },
-      { frame: 'phone', title: '手机', url: 'http://127.0.0.1:31002/demo/m?x=1', width: 390, height: 844, platform: 'mobile' },
-    ])
-  })
-
-  it('未知作品返回中文错误', async () => {
-    const client = await connect(await workspace())
-    const result = await client.callTool({ name: 'get_project', arguments: { project: 'missing' } })
+  it('App 未运行时返回中文错误', async () => {
+    const client = await connect('/tmp/ui-atlas-missing.sock')
+    const result = await client.callTool({ name: 'design_get_state', arguments: {} })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('找不到作品：missing')
-  })
-
-  it('缺少作品参数时返回中文错误', async () => {
-    const client = await connect(await workspace())
-    const result = await client.callTool({ name: 'get_preview_urls', arguments: {} })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toBe('缺少参数：project')
-  })
-
-  it('非法 catalog 返回 launcher 的校验错误', async () => {
-    const catalog = sampleCatalog()
-    catalog.projects[0].frames[0].width = 0
-    const client = await connect(await workspace(catalog))
-    const result = await client.callTool({ name: 'list_projects', arguments: {} })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toBe('配置错误：demo/home 的宽高必须是有限正数')
+    expect(text(result)).toBe('ui-atlas 未运行')
   })
 })

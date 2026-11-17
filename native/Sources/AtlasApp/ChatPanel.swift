@@ -1,7 +1,7 @@
 import AtlasCore
 import SwiftUI
 
-/// 对话面板：与 App 内 Agent 对话，Agent 通过与 MCP 相同的工具整理作品和操作画布。
+/// 对话面板：与 App 内 Agent 对话，Agent 通过与 MCP 相同的工具读取和编辑设计文档。
 struct ChatPanel: View {
     @ObservedObject var chat: ChatSession
     let root: URL?
@@ -81,8 +81,8 @@ struct ChatPanel: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("让 AI 帮你整理作品、画框，或操作画布。").font(.callout).foregroundStyle(.secondary)
-            ForEach(["列出全部作品", "给留白加一个 390×844 的移动端画框", "聚焦到网页端画框"], id: \.self) { example in
+            Text("让 AI 帮你搭建和修改界面。").font(.callout).foregroundStyle(.secondary)
+            ForEach(["新建一个 390×844 的移动端首页，含导航栏、卡片列表和按钮", "把所有按钮改成圆角 12", "截图核对当前画框"], id: \.self) { example in
                 Button { draft = example; inputFocused = true } label: {
                     Text(example).font(.caption).padding(.horizontal, 10).padding(.vertical, 6)
                         .background(.quaternary.opacity(0.6), in: Capsule())
@@ -307,7 +307,7 @@ private struct ChatSettingsSheet: View {
         let token = UUID()
         listToken = token
         listError = nil
-        guard let root else { listing = false; listError = "尚未打开项目目录"; return }
+        guard let root else { listing = false; listError = "找不到 ui-atlas 源码目录，无法读取模型列表"; return }
         let typed = trimmedKey
         guard !typed.isEmpty || hasSavedKey else { listing = false; models = []; return }
         let settings = ChatSettings(provider: provider, model: "", baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))

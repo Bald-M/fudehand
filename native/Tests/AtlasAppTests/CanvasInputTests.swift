@@ -4,38 +4,64 @@ import Testing
 @testable import AtlasApp
 @testable import AtlasCore
 
-/// A window holding a canvas with frames "a" (0,0 400×300) and "b" (600,0 300×300) at 100% zoom.
+/// 转发给真实 store，同时记录画布报告的稳定视口。
 @MainActor
-private final class CanvasHarness {
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled],
-                          backing: .buffered, defer: true)
+final class RecordingHost: CanvasHost {
+    let store: AtlasStore
+    var settled: [Viewport] = []
+    init(_ store: AtlasStore) { self.store = store }
+    func canvasSelect(_ ids: Set<String>) { store.canvasSelect(ids) }
+    func canvasBeginGesture(_ name: String) { store.canvasBeginGesture(name) }
+    func canvasMove(_ origins: [String: Point]) { store.canvasMove(origins) }
+    func canvasResize(_ id: String, to rect: Rect) { store.canvasResize(id, to: rect) }
+    func canvasEndGesture() { store.canvasEndGesture() }
+    func canvasCreate(_ type: NodeType, in rect: Rect) { store.canvasCreate(type, in: rect) }
+    func canvasNudge(_ ids: Set<String>, by delta: Point) { store.canvasNudge(ids, by: delta) }
+    func canvasDelete(_ ids: Set<String>) { store.canvasDelete(ids) }
+    func canvasToolChanged(_ tool: CanvasTool) { store.canvasToolChanged(tool) }
+    func canvasCommand(_ command: CanvasCommand) { store.canvasCommand(command) }
+    func canvasFocus(_ id: String) { store.canvasFocus(id) }
+    func canvasViewportSettled(_ viewport: Viewport) { settled.append(viewport); store.canvasViewportSettled(viewport) }
+    func canvasSizeChanged(_ size: CGSize) { store.canvasSizeChanged(size) }
+}
+
+/// 顶层画框 a（0,0 400×300，含卡片 card 20,20 100×50）与矩形 b（600,0 300×300）；视口 (0, 100) 100%，画框名称标签在屏幕上可见。
+@MainActor
+final class CanvasHarness {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled], backing: .buffered, defer: true)
     let canvas: AtlasCanvasView
-    var selections: [Set<String>] = []
-    var moves: [[String: Point]] = []
+    let store = AtlasStore(defaults: UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!)
+    let host: RecordingHost
+    private var token = 1
 
-    init() {
+    nonisolated static func document() -> DesignDocument {
+        var frame = DesignNode(id: "a", type: .frame, name: "首页", width: 400, height: 300)
+        frame.fill = .white
+        var card = DesignNode(id: "card", type: .rectangle, x: 20, y: 20, width: 100, height: 50)
+        card.fill = .black
+        frame.children = [card]
+        return DesignDocument(nodes: [frame, DesignNode(id: "b", type: .rectangle, x: 600, y: 0, width: 300, height: 300)])
+    }
+
+    init(document: DesignDocument = CanvasHarness.document()) {
         canvas = AtlasCanvasView(frame: window.contentLayoutRect)
+        host = RecordingHost(store)
         window.contentView = canvas
-        canvas.onSelectionChange = { [unowned self] in selections.append($0) }
-        canvas.onFramesMoved = { [unowned self] in moves.append($0) }
-        load(Self.project(id: "first"))
-    }
-
-    static func project(id: String) -> Project {
-        let preview = Preview(cwd: "examples/demo", command: ["pnpm", "dev"], port: 4401, baseUrl: "http://127.0.0.1:4401/")
-        let frames = [
-            Frame(id: "a", title: "首页", platform: "web", path: "/", width: 400, height: 300, x: 0, y: 0),
-            Frame(id: "b", title: "手机", platform: "mobile", path: "/m", width: 300, height: 300, x: 600, y: 0),
-        ]
-        return Project(id: id, title: "作品 \(id)", subtitle: "", description: "", author: "", sourceUrl: nil,
-                       framework: "HTML", tags: [], enabled: true, layoutVersion: 1, preview: preview, frames: frames)
-    }
-
-    func load(_ project: Project) {
-        canvas.update(project: project, positions: [:], positionsToken: 1,
-                      viewportRequest: ViewportRequest(viewport: Viewport(x: 0, y: 0, scale: 1), animated: false, token: 1),
-                      tool: .move, reloadToken: 0)
+        canvas.host = host
+        store.replace(document, url: nil)
+        store.attach(canvas)
+        request(Viewport(x: 0, y: 100, scale: 1))
         canvas.layoutSubtreeIfNeeded()
+    }
+
+    func request(_ viewport: Viewport, animated: Bool = false) {
+        token += 1
+        canvas.update(viewportRequest: ViewportRequest(viewport: viewport, animated: animated, token: token), tool: store.tool)
+    }
+
+    func setTool(_ tool: CanvasTool) {
+        store.tool = tool
+        canvas.update(viewportRequest: ViewportRequest(viewport: Viewport(), animated: false, token: token), tool: tool)
     }
 
     /// `point` is in canvas (flipped, screen-space) coordinates.
@@ -51,316 +77,167 @@ private final class CanvasHarness {
         }
     }
 
-    func drag(from start: NSPoint, to end: NSPoint, release: Bool = true) {
-        send(.leftMouseDown, at: start)
-        send(.leftMouseDragged, at: NSPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2))
-        send(.leftMouseDragged, at: end)
-        if release { send(.leftMouseUp, at: end) }
+    func click(_ point: NSPoint, flags: NSEvent.ModifierFlags = [], clicks: Int = 1) {
+        send(.leftMouseDown, at: point, flags: flags, clicks: clicks)
+        send(.leftMouseUp, at: point, flags: flags, clicks: clicks)
     }
 
+    func drag(from start: NSPoint, to end: NSPoint, flags: NSEvent.ModifierFlags = [], release: Bool = true) {
+        send(.leftMouseDown, at: start, flags: flags)
+        send(.leftMouseDragged, at: NSPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2), flags: flags)
+        send(.leftMouseDragged, at: end, flags: flags)
+        if release { send(.leftMouseUp, at: end, flags: flags) }
+    }
+
+    func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], chars: String = "") throws {
+        window.makeFirstResponder(canvas)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                                  windowNumber: window.windowNumber, context: nil, characters: chars,
+                                                  charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code))
+        canvas.keyDown(with: event)
+    }
+
+    func node(_ id: String) -> DesignNode? { store.editor.document.node(id) }
     func dispose() { canvas.dispose() }
 }
 
-@Test @MainActor func clickSelectsAndReportsSelection() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let content = NSPoint(x: 100, y: 150)
-    harness.send(.leftMouseDown, at: content)
-    harness.send(.leftMouseUp, at: content)
-    #expect(harness.selections.last == ["a"])
-    #expect(harness.canvas.hitTarget(at: content) == .frameContent("a"))
-    #expect(harness.canvas.hitTarget(at: NSPoint(x: 100, y: 20)) == .frameHeader("a"))
-    #expect(harness.canvas.hitTarget(at: NSPoint(x: 500, y: 150)) == .empty)
-    // The page has not finished loading, so a second click still goes to the canvas.
-    let canvas = harness.canvas
-    #expect(canvas.hitTest(canvas.convert(content, to: canvas.superview)) === canvas)
+@Test @MainActor func clickSelectsChildOfFrameFrameBackgroundOrNothing() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.click(NSPoint(x: 50, y: 140))
+    #expect(h.store.selection == ["card"])
+    h.click(NSPoint(x: 300, y: 300))
+    #expect(h.store.selection == ["a"])
+    h.click(NSPoint(x: 500, y: 600))
+    #expect(h.store.selection.isEmpty)
+    h.click(NSPoint(x: 50, y: 140), flags: .command)
+    #expect(h.store.selection == ["card"])
 }
 
-@Test @MainActor func dragCommitsAndUndoRestores() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150))
-    #expect(harness.moves == [["a": Point(x: 100, y: 0)]])
-    let undoManager = try #require(harness.window.undoManager)
-    #expect(undoManager.undoActionName == "移动画框")
-    undoManager.undo()
-    #expect(harness.moves.last == ["a": Point(x: 0, y: 0)])
-    undoManager.redo()
-    #expect(harness.moves.last == ["a": Point(x: 100, y: 0)])
-    #expect(harness.moves.count == 3)
+@Test @MainActor func frameLabelSelectsAndDoubleClickFocuses() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    #expect(h.canvas.hitTarget(at: NSPoint(x: 5, y: 88)) == .label("a"))
+    h.click(NSPoint(x: 5, y: 88))
+    #expect(h.store.selection == ["a"])
+    #expect(h.canvas.overlay.labelTexts == ["a": "首页"])
 }
 
-@Test @MainActor func focusLossCommitsMove() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150), release: false)
-    #expect(harness.moves.isEmpty)
-    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: harness.window)
-    harness.send(.leftMouseUp, at: NSPoint(x: 200, y: 150))
-    #expect(harness.moves == [["a": Point(x: 100, y: 0)]])
+@Test @MainActor func dragMovesAsOneUndoStep() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.drag(from: NSPoint(x: 700, y: 200), to: NSPoint(x: 750, y: 230), flags: .control)
+    #expect(h.node("b")?.frame == Rect(x: 650, y: 30, width: 300, height: 300))
+    #expect(h.store.editor.undoName == "移动图层")
+    h.store.undo()
+    #expect(h.node("b")?.x == 600)
+    #expect(!h.store.canUndo)
 }
 
-@Test @MainActor func switchingProjectClearsUndo() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150))
-    let undoManager = try #require(harness.window.undoManager)
-    #expect(undoManager.canUndo)
-    // The undo manager closes the event's undo group when the run loop turns, as after a real mouse-up.
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    harness.load(CanvasHarness.project(id: "second"))
-    #expect(!undoManager.canUndo)
+@Test @MainActor func childOfAutoLayoutFrameDoesNotMoveByDrag() throws {
+    var document = CanvasHarness.document()
+    try document.update("a") { $0.layout = AutoLayout(direction: .vertical, padding: EdgeInsets(top: 20, left: 20)) }
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    h.drag(from: NSPoint(x: 50, y: 140), to: NSPoint(x: 150, y: 240))
+    #expect(h.store.selection == ["card"])
+    #expect(h.node("card").map { Point(x: $0.x, y: $0.y) } == Point(x: 20, y: 20))
+    #expect(!h.store.canUndo)
 }
 
-@Test @MainActor func marqueeOnEmptyCanvasSelectsIntersectingFrames() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.drag(from: NSPoint(x: 20, y: 600), to: NSPoint(x: 700, y: 300))
-    #expect(harness.selections.last == ["a", "b"])
-    harness.send(.leftMouseDown, at: NSPoint(x: 500, y: 600))
-    harness.send(.leftMouseUp, at: NSPoint(x: 500, y: 600))
-    #expect(harness.selections.last == [])
+@Test @MainActor func handleResizesSelection() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.click(NSPoint(x: 700, y: 200))
+    #expect(h.canvas.hitTarget(at: NSPoint(x: 900, y: 400)) == .handle("b", .bottomRight))
+    h.drag(from: NSPoint(x: 900, y: 400), to: NSPoint(x: 950, y: 420))
+    #expect(h.node("b")?.frame == Rect(x: 600, y: 0, width: 350, height: 320))
+    h.store.undo()
+    #expect(h.node("b")?.width == 300)
 }
 
-@Test @MainActor func shiftClickTogglesFrameInSelection() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.send(.leftMouseDown, at: NSPoint(x: 100, y: 150))
-    harness.send(.leftMouseUp, at: NSPoint(x: 100, y: 150))
-    harness.send(.leftMouseDown, at: NSPoint(x: 700, y: 20), flags: .shift)
-    harness.send(.leftMouseUp, at: NSPoint(x: 700, y: 20), flags: .shift)
-    #expect(harness.selections.last == ["a", "b"])
+@Test @MainActor func marqueeSelectsTopLevelLayers() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.drag(from: NSPoint(x: 550, y: 650), to: NSPoint(x: 650, y: 380))
+    #expect(h.store.selection == ["b"])
 }
 
-@Test @MainActor func arrowNudgeMovesTheSelectionOutline() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.send(.leftMouseDown, at: NSPoint(x: 100, y: 150))
-    harness.send(.leftMouseUp, at: NSPoint(x: 100, y: 150))
-    let before = harness.canvas.overlay.selectionBounds
-    #expect(!before.isNull)
-    #expect(harness.window.firstResponder === harness.canvas)
-    let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
-                                              windowNumber: harness.window.windowNumber, context: nil, characters: "",
-                                              charactersIgnoringModifiers: "", isARepeat: false, keyCode: 124))
-    harness.canvas.keyDown(with: right)
-    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
-    #expect(harness.canvas.overlay.selectionBounds.minX == before.minX + 10)
+@Test @MainActor func creationToolDrawsInsideFrameAndReturnsToMove() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.setTool(.rectangle)
+    h.drag(from: NSPoint(x: 200, y: 300), to: NSPoint(x: 260, y: 340))
+    let id = try #require(h.store.selection.first)
+    #expect(h.store.editor.document.parentID(of: id) == .some("a"))
+    #expect(h.node(id)?.frame == Rect(x: 200, y: 200, width: 60, height: 40))
+    #expect(h.store.tool == .move)
+    h.setTool(.text)
+    h.click(NSPoint(x: 700, y: 600))
+    let text = try #require(h.store.selection.first.flatMap(h.node))
+    #expect(text.type == .text && text.text?.content == "文字" && text.width > 0)
+    #expect(h.store.editor.document.parentID(of: text.id) == .some(nil))
 }
 
-@Test @MainActor func disposingClearsUndo() throws {
-    let harness = CanvasHarness()
-    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150))
-    let undoManager = try #require(harness.window.undoManager)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    #expect(undoManager.canUndo)
-    harness.dispose()
-    #expect(!undoManager.canUndo)
+@Test @MainActor func keyboardNudgesDeletesAndNavigatesLevels() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.click(NSPoint(x: 700, y: 200))
+    try h.key(124)
+    #expect(h.node("b")?.x == 601)
+    try h.key(125, .shift)
+    #expect(h.node("b")?.y == 10)
+    h.click(NSPoint(x: 50, y: 140))
+    try h.key(53)
+    #expect(h.store.selection == ["a"])
+    try h.key(36)
+    #expect(h.store.selection == ["card"])
+    try h.key(53)
+    try h.key(53)
+    #expect(h.store.selection.isEmpty)
+    try h.key(0, .command, chars: "a")
+    #expect(h.store.selection == ["a", "b"])
+    h.click(NSPoint(x: 700, y: 200))
+    try h.key(51)
+    #expect(h.node("b") == nil && h.store.selection.isEmpty)
+    try h.key(15, chars: "r")
+    #expect(h.store.tool == .rectangle)
 }
 
-/// Selects "a" and marks its page loaded so it becomes the active frame.
-@MainActor private func activateA(_ harness: CanvasHarness) throws -> PreviewFrameView {
-    harness.send(.leftMouseDown, at: NSPoint(x: 100, y: 150))
-    harness.send(.leftMouseUp, at: NSPoint(x: 100, y: 150))
-    let frame = try #require(harness.canvas.frames["a"])
-    frame.isReady = true
-    return frame
+@Test @MainActor func focusLossDuringDragKeepsTheMoveAsOneStep() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.drag(from: NSPoint(x: 700, y: 200), to: NSPoint(x: 800, y: 200), flags: .control, release: false)
+    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: h.window)
+    #expect(h.node("b")?.x == 700)
+    h.store.undo()
+    #expect(h.node("b")?.x == 600)
 }
 
-@Test @MainActor func activePageRoutingHonorsShiftAndButtonNumber() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let frame = try activateA(harness)
-    let canvas = harness.canvas
-    let point = canvas.convert(NSPoint(x: 100, y: 150), to: canvas.superview)
-    func click(_ flags: NSEvent.ModifierFlags) -> NSEvent {
-        NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                           windowNumber: harness.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
-    }
-    func other(_ button: UInt32) throws -> NSEvent {
-        let mouseButton = try #require(CGMouseButton(rawValue: button))
-        let cg = try #require(CGEvent(mouseEventSource: nil, mouseType: .otherMouseDown, mouseCursorPosition: .zero,
-                                      mouseButton: mouseButton))
-        return try #require(NSEvent(cgEvent: cg))
-    }
-    func goesToPage(_ event: NSEvent) -> Bool {
-        guard let view = canvas.hitTest(point, event: event) else { return false }
-        return view !== canvas && view.isDescendant(of: frame)
-    }
-    #expect(goesToPage(click([])))
-    #expect(canvas.hitTest(point, event: click(.shift)) === canvas)
-    #expect(canvas.hitTest(point, event: try other(2)) === canvas)
-    #expect(goesToPage(try other(3)))
-}
-
-@Test @MainActor func pageThatStopsBeingReadyReturnsFocusToCanvas() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let frame = try activateA(harness)
-    // Stands in for the frame's WKWebView holding focus.
+@Test @MainActor func canvasKeysOnlyApplyWhenTheCanvasIsFirstResponder() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
     final class Acceptor: NSView { override var acceptsFirstResponder: Bool { true } }
     let inner = Acceptor()
-    frame.addSubview(inner)
-    #expect(harness.window.makeFirstResponder(inner))
-    frame.isReady = false
-    #expect(harness.window.firstResponder === harness.canvas)
+    h.canvas.addSubview(inner)
+    #expect(h.window.makeFirstResponder(inner))
+    let space = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: h.window.windowNumber,
+                                              context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49))
+    h.canvas.keyDown(with: space)
+    #expect(!h.canvas.spaceHeld)
+    #expect(h.window.makeFirstResponder(h.canvas))
+    h.canvas.keyDown(with: space)
+    #expect(h.canvas.spaceHeld)
+    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: h.window)
+    #expect(!h.canvas.spaceHeld)
 }
 
-@MainActor private func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], chars: String = "", window: NSWindow) throws -> NSEvent {
-    try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                                  windowNumber: window.windowNumber, context: nil, characters: chars,
-                                  charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code))
-}
-
-@MainActor private func select(_ harness: CanvasHarness, at point: NSPoint = NSPoint(x: 100, y: 150)) {
-    harness.send(.leftMouseDown, at: point)
-    harness.send(.leftMouseUp, at: point)
-}
-
-@Test @MainActor func arrowKeysNudgeSelectionAndUndoAsOneStep() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    let undoManager = try #require(harness.window.undoManager)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    harness.canvas.keyDown(with: try key(124, window: harness.window))
-    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    harness.canvas.keyDown(with: try key(124, .shift, window: harness.window))
-    #expect(harness.moves.last == ["a": Point(x: 110, y: 0)])
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    undoManager.undo()
-    #expect(harness.moves.last == ["a": Point(x: 10, y: 0)])
-    #expect(undoManager.canUndo)
-}
-
-@Test @MainActor func shiftDigitsIssueCommands() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var commands: [CanvasCommand] = []
-    harness.canvas.onCommand = { commands.append($0) }
-    select(harness, at: NSPoint(x: 500, y: 600))
-    for code: UInt16 in [18, 19, 29] { harness.canvas.keyDown(with: try key(code, .shift, window: harness.window)) }
-    harness.canvas.keyDown(with: try key(18, [.shift, .command], window: harness.window))
-    harness.canvas.keyDown(with: try key(18, window: harness.window))
-    #expect(commands == [.fitAll, .zoomToSelection, .actualSize])
-}
-
-@Test @MainActor func toolKeysReportToolChange() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var tools: [CanvasTool] = []
-    harness.canvas.onToolChange = { tools.append($0) }
-    select(harness, at: NSPoint(x: 500, y: 600))
-    // Key codes are deliberately those of other letters: the character decides, not the QWERTY position.
-    harness.canvas.keyDown(with: try key(0, chars: "h", window: harness.window))
-    harness.canvas.keyDown(with: try key(0, chars: "V", window: harness.window))
-    harness.canvas.keyDown(with: try key(9, chars: "x", window: harness.window))
-    harness.canvas.keyDown(with: try key(4, .command, chars: "h", window: harness.window))
-    #expect(tools == [.hand, .move])
-}
-
-@Test @MainActor func escapeClearsSelectionAndSelectAllSelectsEveryFrame() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    harness.canvas.keyDown(with: try key(53, window: harness.window))
-    #expect(harness.selections.last == [])
-    harness.canvas.keyDown(with: try key(0, .command, window: harness.window))
-    #expect(harness.selections.last == ["a", "b"])
-}
-
-@Test @MainActor func returnFocusesOnlyAReadySingleSelection() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    let frame = try #require(harness.canvas.frames["a"])
-    harness.canvas.keyDown(with: try key(36, window: harness.window))
-    #expect(harness.window.firstResponder === harness.canvas)
-    frame.isReady = true
-    harness.canvas.keyDown(with: try key(36, window: harness.window))
-    #expect(harness.window.firstResponder === frame.pageView)
-}
-
-@Test func scrollPhaseMapping() {
-    typealias Canvas = AtlasCanvasView
-    #expect(Canvas.scrollPhase([], momentum: []) == .discrete)
-    #expect(Canvas.scrollPhase(.mayBegin, momentum: []) == .began)
-    #expect(Canvas.scrollPhase(.began, momentum: []) == .began)
-    #expect(Canvas.scrollPhase(.changed, momentum: []) == .changed)
-    #expect(Canvas.scrollPhase(.ended, momentum: []) == .ended)
-    #expect(Canvas.scrollPhase(.cancelled, momentum: []) == .ended)
-    #expect(Canvas.scrollPhase([], momentum: .began) == .momentum)
-    #expect(Canvas.scrollPhase([], momentum: .changed) == .momentum)
-    #expect(Canvas.scrollPhase([], momentum: .ended) == .momentumEnded)
-}
-
-@Test @MainActor func momentumKeepsTheTargetChosenAtGestureStart() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let canvas = harness.canvas
-    // A gesture that starts over empty canvas stays on the canvas as it slides over the active page.
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: .ended, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: [], momentum: .changed, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    // A plain gesture over the active page still pans the canvas; ⌥ at gesture start scrolls the page.
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    #expect(canvas.routeScroll(phase: [], momentum: .ended, overActivePage: true, pageModifier: false, zoomModifier: false) == .canvas)
-    // A ⌥ gesture over the page keeps scrolling it after ⌥ is released, even with zoom held only for its own events.
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: true, zoomModifier: false) == .page)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: true, pageModifier: false, zoomModifier: true) == .canvas)
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .page)
-    #expect(canvas.routeScroll(phase: [], momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
-}
-
-@Test @MainActor func wheelOverActivePagePansCanvasUnlessOptionHeld() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    try #require(harness.canvas.frames["a"]).isReady = true
-    let point = NSPoint(x: 100, y: 150)
-    func wheel(_ flags: CGEventFlags) throws -> NSEvent {
-        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -40, wheel2: 0, wheel3: 0))
-        cg.flags = flags
-        return try #require(NSEvent(cgEvent: cg))
-    }
-    let start = harness.canvas.worldBounds
-    #expect(harness.canvas.routeScrollEvent(try wheel([]), at: point) == nil)
-    let panned = harness.canvas.worldBounds
-    #expect(panned != start)
-    _ = harness.canvas.routeScrollEvent(try wheel(.maskAlternate), at: point)
-    #expect(harness.canvas.worldBounds == panned)
-}
-
-@Test @MainActor func arrowKeysAreIgnoredDuringADrag() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    harness.drag(from: NSPoint(x: 100, y: 150), to: NSPoint(x: 200, y: 150), release: false)
-    let undoManager = try #require(harness.window.undoManager)
-    harness.canvas.keyDown(with: try key(124, window: harness.window))
-    #expect(harness.moves.isEmpty)
-    #expect(!undoManager.canUndo)
-    harness.send(.leftMouseUp, at: NSPoint(x: 200, y: 150))
-    #expect(harness.moves == [["a": Point(x: 100, y: 0)]])
-}
-
-@Test @MainActor func scrollLockResetsWhenTheSelectionChanges() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let canvas = harness.canvas
-    select(harness)
-    #expect(canvas.routeScroll(phase: .began, momentum: [], overActivePage: true, pageModifier: true, zoomModifier: false) == .page)
-    select(harness, at: NSPoint(x: 500, y: 600))
-    #expect(canvas.routeScroll(phase: .changed, momentum: [], overActivePage: false, pageModifier: false, zoomModifier: false) == .canvas)
-}
+// MARK: Viewport
 
 @Test func frameIntervalLogCountsHitchesOncePerSecond() {
     var log = FrameIntervalLog()
     #expect(log.record(10.0) == nil)
     #expect(log.record(10.016) == nil)
-    // 50ms is a hitch; 20ms is not.
     #expect(log.record(10.066) == nil)
     #expect(log.record(10.086) == nil)
     #expect(log.record(11.0) == "[frame] hitches=2 frames=4")
@@ -369,174 +246,66 @@ private final class CanvasHarness {
 }
 
 @Test @MainActor func pointerDownCommitsPendingZoom() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    let before = harness.canvas.worldBounds
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    #expect(harness.canvas.worldBounds == before)
-    #expect(settled.isEmpty)
-    harness.send(.leftMouseDown, at: NSPoint(x: 900, y: 650))
-    #expect(harness.canvas.worldBounds == NSRect(x: 0, y: 0, width: before.width / 2, height: before.height / 2))
-    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
-    #expect(CATransform3DIsIdentity(harness.canvas.zoomHost.layer?.sublayerTransform ?? CATransform3DMakeScale(0, 0, 0)))
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 1))
+    let before = h.canvas.worldBounds
+    h.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    #expect(h.canvas.worldBounds == before)
+    #expect(h.host.settled.isEmpty)
+    h.send(.leftMouseDown, at: NSPoint(x: 990, y: 690))
+    #expect(h.canvas.worldBounds == NSRect(x: 0, y: 0, width: before.width / 2, height: before.height / 2))
+    #expect(h.host.settled == [Viewport(x: 0, y: 0, scale: 2)])
+    #expect(h.canvas.renderer.contentsScale == 2 * (h.window.backingScaleFactor))
 }
 
-@Test @MainActor func pinchEndCommitsAndSettles() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    harness.canvas.magnify(by: 0, at: NSPoint(x: 0, y: 0), phase: .ended)
-    #expect(harness.canvas.worldBounds.width == 500)
-    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
+@Test func rasterZoomRoundsUpToPowersOfTwo() {
+    #expect(AtlasCanvasView.rasterZoom(0.05) == 0.25)
+    #expect(AtlasCanvasView.rasterZoom(0.3) == 0.5)
+    #expect(AtlasCanvasView.rasterZoom(0.5) == 0.5)
+    #expect(AtlasCanvasView.rasterZoom(0.9) == 1)
+    #expect(AtlasCanvasView.rasterZoom(1) == 1)
+    #expect(AtlasCanvasView.rasterZoom(1.2) == 2)
+    #expect(AtlasCanvasView.rasterZoom(4) == 4)
 }
 
-@Test @MainActor func pendingZoomOverlayAndHitTestUseLiveViewport() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    let before = harness.canvas.overlay.selectionBounds
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    // The committed world is scaled on the GPU: frame "b" at world (600, 0) is drawn at screen (1200, 0).
-    let transform = try #require(harness.canvas.zoomHost.layer?.sublayerTransform)
-    #expect(CGPoint(x: 600, y: 0).applying(CATransform3DGetAffineTransform(transform)) == CGPoint(x: 1200, y: 0))
-    #expect(harness.canvas.overlay.selectionBounds.width == before.width * 2)
-    // Frame "b" starts at world x 600, now on screen at 1200; world x 450 (screen 900) is empty.
-    #expect(harness.canvas.hitTarget(at: NSPoint(x: 700, y: 300)) == .frameContent("a"))
-    #expect(harness.canvas.hitTarget(at: NSPoint(x: 900, y: 300)) == .empty)
-}
-
-@MainActor private func animatedRequest(_ harness: CanvasHarness, to target: Viewport) {
-    harness.canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
-                          viewportRequest: ViewportRequest(viewport: target, animated: true, token: 2),
-                          tool: .move, reloadToken: 0)
+@Test @MainActor func pendingZoomHitTestUsesLiveViewport() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 1))
+    h.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
+    // 画框 a 在屏幕上放大为 0–800；矩形 b 从屏幕 1200 开始。
+    #expect(h.canvas.hitTarget(at: NSPoint(x: 700, y: 300)) == .node("a"))
+    #expect(h.canvas.hitTarget(at: NSPoint(x: 900, y: 300)) == .empty)
 }
 
 @Test @MainActor func animatedRequestSettlesAtTarget() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
+    let h = CanvasHarness()
+    defer { h.dispose() }
     let target = Viewport(x: -200, y: -100, scale: 0.5)
-    let before = harness.canvas.worldBounds
-    animatedRequest(harness, to: target)
-    #expect(harness.canvas.worldBounds == before)
-    harness.canvas.advanceAnimation(to: 0.5)
-    #expect(settled.isEmpty)
-    harness.canvas.advanceAnimation(to: 1)
-    #expect(settled == [target])
-    #expect(harness.canvas.worldBounds == NSRect(x: 400, y: 200, width: 2000, height: 1400))
-}
-
-@Test @MainActor func inputDuringAnimationStopsAtTheLiveViewport() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    let target = Viewport(x: -200, y: -100, scale: 0.5)
-    animatedRequest(harness, to: target)
-    harness.canvas.advanceAnimation(to: 0.5)
-    harness.send(.leftMouseDown, at: NSPoint(x: 990, y: 690))
-    let expected = ViewportAnimation.value(from: Viewport(x: 0, y: 0, scale: 1), to: target, size: Size(width: 1000, height: 700),
-                                           fraction: ViewportAnimation.easeOut(0.5))
-    #expect(settled == [expected])
-    harness.canvas.advanceAnimation(to: 1)
-    #expect(settled == [expected])
-}
-
-@Test @MainActor func gridHidesWhenDense() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let canvas = harness.canvas
-    canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
-                  viewportRequest: ViewportRequest(viewport: Viewport(x: 0, y: 0, scale: 0.2), animated: false, token: 2),
-                  tool: .move, reloadToken: 0)
-    #expect(canvas.gridLayer.isHidden)
-    canvas.update(project: CanvasHarness.project(id: "first"), positions: [:], positionsToken: 1,
-                  viewportRequest: ViewportRequest(viewport: Viewport(x: 0, y: 0, scale: 1), animated: false, token: 3),
-                  tool: .move, reloadToken: 0)
-    #expect(!canvas.gridLayer.isHidden)
-}
-
-@Test @MainActor func commandScrollZoomSettlesAfterIdle() async throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    let before = harness.canvas.worldBounds
-    let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 50, wheel2: 0, wheel3: 0))
-    cg.flags = .maskCommand
-    harness.canvas.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
-    #expect(harness.canvas.worldBounds == before)
-    #expect(settled.isEmpty)
-    // Sleeping yields the main actor so the 150ms idle timer can fire.
-    try await Task.sleep(for: .milliseconds(300))
-    #expect(settled.count == 1)
-    #expect((settled.first?.scale ?? 1) > 1)
-    #expect(abs(harness.canvas.worldBounds.width - 1000 / (settled.first?.scale ?? 1)) < 1e-6)
-}
-
-@Test @MainActor func requestedAnimationKeepsTheIndicatorAtItsTarget() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    let indicator = ZoomIndicator()
-    harness.canvas.zoomIndicator = indicator
-    let target = Viewport(x: -200, y: -100, scale: 0.5)
-    indicator.update(target)
-    animatedRequest(harness, to: target)
-    harness.canvas.lastIndicatorUpdate = 0
-    harness.canvas.advanceAnimation(to: 0.3)
-    #expect(indicator.viewport == target)
-    harness.canvas.advanceAnimation(to: 1)
-    #expect(indicator.viewport == target)
-}
-
-@Test @MainActor func clickOnTheActivePageDuringAPendingZoomIsNotACanvasPress() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    _ = try activateA(harness)
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    // Frame "a" content now covers screen (0, 60)–(800, 660); the press commits the zoom and goes to the page.
-    harness.drag(from: NSPoint(x: 200, y: 300), to: NSPoint(x: 400, y: 300))
-    #expect(!harness.canvas.isZoomPending)
-    #expect(harness.moves.isEmpty)
-}
-
-@Test @MainActor func clickOnEmptyCanvasDuringAPendingZoomIsStillACanvasPress() {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    select(harness)
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    harness.send(.leftMouseDown, at: NSPoint(x: 900, y: 690))
-    harness.send(.leftMouseUp, at: NSPoint(x: 900, y: 690))
-    #expect(harness.selections.last == [])
+    h.request(target, animated: true)
+    h.canvas.advanceAnimation(to: 0.5)
+    #expect(h.host.settled.isEmpty)
+    h.canvas.advanceAnimation(to: 1)
+    #expect(h.host.settled == [target])
+    #expect(h.canvas.worldBounds == NSRect(x: 400, y: 200, width: 2000, height: 1400))
 }
 
 @Test @MainActor func pinchWithoutAnEndSettlesAfterIdle() async throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    harness.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    #expect(settled.isEmpty)
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 1))
+    h.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
     try await Task.sleep(for: .milliseconds(250))
-    #expect(settled == [Viewport(x: 0, y: 0, scale: 2)])
-    #expect(!harness.canvas.isZoomPending)
+    #expect(h.host.settled == [Viewport(x: 0, y: 0, scale: 2)])
+    #expect(!h.canvas.isZoomPending)
 }
 
-@Test @MainActor func unhandledKeyLeavesTheAnimationRunning() throws {
-    let harness = CanvasHarness()
-    defer { harness.dispose() }
-    var settled: [Viewport] = []
-    harness.canvas.onViewportSettled = { settled.append($0) }
-    select(harness, at: NSPoint(x: 500, y: 600))
-    let target = Viewport(x: -200, y: -100, scale: 0.5)
-    animatedRequest(harness, to: target)
-    harness.canvas.advanceAnimation(to: 0.5)
-    harness.canvas.keyDown(with: try key(9, chars: "x", window: harness.window))
-    harness.canvas.advanceAnimation(to: 1)
-    #expect(settled == [target])
+@Test @MainActor func gridHidesWhenDense() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 0.2))
+    #expect(h.canvas.gridLayer.isHidden)
+    h.request(Viewport(x: 0, y: 0, scale: 1))
+    #expect(!h.canvas.gridLayer.isHidden)
 }

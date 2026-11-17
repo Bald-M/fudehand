@@ -2,272 +2,371 @@ import AppKit
 import AtlasCore
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
+/// `pnpm build:native` 写入 App 包的本机源码位置；对话面板据此找到 harness 与 Node。
+struct WorkspaceLocation: Decodable {
+    let root: String
+    let node: String?
+    let path: String?
+}
+
+enum InspectorTab: String, CaseIterable { case design, chat }
+
+/// App 状态：唯一持有设计文档与撤销历史；画布、面板与控制通道都经它修改文档。
 @MainActor
 final class AtlasStore: ObservableObject {
-    @Published var catalog: Catalog?
-    @Published var project: Project?
-    /// The last settled viewport; the canvas owns the live one.
-    private(set) var viewport = Viewport()
-    @Published var positions: [String: Point] = [:]
-    @Published var selection: Set<String> = []
+    private(set) var editor = DesignEditor(measure: TextMetrics.measure)
+    /// 面板显示用的文档；拖动等连续操作期间不更新，结束时一次更新。
+    @Published private(set) var document = DesignDocument()
+    @Published private(set) var selection: Set<String> = []
     @Published var tool: CanvasTool = .move
-    @Published private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
-    @Published private(set) var positionsToken = 0
-    let zoomIndicator = ZoomIndicator()
-    @Published var reloadToken = 0
-    @Published var canvasSize = CGSize(width: 1000, height: 700)
-    @Published var root: URL?
-    @Published var error: String?
-    @Published var opening = false
+    @Published private(set) var fileURL: URL?
+    @Published private(set) var savedRevision = 0
+    /// 最近一次视口请求；直接推给画布，不经 SwiftUI，避免每次缩放都重新计算面板。
+    private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
+    @Published var inspectorTab: InspectorTab = .design
+    @Published var showingInspector = true
+    @Published var alert: String?
     @Published var theme: String {
         didSet { defaults.set(theme, forKey: "native.theme") }
     }
-    let session = PreviewSession()
+    let zoomIndicator = ZoomIndicator()
     let chat = ChatSession()
-    @Published var showingChat = false
-    /// 当前工作区置顶的作品 id。
-    @Published private(set) var pinned: Set<String> = []
-    @Published var projectOrder: ProjectOrder {
-        didSet { defaults.set(projectOrder.rawValue, forKey: "native.projectOrder") }
-    }
-    /// 作品目录的最近修改时间；打开工作区后在后台扫描。
-    @Published private(set) var modified: [String: Date] = [:]
-    /// 侧栏缩略图，取自作品第一个画框的截图。
-    @Published private(set) var thumbnails: [String: NSImage] = [:]
-    private var thumbnailCache: ThumbnailCache?
-    private let thumbnailBase: URL
-    /// 当前画布，供控制通道截取画框。
-    weak var canvas: AtlasCanvasView?
-    private let defaults: UserDefaults
-    private var layouts: LayoutStore?
+    /// 源码目录：对话面板从这里启动 `scripts/agent-chat.mjs`。
+    private(set) var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
-    private var bootstrapped = false
-    private var pendingSave: DispatchWorkItem?
-    private var needsInitialFit = false
-    private var hasMeasuredCanvas = false
+    private(set) var canvasSize = CGSize(width: 1000, height: 700)
+    /// 最近一次稳定或请求的视口；画布持有实时视口。
+    private(set) var viewport = Viewport()
+    weak var canvas: AtlasCanvasView?
+    private var inGesture = false
+    private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard, thumbnailBase: URL = ThumbnailCache.defaultBase) {
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.thumbnailBase = thumbnailBase
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
-        projectOrder = defaults.string(forKey: "native.projectOrder").flatMap(ProjectOrder.init(rawValue:)) ?? .catalog
-    }
-
-    /// 侧栏顺序：置顶在前，其余按当前排序方式。
-    var orderedProjects: [Project] {
-        SidebarOrdering.order(catalog?.projects ?? [], by: projectOrder, pinned: pinned, modified: modified)
-    }
-
-    private func pinnedKey(_ root: URL) -> String { "native.pinned.\(root.standardizedFileURL.path)" }
-
-    func pinnedIDs(for root: URL) -> Set<String> { Set(defaults.stringArray(forKey: pinnedKey(root)) ?? []) }
-
-    func togglePin(_ id: String) {
-        guard let root else { return }
-        if pinned.contains(id) { pinned.remove(id) } else { pinned.insert(id) }
-        defaults.set(pinned.sorted(), forKey: pinnedKey(root))
-    }
-
-    /// 切换到 `url` 工作区的置顶与缩略图缓存。
-    func loadWorkspaceState(_ url: URL) {
-        root = url
-        pinned = pinnedIDs(for: url)
-        thumbnailCache = ThumbnailCache(directory: ThumbnailCache.directory(for: url, base: thumbnailBase))
-        thumbnails = [:]
-        modified = [:]
-    }
-
-    /// 读取已缓存的缩略图并在后台扫描各作品目录，不阻塞服务启动。
-    private func loadSidebarMetadata(_ catalog: Catalog, root url: URL) {
-        if let cache = thumbnailCache {
-            for project in catalog.projects { if let image = cache.load(project.id) { thumbnails[project.id] = image } }
-        }
-        let directories = catalog.projects.map { ($0.id, url.appendingPathComponent($0.preview.cwd)) }
-        Task { [weak self] in
-            let result = await Task.detached(priority: .utility) {
-                var result: [String: Date] = [:]
-                for (id, directory) in directories { result[id] = SidebarOrdering.lastModified(directory: directory) }
-                return result
-            }.value
-            guard let self, self.root == url else { return }
-            self.modified = result
-        }
-    }
-
-    /// 画框加载完成；作品第一个画框的截图更新侧栏缩略图，失败时保留旧图。
-    /// 加载完成时网页往往还没绘制（截出来是空白），所以稍等再截，期间画框重载或换了作品就放弃。
-    func frameBecameReady(_ frameID: String) {
-        guard let project, project.frames.first?.id == frameID, let cache = thumbnailCache,
-              let view = canvas?.frames[frameID] else { return }
-        let id = project.id
-        Task { [weak view] in
-            try? await Task.sleep(for: .seconds(2))
-            guard let view, view.isReady, self.project?.id == id, self.canvas?.frames[frameID] === view,
-                  let png = try? await view.snapshotPNG(), let image = try? cache.save(png, id: id) else { return }
-            thumbnails[id] = image
-        }
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
-    var ready: Bool { session.phase(for: project?.id) == .ready }
+    var isDirty: Bool { editor.revision != savedRevision }
+    var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? "未命名" }
+    var canUndo: Bool { editor.canUndo }
+    var canRedo: Bool { editor.canRedo }
 
-    func bootstrap() async {
-        guard !bootstrapped else { return }
-        bootstrapped = true
+    /// 读取构建时写入的源码位置；不启动任何子进程。
+    func bootstrap() {
         if let url = Bundle.main.url(forResource: "workspace", withExtension: "json"),
            let data = try? Data(contentsOf: url) { runtime = try? JSONDecoder().decode(WorkspaceLocation.self, from: data) }
         let args = CommandLine.arguments
-        let argumentRoot: String? = args.firstIndex(of: "--root").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
-        let candidates = [argumentRoot, defaults.string(forKey: "native.workspace"), runtime?.root, FileManager.default.currentDirectoryPath].compactMap { $0 }
-        if let path = candidates.first(where: { FileManager.default.fileExists(atPath: URL(fileURLWithPath: $0).appendingPathComponent("catalog.json").path) }) {
-            await open(URL(fileURLWithPath: path))
-        }
+        let argumentRoot = args.firstIndex(of: "--root").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        let candidates = [argumentRoot, runtime?.root, FileManager.default.currentDirectoryPath].compactMap { $0 }
+        toolsRoot = candidates.map { URL(fileURLWithPath: $0) }
+            .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("scripts/agent-chat.mjs").path) }
     }
 
-    func chooseWorkspace() {
+    // MARK: Document changes
+
+    /// 文档变化后同步画布与面板。
+    private func changed() {
+        let current = editor.document
+        canvas?.show(current)
+        let ids = current.allIDs()
+        if !selection.isSubset(of: ids) { setSelection(selection.intersection(ids)) }
+        if !inGesture { document = current }
+    }
+
+    /// 一次可撤销的修改。
+    func perform(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> Void) throws {
+        try editor.perform(name, coalescing: coalescing, change)
+        changed()
+        // 拖动中收到的修改（如 Agent 命令）也立即显示在面板中。
+        if inGesture { document = editor.document }
+    }
+
+    /// 面板里的修改：失败时显示错误。
+    func edit(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> Void) {
+        do { try perform(name, coalescing: coalescing, change) } catch { alert = error.localizedDescription }
+    }
+
+    func updateNode(_ id: String, _ name: String, coalescing: String? = nil, _ change: @escaping (inout DesignNode) throws -> Void) {
+        edit(name, coalescing: coalescing.map { "\(id).\($0)" }) { try $0.update(id, change) }
+    }
+
+    /// 撤销、重做先结束画布上进行中的拖动，避免之后的拖动不再记录。
+    func undo() { canvas?.releaseHeldInput(); if editor.undo() { changed() } }
+    func redo() { canvas?.releaseHeldInput(); if editor.redo() { changed() } }
+
+    func setSelection(_ ids: Set<String>) {
+        guard ids != selection else { return }
+        selection = ids
+        canvas?.setSelection(ids)
+    }
+
+    func attach(_ canvas: AtlasCanvasView) {
+        self.canvas = canvas
+        canvas.show(editor.document)
+        canvas.setSelection(selection)
+    }
+
+    /// 新建图层的默认外观。
+    static func newNode(_ type: NodeType, id: String, rect: Rect, clicked: Bool) -> DesignNode {
+        var node = DesignNode(id: id, type: type, x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+        switch type {
+        case .frame: node.fill = .white
+        case .rectangle, .ellipse: node.fill = try? DesignColor(hex: "#D9D9D9")
+        case .text: node.text = DesignText(content: "文字", fontSize: 16, autoResize: clicked ? .widthAndHeight : .height)
+        case .image, .group: break
+        }
+        return node
+    }
+
+    /// 在画布矩形处新建图层：起点落在某个顶层画框内时放进该画框。
+    func create(_ type: NodeType, in rect: Rect, clicked: Bool) {
+        let point = Point(x: rect.x, y: rect.y)
+        let parent = type == .frame ? nil : editor.document.nodes.last {
+            $0.type == .frame && $0.visible && !$0.locked && $0.frame.contains(point)
+        }
+        let origin = parent.map { Point(x: $0.x, y: $0.y) } ?? Point(x: 0, y: 0)
+        let id = DesignDocument.newID(existing: editor.document.allIDs())
+        let node = Self.newNode(type, id: id, rect: Rect(x: rect.x - origin.x, y: rect.y - origin.y, width: rect.width, height: rect.height),
+                                clicked: clicked)
+        edit("新建\(type.title)") { try $0.insert(node, parent: parent?.id, index: nil) }
+        if editor.document.node(id) != nil { setSelection([id]) }
+        tool = .move
+    }
+
+    /// 插入图片文件：放进选中的画框，否则放在视口中央。
+    func insertImage() {
         let panel = NSOpenPanel()
-        panel.title = "选择 ui-atlas 项目目录"
-        panel.message = "选择包含 catalog.json 和 examples 的仓库目录。"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url { Task { await open(url) } }
-    }
-
-    func open(_ url: URL) async {
-        guard !opening else { return }
-        opening = true
-        defer { opening = false }
-        // Validate before stopping the current workspace, so a wrong folder is recoverable.
-        let loaded: Catalog
-        do { loaded = try Catalog.load(from: url) }
-        catch { self.error = "无法读取作品目录：\(error.localizedDescription)"; return }
-        saveNow()
-        await session.stop()
-        loadWorkspaceState(url)
-        catalog = loaded
-        loadSidebarMetadata(loaded, root: url)
-        error = nil
-        selection = []
-        hasMeasuredCanvas = false
-        defaults.set(url.path, forKey: "native.workspace")
-        layouts = LayoutStore(defaults: defaults, namespace: "native.\(url.standardizedFileURL.path)")
-        let recent = defaults.string(forKey: "native.recent.\(url.path)")
-        let selected = loaded.projects.first { $0.enabled && $0.id == recent } ?? loaded.projects.first { $0.enabled }
-        project = nil
-        session.start(root: url, runtime: runtime)
-        if let selected { select(selected) }
-        else { positions = [:]; positionsToken += 1; viewport = Viewport(); zoomIndicator.update(viewport) }
-    }
-
-    func select(_ next: Project) {
-        guard next.enabled else { return }
-        // 再次选中当前作品时只补发启动请求，用于重试失败的案例服务。
-        guard next.id != project?.id else { session.request(next.id); return }
-        saveNow()
-        selection = []
-        project = next
-        if let saved = layouts?.load(project: next) {
-            positions = saved.positions
-            positionsToken += 1
-            request(saved.viewport, animated: false)
-            needsInitialFit = false
-        } else {
-            positions = Dictionary(uniqueKeysWithValues: next.frames.map { ($0.id, Point(x: $0.x, y: $0.y)) })
-            positionsToken += 1
-            fitAll(animated: false)
-            needsInitialFit = !hasMeasuredCanvas
+        panel.allowedContentTypes = [.png, .jpeg]
+        panel.title = "插入图片"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            guard let image = DesignRenderer.cgImage(data) else { throw DesignError("无法读取图片：\(url.lastPathComponent)") }
+            let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
+            let width = Double(image.width) / 2, height = Double(image.height) / 2
+            let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
+            let id = DesignDocument.newID(existing: editor.document.allIDs())
+            var node = DesignNode(id: id, type: .image, name: url.deletingPathExtension().lastPathComponent,
+                                  x: parent == nil ? center.x - width / 2 : 0, y: parent == nil ? center.y - height / 2 : 0,
+                                  width: width, height: height)
+            node.image = DesignImage(data: data)
+            try perform("插入图片") { try $0.insert(node, parent: parent, index: nil) }
+            setSelection([id])
+        } catch {
+            alert = error.localizedDescription
         }
-        if let root { defaults.set(next.id, forKey: "native.recent.\(root.path)") }
-        session.request(next.id)
     }
 
-    func resize(_ size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-        canvasSize = size
-        hasMeasuredCanvas = true
-        if needsInitialFit { needsInitialFit = false; fitAll(animated: false) }
-    }
-
-    /// The canvas reports its viewport once a pan, scroll or zoom has stopped.
-    func viewportSettled(_ settled: Viewport) {
-        viewport = settled
-        zoomIndicator.update(settled)
-        scheduleSave()
-    }
-
-    func framesMoved(_ moved: [String: Point]) {
-        positions.merge(moved) { _, new in new }
-        scheduleSave()
-    }
+    // MARK: Viewport
 
     private func request(_ next: Viewport, animated: Bool) {
         viewport = next
         zoomIndicator.update(next)
         viewportRequest = ViewportRequest(viewport: next, animated: animated, token: viewportRequest.token + 1)
-        scheduleSave()
-    }
-
-    private func rectangles(_ id: String? = nil) -> [Rect] {
-        (project?.frames ?? []).filter { id == nil || $0.id == id }.map { frame in
-            let point = positions[frame.id] ?? Point(x: frame.x, y: frame.y)
-            return Rect(x: point.x, y: point.y, width: frame.width, height: frame.height + CanvasGeometry.headerHeight)
-        }
+        canvas?.update(viewportRequest: viewportRequest, tool: tool)
     }
 
     private var canvasExtent: Size { Size(width: canvasSize.width, height: canvasSize.height) }
 
     func fitAll(animated: Bool = true) {
-        request(CanvasGeometry.fitRects(rectangles(), size: canvasExtent, padding: 64), animated: animated)
+        let rects = editor.document.nodes.filter(\.visible).map(\.frame)
+        request(rects.isEmpty ? Viewport() : CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 64), animated: animated)
     }
-    func focusFrame(_ id: String) {
-        request(CanvasGeometry.fitRects(rectangles(id), size: canvasExtent, padding: 40), animated: true)
+
+    func focus(_ id: String) {
+        guard let rect = editor.document.worldRect(id) else { return }
+        request(CanvasGeometry.fitRects([rect], size: canvasExtent, padding: 40), animated: true)
     }
+
     func zoomToSelection() {
-        guard !selection.isEmpty else { fitAll(); return }
-        let rects = (project?.frames ?? []).filter { selection.contains($0.id) }.map { frame -> Rect in
-            let point = positions[frame.id] ?? Point(x: frame.x, y: frame.y)
-            return Rect(x: point.x, y: point.y, width: frame.width, height: frame.height + CanvasGeometry.headerHeight)
-        }
+        let rects = selection.compactMap { editor.document.worldRect($0) }
+        guard !rects.isEmpty else { fitAll(); return }
         request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
     }
+
     func zoom(_ scale: Double) {
-        // Builds on the last requested or settled viewport, so presses during an animation stack.
-        request(CanvasGeometry.zoomAt(viewport, point: Point(x: canvasSize.width / 2, y: canvasSize.height / 2), scale: scale),
-                animated: true)
+        request(CanvasGeometry.zoomAt(viewport, point: Point(x: canvasSize.width / 2, y: canvasSize.height / 2), scale: scale), animated: true)
     }
     func zoomIn() { zoom(viewport.scale * 1.2) }
     func zoomOut() { zoom(viewport.scale / 1.2) }
-    func reset() {
-        guard let project else { return }
-        pendingSave?.cancel()
-        layouts?.clear(project: project)
-        positions = Dictionary(uniqueKeysWithValues: project.frames.map { ($0.id, Point(x: $0.x, y: $0.y)) })
-        positionsToken += 1
-        selection = []
+
+    // MARK: Files
+
+    /// 有未保存修改时询问：保存、不保存或取消。返回是否可以继续。
+    func confirmDiscard(_ action: String) -> Bool {
+        guard isDirty else { return true }
+        let alert = NSAlert()
+        alert.messageText = "要保存对“\(title)”的修改吗？"
+        alert.informativeText = "\(action)前不保存，修改将会丢失。"
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: "不保存")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return save()
+        case .alertThirdButtonReturn: return true
+        default: return false
+        }
+    }
+
+    func newDocument() {
+        guard confirmDiscard("新建") else { return }
+        replace(DesignDocument(), url: nil)
+    }
+
+    func openDocument() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [Self.contentType]
+        panel.title = "打开工程文件"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // 选好文件后再询问：选择期间 Agent 可能修改了文档。
+        guard confirmDiscard("打开其他文件") else { return }
+        do { try open(url) } catch { alert = error.localizedDescription }
+    }
+
+    /// 读取并校验工程文件；失败时当前文档不变。
+    func open(_ url: URL) throws {
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { throw DesignError("无法读取文件：\(url.lastPathComponent)") }
+        replace(try DesignDocument.decode(data), url: url)
+    }
+
+    func replace(_ next: DesignDocument, url: URL?) {
+        canvas?.releaseHeldInput()
+        editor.replace(next)
+        inGesture = false
+        fileURL = url
+        savedRevision = editor.revision
+        setSelection([])
+        changed()
         fitAll(animated: false)
     }
-    /// 启动器失败时整体重启；只是当前作品失败时只重试该作品。
-    func retryPreview() {
-        if case .failed = session.phase { restart() }
-        else if let project { session.request(project.id) }
+
+    /// 保存到当前文件；未保存过时询问位置。返回是否已保存。
+    @discardableResult
+    func save() -> Bool {
+        guard let fileURL else { return saveAs() }
+        do { try write(to: fileURL); return true } catch { alert = error.localizedDescription; return false }
     }
-    func restart() {
-        guard let root, !opening else { return }
-        Task { await open(root); reloadToken += 1 }
+
+    @discardableResult
+    func saveAs() -> Bool {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [Self.contentType]
+        panel.nameFieldStringValue = "\(title).\(DesignDocument.fileExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        do { try write(to: url); return true } catch { alert = error.localizedDescription; return false }
     }
-    func saveNow() {
-        pendingSave?.cancel()
-        guard let project else { return }
-        layouts?.save(AtlasCore.Layout(layoutVersion: project.layoutVersion, viewport: viewport, positions: positions), project: project)
+
+    func write(to url: URL) throws {
+        try editor.document.encoded().write(to: url, options: .atomic)
+        fileURL = url
+        savedRevision = editor.revision
     }
-    private func scheduleSave() {
-        pendingSave?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
-        pendingSave = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: work)
+
+    static var contentType: UTType {
+        UTType(filenameExtension: DesignDocument.fileExtension, conformingTo: .json) ?? .json
     }
-    func shutdown() async { saveNow(); await chat.shutdown(); await session.stop() }
+
+    func shutdown() async { await chat.shutdown() }
+}
+
+// MARK: Canvas
+
+extension AtlasStore: CanvasHost {
+    func canvasSelect(_ ids: Set<String>) { selection = ids }
+
+    func canvasBeginGesture(_ name: String) {
+        editor.beginGesture(name)
+        inGesture = true
+    }
+
+    /// 选择中同时有父图层与其子图层时，只移动最外层的图层，子图层随父图层移动。
+    private func outermost(_ ids: Set<String>, in document: DesignDocument) -> Set<String> {
+        ids.filter { id in !document.ancestry(of: id).dropLast().contains(where: ids.contains) }
+    }
+
+    func canvasMove(_ origins: [String: Point]) {
+        let roots = outermost(Set(origins.keys), in: editor.document)
+        editor.applyLive { document in
+            for (id, target) in origins where roots.contains(id) {
+                guard let current = document.worldRect(id) else { continue }
+                try? document.update(id) { $0.x += target.x - current.x; $0.y += target.y - current.y }
+            }
+        }
+        changed()
+    }
+
+    func canvasResize(_ id: String, to rect: Rect) {
+        editor.applyLive { document in
+            guard let current = document.worldRect(id) else { return }
+            try? document.update(id) { node in
+                let widthChanged = rect.width != current.width, heightChanged = rect.height != current.height
+                node.x += rect.x - current.x
+                node.y += rect.y - current.y
+                node.width = rect.width
+                node.height = rect.height
+                if widthChanged { node.sizing.horizontal = .fixed }
+                if heightChanged { node.sizing.vertical = .fixed }
+                if node.text != nil {
+                    if heightChanged { node.text?.autoResize = .none }
+                    else if widthChanged, node.text?.autoResize == .widthAndHeight { node.text?.autoResize = .height }
+                }
+            }
+        }
+        changed()
+    }
+
+    func canvasEndGesture() {
+        editor.endGesture()
+        inGesture = false
+        changed()
+    }
+
+    func canvasCreate(_ type: NodeType, in rect: Rect) {
+        let clicked = rect.width == CanvasInteraction.defaultSize && rect.height == CanvasInteraction.defaultSize
+        create(type, in: rect, clicked: clicked)
+    }
+
+    func canvasNudge(_ ids: Set<String>, by delta: Point) {
+        let document = editor.document
+        let movable = outermost(ids, in: document).filter { id in
+            guard let node = document.node(id), !node.locked, let parent = document.parentID(of: id) else { return false }
+            return parent.flatMap { document.node($0)?.layout } == nil
+        }
+        guard !movable.isEmpty else { return }
+        edit("移动图层") { document in
+            for id in movable { try document.update(id) { $0.x += delta.x; $0.y += delta.y } }
+        }
+    }
+
+    func canvasDelete(_ ids: Set<String>) {
+        edit("删除图层") { try $0.delete(ids) }
+        setSelection([])
+    }
+
+    func canvasToolChanged(_ tool: CanvasTool) { self.tool = tool }
+
+    func canvasCommand(_ command: CanvasCommand) {
+        switch command {
+        case .fitAll: fitAll()
+        case .zoomToSelection: zoomToSelection()
+        case .actualSize: zoom(1)
+        }
+    }
+
+    func canvasFocus(_ id: String) { focus(id) }
+
+    func canvasViewportSettled(_ settled: Viewport) {
+        viewport = settled
+        zoomIndicator.update(settled)
+    }
+
+    func canvasSizeChanged(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        canvasSize = size
+    }
 }

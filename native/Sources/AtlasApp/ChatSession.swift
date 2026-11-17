@@ -157,7 +157,7 @@ final class ChatSession: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !transcript.busy else { return }
         transcript.send(trimmed)
-        guard let root else { transcript.fail("尚未打开项目目录"); return }
+        guard let root else { transcript.fail("找不到 ui-atlas 源码目录，无法启动对话程序"); return }
         if process == nil {
             do { try start(root: root, runtime: runtime) }
             catch { transcript.fail("无法启动对话程序：\(error.localizedDescription)"); return }

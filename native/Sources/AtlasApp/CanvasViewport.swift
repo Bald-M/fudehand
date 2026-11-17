@@ -86,7 +86,8 @@ extension AtlasCanvasView {
         committedViewport = liveViewport
         applyViewport()
         updateIndicator(force: true)
-        onViewportSettled?(liveViewport)
+        updateContentsScale()
+        host?.canvasViewportSettled(liveViewport)
     }
 
     /// Wheel events have no end marker, so a pause settles the viewport.
@@ -118,6 +119,7 @@ extension AtlasCanvasView {
             committedViewport = request.viewport
             applyViewport()
             updateIndicator(force: true)
+            updateContentsScale()
         }
     }
 

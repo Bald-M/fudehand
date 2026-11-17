@@ -17,13 +17,13 @@ import { createProvider, listModels } from './agent-providers.mjs'
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
 const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
-const maximumRounds = 8
+const maximumRounds = 16
 
 const system = [
-  '你是 ui-atlas 内置的助手，帮助使用者整理作品与画框、操作画布。',
-  '作品与画框保存在 catalog.json，用 list_projects、get_project 等工具读取，用 add_frame、update_frame、remove_frame、set_project_enabled 修改。',
-  '修改 catalog.json 后，App 需要重启预览才会显示变更，可以调用 canvas_restart_preview。',
-  '画布工具（canvas_*、frame_*）直接操作正在运行的 App；修改作品后可用 frame_console 查看报错、frame_read 读取页面、frame_interact 验证交互。',
+  '你是 ui-atlas 内置的设计助手。ui-atlas 是原生设计工具：画布上是由图层组成的设计文档，你和使用者编辑同一份文档。',
+  '先用 design_get_state 或 design_get_document 了解现状，再用 design_create_node、design_update_node、design_delete_nodes、design_move_node 修改；每次修改画布立即更新。',
+  '搭建界面时优先用带自动布局（layout）的画框，在一次 design_create_node 中用 children 创建整组图层；移动端画框通常为 390×844。',
+  '修改后用 design_snapshot 截图核对效果，有问题再调整。撤销用 design_undo；保存用 design_save_document。',
   '回答使用简体中文，简洁说明做了什么。',
 ].join('\n')
 
