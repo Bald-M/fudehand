@@ -2,15 +2,15 @@ import AppKit
 import AtlasCore
 import ImageIO
 
-/// 把设计文档同步到 Core Animation 图层树：每个节点一个图层，按 id 复用，只更新变化的属性。
+/// Syncs the design document to a Core Animation layer tree: one layer per node, reused by id, updating only the properties that changed.
 @MainActor
 final class DesignRenderer {
-    /// 所有顶层图层的父层。画布把它放进翻转的 world 视图图层，已是左上角原点，这里不再翻转。
+    /// The parent of all top-level layers. The canvas puts it inside the flipped world view layer, which already has a top-left origin, so it is not flipped again here.
     let root = CALayer()
     private var layers: [String: CALayer] = [:]
-    /// 每个图层上次应用的节点（不含子节点），用于跳过未变化的节点。
+    /// The node last applied to each layer (without children), used to skip unchanged nodes.
     private var applied: [String: DesignNode] = [:]
-    /// 文字与图片按此比例光栅化：屏幕倍率 × 画布缩放。
+    /// Text and images are rasterized at this scale: screen scale × canvas zoom.
     var contentsScale: CGFloat = 2 {
         didSet {
             guard contentsScale != oldValue else { return }
@@ -94,7 +94,7 @@ final class DesignRenderer {
         color.map { CGColor(srgbRed: $0.r, green: $0.g, blue: $0.b, alpha: $0.a) }
     }
 
-    /// 位图边长上限：放大很多倍时，大尺寸文字或图片不按完整倍率光栅化，避免巨大的位图。
+    /// Upper limit on a bitmap's side length: when zoomed in many times, large text or images are not rasterized at the full scale, avoiding huge bitmaps.
     static let maximumRasterSide: CGFloat = 8192
 
     static func rasterScale(_ scale: CGFloat, for size: CGSize) -> CGFloat {
@@ -110,7 +110,7 @@ final class DesignRenderer {
         layer.opacity = Float(node.opacity)
         let stroke = node.stroke.flatMap { $0.width > 0 ? $0 : nil }
         if let shape = layer as? CAShapeLayer {
-            // 描边画在内侧，与矩形一致。
+            // The stroke is drawn on the inside, matching rectangles.
             let inset = (stroke?.width ?? 0) / 2
             let rect = CGRect(x: 0, y: 0, width: node.width, height: node.height).insetBy(dx: inset, dy: inset)
             shape.path = CGPath(ellipseIn: rect.width > 0 && rect.height > 0 ? rect : .zero, transform: nil)
@@ -142,7 +142,7 @@ final class DesignRenderer {
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
-    /// 离屏渲染一个节点（含子节点），返回 PNG；节点自身位于图片左上角。
+    /// Renders a node (with its children) offscreen and returns a PNG; the node itself sits at the top-left corner of the image.
     static func snapshotPNG(_ node: DesignNode, scale: Double) throws -> Data {
         let renderer = DesignRenderer()
         renderer.contentsScale = scale
@@ -161,8 +161,8 @@ final class DesignRenderer {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw ControlCommandError("Could not create the snapshot canvas")
         }
-        // 位图以左下角为原点，翻转后与图层的左上角原点一致。文字图层的位图在这个翻转的上下文里
-        // 会被整体倒置，所以预先反向绘制。
+        // The bitmap has a bottom-left origin; flipping it matches the layers' top-left origin. A text layer's bitmap would be
+        // turned upside down as a whole in this flipped context, so it is drawn reversed in advance.
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
         renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)

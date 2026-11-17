@@ -8,13 +8,13 @@ struct CommandResult: Sendable {
     var error: String
 }
 
-/// MCP 连接器：检测 ui-atlas MCP server 是否已注册到 Claude Code / Codex 的用户级配置，并用它们的 CLI 连接或断开。
+/// MCP connectors: detects whether the ui-atlas MCP server is registered in the user-level configuration of Claude Code / Codex, and connects or disconnects it with their CLIs.
 @MainActor
 final class ConnectorsModel: ObservableObject {
     typealias Runner = @Sendable (_ executable: String, _ arguments: [String], _ environment: [String: String]) async -> CommandResult
 
     struct Entry: Equatable {
-        /// nil 表示尚未检测完成。
+        /// nil means detection has not finished yet.
         var status: ConnectorStatus?
         var busy = false
         var error: String?
@@ -22,7 +22,7 @@ final class ConnectorsModel: ObservableObject {
 
     @Published private(set) var entries: [AgentConnector: Entry] = Dictionary(uniqueKeysWithValues: AgentConnector.allCases.map { ($0, Entry()) })
 
-    /// 本检出目录的 `scripts/mcp-server.mjs`；找不到源码目录时为 nil。
+    /// This checkout's `scripts/mcp-server.mjs`; nil when the source directory cannot be found.
     let script: String?
     private let environment: [String: String]
     private let claudeConfig: URL
@@ -35,11 +35,11 @@ final class ConnectorsModel: ObservableObject {
          run: @escaping Runner = ConnectorsModel.runProcess) {
         script = root?.appendingPathComponent("scripts/mcp-server.mjs").path
         var environment = inherited
-        // 从 Finder 打开时 PATH 很短；补上构建时记录的 PATH，claude 等 Node CLI 才找得到 node。
+        // PATH is very short when opened from Finder; add the PATH recorded at build time so Node CLIs such as claude can find node.
         environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ":")
         self.environment = environment
-        // claude CLI 在设置了 CLAUDE_CONFIG_DIR 时把用户级配置写在该目录下。
+        // When CLAUDE_CONFIG_DIR is set, the claude CLI writes the user-level configuration under that directory.
         self.claudeConfig = claudeConfig ?? URL(fileURLWithPath: inherited["CLAUDE_CONFIG_DIR"] ?? FileManager.default.homeDirectoryForCurrentUser.path)
             .appendingPathComponent(".claude.json")
         self.isExecutable = isExecutable
@@ -86,7 +86,7 @@ final class ConnectorsModel: ObservableObject {
         case .codex:
             let result = await run(executable, connector.statusArguments ?? [], environment)
             entries[connector]?.status = AgentConnector.codexStatus(output: result.output, exitCode: result.exitCode, script: script)
-            // 未注册时 codex 报 “No MCP server named”；其他失败（如配置文件损坏）要显示出来，而不是只显示未连接。
+            // When not registered, codex reports "No MCP server named"; other failures (such as a corrupted configuration file) must be shown rather than only showing not connected.
             if result.exitCode != 0, !result.error.contains("No MCP server named"), entries[connector]?.error == nil {
                 let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
                 let failure = L("Could not check the connection status")
@@ -115,7 +115,7 @@ final class ConnectorsModel: ObservableObject {
                     continuation.resume(returning: CommandResult(exitCode: -1, output: Data(), error: error.localizedDescription))
                     return
                 }
-                // 先在后台读完 stderr，避免任一管道写满时子进程阻塞。
+                // Read all of stderr in the background first, so the child process does not block when either pipe fills up.
                 var errorData = Data()
                 let group = DispatchGroup()
                 group.enter()
@@ -130,7 +130,7 @@ final class ConnectorsModel: ObservableObject {
     }
 }
 
-/// “MCP 连接器”窗口：每个 Agent 一行，显示连接状态与连接 / 断开连接按钮。
+/// The "MCP Connectors" window: one row per Agent, showing the connection status and the Connect / Disconnect button.
 struct ConnectorsView: View {
     @ObservedObject var model: ConnectorsModel
     @Environment(\.locale) private var locale

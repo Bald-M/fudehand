@@ -19,8 +19,8 @@ const text = (result: { content: { text?: string }[] }) => result.content.map(it
 const echo = (request: { command: string }) => ({ ok: true, result: { echo: request.command } })
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-describe('设计工具', () => {
-  it('提供全部设计与画布工具，不再有作品与网页工具', () => {
+describe('design tools', () => {
+  it('provides all design and canvas tools, with no work or web tools left', () => {
     const names = tools.map((tool: { name: string }) => tool.name)
     expect(names).toEqual([
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
@@ -31,7 +31,7 @@ describe('设计工具', () => {
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
 
-  it('把命令和定义过的参数转发给 App', async () => {
+  it('forwards the command and the defined arguments to the App', async () => {
     const fake = await app(echo)
     const ctx = { root: '/repo', socketPath: fake.socketPath }
     const created = await callTool('design_create_node', { parent: 'f', node: { type: 'rectangle', fill: '#FFFFFF' }, extra: 1 }, ctx)
@@ -62,7 +62,7 @@ describe('设计工具', () => {
     ])
   })
 
-  it('把 image.path 读成 base64，包括子图层与修改', async () => {
+  it('reads image.path into base64, including child layers and updates', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'uia-image-'))
     cleanup.push(() => rm(dir, { recursive: true, force: true }))
     await writeFile(join(dir, 'dot.png'), Buffer.from(PNG, 'base64'))
@@ -92,8 +92,9 @@ describe('设计工具', () => {
     expect(text(result)).toBe('ui-atlas is not running')
   })
 
-  it('工具描述与参数描述为英文，不含中文', () => {
+  it('has English tool and parameter descriptions, with no Chinese', () => {
     for (const tool of tools) {
+      // The Chinese range is deliberate: it asserts the descriptions contain no Chinese.
       expect(JSON.stringify({ description: tool.description, inputSchema: tool.inputSchema }), tool.name).not.toMatch(/[一-鿿]/)
     }
   })
@@ -110,24 +111,26 @@ describe('设计工具', () => {
     expect(Buffer.from(sent, 'base64').equals(image)).toBe(true)
   })
 
-  it('design_snapshot 以 MCP image 内容返回截图', async () => {
+  it('design_snapshot returns the snapshot as MCP image content', async () => {
     const fake = await app(() => ({ ok: true, result: { id: 'home', mimeType: 'image/png', data: PNG, width: 390, height: 844 } }))
     const result = await callTool('design_snapshot', { id: 'home' }, { root: '/repo', socketPath: fake.socketPath })
     expect(fake.received[0]).toMatchObject({ command: 'node_snapshot', args: { id: 'home' } })
     expect(result.content).toEqual([
       { type: 'image', data: PNG, mimeType: 'image/png' },
+      // Chinese kept: this is the text the tool currently returns; tool output is out of scope here.
       { type: 'text', text: '图层 home 的截图（390×844）' },
     ])
   })
 
-  it('响应跨数据块且切在中文字符中间时仍完整解析', async () => {
+  it('parses a response in full when it spans chunks and is split inside a Chinese character', async () => {
+    // Chinese kept deliberately: the chunk boundary must fall inside a multi-byte character.
     const error = 'Layer not found: 手机'
     const fake = await app(() => ({ ok: false, error }), { splitInside: '手' })
     const result = await callTool('design_get_node', { id: '手机' }, { root: '/repo', socketPath: fake.socketPath })
     expect(text(result)).toBe(error)
   })
 
-  it('读取数 MB 的截图响应', async () => {
+  it('reads a snapshot response of several MB', async () => {
     const data = 'A'.repeat(6 << 20)
     const fake = await app(() => ({ ok: true, result: { id: 'web', mimeType: 'image/png', data, width: 1440, height: 900 } }))
     const result = await callTool('design_snapshot', { id: 'web' }, { root: '/repo', socketPath: fake.socketPath })

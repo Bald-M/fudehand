@@ -1,7 +1,7 @@
 import AtlasCore
 import SwiftUI
 
-/// 对话面板：与 App 内 Agent 对话，Agent 通过与 MCP 相同的工具读取和编辑设计文档。
+/// The chat panel: a conversation with the in-App Agent, which reads and edits the design document through the same tools as MCP.
 struct ChatPanel: View {
     @ObservedObject var chat: ChatSession
     let root: URL?
@@ -216,7 +216,7 @@ private struct ChatSettingsSheet: View {
                         Keychain.delete(provider)
                         chat.keyUpdated(provider: provider, saved: false)
                         key = ""; hasSavedKey = false; editingKey = false
-                        // 丢弃仍在进行、用旧 key 发出的请求。
+                        // Discard requests still in progress that were sent with the old key.
                         listToken = UUID(); listing = false; models = []; listError = nil
                     }
                 }
@@ -228,7 +228,7 @@ private struct ChatSettingsSheet: View {
         .padding(20).frame(width: 460)
         .onAppear { load(chat.settings); refreshModels() }
         .onChange(of: provider) { previous, next in
-            // 首次载入时 previous 为空，保留 onAppear 读到的值；之后每次切换都换成该提供方保存的设置。
+            // On first load previous is empty, so keep the value read in onAppear; after that every switch replaces it with the settings saved for that provider.
             hasSavedKey = chat.savedKey(for: next)
             guard !previous.isEmpty else { return }
             let stored = ChatSession.stored(next, .standard)
@@ -237,7 +237,7 @@ private struct ChatSettingsSheet: View {
             refreshModels()
         }
         .onChange(of: keyFocused) { _, focused in
-            // 输入期间保持明文框；离开输入框后改为遮蔽显示，并用新 key 重新获取模型。
+            // Keep the plain-text field while typing; after leaving the field, switch to the masked display and fetch the models again with the new key.
             if focused { editingKey = true; return }
             guard editingKey, !trimmedKey.isEmpty || hasSavedKey else { return }
             editingKey = false
@@ -308,7 +308,7 @@ private struct ChatSettingsSheet: View {
         hasSavedKey = chat.savedKey(for: settings.provider)
     }
 
-    /// 用输入框里的新 key（没有时用钥匙串里的 key）读取当前提供方的模型列表；只采用最后一次请求的结果。
+    /// Reads the current provider's model list with the new key in the field (or the key in the Keychain when there is none); only the result of the last request is used.
     private func refreshModels() {
         let token = UUID()
         listToken = token
@@ -334,7 +334,7 @@ private struct ChatSettingsSheet: View {
         do {
             if !trimmedKey.isEmpty { try Keychain.save(trimmedKey, account: provider) }
         } catch { self.error = error.localizedDescription; return }
-        // 设置变化时 ChatSession 自己会重启；只有确实保存了新 key 才通知。
+        // ChatSession restarts itself when the settings change; notify only when a new key was actually saved.
         chat.settings = ChatSettings(provider: provider, model: model.trimmingCharacters(in: .whitespaces),
                                      baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))
         if !trimmedKey.isEmpty { chat.keyUpdated(provider: provider, saved: true, key: trimmedKey) }

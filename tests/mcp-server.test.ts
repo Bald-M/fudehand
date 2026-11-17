@@ -25,7 +25,7 @@ function text(result: { content: unknown }) {
 }
 
 describe('MCP server', () => {
-  it('列出设计工具并附带输入结构', async () => {
+  it('lists the design tools with their input schemas', async () => {
     const client = await connect('/tmp/unused.sock')
     const { tools } = await client.listTools()
     expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['design_create_node', 'design_update_node', 'design_snapshot']))
@@ -38,10 +38,11 @@ describe('MCP server', () => {
     expect(client.getServerVersion()?.version).toBe(version)
   })
 
-  it('经 UI_ATLAS_CONTROL_SOCKET 把调用转发给 App', async () => {
+  it('forwards calls to the App through UI_ATLAS_CONTROL_SOCKET', async () => {
     const app = await fakeApp(request => ({ ok: true, result: { id: 'abc', got: request.args } }))
     cleanup.push(app.close)
     const client = await connect(app.socketPath)
+    // Chinese kept deliberately: it checks that non-ASCII text passes through unchanged.
     const result = await client.callTool({ name: 'design_create_node', arguments: { node: { type: 'text', text: { content: '你好' } } } })
     expect(result.isError).toBeFalsy()
     expect(JSON.parse(text(result))).toEqual({ id: 'abc', got: { node: { type: 'text', text: { content: '你好' } } } })

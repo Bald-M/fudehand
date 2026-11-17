@@ -1,8 +1,8 @@
 import Testing
 import AtlasCore
 
-/// 顶层画框 f（0,0 300×300）内有卡片 card（10,10 200×100，含按钮 btn 20,20 50×30）和分组 g（含 dot）；
-/// 顶层还有矩形 r（400,0）。
+/// Top-level frame f (0,0 300×300) contains card (10,10 200×100, with button btn 20,20 50×30) and group g (containing dot);
+/// the top level also has rectangle r (400,0).
 private func document() -> DesignDocument {
     var button = DesignNode(id: "btn", type: .rectangle, x: 20, y: 20, width: 50, height: 30)
     button.fill = .white
@@ -23,7 +23,7 @@ private func pick(_ x: Double, _ y: Double, selection: Set<String> = [], deep: B
     #expect(DesignHitTest.path(at: Point(x: 35, y: 35), in: document()) == ["f", "card", "btn"])
     #expect(DesignHitTest.path(at: Point(x: 250, y: 250), in: document()) == ["f"])
     #expect(DesignHitTest.path(at: Point(x: 350, y: 10), in: document()).isEmpty)
-    // 分组空白处点不中分组。
+    // The empty area of a group does not hit the group.
     #expect(DesignHitTest.path(at: Point(x: 15, y: 205), in: document()) == ["f", "g", "dot"])
 }
 

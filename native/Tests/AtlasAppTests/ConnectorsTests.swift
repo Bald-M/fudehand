@@ -3,7 +3,7 @@ import Testing
 @testable import AtlasApp
 @testable import AtlasCore
 
-/// 模拟 codex CLI 的用户级配置：add 后 get 返回注册内容，remove 后报未找到。
+/// Simulates the codex CLI's user-level configuration: after add, get returns the registration; after remove, it reports not found.
 private actor FakeCodex {
     var registered: [String]?
     var calls: [[String]] = []

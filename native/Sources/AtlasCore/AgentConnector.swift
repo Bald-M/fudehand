@@ -1,17 +1,17 @@
 import Foundation
 
-/// MCP 连接器的连接状态：ui-atlas MCP server 是否注册在该 Agent 的用户级配置中。
+/// The connection status of an MCP connector: whether the ui-atlas MCP server is registered in that Agent's user-level configuration.
 public enum ConnectorStatus: Equatable, Sendable {
-    /// 本机找不到对应 CLI。
+    /// The corresponding CLI cannot be found on this machine.
     case unavailable
     case disconnected
-    /// 已注册且指向本检出目录的 MCP server。
+    /// Registered and pointing at this checkout's MCP server.
     case connected
-    /// 已注册 `ui-atlas`，但命令指向别处；关联值是注册的命令。
+    /// `ui-atlas` is registered, but the command points elsewhere; the associated value is the registered command.
     case elsewhere(String)
 }
 
-/// MCP 连接器：把 ui-atlas MCP server 注册到外部 Agent（Claude Code、Codex）的用户级配置，或从中移除。
+/// An MCP connector: registers the ui-atlas MCP server in the user-level configuration of an external Agent (Claude Code, Codex), or removes it from there.
 public enum AgentConnector: String, CaseIterable, Sendable {
     case claude, codex
 
@@ -29,22 +29,22 @@ public enum AgentConnector: String, CaseIterable, Sendable {
         ["mcp", "remove"] + (self == .claude ? ["--scope", "user"] : []) + [Self.serverName]
     }
 
-    /// Codex 用 `mcp get --json` 读取状态；Claude Code 的 `mcp get` 会启动并检查 server，改为直接读 `~/.claude.json`。
+    /// Codex reads the status with `mcp get --json`; Claude Code's `mcp get` would start and check the server, so `~/.claude.json` is read directly instead.
     public var statusArguments: [String]? { self == .codex ? ["mcp", "get", Self.serverName, "--json"] : nil }
 
-    /// 在 PATH 中查找 CLI。
+    /// Looks up the CLI in PATH.
     public func locate(path: String, isExecutable: (String) -> Bool) -> String? {
         path.split(separator: ":").map { "\($0)/\(executable)" }.first(where: isExecutable)
     }
 
-    /// 解析 `~/.claude.json` 顶层（用户级）的 `mcpServers`。
+    /// Parses the top-level (user-level) `mcpServers` of `~/.claude.json`.
     public static func claudeStatus(config: Data?, script: String) -> ConnectorStatus {
         guard let config, let root = (try? JSONSerialization.jsonObject(with: config)) as? [String: Any],
               let server = (root["mcpServers"] as? [String: Any])?[serverName] as? [String: Any] else { return .disconnected }
         return status(command: server["command"] as? String, args: server["args"] as? [String], script: script)
     }
 
-    /// 解析 `codex mcp get ui-atlas --json`；未注册时命令以非零状态退出。
+    /// Parses `codex mcp get ui-atlas --json`; when not registered the command exits with a non-zero status.
     public static func codexStatus(output: Data, exitCode: Int32, script: String) -> ConnectorStatus {
         guard exitCode == 0, let root = (try? JSONSerialization.jsonObject(with: output)) as? [String: Any] else { return .disconnected }
         let transport = root["transport"] as? [String: Any]

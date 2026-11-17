@@ -34,6 +34,7 @@ private func specifiers(_ text: String) -> [String] {
     #expect(AppLanguage.enUS.preferredLanguages(system: []) == ["en-US"])
 }
 
+// The Chinese in this file is deliberate: these tests assert the Chinese localization tables and language names.
 @Test func supportsExactlyTheFourLanguages() {
     #expect(AppLanguage.allCases.map(\.rawValue) == ["en-US", "en-GB", "zh-Hans", "zh-Hant"])
     #expect(AppLanguage.allCases.map(\.displayName) == ["English (US)", "English (UK)", "简体中文", "繁體中文"])

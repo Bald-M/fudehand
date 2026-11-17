@@ -1,6 +1,6 @@
 import Foundation
 
-/// 控制通道的命令：外部进程经本地 Unix socket 读取和编辑正在运行的 App 中的设计文档。
+/// Control-channel commands: an external process reads and edits the design document in the running App over a local Unix socket.
 public enum ControlCommand: Equatable, Sendable {
     case getState
     case getDocument
@@ -21,14 +21,14 @@ public enum ControlCommand: Equatable, Sendable {
     case nodeSnapshot(String, scale: Double)
 }
 
-/// 原样携带的 JSON 对象（图层定义或字段补丁），由 `DesignJSON` 校验。
+/// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
 public struct JSONObject: Equatable, @unchecked Sendable {
     public let value: [String: Any]
     public init(_ value: [String: Any]) { self.value = value }
     public static func == (a: JSONObject, b: JSONObject) -> Bool { NSDictionary(dictionary: a.value).isEqual(to: b.value) }
 }
 
-/// 请求 id 原样回传，便于调用方匹配响应。
+/// The request id is echoed back as is, so the caller can match the response.
 public enum ControlID: Equatable, Sendable {
     case int(Int)
     case string(String)
@@ -55,8 +55,8 @@ public struct ControlFailure: Error, Equatable, Sendable {
     }
 }
 
-/// 行分隔 JSON：请求 `{"id":1,"command":"focus_node","args":{"id":"home"}}`，
-/// 响应 `{"id":1,"ok":true,"result":…}` 或 `{"id":1,"ok":false,"error":"…"}`。
+/// Line-delimited JSON: request `{"id":1,"command":"focus_node","args":{"id":"home"}}`,
+/// response `{"id":1,"ok":true,"result":…}` or `{"id":1,"ok":false,"error":"…"}`.
 public enum ControlProtocol {
     public static func parse(_ line: Data) -> Result<ControlRequest, ControlFailure> {
         guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {

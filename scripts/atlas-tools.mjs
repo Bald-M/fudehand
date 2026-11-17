@@ -3,16 +3,16 @@ import { isAbsolute, resolve } from 'node:path'
 import { sendControl } from './control-client.mjs'
 
 /**
- * MCP server 与 App 内 Agent harness 共用的唯一工具实现。所有工具经本地控制通道转发给正在运行的 App；
- * App 是设计文档的唯一持有者，字段校验只在 App（Swift）一处。
+ * The only tool implementation, shared by the MCP server and the in-App Agent harness. Every tool is forwarded through the local control channel to the running App;
+ * the App is the sole owner of the design document, and field validation happens in one place only, the App (Swift).
  */
 
 const json = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] })
 
-/** 相对路径按 ui-atlas 源码目录解析，避免依赖 App 进程的工作目录。 */
+/** Relative paths are resolved against the ui-atlas source directory, to avoid depending on the App process's working directory. */
 const absolute = (path, root) => isAbsolute(path) ? path : resolve(root, path)
 
-/** 把节点（及子节点）中 `image.path` 指向的 PNG/JPEG 读成 base64 的 `image.data`。 */
+/** Reads the PNG/JPEG that `image.path` points to in a node (and its children) into a base64 `image.data`. */
 async function inlineImages(value, root) {
   if (Array.isArray(value)) return Promise.all(value.map(item => inlineImages(item, root)))
   if (!value || typeof value !== 'object') return value

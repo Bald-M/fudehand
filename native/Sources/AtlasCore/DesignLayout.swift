@@ -1,12 +1,12 @@
 import Foundation
 
-/// 测量文字：`maxWidth` 为 nil 时返回单行自然宽度，否则按该宽度折行。App 用 CoreText 实现，测试用固定规则。
+/// Measures text: returns the natural single-line width when `maxWidth` is nil, otherwise wraps at that width. The App implements it with CoreText; tests use a fixed rule.
 public typealias TextMeasure = (DesignText, _ maxWidth: Double?) -> Size
 
-/// 自动布局、文字自适应和分组收缩。结果直接写回节点的 x/y/width/height，渲染只读这些值。
+/// Auto layout, text auto-sizing, and group shrinking. Results are written straight back to the nodes' x/y/width/height, and rendering only reads those values.
 public enum DesignLayout {
     public static func apply(to nodes: inout [DesignNode], measure: TextMeasure) {
-        // 宽度在自顶向下阶段才确定，会影响折行文字的高度和 hug 父节点，所以运行两遍。
+        // Widths are settled only in the top-down phase and affect the height of wrapped text and hug parents, so run two passes.
         for _ in 0..<2 {
             for index in nodes.indices {
                 measureUp(&nodes[index], parentLayout: nil, measure: measure)
@@ -15,7 +15,7 @@ public enum DesignLayout {
         }
     }
 
-    /// 自底向上：文字尺寸、分组并集、hug 画框尺寸。
+    /// Bottom-up: text sizes, group unions, hug frame sizes.
     static func measureUp(_ node: inout DesignNode, parentLayout: AutoLayout?, measure: TextMeasure) {
         for index in node.children.indices {
             measureUp(&node.children[index], parentLayout: node.layout, measure: measure)
@@ -23,7 +23,7 @@ public enum DesignLayout {
         switch node.type {
         case .text:
             guard let text = node.text else { return }
-            // 宽度由自动布局父图层决定（fill，或竖向布局的交叉轴拉伸）时不按内容收缩宽度。
+            // When the width is decided by the auto layout parent (fill, or cross-axis stretch in a vertical layout), do not shrink the width to the content.
             let fillsWidth = parentLayout.map { $0.direction == .vertical && $0.crossAlign == .stretch || node.sizing.horizontal == .fill } ?? false
             let hugWidth = !fillsWidth && (text.autoResize == .widthAndHeight || node.sizing.horizontal == .hug)
             let hugHeight = text.autoResize != .none || node.sizing.vertical == .hug
@@ -58,7 +58,7 @@ public enum DesignLayout {
         }
     }
 
-    /// 自顶向下：自动布局画框分配 fill 尺寸、拉伸交叉轴、摆放子项，再递归。
+    /// Top-down: an auto layout frame distributes fill sizes, stretches the cross axis, places its children, then recurses.
     static func layoutDown(_ node: inout DesignNode) {
         if let layout = node.layout {
             let horizontal = layout.direction == .horizontal

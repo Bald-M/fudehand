@@ -7,8 +7,8 @@ import { randomUUID } from 'node:crypto'
 export interface ControlRequest { id: unknown, command: string, args: Record<string, unknown> }
 
 /**
- * 假的 App 控制通道：记录收到的请求，用 respond 生成响应。返回 socket 路径、请求记录与关闭函数。
- * `splitInside` 让响应在该字符处分两次写出，模拟数据块切在多字节字符中间。
+ * A fake App control channel: records the requests it receives and produces responses with respond. Returns the socket path, the request log, and a close function.
+ * `splitInside` makes the response be written in two parts at that character, simulating a chunk boundary in the middle of a multi-byte character.
  */
 export async function fakeApp(respond: (request: ControlRequest) => object, { splitInside = '' } = {}) {
   const socketPath = join(tmpdir(), `uia-${randomUUID().slice(0, 8)}.sock`)

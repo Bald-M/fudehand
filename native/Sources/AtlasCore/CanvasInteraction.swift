@@ -3,7 +3,7 @@ import Foundation
 public enum CanvasTool: String, Equatable, CaseIterable, Sendable {
     case move, hand, frame, rectangle, ellipse, text
 
-    /// 创建工具对应的图层类型。
+    /// The layer type a creation tool corresponds to.
     public var creates: NodeType? {
         switch self {
         case .frame: return .frame
@@ -15,7 +15,7 @@ public enum CanvasTool: String, Equatable, CaseIterable, Sendable {
     }
 }
 
-/// 选框上的八个缩放把手。
+/// The eight resize handles on the selection box.
 public enum ResizeHandle: CaseIterable, Equatable, Sendable {
     case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
 
@@ -24,17 +24,17 @@ public enum ResizeHandle: CaseIterable, Equatable, Sendable {
     var movesTop: Bool { self == .topLeft || self == .top || self == .topRight }
     var movesBottom: Bool { self == .bottomLeft || self == .bottom || self == .bottomRight }
 
-    /// 把手在矩形上的相对位置（0、0.5、1）。
+    /// The handle's relative position on the rectangle (0, 0.5, 1).
     public var anchor: Point {
         Point(x: movesLeft ? 0 : movesRight ? 1 : 0.5, y: movesTop ? 0 : movesBottom ? 1 : 0.5)
     }
 }
 
-/// 指针下的目标；`node` 已由 App 按当前选择层级解析为可选中的图层。
+/// The target under the pointer; `node` has already been resolved by the App, according to the current selection level, to a selectable layer.
 public enum HitTarget: Equatable, Sendable {
     case empty
     case node(String)
-    /// 顶层画框上方的名称标签。
+    /// The name label above a top-level frame.
     case label(String)
     case handle(String, ResizeHandle)
 }
@@ -50,35 +50,35 @@ public struct PointerModifiers: OptionSet, Equatable {
 
 public enum InteractionEffect: Equatable {
     case select(Set<String>)
-    /// 开始一次连续修改，名称用作撤销步骤名。
+    /// Begins a continuous edit; the name is used as the undo step name.
     case beginGesture(String)
-    /// 拖动中的图层左上角（画布绝对坐标）。
+    /// The top-left corners of the layers being dragged (absolute canvas coordinates).
     case moveNodes([String: Point])
-    /// 缩放中的图层矩形（画布绝对坐标）。
+    /// The rectangles of the layers being resized (absolute canvas coordinates).
     case resize(String, Rect)
     case endGesture
-    /// 屏幕坐标的框选或创建预览矩形；nil 隐藏。
+    /// The marquee selection or creation preview rectangle in screen coordinates; nil hides it.
     case marquee(Rect?)
-    /// 画布坐标的吸附参考线。
+    /// Snapping guides in canvas coordinates.
     case guides([Guide])
     case pan(Viewport)
-    /// 双击顶层画框标签：缩放聚焦。
+    /// Double-clicking a top-level frame's label: zoom to focus.
     case focus(String)
-    /// 双击已选图层：由 App 选中指针（画布坐标）下更深一层的图层。
+    /// Double-clicking a selected layer: the App selects the layer one level deeper under the pointer (canvas coordinates).
     case enter(String, Point)
-    /// 创建工具：在画布坐标矩形处新建图层。
+    /// Creation tool: creates a layer at a rectangle in canvas coordinates.
     case create(NodeType, Rect)
 }
 
 public struct InteractionContext {
     public var viewport: Viewport
-    /// 选中图层与顶层图层的画布绝对矩形。
+    /// The absolute canvas rectangles of the selected layers and the top-level layers.
     public var rects: [String: Rect]
-    /// 框选的候选图层（顶层图层）。
+    /// The candidate layers for marquee selection (top-level layers).
     public var marqueeCandidates: Set<String>
-    /// 拖动当前选择时可吸附的矩形（兄弟图层与父图层）。
+    /// The rectangles the current selection can snap to while dragged (sibling layers and the parent layer).
     public var snapTargets: [Rect]
-    /// 可以拖动移动的图层（不在自动布局中、未锁定）。
+    /// The layers that can be moved by dragging (not in auto layout, not locked).
     public var movable: Set<String>
     public var selection: Set<String>
     public var tool: CanvasTool
@@ -92,17 +92,17 @@ public struct InteractionContext {
     }
 }
 
-/// 把指针事件转换为画布效果的状态机；不依赖 AppKit。
+/// A state machine turning pointer events into canvas effects; no AppKit dependency.
 public struct CanvasInteraction {
     public static let dragThreshold = 3.0
     public static let snapThreshold = 6.0
-    /// 单击创建（未拖出尺寸）时的默认尺寸。
+    /// The default size when creating with a single click (no size dragged out).
     public static let defaultSize = 100.0
 
     private struct Press {
         var origin: Point
         var dragIDs: Set<String>
-        /// 在多选中按下（无 Shift）且未拖动时，松开后收缩为该图层。
+        /// When pressed inside a multi-selection (without Shift) and not dragged, the selection collapses to this layer on release.
         var collapseTo: String?
     }
 
@@ -141,7 +141,7 @@ public struct CanvasInteraction {
 
     public mutating func pointerDown(at point: Point, hit: HitTarget, button: PointerButton, modifiers: PointerModifiers,
                                      clickCount: Int, context: InteractionContext) -> [InteractionEffect] {
-        // 漏掉松开事件的上一个手势先结束。
+        // End the previous gesture first if its release event was missed.
         let leftover = isIdle ? [] : finish(at: point, context: context)
         return leftover + beginPress(at: point, hit: hit, button: button, modifiers: modifiers, clickCount: clickCount, context: context)
     }
@@ -197,7 +197,7 @@ public struct CanvasInteraction {
             guard (dx * dx + dy * dy).squareRoot() > Self.dragThreshold else { return [] }
             let rects = press.dragIDs.filter(context.movable.contains).reduce(into: [String: Rect]()) { $0[$1] = context.rects[$1] }
             guard !rects.isEmpty else {
-                // 不能移动的图层（自动布局子项、锁定）拖动时什么都不做。
+                // Dragging layers that cannot be moved (auto layout children, locked) does nothing.
                 state = .pressed(Press(origin: press.origin, dragIDs: [], collapseTo: nil))
                 return []
             }
@@ -229,7 +229,7 @@ public struct CanvasInteraction {
         finish(at: point, context: context)
     }
 
-    /// 焦点离开时结束手势：进行中的移动或缩放保留当前结果，创建被放弃。
+    /// Ends the gesture when focus leaves: a move or resize in progress keeps its current result, and a creation is abandoned.
     public mutating func cancel() -> [InteractionEffect] {
         defer { state = .idle }
         switch state {
@@ -282,7 +282,7 @@ public struct CanvasInteraction {
         return [.moveNodes(next.current), .guides(guides)]
     }
 
-    /// 按把手拖动距离（画布单位）计算新矩形；尺寸最小为 1，不翻转。
+    /// Computes the new rectangle from the distance the handle was dragged (canvas units); the size is at least 1 and never flips.
     public static func resized(_ rect: Rect, handle: ResizeHandle, by delta: Point) -> Rect {
         var left = rect.minX, right = rect.maxX, top = rect.minY, bottom = rect.maxY
         if handle.movesLeft { left = min(left + delta.x, right - 1) }

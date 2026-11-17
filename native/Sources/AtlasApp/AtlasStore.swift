@@ -4,7 +4,7 @@ import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// `pnpm build:native` 写入 App 包的本机源码位置；对话面板据此找到 harness 与 Node。
+/// The local source location that `pnpm build:native` writes into the app bundle; the chat panel uses it to find the harness and Node.
 struct WorkspaceLocation: Decodable {
     let root: String
     let node: String?
@@ -13,17 +13,17 @@ struct WorkspaceLocation: Decodable {
 
 enum InspectorTab: String, CaseIterable { case design, chat }
 
-/// App 状态：唯一持有设计文档与撤销历史；画布、面板与控制通道都经它修改文档。
+/// App state: the sole owner of the design document and the undo history; the canvas, the panels, and the control channel all modify the document through it.
 @MainActor
 final class AtlasStore: ObservableObject {
     private(set) var editor = DesignEditor(measure: TextMetrics.measure)
-    /// 面板显示用的文档；拖动等连续操作期间不更新，结束时一次更新。
+    /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
     @Published private(set) var document = DesignDocument()
     @Published private(set) var selection: Set<String> = []
     @Published var tool: CanvasTool = .move
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
-    /// 最近一次视口请求；直接推给画布，不经 SwiftUI，避免每次缩放都重新计算面板。
+    /// The most recent viewport request; pushed directly to the canvas, bypassing SwiftUI, so the panels are not recomputed on every zoom.
     private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
     @Published var inspectorTab: InspectorTab = .design
     @Published var showingInspector = true
@@ -42,27 +42,27 @@ final class AtlasStore: ObservableObject {
     }
     let zoomIndicator = ZoomIndicator()
     let chat = ChatSession()
-    /// 源码目录：对话面板从这里启动 `scripts/agent-chat.mjs`。
+    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
     private(set) var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
-    /// “MCP 连接器”窗口的模型；窗口可能先于主窗口打开，所以按需读取源码位置。
+    /// The model of the "MCP Connectors" window; the window may open before the main window, so the source location is read on demand.
     private(set) lazy var connectors: ConnectorsModel = {
         if toolsRoot == nil { bootstrap() }
         return ConnectorsModel(root: toolsRoot, runtime: runtime)
     }()
     private(set) var canvasSize = CGSize(width: 1000, height: 700)
-    /// 最近一次稳定或请求的视口；画布持有实时视口。
+    /// The most recent stable or requested viewport; the canvas owns the live viewport.
     private(set) var viewport = Viewport()
     weak var canvas: AtlasCanvasView?
     private var inGesture = false
-    /// 编辑窗口未打开时替换了文档：画布出现后按实际尺寸适应全部。窗口打开过程中尺寸会变化几次，
-    /// 尺寸稳定一小段时间后才结束。
+    /// The document was replaced while the editor window was not open: once the canvas appears, fit all at its actual size. The size changes a few times while the window opens,
+    /// so this ends only after the size has been stable for a short while.
     private var fitWhenCanvasSized = false
     private var endFitWhenCanvasSized: DispatchWorkItem?
     private let defaults: UserDefaults
-    /// 最近打开的工程文件，启动窗口与“打开最近”菜单共用。
+    /// The recently opened project files, shared by the launch window and the "Open Recent" menu.
     @Published private(set) var recents: RecentDocuments
-    /// 显示编辑窗口并关闭启动窗口；由窗口中的视图从环境取得动作后登记。
+    /// Shows the editor window and closes the launch window; registered by a view in a window after it gets the actions from the environment.
     var presentEditor: () -> Void = {}
 
     init(defaults: UserDefaults = .standard) {
@@ -79,7 +79,7 @@ final class AtlasStore: ObservableObject {
     var canUndo: Bool { editor.canUndo }
     var canRedo: Bool { editor.canRedo }
 
-    /// 读取构建时写入的源码位置；不启动任何子进程。
+    /// Reads the source location written at build time; starts no child process.
     func bootstrap() {
         if let url = Bundle.main.url(forResource: "workspace", withExtension: "json"),
            let data = try? Data(contentsOf: url) { runtime = try? JSONDecoder().decode(WorkspaceLocation.self, from: data) }
@@ -92,7 +92,7 @@ final class AtlasStore: ObservableObject {
 
     // MARK: Document changes
 
-    /// 文档变化后同步画布与面板。
+    /// Syncs the canvas and the panels after the document changes.
     private func changed() {
         let current = editor.document
         canvas?.show(current)
@@ -101,15 +101,15 @@ final class AtlasStore: ObservableObject {
         if !inGesture { document = current }
     }
 
-    /// 一次可撤销的修改。
+    /// One undoable edit.
     func perform(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> Void) throws {
         try editor.perform(name, coalescing: coalescing, change)
         changed()
-        // 拖动中收到的修改（如 Agent 命令）也立即显示在面板中。
+        // Edits received during a drag (such as Agent commands) are also shown in the panels immediately.
         if inGesture { document = editor.document }
     }
 
-    /// 面板里的修改：失败时显示错误。
+    /// An edit from a panel: shows the error on failure.
     func edit(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> Void) {
         do { try perform(name, coalescing: coalescing, change) } catch { alert = error.localizedDescription }
     }
@@ -118,7 +118,7 @@ final class AtlasStore: ObservableObject {
         edit(name, coalescing: coalescing.map { "\(id).\($0)" }) { try $0.update(id, change) }
     }
 
-    /// 撤销、重做先结束画布上进行中的拖动，避免之后的拖动不再记录。
+    /// Undo and redo first end the drag in progress on the canvas, so later drags do not stop being recorded.
     func undo() { canvas?.releaseHeldInput(); if editor.undo() { changed() } }
     func redo() { canvas?.releaseHeldInput(); if editor.redo() { changed() } }
 
@@ -134,7 +134,7 @@ final class AtlasStore: ObservableObject {
         canvas.setSelection(selection)
     }
 
-    /// 新建图层的默认外观。
+    /// The default appearance of a new layer.
     static func newNode(_ type: NodeType, id: String, rect: Rect, clicked: Bool) -> DesignNode {
         var node = DesignNode(id: id, type: type, x: rect.x, y: rect.y, width: rect.width, height: rect.height)
         switch type {
@@ -146,7 +146,7 @@ final class AtlasStore: ObservableObject {
         return node
     }
 
-    /// 在画布矩形处新建图层：起点落在某个顶层画框内时放进该画框。
+    /// Creates a layer at a canvas rectangle: when the start point falls inside a top-level frame, it is put into that frame.
     func create(_ type: NodeType, in rect: Rect, clicked: Bool) {
         let point = Point(x: rect.x, y: rect.y)
         let parent = type == .frame ? nil : editor.document.nodes.last {
@@ -161,7 +161,7 @@ final class AtlasStore: ObservableObject {
         tool = .move
     }
 
-    /// 插入图片文件：放进选中的画框，否则放在视口中央。
+    /// Inserts an image file: into the selected frame, otherwise at the center of the viewport.
     func insertImage() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg]
@@ -220,7 +220,7 @@ final class AtlasStore: ObservableObject {
 
     // MARK: Files
 
-    /// 有未保存修改时询问：保存、不保存或取消。返回是否可以继续。
+    /// Asks when there are unsaved changes: Save, Don't Save, or Cancel. Returns whether it is OK to continue.
     func confirmDiscard() -> Bool {
         guard isDirty else { return true }
         let alert = NSAlert()
@@ -246,19 +246,19 @@ final class AtlasStore: ObservableObject {
         panel.allowedContentTypes = [Self.contentType]
         panel.title = L("Open Project File")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // 选好文件后再询问：选择期间 Agent 可能修改了文档。
+        // Ask only after the file is chosen: the Agent may have modified the document while choosing.
         guard confirmDiscard() else { return }
         do { try open(url) } catch { alert = error.localizedDescription }
     }
 
-    /// 读取并校验工程文件；失败时当前文档不变。
+    /// Reads and validates a project file; on failure the current document is unchanged.
     func open(_ url: URL) throws {
         let data: Data
         do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read file: %@", url.lastPathComponent)) }
         replace(try DesignDocument.decode(data), url: url)
     }
 
-    /// 替换当前文档并进入编辑窗口；新建、打开、模板与 Agent 命令都经过这里。
+    /// Replaces the current document and enters the editor window; New, Open, templates, and Agent commands all go through here.
     func replace(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         editor.replace(next)
@@ -278,7 +278,7 @@ final class AtlasStore: ObservableObject {
     private static let recentsKey = "native.recentDocuments"
 
     private func recordRecent(_ url: URL) {
-        // 解析符号链接，与 openFromSystem 判断“当前文件”的方式一致，避免同一文件出现两条。
+        // Resolve symlinks, matching how openFromSystem identifies "the current file", so the same file does not appear twice.
         updateRecents { $0.record(url.resolvingSymlinksInPath().path, at: Date()) }
     }
 
@@ -294,7 +294,7 @@ final class AtlasStore: ObservableObject {
         recents.entries { FileManager.default.fileExists(atPath: $0) }
     }
 
-    /// 打开一条最近记录；文件已不存在时提示并可从列表移除，当前文档不变。
+    /// Opens a recent entry; when the file no longer exists, says so and offers to remove it from the list, leaving the current document unchanged.
     func openRecent(_ path: String) {
         guard FileManager.default.fileExists(atPath: path) else {
             let alert = NSAlert()
@@ -316,7 +316,7 @@ final class AtlasStore: ObservableObject {
         var name: String { url.deletingPathExtension().lastPathComponent }
     }
 
-    /// App 自带的模板：构建时复制到 `Contents/Resources/Templates/` 的 `.uiatlas` 文件。
+    /// The App's bundled templates: the `.uiatlas` files copied to `Contents/Resources/Templates/` at build time.
     static var bundledTemplates: [Template] {
         templates(in: Bundle.main.resourceURL?.appendingPathComponent("Templates"))
     }
@@ -329,7 +329,7 @@ final class AtlasStore: ObservableObject {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// 从模板新建：得到未命名文档，不关联模板文件，保存时询问位置。
+    /// New from a template: produces an untitled document not associated with the template file, asking for a location on save.
     func newDocument(fromTemplate template: Template) {
         guard confirmDiscard() else { return }
         do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
@@ -341,7 +341,7 @@ final class AtlasStore: ObservableObject {
         replace(try DesignDocument.decode(data), url: nil)
     }
 
-    /// 保存到当前文件；未保存过时询问位置。返回是否已保存。
+    /// Saves to the current file; asks for a location when never saved. Returns whether it was saved.
     @discardableResult
     func save() -> Bool {
         guard let fileURL else { return saveAs() }
@@ -364,15 +364,15 @@ final class AtlasStore: ObservableObject {
         recordRecent(url)
     }
 
-    /// 工程文件的统一类型标识，在 Info.plist 中导出（扩展名 .uiatlas，符合 public.json）。
-    /// 必须用已导出的类型：按扩展名临时合成的动态类型与系统给文件的类型不同，打开面板会把文件判为不可选（#50）。
+    /// The uniform type identifier of project files, exported in Info.plist (extension .uiatlas, conforming to public.json).
+    /// The exported type must be used: a dynamic type synthesized ad hoc from the extension differs from the type the system gives the file, and the open panel would treat the file as not selectable (#50).
     static let contentTypeIdentifier = "local.ui-atlas.design"
 
     static var contentType: UTType {
         UTType(exportedAs: contentTypeIdentifier, conformingTo: .json)
     }
 
-    /// Finder 双击或“打开方式”传来的工程文件：有未保存修改时先询问，打不开时显示原因。
+    /// A project file passed by a Finder double-click or "Open With": asks first when there are unsaved changes, and shows the reason when it cannot be opened.
     func openFromSystem(_ url: URL) {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
@@ -393,7 +393,7 @@ extension AtlasStore: CanvasHost {
         inGesture = true
     }
 
-    /// 选择中同时有父图层与其子图层时，只移动最外层的图层，子图层随父图层移动。
+    /// When the selection contains both a parent layer and its children, only the outermost layers are moved; the children move with their parent.
     private func outermost(_ ids: Set<String>, in document: DesignDocument) -> Set<String> {
         ids.filter { id in !document.ancestry(of: id).dropLast().contains(where: ids.contains) }
     }

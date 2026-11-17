@@ -2,18 +2,18 @@ import AtlasCore
 import Combine
 import Foundation
 
-/// 对话面板的模型设置；不含 API key（key 在钥匙串）。
+/// The chat panel's model settings; excludes the API key (the key is in the Keychain).
 struct ChatSettings: Equatable {
     static let providers: [(id: String, title: String)] = [("deepseek", "DeepSeek"), ("anthropic", "Anthropic Claude"), ("openai", "OpenAI")]
 
     var provider: String
-    /// 留空时由 harness 使用该提供方的默认模型和官方地址。
+    /// When left empty, the harness uses the provider's default model and official address.
     var model: String
     var baseUrl: String
 
     var providerTitle: String { Self.providers.first { $0.id == provider }?.title ?? provider }
 
-    /// 只保留首尾各 4 位，用于在界面上辨认 key；过短的 key 全部遮蔽。
+    /// Keeps only the first and last 4 characters, to recognize the key in the UI; a key that is too short is masked entirely.
     static func maskedKey(_ key: String) -> String {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "" }
@@ -22,7 +22,7 @@ struct ChatSettings: Equatable {
     }
 }
 
-/// 提供方模型列表接口返回的模型 ID，以及模型留空时 harness 使用的默认模型。
+/// The model IDs returned by the provider's model-list endpoint, and the default model the harness uses when the model is left empty.
 struct ModelListing: Equatable {
     var models: [String]
     var defaultModel: String
@@ -32,8 +32,8 @@ struct ModelListError: Error, Equatable {
     let message: String
 }
 
-/// 管理 App 内的 Agent harness（scripts/agent-chat.mjs）子进程：按需启动，经 stdin/stdout 交换 JSON 行。
-/// 设置或 key 变化后结束当前进程，下一条消息用新配置重新启动。
+/// Manages the child process of the in-App Agent harness (scripts/agent-chat.mjs): started on demand, exchanging JSON lines over stdin/stdout.
+/// After the settings or the key change, the current process is ended and the next message restarts it with the new configuration.
 @MainActor
 final class ChatSession: ObservableObject {
     struct Launch {
@@ -53,7 +53,7 @@ final class ChatSession: ObservableObject {
             restart()
         }
     }
-    /// 是否已在钥匙串保存当前提供方的 key。只记录标记，避免启动时读取钥匙串触发授权提示。
+    /// Whether the current provider's key is saved in the Keychain. Only a flag is recorded, so launch does not read the Keychain and trigger an authorization prompt.
     @Published private(set) var hasKey = false
 
     private let defaults: UserDefaults
@@ -61,7 +61,7 @@ final class ChatSession: ObservableObject {
     private var process: Process?
     private var input: FileHandle?
     private var buffer = Data()
-    /// harness 的最后几行错误输出，进程意外退出时显示。
+    /// The last few lines of the harness's error output, shown when the process exits unexpectedly.
     private var errorOutput = ""
     private var generation = UUID()
 
@@ -80,17 +80,17 @@ final class ChatSession: ObservableObject {
 
     func savedKey(for provider: String) -> Bool { defaults.bool(forKey: "agent.\(provider).hasKey") }
 
-    /// 已保存 key 的遮蔽形式；完整 key 只在钥匙串。
+    /// The masked form of the saved key; the full key is only in the Keychain.
     func keyHint(for provider: String) -> String? { defaults.string(forKey: "agent.\(provider).keyHint") }
 
-    /// 读取钥匙串中保存的 key（可能触发授权提示），并为旧版本保存、没有遮蔽提示的 key 补上提示。
+    /// Reads the key saved in the Keychain (may trigger an authorization prompt), and adds the masked hint for a key saved by an older version without one.
     func savedKeyValue(for provider: String) -> String? {
         guard savedKey(for: provider), let key = readKey(provider) else { return nil }
         if keyHint(for: provider) == nil { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
         return key
     }
 
-    /// 钥匙串中某个提供方的 key 保存或删除后调用；只有当前提供方的变化才需要重启对话程序。
+    /// Called after a provider's key is saved to or deleted from the Keychain; only a change to the current provider needs the chat program restarted.
     func keyUpdated(provider: String, saved: Bool, key: String? = nil) {
         defaults.set(saved, forKey: "agent.\(provider).hasKey")
         if !saved { defaults.removeObject(forKey: "agent.\(provider).keyHint") }
@@ -115,7 +115,7 @@ final class ChatSession: ObservableObject {
         return Launch(executable: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node"] + arguments, environment: environment)
     }
 
-    /// 用 harness 的 --list-models 模式读取提供方的模型列表；key 同样只经环境变量传入。
+    /// Reads the provider's model list with the harness's --list-models mode; the key is likewise passed only through an environment variable.
     nonisolated static func listModels(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?) async -> Result<ModelListing, ModelListError> {
         let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: apiKey,
                                  environment: ProcessInfo.processInfo.environment, listModels: true)
@@ -167,7 +167,7 @@ final class ChatSession: ObservableObject {
 
     func stopReply() { write(["type": "stop"]) }
 
-    /// 回复进行中不清空，避免随后到达的结束事件写进新会话。
+    /// Not cleared while a reply is in progress, so the end event that arrives afterwards is not written into the new conversation.
     func clear() {
         guard !transcript.busy else { return }
         write(["type": "clear"])
@@ -200,7 +200,7 @@ final class ChatSession: ObservableObject {
         child.standardInput = stdinPipe
         child.standardOutput = stdoutPipe
         child.standardError = stderrPipe
-        // 进程已退出时写入 stdin 返回错误，而不是向 App 发送 SIGPIPE。
+        // Writing to stdin after the process has exited returns an error instead of sending SIGPIPE to the App.
         _ = fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         let token = UUID()
         generation = token
@@ -231,7 +231,7 @@ final class ChatSession: ObservableObject {
     private func write(_ message: [String: String]) {
         guard let input, var data = try? JSONSerialization.data(withJSONObject: message) else { return }
         data.append(UInt8(ascii: "\n"))
-        // 进程已退出时写入会失败；App 已忽略 SIGPIPE，失败由退出回调报告。
+        // The write fails when the process has exited; the App already ignores SIGPIPE, and the failure is reported by the termination handler.
         try? input.write(contentsOf: data)
     }
 
@@ -255,14 +255,14 @@ final class ChatSession: ObservableObject {
         process = nil
         input = nil
         guard transcript.busy else { return }
-        // harness 自己会去掉 key，这里不显示 stderr 之外的内容。
+        // The harness strips the key itself; nothing other than stderr is shown here.
         let detail = errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         transcript.fail(L("The chat process exited unexpectedly (%d). Make sure you have run pnpm install in the project directory.", status) + (detail.isEmpty ? "" : "\n\(detail)"))
     }
 
     private func terminate() {
         generation = UUID()
-        // 关闭 stdin 后 harness 会中止当前请求并退出。
+        // After stdin is closed, the harness aborts the current request and exits.
         try? input?.close()
         process?.terminate()
         process = nil
