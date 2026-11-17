@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -59,6 +59,26 @@ describe('设计工具', () => {
       { command: 'save_document', args: {} },
       { command: 'save_document', args: { path: '/tmp/a.uiatlas' } },
       { command: 'zoom', args: { scale: 0.5 } },
+    ])
+  })
+
+  it('expands ~ in file and image paths to the home directory', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'uia-home-'))
+    cleanup.push(() => rm(home, { recursive: true, force: true }))
+    await writeFile(join(home, 'dot.png'), Buffer.from(PNG, 'base64'))
+    vi.stubEnv('HOME', home)
+    cleanup.push(async () => vi.unstubAllEnvs())
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_save_document', { path: '~/Desktop/a.uiatlas' }, ctx)
+    await callTool('design_open_document', { path: '~' }, ctx)
+    await callTool('design_create_node', { node: { type: 'image', image: { path: '~/dot.png' } } }, ctx)
+    await callTool('design_open_document', { path: '~other/a.uiatlas' }, ctx)
+    expect(fake.received.map(({ args }) => args)).toEqual([
+      { path: join(home, 'Desktop/a.uiatlas') },
+      { path: home },
+      { node: { type: 'image', image: { data: PNG } } },
+      { path: '/repo/~other/a.uiatlas' },
     ])
   })
 
