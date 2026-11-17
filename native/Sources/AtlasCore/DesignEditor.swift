@@ -188,8 +188,11 @@ public struct DesignEditor {
 
     /// 一次修改为一步撤销；修改抛错或没有变化时文档与历史都不变。相同 `coalescing` 的连续修改合并为一步。
     @discardableResult
+    /// 连续操作进行中（例如拖动时 Agent 发来修改）时，先把已拖动的部分记为一步，修改后从新状态继续记录这次拖动。
     public mutating func perform<T>(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> T) rethrows -> T {
+        let open = gesture?.name
         endGesture()
+        defer { if let open { gesture = (open, document) } }
         var next = document
         let result = try change(&next)
         DesignLayout.apply(to: &next.nodes, measure: measure)

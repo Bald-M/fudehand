@@ -55,7 +55,7 @@ public struct ControlFailure: Error, Equatable, Sendable {
     }
 }
 
-/// 行分隔 JSON：请求 `{"id":1,"command":"focus_frame","args":{"frame":"mobile"}}`，
+/// 行分隔 JSON：请求 `{"id":1,"command":"focus_node","args":{"id":"home"}}`，
 /// 响应 `{"id":1,"ok":true,"result":…}` 或 `{"id":1,"ok":false,"error":"…"}`。
 public enum ControlProtocol {
     public static func parse(_ line: Data) -> Result<ControlRequest, ControlFailure> {

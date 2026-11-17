@@ -166,7 +166,8 @@ public struct DesignDocument: Equatable, Sendable {
     public static func decode(_ data: Data) throws -> DesignDocument {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               object["format"] as? String == format else { throw DesignError("不是 ui-atlas 工程文件") }
-        guard let version = object["version"] as? NSNumber, !DesignJSON.isBool(version), version.doubleValue == version.doubleValue.rounded() else {
+        guard let version = object["version"] as? NSNumber, !DesignJSON.isBool(version), version.doubleValue == version.doubleValue.rounded(),
+              version.intValue >= 1 else {
             throw DesignError("工程文件缺少格式版本号")
         }
         if version.intValue > formatVersion {

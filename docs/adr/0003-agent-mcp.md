@@ -1,5 +1,7 @@
 # Agent 经 Node MCP 与本地控制通道接入
 
+> 部分已被 [ADR 0006](0006-native-design-document.md) 取代：MCP server、控制通道与对话面板的结构保留，作品数据层（`catalog.json`）与画框工具已移除，工具改为编辑设计文档。
+
 2026-11-17。为了让 AI Agent 不必手改 `catalog.json` 就能整理作品与画框，并在 App 运行时操作画布、获取画框截图（#2），接入分为三部分：
 
 - **MCP server**（`scripts/mcp-server.mjs`）：Node stdio 进程，由 Claude Code、Codex 等外部 Agent 按需启动。作品数据层直接读写 `catalog.json`，写入前调用 launcher 的 `servicesFromCatalog` 校验，再经临时文件与 rename 原子替换；校验失败时不改文件。

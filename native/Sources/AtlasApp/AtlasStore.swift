@@ -81,6 +81,8 @@ final class AtlasStore: ObservableObject {
     func perform(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> Void) throws {
         try editor.perform(name, coalescing: coalescing, change)
         changed()
+        // 拖动中收到的修改（如 Agent 命令）也立即显示在面板中。
+        if inGesture { document = editor.document }
     }
 
     /// 面板里的修改：失败时显示错误。

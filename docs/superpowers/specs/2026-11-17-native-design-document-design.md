@@ -110,7 +110,7 @@ ui-atlas 从“在画布上展示网页作品”改为“原生的 AI 设计工�
 | `focus_node` / `fit_all` / `zoom` | 视口 |
 | `node_snapshot` | `{id, scale?}`，返回该节点渲染的 PNG |
 
-字段校验只在 Swift 一处（`AtlasCore/DesignPatch.swift`）。`scripts/atlas-tools.mjs` 只把参数转发给控制通道，MCP 工具名为 `design_*` 与 `canvas_*`；图片可以传 `imagePath`，由 Node 端读成 base64 再转发。harness 的系统提示改为设计助手。
+字段校验只在 Swift 一处（`AtlasCore/DesignJSON.swift`，文件读取与 Agent 补丁共用）。`scripts/atlas-tools.mjs` 只把参数转发给控制通道，MCP 工具名为 `design_*` 与 `canvas_*`；图片可以给 `image.path`（本机文件路径），由 Node 端读成 base64 的 `image.data` 再转发。harness 的系统提示改为设计助手。
 
 ### App
 
@@ -144,5 +144,5 @@ ui-atlas 从“在画布上展示网页作品”改为“原生的 AI 设计工�
 
 - `AtlasCore` 单元测试覆盖文档读写与版本校验、补丁校验、布局、编辑与撤销、画布交互状态机。
 - `AtlasApp` 测试覆盖控制命令分发、渲染器增量更新和截图。
-- Node 测试覆盖 MCP 工具转发与 `imagePath` 读取。
+- Node 测试覆盖 MCP 工具转发与 `image.path` 读取。
 - 真实 App 中用 MCP 工具逐步搭建移动端画框，并截取浅色、深色截图放入 `docs/evidence/`。

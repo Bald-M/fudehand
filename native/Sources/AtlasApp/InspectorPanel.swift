@@ -201,7 +201,7 @@ private struct NodeInspector: View {
                 Toggle("裁剪内容", isOn: Binding(get: { node.clipsContent }, set: { v in update("修改裁剪") { $0.clipsContent = v } }))
             }
         }
-        if node.type != .group {
+        Group {
             Section(title: node.type == .text ? "背景" : "填充") {
                 if let fill = node.fill {
                     HStack {
@@ -262,7 +262,7 @@ private struct NodeInspector: View {
             HStack {
                 NumberField(label: "字号", value: text.fontSize, minimum: 1) { v in update("修改字号") { $0.text?.fontSize = v } }
                 Picker("字重", selection: Binding(get: { text.fontWeight }, set: { v in update("修改字重") { $0.text?.fontWeight = v } })) {
-                    ForEach([300, 400, 500, 600, 700, 800], id: \.self) { Text(Self.weightName($0)).tag($0) }
+                    ForEach([100, 200, 300, 400, 500, 600, 700, 800, 900], id: \.self) { Text(Self.weightName($0)).tag($0) }
                 }.labelsHidden()
             }
             ColorRow(label: "文字颜色", color: text.color) { c in update("修改文字颜色", "text.color") { $0.text?.color = c } }
@@ -280,7 +280,7 @@ private struct NodeInspector: View {
     }
 
     static func weightName(_ weight: Int) -> String {
-        [300: "细", 400: "常规", 500: "中等", 600: "半粗", 700: "粗", 800: "特粗"][weight] ?? "\(weight)"
+        [100: "极细", 200: "纤细", 300: "细", 400: "常规", 500: "中等", 600: "半粗", 700: "粗", 800: "特粗", 900: "黑"][weight] ?? "\(weight)"
     }
 
     private func layoutSection(_ layout: AutoLayout?) -> some View {

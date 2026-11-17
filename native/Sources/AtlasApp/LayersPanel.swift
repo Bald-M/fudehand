@@ -112,6 +112,8 @@ struct LayersPanel: View {
         .onTapGesture { select(node.id) }
         .contextMenu {
             Button("重命名") { beginRename(node) }
+            Button("上移一层") { step(node.id, by: 1) }
+            Button("下移一层") { step(node.id, by: -1) }
             Button("移到最上层") { reorder(node.id, toTop: true) }
             Button("移到最下层") { reorder(node.id, toTop: false) }
             Divider()
@@ -148,6 +150,16 @@ struct LayersPanel: View {
         let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         store.updateNode(id, "重命名图层") { $0.name = name }
+    }
+
+    /// 在同一父图层内上移（+1）或下移（-1）一层；已在最上或最下时不变。
+    private func step(_ id: String, by offset: Int) {
+        let document = store.editor.document
+        guard let parent = document.parentID(of: id), let index = document.indexPath(of: id)?.last else { return }
+        let count = (parent.flatMap { document.node($0)?.children } ?? document.nodes).count
+        let target = index + offset
+        guard (0..<count).contains(target) else { return }
+        store.edit(offset > 0 ? "上移一层" : "下移一层") { try $0.move(id, parent: parent, index: target) }
     }
 
     private func reorder(_ id: String, toTop: Bool) {

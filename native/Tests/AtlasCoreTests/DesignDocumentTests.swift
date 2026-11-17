@@ -55,6 +55,11 @@ let sampleDocument = """
             == "文件由更新版本的 ui-atlas 创建（格式版本 2），请升级后再打开")
 }
 
+@Test func rejectsMissingOrInvalidVersion() {
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":0,"nodes":[]}"#) } == "工程文件缺少格式版本号")
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","nodes":[]}"#) } == "工程文件缺少格式版本号")
+}
+
 @Test func rejectsWrongFormat() {
     #expect(message { _ = try decode(#"{"format":"figma","version":1,"nodes":[]}"#) } == "不是 ui-atlas 工程文件")
     #expect(message { _ = try decode("not json") } == "不是 ui-atlas 工程文件")

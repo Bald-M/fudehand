@@ -54,6 +54,19 @@ private func editor() -> DesignEditor {
     #expect(e.undo() && e.document.node("a")?.x == 10)
 }
 
+@Test func dragContinuesAsItsOwnStepAfterAnEditArrivesMidGesture() throws {
+    var e = editor()
+    e.beginGesture("移动图层")
+    e.applyLive { try? $0.update("a") { $0.x = 20 } }
+    try e.perform("删除") { try $0.delete(["b"]) }
+    e.applyLive { try? $0.update("a") { $0.x = 30 } }
+    e.endGesture()
+    #expect(e.undoName == "移动图层")
+    #expect(e.undo() && e.document.node("a")?.x == 20 && e.document.node("b") == nil)
+    #expect(e.undo() && e.document.node("b") != nil && e.document.node("a")?.x == 20)
+    #expect(e.undo() && e.document.node("a")?.x == 10)
+}
+
 @Test func insertValidatesParentIndexAndIDs() throws {
     var e = editor()
     try e.perform("新建") { try $0.insert(DesignNode(id: "c", type: .text), parent: "f", index: 0) }
