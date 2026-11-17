@@ -63,6 +63,10 @@ ui-atlas 为 AI Agent 提供一组设计工具（`scripts/atlas-tools.mjs`），
 
 工具经 App 的**控制通道**通信：`~/Library/Application Support/ui-atlas/control.sock`（可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖），只对当前用户开放，不监听网络地址。
 
+### MCP 连接器
+
+App 的应用菜单“ui-atlas → MCP 连接器…”列出 Claude Code 和 Codex 的连接状态：未连接时点“连接”，App 会调用对应 CLI 把本检出目录的 MCP server 注册到该 Agent 的用户级配置（`claude mcp add --scope user` / `codex mcp add`）；已连接时点“断开连接”移除注册。本机没装对应 CLI 时显示“不可用”。连接后在新开的 Agent 会话中生效，下面的手动方式仍然可用。
+
 ### Claude Code
 
 仓库根目录的 `.mcp.json` 已注册 `ui-atlas`。在仓库根目录启动 `claude`，首次会询问是否启用项目 MCP server，同意后即可在 `/mcp` 中看到它。

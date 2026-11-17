@@ -36,6 +36,11 @@ final class AtlasStore: ObservableObject {
     /// 源码目录：对话面板从这里启动 `scripts/agent-chat.mjs`。
     private(set) var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
+    /// “MCP 连接器”窗口的模型；窗口可能先于主窗口打开，所以按需读取源码位置。
+    private(set) lazy var connectors: ConnectorsModel = {
+        if toolsRoot == nil { bootstrap() }
+        return ConnectorsModel(root: toolsRoot, runtime: runtime)
+    }()
     private(set) var canvasSize = CGSize(width: 1000, height: 700)
     /// 最近一次稳定或请求的视口；画布持有实时视口。
     private(set) var viewport = Viewport()
