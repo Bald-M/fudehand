@@ -28,6 +28,8 @@ App 启动时先显示启动窗口：新建设计文档（⌘N）、打开工程
 
 画布操作、面板、文件与快捷键见 [macOS 使用说明](docs/macos.md)。
 
+参与开发前请先阅读[贡献指南](CONTRIBUTING.md)（英文）。
+
 ## `.uiatlas` 工程文件
 
 设计稿用文件菜单的保存（⌘S）、另存为（⇧⌘S）存为 `.uiatlas` 工程文件，打开（⌘O）或“打开最近”重新打开。App 导出了 `.uiatlas` 文件类型，Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开；有未保存修改时会先询问是否保存。
@@ -119,5 +121,16 @@ pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
 ```
 
 Node 测试会启动子进程和本机 socket，需要回环网络；禁止监听本机端口的沙箱会让它们误报失败。
+
+## 发布
+
+发布前先统一版本号，再手动在 [CHANGELOG](CHANGELOG.md) 归档本版本，并更新本文开头的“当前版本”：
+
+```bash
+pnpm version:set 0.0.2   # 改写 package.json 与 Info.plist 的版本号，构建号（CFBundleVersion）加 1
+pnpm version:check       # 检查各处版本号一致，不一致时列出差异并以非 0 退出
+```
+
+MCP server 运行时读取 `package.json` 的版本号，App“关于”窗口的版本来自 `native/Resources/Info.plist`。
 
 源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)，以 Apache-2.0 许可发布。App 仅在本机构建和运行，不配置 CI、云同步或生产部署。
