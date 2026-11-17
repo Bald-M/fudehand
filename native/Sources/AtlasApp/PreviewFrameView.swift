@@ -136,6 +136,29 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         if isReady { window?.makeFirstResponder(webView) }
     }
 
+    /// 以 CSS 视口宽度截取网页，返回 PNG（像素按屏幕倍率）。网页进程无响应时 10 秒后失败。
+    func snapshotPNG() async throws -> Data {
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: definition.width)
+        let image: NSImage = try await withCheckedThrowingContinuation { continuation in
+            var finished = false
+            func finish(_ result: Result<NSImage, Error>) {
+                guard !finished else { return }
+                finished = true
+                continuation.resume(with: result)
+            }
+            webView.takeSnapshot(with: configuration) { image, error in
+                finish(image.map { .success($0) } ?? .failure(error ?? ControlCommandError("截图失败")))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { finish(.failure(ControlCommandError("截图超时"))) }
+        }
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+            throw ControlCommandError("截图无法编码为 PNG")
+        }
+        return png
+    }
+
     @objc private func openExternal() {
         guard let previewURL else { return }
         let current = webView.url.flatMap { isPreviewOrigin($0) ? $0 : nil } ?? previewURL

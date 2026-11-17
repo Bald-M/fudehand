@@ -24,6 +24,8 @@ final class AtlasStore: ObservableObject {
         didSet { defaults.set(theme, forKey: "native.theme") }
     }
     let session = PreviewSession()
+    /// 当前画布，供控制通道截取画框。
+    weak var canvas: AtlasCanvasView?
     private let defaults = UserDefaults.standard
     private var layouts: LayoutStore?
     private var runtime: WorkspaceLocation?
