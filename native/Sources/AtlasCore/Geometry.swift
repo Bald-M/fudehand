@@ -79,10 +79,11 @@ public enum CanvasGeometry {
         precise ? delta : Point(x: delta.x * wheelLineHeight, y: delta.y * wheelLineHeight)
     }
 
-    /// ⌘ / ⌃ + wheel: scrolling up zooms in and down zooms out, whatever the natural scrolling setting.
-    /// `invertedFromDevice` is `NSEvent.isDirectionInvertedFromDevice` (true with natural scrolling).
-    public static func wheelZoomScale(_ scale: Double, deltaY: Double, invertedFromDevice: Bool) -> Double {
-        scale * exp((invertedFromDevice ? -deltaY : deltaY) * 0.01)
+    /// ⌘ / ⌃ + wheel: a positive `scrollingDeltaY` (a mouse wheel rolled up) zooms in, a negative one zooms out.
+    /// `isDirectionInvertedFromDevice` is deliberately ignored: it reports true for mouse wheels whose
+    /// deltas are not inverted, which flipped the direction (#30).
+    public static func wheelZoomScale(_ scale: Double, deltaY: Double) -> Double {
+        scale * exp(deltaY * 0.01)
     }
 
     public static func screenToWorld(_ point: Point, viewport: Viewport) -> Point {
