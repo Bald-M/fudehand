@@ -20,6 +20,8 @@ _避免_：设备模拟器
 **控制通道**：App 运行时只对当前用户开放的本地 Unix socket，外部进程经它读取画布状态、操作画布和截取画框。
 _避免_：控制端口、API 服务
 
+**画框控制台**：画框网页最近的控制台输出与未捕获错误，由 App 按画框保存，Agent 经 `frame_console` 读取。
+
 **对话面板**：App 内与 AI 对话的侧边面板，AI 通过与 MCP server 相同的工具整理作品和操作画布。
 
 **Agent harness**：对话面板背后的 Node 子进程（`scripts/agent-chat.mjs`），负责对话循环、调用模型 API 和执行工具。

@@ -17,6 +17,10 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     /// Set when a response is rejected, so the follow-up cancellation error keeps the HTTP message.
     private var rejectedResponse = false
     var frameID: String { definition.id }
+    /// 网页最近的控制台输出与未捕获错误；网页重载后仍保留。
+    private(set) var console = FrameConsole()
+    /// 读取和交互脚本在独立的脚本世界执行，页面自己的脚本改不到它们。
+    private static let agentWorld = WKContentWorld.world(name: "界面图鉴")
     /// True once the page has loaded; only a ready frame can become the active frame that receives web input.
     /// Set only by navigation callbacks; settable internally so tests can simulate a loaded page.
     var isReady = false {
@@ -33,6 +37,8 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
                                                                        injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.addUserScript(WKUserScript(source: Self.hideScrollbarsScript,
                                                                        injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.addUserScript(WKUserScript(source: FramePageScripts.console,
+                                                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: NSRect(x: 0, y: CanvasGeometry.headerHeight, width: frame.width, height: frame.height), configuration: configuration)
         super.init(frame: .zero)
         wantsLayer = true
@@ -48,6 +54,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.configuration.userContentController.add(self, name: "atlasExit")
+        webView.configuration.userContentController.add(self, name: "atlasConsole")
         addSubview(webView)
         externalButton.bezelStyle = .inline
         externalButton.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "在浏览器打开")
@@ -87,6 +94,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         timeout?.cancel()
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "atlasExit")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "atlasConsole")
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
     }
@@ -168,6 +176,46 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         return png
     }
 
+    /// 读取网页的精简文本大纲：标题、文本和可交互元素（附 CSS 选择器），最多约 20000 字。
+    func readPage() async throws -> [String: Any] {
+        try await runAgentScript(FramePageScripts.read, arguments: [:])
+    }
+
+    /// 在网页中按选择器点击、填值或滚动。只操作当前预览页面，不导航到其他站点。
+    func interact(_ action: FrameAction) async throws -> [String: Any] {
+        var arguments: [String: Any] = ["selector": NSNull(), "value": NSNull(), "deltaX": 0, "deltaY": 0]
+        switch action {
+        case .click(let selector):
+            arguments["action"] = "click"; arguments["selector"] = selector
+        case .fill(let selector, let value):
+            arguments["action"] = "fill"; arguments["selector"] = selector; arguments["value"] = value
+        case .scroll(let selector, let deltaX, let deltaY):
+            arguments["action"] = "scroll"; arguments["selector"] = selector ?? NSNull()
+            arguments["deltaX"] = deltaX; arguments["deltaY"] = deltaY
+        }
+        let result = try await runAgentScript(FramePageScripts.interact, arguments: arguments)
+        if let message = result["error"] as? String { throw ControlCommandError(message) }
+        return result
+    }
+
+    /// 在独立脚本世界中执行函数体，返回对象结果。网页无响应时 10 秒后失败。
+    private func runAgentScript(_ body: String, arguments: [String: Any]) async throws -> [String: Any] {
+        let value: Any? = try await withCheckedThrowingContinuation { continuation in
+            var finished = false
+            func finish(_ result: Result<Any?, Error>) {
+                guard !finished else { return }
+                finished = true
+                continuation.resume(with: result)
+            }
+            webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: Self.agentWorld) { result in
+                finish(result.map { $0 as Any? }.mapError { ControlCommandError("页面脚本执行失败：\($0.localizedDescription)") })
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { finish(.failure(ControlCommandError("页面没有响应"))) }
+        }
+        guard let object = value as? [String: Any] else { throw ControlCommandError("页面脚本返回了无法识别的结果") }
+        return object
+    }
+
     @objc private func openExternal() {
         guard let previewURL else { return }
         let current = webView.url.flatMap { isPreviewOrigin($0) ? $0 : nil } ?? previewURL
@@ -210,6 +258,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         retryButton.isHidden = true
         progress.stopAnimation(nil)
         webView.isHidden = false
+        console.append(level: "info", source: "atlas", message: "页面已加载：\(webView.url?.absoluteString ?? "")")
         isReady = true
     }
 
@@ -261,9 +310,16 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "atlasExit", message.frameInfo.isMainFrame,
-              let url = message.frameInfo.request.url, isPreviewOrigin(url) else { return }
-        canvas?.pageRequestedExit(definition.id)
+        guard message.frameInfo.isMainFrame, let url = message.frameInfo.request.url, isPreviewOrigin(url) else { return }
+        switch message.name {
+        case "atlasExit":
+            canvas?.pageRequestedExit(definition.id)
+        case "atlasConsole":
+            guard let body = message.body as? [String: Any], let level = body["level"] as? String,
+                  let source = body["source"] as? String, let text = body["message"] as? String else { return }
+            console.append(level: level, source: source, message: text)
+        default: break
+        }
     }
 
     /// Frames read like a design board, so the page and its scroll containers show no scrollbar; scrolling still works.

@@ -60,5 +60,9 @@ private func project(_ id: String, enabled: Bool = true, port: Int) -> Project {
     #expect(await failure(store, .focusFrame("tv")) == "当前作品没有画框：tv")
     #expect(await failure(store, .frameSnapshot("tv")) == "当前作品没有画框：tv")
     #expect(await failure(store, .frameSnapshot("home")) == "画框尚未加载：home")
+    #expect(await failure(store, .frameConsole("tv", limit: 50)) == "当前作品没有画框：tv")
+    #expect(await failure(store, .frameConsole("home", limit: 50)) == "画框尚未加载：home")
+    #expect(await failure(store, .frameRead("home")) == "画框尚未加载：home")
+    #expect(await failure(store, .frameInteract("home", .click(selector: "button"))) == "画框尚未加载：home")
     #expect(await failure(store, .restartPreview) == "尚未打开项目目录")
 }

@@ -124,7 +124,10 @@ App 直接访问案例端口，不把案例代理到统一子路径，从而保�
 界面图鉴为 AI Agent 提供一组工具，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md)：
 
 - **作品数据层**（无需 App 运行）：`list_projects`、`get_project`、`get_preview_urls`、`add_frame`、`update_frame`、`remove_frame`、`set_project_enabled`。写入 `catalog.json` 前使用与启动器相同的校验，失败时返回中文错误且不改文件。App 只在打开项目时读取目录，改完后用 `canvas_restart_preview` 或“重新读取目录并启动服务”生效。
-- **画布控制层**（需要 App 正在运行）：`canvas_get_state`、`canvas_select_project`、`canvas_focus_frame`、`canvas_fit_all`、`canvas_zoom`、`canvas_reset`、`canvas_restart_preview`，以及返回画框实际渲染截图的 `frame_snapshot`。App 未运行时返回“界面图鉴未运行”。
+- **画布控制层**（需要 App 正在运行）：`canvas_get_state`、`canvas_select_project`、`canvas_focus_frame`、`canvas_fit_all`、`canvas_zoom`、`canvas_reset`、`canvas_restart_preview`，以及返回画框实际渲染截图的 `frame_snapshot`。
+- **画框页面层**（需要 App 正在运行且画框已加载）：`frame_console` 读取画框网页最近的控制台输出与未捕获错误（每个画框保留 200 条，网页重载后仍在）；`frame_read` 读取页面可见内容的精简大纲，可交互元素附 CSS 选择器；`frame_interact` 按选择器点击、填值或滚动。它们只作用于该作品的本机预览页面，不能点击指向其他站点或在新窗口打开的链接。
+
+App 未运行时画布与画框工具返回“界面图鉴未运行”，画框未加载时返回“画框尚未加载：<画框 id>”。
 
 画布工具经 App 的**控制通道**通信：`~/Library/Application Support/界面图鉴/control.sock`，只对当前用户开放，不监听网络地址。
 
