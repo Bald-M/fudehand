@@ -1,9 +1,10 @@
 /**
  * 模型提供方适配。对话历史使用中立格式，每次请求时再转换成各家接口的格式：
  *   { role: 'user', text }
- *   { role: 'assistant', text, toolCalls: [{ id, name, args }] }
+ *   { role: 'assistant', text, toolCalls: [{ id, name, args }], blocks? }
  *   { role: 'tool', id, name, text, isError }
  * 工具参数无法解析时，toolCalls 中的项带 error 字段，harness 不执行它。
+ * blocks holds the provider's own content blocks for the turn (Anthropic only), sent back unchanged.
  */
 
 export const providerDefaults = {
@@ -67,7 +68,8 @@ function anthropicMessages(history) {
   for (const entry of history) {
     if (entry.role === 'user') push('user', [{ type: 'text', text: entry.text }])
     else if (entry.role === 'tool') push('user', [{ type: 'tool_result', tool_use_id: entry.id, content: entry.text, ...(entry.isError ? { is_error: true } : {}) }])
-    else push('assistant', [
+    // Thinking blocks are only valid when the turn is sent back exactly as the model produced it.
+    else push('assistant', entry.blocks ?? [
       ...(entry.text ? [{ type: 'text', text: entry.text }] : []),
       ...entry.toolCalls.map(call => ({ type: 'tool_use', id: call.id, name: call.name, input: call.args })),
     ])
@@ -134,7 +136,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: name, instructions: system, input: responsesInput(history), store: false,
-            tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema })),
+            tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
           }),
         }, signal)
         if (body.status === 'incomplete') throw new Error(truncated)
@@ -154,13 +156,16 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
-          model: name, max_tokens: 4096, system, messages: anthropicMessages(history),
+          model: name, max_tokens: 16000, system, messages: anthropicMessages(history),
           tools: tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })),
         }),
       }, signal)
       if (body.stop_reason === 'max_tokens') throw new Error(truncated)
+      if (body.stop_reason === 'refusal') throw new Error('The model declined this request; stopped this reply')
+      if (body.stop_reason === 'pause_turn') throw new Error('The model paused before finishing; stopped this reply')
       const blocks = body.content ?? []
       return {
+        blocks,
         text: blocks.filter(block => block.type === 'text').map(block => block.text).join(''),
         toolCalls: blocks.filter(block => block.type === 'tool_use').map(block => ({ id: block.id, name: block.name, args: block.input ?? {} })),
       }
