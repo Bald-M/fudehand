@@ -92,6 +92,12 @@ describe('设计工具', () => {
     expect(text(result)).toBe('ui-atlas 未运行')
   })
 
+  it('工具描述与参数描述为英文，不含中文', () => {
+    for (const tool of tools) {
+      expect(JSON.stringify({ description: tool.description, inputSchema: tool.inputSchema }), tool.name).not.toMatch(/[一-鿿]/)
+    }
+  })
+
   it('design_snapshot 以 MCP image 内容返回截图', async () => {
     const fake = await app(() => ({ ok: true, result: { id: 'home', mimeType: 'image/png', data: PNG, width: 390, height: 844 } }))
     const result = await callTool('design_snapshot', { id: 'home' }, { root: '/repo', socketPath: fake.socketPath })
