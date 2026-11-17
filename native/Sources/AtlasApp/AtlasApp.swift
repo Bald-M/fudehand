@@ -1,4 +1,5 @@
 import AppKit
+import AtlasCore
 import SwiftUI
 
 @MainActor
@@ -6,6 +7,23 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AtlasStore?
     private var quitting = false
     private var control: ControlServer?
+    /// 启动过程中、窗口和 store 就绪前收到的打开文件请求。
+    private var pendingFiles: [URL] = []
+
+    func attach(_ store: AtlasStore) {
+        self.store = store
+        let files = pendingFiles
+        pendingFiles = []
+        // 一次只编辑一份文档，多选打开时取最后一个。
+        files.last.map(store.openFromSystem)
+    }
+
+    /// Finder 双击、拖到 Dock 图标或“打开方式”打开 .uiatlas 文件。
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let files = urls.filter { $0.pathExtension == DesignDocument.fileExtension }
+        guard let store else { pendingFiles += files; return }
+        files.last.map(store.openFromSystem)
+    }
 
     /// 启动本地控制通道；失败只影响外部控制，不影响 App 使用。
     func startControl(_ store: AtlasStore) {
@@ -44,11 +62,12 @@ struct AtlasApp: App {
     @StateObject private var store = AtlasStore()
 
     var body: some Scene {
-        WindowGroup("ui-atlas") {
+        // 单窗口：一次编辑一份文档；WindowGroup 会为 Finder 打开文件等外部事件再开新窗口。
+        Window("ui-atlas", id: "main") {
             WorkspaceView(store: store)
                 .frame(minWidth: 960, minHeight: 620)
                 .preferredColorScheme(store.colorScheme)
-                .task { delegate.store = store; store.bootstrap(); delegate.startControl(store) }
+                .task { store.bootstrap(); delegate.attach(store); delegate.startControl(store) }
         }
         .defaultSize(width: 1440, height: 940)
         .commands {
