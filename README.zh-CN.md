@@ -8,7 +8,7 @@ App 是 **SwiftUI + AppKit 原生 macOS App**，画布用 Core Animation 直接�
 
 ![ui-atlas 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
 
-当前版本 v0.0.1，变更记录见 [CHANGELOG](CHANGELOG.md)。
+当前版本 v0.0.2，变更记录见 [CHANGELOG](CHANGELOG.md)。
 
 ## 安装与构建
 
