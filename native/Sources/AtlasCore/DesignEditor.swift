@@ -3,7 +3,7 @@ import Foundation
 // MARK: Tree operations
 
 extension DesignDocument {
-    /// 节点在树中的下标路径。
+    /// The index path of a node in the tree.
     public func indexPath(of id: String) -> [Int]? {
         func search(_ nodes: [DesignNode], _ prefix: [Int]) -> [Int]? {
             for (index, node) in nodes.enumerated() {
@@ -32,19 +32,19 @@ extension DesignDocument {
         }
     }
 
-    /// 外层 nil 表示找不到节点，内层 nil 表示顶层节点。
+    /// An outer nil means the node was not found; an inner nil means a top-level node.
     public func parentID(of id: String) -> String?? {
         guard let path = indexPath(of: id) else { return nil }
         return .some(path.count == 1 ? nil : self[Array(path.dropLast())].id)
     }
 
-    /// 从顶层到该节点（含）的 id 列表。
+    /// The list of ids from the top level to this node (inclusive).
     public func ancestry(of id: String) -> [String] {
         guard let path = indexPath(of: id) else { return [] }
         return (1...path.count).map { self[Array(path.prefix($0))].id }
     }
 
-    /// 节点在画布上的绝对矩形。
+    /// The absolute rectangle of a node on the canvas.
     public func worldRect(_ id: String) -> Rect? {
         guard let path = indexPath(of: id) else { return nil }
         var x = 0.0, y = 0.0
@@ -95,7 +95,7 @@ extension DesignDocument {
         self[path] = node
     }
 
-    /// 删除节点及其子树；任何一个 id 不存在时什么都不删。
+    /// Deletes nodes and their subtrees; when any id does not exist, nothing is deleted.
     public mutating func delete(_ ids: Set<String>) throws {
         let existing = allIDs()
         if let missing = ids.sorted().first(where: { !existing.contains($0) }) { throw DesignError("Layer not found: \(missing)") }
@@ -109,7 +109,7 @@ extension DesignDocument {
         nodes = prune(nodes)
     }
 
-    /// 移动到新的父节点（nil 为顶层）与位置，保持画布上的绝对位置。`index` 是移出后在新父节点中的位置。
+    /// Moves to a new parent node (nil for the top level) and position, keeping the absolute position on the canvas. `index` is the position in the new parent after the node is removed.
     public mutating func move(_ id: String, parent: String?, index: Int?) throws {
         guard let path = indexPath(of: id), let world = worldRect(id) else { throw DesignError("Layer not found: \(id)") }
         if let parent, ancestry(of: parent).contains(id) { throw DesignError("Cannot move a layer into itself or its descendants") }
@@ -135,7 +135,7 @@ extension DesignDocument {
         }
     }
 
-    /// 给 JSON 形式的新节点及其子节点补上缺少的 id，用于 Agent 创建图层。
+    /// Fills in the missing ids of a new node in JSON form and of its children; used when the Agent creates layers.
     public static func assigningIDs(_ object: [String: Any], existing: inout Set<String>) -> [String: Any] {
         var result = object
         if result["id"] == nil || result["id"] is NSNull || (result["id"] as? String)?.isEmpty == true {
@@ -157,7 +157,7 @@ extension DesignDocument {
 
 // MARK: Editor
 
-/// 文档与撤销历史。人工编辑与 Agent 编辑共用一条历史；每次修改后重新布局。
+/// The document and the undo history. Manual edits and Agent edits share one history; layout runs again after every edit.
 public struct DesignEditor {
     private struct Step {
         let name: String
@@ -165,11 +165,11 @@ public struct DesignEditor {
         let coalescing: String?
         var time = Date()
     }
-    /// 相同合并键的修改在这段时间内连续发生才合并为一步。
+    /// Edits with the same coalescing key are merged into one step only when they happen in succession within this interval.
     public static let coalescingWindow: TimeInterval = 1.5
 
     public private(set) var document: DesignDocument
-    /// 每次文档变化（含撤销、重做、替换）递增。
+    /// Incremented on every document change (including undo, redo, and replace).
     public private(set) var revision = 0
     private let measure: TextMeasure
     private var undoStack: [Step] = []
@@ -189,9 +189,9 @@ public struct DesignEditor {
     public var undoName: String? { undoStack.last?.name }
     public var redoName: String? { redoStack.last?.name }
 
-    /// 一次修改为一步撤销；修改抛错或没有变化时文档与历史都不变。相同 `coalescing` 的连续修改合并为一步。
+    /// One edit is one undo step; when the edit throws or changes nothing, both the document and the history are unchanged. Successive edits with the same `coalescing` are merged into one step.
     @discardableResult
-    /// 连续操作进行中（例如拖动时 Agent 发来修改）时，先把已拖动的部分记为一步，修改后从新状态继续记录这次拖动。
+    /// While a continuous gesture is in progress (for example the Agent sends an edit during a drag), the part dragged so far is first recorded as one step, and after the edit the drag continues recording from the new state.
     public mutating func perform<T>(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> T) rethrows -> T {
         let open = gesture?.name
         endGesture()
@@ -213,7 +213,7 @@ public struct DesignEditor {
         return result
     }
 
-    /// 画布拖动等连续操作：开始时记录快照，过程中用 `applyLive` 修改，结束时记为一步。
+    /// A continuous gesture such as a canvas drag: a snapshot is recorded at the start, `applyLive` modifies during it, and it is recorded as one step at the end.
     public mutating func beginGesture(_ name: String) {
         endGesture()
         gesture = (name, document)
@@ -256,7 +256,7 @@ public struct DesignEditor {
         return true
     }
 
-    /// 新建或打开文件：替换文档并清空历史。
+    /// New or open file: replaces the document and clears the history.
     public mutating func replace(_ next: DesignDocument) {
         gesture = nil
         undoStack.removeAll()

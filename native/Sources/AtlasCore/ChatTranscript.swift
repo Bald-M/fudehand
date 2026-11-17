@@ -1,6 +1,6 @@
 import Foundation
 
-/// 对话面板中的一条记录。工具调用和结果也作为记录显示，便于看清 Agent 做了什么。
+/// One entry in the chat panel. Tool calls and results are shown as entries too, making it clear what the Agent did.
 public struct ChatEntry: Equatable, Identifiable, Sendable {
     public enum Kind: Equatable, Sendable {
         case user, assistant, toolCall, toolResult(ok: Bool), error, notice
@@ -9,11 +9,11 @@ public struct ChatEntry: Equatable, Identifiable, Sendable {
     public let id: Int
     public let kind: Kind
     public let text: String
-    /// 工具参数或结果全文，界面中可展开查看。
+    /// The full text of the tool arguments or result, which can be expanded in the UI.
     public let detail: String?
 }
 
-/// 把 Agent harness 输出的 JSON 行（见 scripts/agent-chat.mjs）整理成对话记录。
+/// Turns the JSON lines output by the Agent harness (see scripts/agent-chat.mjs) into the chat transcript.
 public struct ChatTranscript: Equatable, Sendable {
     public private(set) var entries: [ChatEntry] = []
     public private(set) var busy = false
@@ -47,7 +47,7 @@ public struct ChatTranscript: Equatable, Sendable {
         }
     }
 
-    /// harness 意外退出等无法由事件表达的失败。
+    /// Failures that events cannot express, such as the harness exiting unexpectedly.
     public mutating func fail(_ message: String) {
         append(.error, message)
         busy = false
@@ -60,7 +60,7 @@ public struct ChatTranscript: Equatable, Sendable {
         append(.notice, L("Reply stopped"))
     }
 
-    /// 不打断回复状态的提示，例如切换了模型设置。
+    /// A notice that does not interrupt the replying state, for example that the model settings were changed.
     public mutating func note(_ text: String) {
         append(.notice, text)
     }

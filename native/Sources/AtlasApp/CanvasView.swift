@@ -1,14 +1,14 @@
 import AppKit
 import AtlasCore
 
-/// 画布向持有文档的一方（`AtlasStore`）报告的编辑与状态；画布本身不修改文档。
+/// The edits and state the canvas reports to the owner of the document (`AtlasStore`); the canvas itself does not modify the document.
 @MainActor
 protocol CanvasHost: AnyObject {
     func canvasSelect(_ ids: Set<String>)
     func canvasBeginGesture(_ name: String)
-    /// 拖动中图层的新左上角（画布绝对坐标）。
+    /// The new top-left corners of the layers being dragged (absolute canvas coordinates).
     func canvasMove(_ origins: [String: Point])
-    /// 缩放中图层的新矩形（画布绝对坐标）。
+    /// The new rectangle of the layer being resized (absolute canvas coordinates).
     func canvasResize(_ id: String, to rect: Rect)
     func canvasEndGesture()
     func canvasCreate(_ type: NodeType, in rect: Rect)

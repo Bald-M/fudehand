@@ -2,7 +2,7 @@ import AppKit
 import AtlasCore
 import CoreText
 
-/// 文字的字体、排版与测量；渲染与布局用同一份属性，保证测量结果与绘制一致。
+/// The font, typesetting, and measurement of text; rendering and layout use the same attributes, so measurements match what is drawn.
 enum TextMetrics {
     static func weight(_ value: Int) -> NSFont.Weight {
         switch value {
@@ -34,13 +34,13 @@ enum TextMetrics {
         paragraph.lineBreakMode = .byWordWrapping
         if let lineHeight = text.lineHeight { paragraph.lineHeightMultiple = CGFloat(lineHeight) }
         let color = NSColor(srgbRed: text.color.r, green: text.color.g, blue: text.color.b, alpha: text.color.a)
-        // 空文字也要有一行高度，便于在画布上选中。
+        // Empty text still needs one line of height so it can be selected on the canvas.
         return NSAttributedString(string: text.content.isEmpty ? " " : text.content,
                                   attributes: [.font: font(text), .foregroundColor: color, .paragraphStyle: paragraph])
     }
 
     private struct MeasureKey: Hashable { let text: DesignText; let maxWidth: Double? }
-    /// 布局在每次修改后都会重新测量全部文字；相同文字与宽度直接复用结果。只在主线程使用。
+    /// Layout measures all text again after every edit; the same text and width reuse the result directly. Used on the main thread only.
     nonisolated(unsafe) private static var cache: [MeasureKey: Size] = [:]
 
     static let measure: TextMeasure = { text, maxWidth in
@@ -60,10 +60,10 @@ enum TextMetrics {
     }
 }
 
-/// 用 CoreText 绘制文字的图层，与 `TextMetrics.measure` 使用同一排版。
+/// A layer that draws text with CoreText, using the same typesetting as `TextMetrics.measure`.
 final class TextLayer: CALayer {
     var attributed = NSAttributedString() { didSet { setNeedsDisplay() } }
-    /// 离屏截图把整个图层树画进上下翻转的位图，文字位图会随之倒置；截图时预先反向绘制。
+    /// An offscreen snapshot draws the whole layer tree into a vertically flipped bitmap, which turns the text bitmap upside down with it; it is drawn reversed in advance when snapshotting.
     var invertedForSnapshot = false { didSet { setNeedsDisplay() } }
 
     override init() {
@@ -81,13 +81,13 @@ final class TextLayer: CALayer {
 
     override func draw(in context: CGContext) {
         context.saveGState()
-        // CoreText 以左下角为原点、y 向上排版；上下翻转的上下文（翻转几何的图层、截图用的翻转位图）先翻回来。
+        // CoreText typesets with a bottom-left origin and y pointing up; a vertically flipped context (a layer with flipped geometry, the flipped bitmap used for snapshots) is flipped back first.
         if (context.ctm.d < 0) != invertedForSnapshot {
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
         }
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
-        // 留出余量，避免取整后的宽度让最后一个字换行。
+        // Leave a margin so the rounded width does not make the last character wrap.
         let path = CGPath(rect: CGRect(x: 0, y: bounds.height - 10_000, width: bounds.width + 0.5, height: 10_000), transform: nil)
         CTFrameDraw(CTFramesetterCreateFrame(framesetter, CFRange(), path, nil), context)
         context.restoreGState()

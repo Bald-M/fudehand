@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import AtlasCore
 
-/// 每个字符宽 10、每行高 20；给出最大宽度时按宽度折行。
+/// Each character is 10 wide and each line 20 high; wraps at the width when a maximum width is given.
 let fakeMeasure: TextMeasure = { text, maxWidth in
     let natural = Double(text.content.count) * 10
     guard let maxWidth, maxWidth > 0 else { return Size(width: natural, height: 20) }
@@ -89,7 +89,7 @@ private func laidOut(_ node: DesignNode) -> DesignNode {
 
 @Test func stretchedTextWrapsAtParentWidth() {
     var text = DesignNode(id: "t", type: .text)
-    text.text = DesignText(content: String(repeating: "字", count: 50))
+    text.text = DesignText(content: String(repeating: "x", count: 50))
     let frame = laidOut(autoFrame(AutoLayout(direction: .vertical, crossAlign: .stretch), sizing: Sizing(vertical: .hug), children: [text]))
     #expect(frame.children[0].width == 200 && frame.children[0].height == 60 && frame.height == 60)
 }

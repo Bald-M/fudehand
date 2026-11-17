@@ -6,12 +6,12 @@ import { callTool, tools } from './atlas-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 
 /**
- * App 内对话面板的 Agent harness。由 ui-atlas 按需启动，经 stdin/stdout 交换 JSON 行：
- *   输入：{type:'user',text} | {type:'stop'} | {type:'clear'}
- *   输出：{type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
+ * The Agent harness of the in-App chat panel. Started on demand by ui-atlas, exchanging JSON lines over stdin/stdout:
+ *   Input:  {type:'user',text} | {type:'stop'} | {type:'clear'}
+ *   Output: {type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
  *        | {type:'error',message} | {type:'done',stopped}
- * 提供方、模型、baseUrl 与 API key 只经环境变量传入；stdin 关闭时退出。
- * 带 --list-models 时只输出一行 {type:'models',models,default} 或 {type:'error',message} 后退出。
+ * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
+ * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
  */
 
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
@@ -27,7 +27,7 @@ const system = [
   'Reply in the same language as the user\'s latest message, and briefly explain what you did.',
 ].join('\n')
 
-/** 任何发给 App 的文本都去掉 API key，避免出现在界面或日志中。 */
+/** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */
 function redact(text) {
   return apiKey ? String(text).split(apiKey).join('***') : String(text)
 }
@@ -44,7 +44,7 @@ if (values['list-models']) {
   } catch (error) {
     emit({ type: 'error', message: error?.name === 'TimeoutError' ? 'Timed out fetching the model list' : String(error?.message ?? error) })
   }
-  // macOS 上管道写入是异步的，等输出写完再退出，避免模型很多时被截断。
+  // Pipe writes are asynchronous on macOS; wait for the output to be written before exiting, so it is not truncated when there are many models.
   await new Promise(resolve => process.stdout.write('', resolve))
   process.exit(0)
 }
@@ -63,7 +63,7 @@ function toolText(result) {
 
 async function reply(text, controller) {
   const { signal } = controller
-  // 清空会话会替换 history；本轮回复始终写入开始时的那份历史。
+  // Clearing the conversation replaces history; this turn's reply always goes into the history it started with.
   const log = history
   log.push({ role: 'user', text })
   try {
@@ -73,13 +73,13 @@ async function reply(text, controller) {
       if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(system, log, tools, signal)
       if (signal.aborted) break
-      // 空回复两家接口都不接受写回历史，直接结束本轮。
+      // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
       log.push({ role: 'assistant', text: answer.text, toolCalls: answer.toolCalls })
       if (answer.text) emit({ type: 'assistant', text: answer.text })
       if (!answer.toolCalls.length) break
       for (const call of answer.toolCalls) {
-        // 停止后不再执行任何后续工具调用，只为模型补上占位结果，保持历史完整。
+        // After a stop, no further tool calls are executed; placeholder results are only filled in for the model to keep the history complete.
         if (signal.aborted) { log.push({ role: 'tool', id: call.id, name: call.name, text: 'The user stopped this reply; not executed.' }); continue }
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] } : await callTool(call.name, call.args, ctx)

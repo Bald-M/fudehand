@@ -10,15 +10,15 @@ private func message(_ body: () throws -> Void) -> String? {
 
 let sampleDocument = """
 {"format":"ui-atlas.design","version":1,"nodes":[
-  {"id":"screen","type":"frame","name":"首页","x":0,"y":0,"width":390,"height":844,"fill":"#FFFFFF",
+  {"id":"screen","type":"frame","name":"Home","x":0,"y":0,"width":390,"height":844,"fill":"#FFFFFF",
    "layout":{"direction":"vertical","spacing":12,"padding":{"top":16,"right":16,"bottom":16,"left":16},"align":"start","crossAlign":"stretch"},
    "children":[
-     {"id":"title","type":"text","name":"标题","x":16,"y":16,"width":120,"height":28,
-      "text":{"content":"今日计划","fontSize":22,"fontWeight":600,"color":"#111111","align":"left","autoResize":"height"},
+     {"id":"title","type":"text","name":"Title","x":16,"y":16,"width":120,"height":28,
+      "text":{"content":"Today","fontSize":22,"fontWeight":600,"color":"#111111","align":"left","autoResize":"height"},
       "sizing":{"horizontal":"fill","vertical":"hug"}},
-     {"id":"card","type":"rectangle","name":"卡片","x":16,"y":56,"width":358,"height":80,"fill":"#F2F2F780",
+     {"id":"card","type":"rectangle","name":"Card","x":16,"y":56,"width":358,"height":80,"fill":"#F2F2F780",
       "stroke":{"color":"#000000","width":1},"cornerRadius":12,"opacity":0.5,"visible":false,"locked":true},
-     {"id":"dot","type":"ellipse","name":"点","x":0,"y":0,"width":10,"height":10}
+     {"id":"dot","type":"ellipse","name":"Dot","x":0,"y":0,"width":10,"height":10}
    ]}
 ]}
 """

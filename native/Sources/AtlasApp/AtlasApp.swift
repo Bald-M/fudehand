@@ -7,26 +7,26 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     weak var store: AtlasStore?
     private var quitting = false
     private var control: ControlServer?
-    /// 启动过程中、窗口和 store 就绪前收到的打开文件请求。
+    /// Open-file requests received during launch, before the window and the store are ready.
     private var pendingFiles: [URL] = []
 
     func attach(_ store: AtlasStore) {
         self.store = store
         let files = pendingFiles
         pendingFiles = []
-        // 一次只编辑一份文档，多选打开时取最后一个。
+        // Only one document is edited at a time; when several are opened together, take the last one.
         files.last.map(store.openFromSystem)
     }
 
-    /// Finder 双击、拖到 Dock 图标或“打开方式”打开 .uiatlas 文件。
+    /// Opens a .uiatlas file double-clicked in Finder, dropped on the Dock icon, or chosen with "Open With".
     func application(_ application: NSApplication, open urls: [URL]) {
-        // 扩展名不区分大小写，与系统识别文件类型的方式一致。
+        // The extension is case-insensitive, matching how the system identifies file types.
         let files = urls.filter { $0.pathExtension.lowercased() == DesignDocument.fileExtension }
         guard let store else { pendingFiles += files; return }
         files.last.map(store.openFromSystem)
     }
 
-    /// 启动本地控制通道；失败只影响外部控制，不影响 App 使用。
+    /// Starts the local control channel; a failure only affects external control, not use of the App.
     func startControl(_ store: AtlasStore) {
         guard control == nil else { return }
         let server = ControlServer { [weak store] command in
@@ -38,7 +38,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // 冷启动总是先显示启动窗口，不恢复上次退出时打开的编辑窗口。
+        // A cold launch always shows the launch window first and does not restore the editor window that was open at the last quit.
         UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": false])
     }
 
@@ -52,7 +52,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
         guard !quitting else { return .terminateLater }
         guard store.confirmDiscard() else { return .terminateCancel }
         quitting = true
-        // 先关闭控制通道，退出过程中不再接受命令。
+        // Close the control channel first so no more commands are accepted while quitting.
         control?.stop()
         Task {
             await store.shutdown()
@@ -79,7 +79,7 @@ struct AtlasApp: App {
     }
 
     var body: some Scene {
-        // 第一个场景在启动时打开：先显示启动窗口，新建或打开后才进入编辑窗口。
+        // The first scene opens at launch: the launch window is shown first, and the editor window is entered only after New or Open.
         Window(L("Launch Window"), id: Self.launchWindowID) {
             LaunchView(store: store)
                 // The scene's title is not refreshed while the window is open; this one is.
@@ -133,7 +133,7 @@ struct AtlasApp: App {
             }
         }
 
-        // 单窗口：一次编辑一份文档；WindowGroup 会为 Finder 打开文件等外部事件再开新窗口。
+        // Single window: one document is edited at a time; a WindowGroup would open another window for external events such as Finder opening a file.
         Window("ui-atlas", id: Self.editorWindowID) {
             WorkspaceView(store: store)
                 .frame(minWidth: 960, minHeight: 620)
@@ -151,7 +151,7 @@ struct AtlasApp: App {
         .windowResizability(.contentSize)
     }
 
-    /// 第一个窗口出现时读取源码位置、打开启动过程中收到的文件并启动控制通道。
+    /// When the first window appears, reads the source location, opens the files received during launch, and starts the control channel.
     private func start() {
         guard delegate.store == nil else { return }
         store.bootstrap()
@@ -159,7 +159,7 @@ struct AtlasApp: App {
         delegate.startControl(store)
     }
 
-    /// 文字输入框有焦点时撤销交给输入框，否则撤销设计文档。
+    /// When a text field has focus, undo goes to the text field; otherwise it undoes the design document.
     private func undoOrForward(_ selector: Selector, document: () -> Void) {
         if NSApp.keyWindow?.firstResponder is NSText {
             NSApp.sendAction(selector, to: nil, from: nil)
@@ -169,7 +169,7 @@ struct AtlasApp: App {
     }
 }
 
-/// 应用菜单中的“MCP 连接器…”；commands 里取得 openWindow 需要放在 View 中。
+/// "MCP Connectors…" in the application menu; getting openWindow inside commands requires a View.
 private struct ConnectorsMenuItem: View {
     static let windowID = "connectors"
     /// Passed in so the item re-renders when the UI language changes.
@@ -181,7 +181,7 @@ private struct ConnectorsMenuItem: View {
     }
 }
 
-/// 向 store 登记切换窗口的动作：打开编辑窗口，再关闭启动窗口。
+/// Registers the window-switching action with the store: open the editor window, then close the launch window.
 private struct WindowActions: ViewModifier {
     let store: AtlasStore
     let start: () -> Void
@@ -192,7 +192,7 @@ private struct WindowActions: ViewModifier {
         content.onAppear {
             store.presentEditor = { [openWindow, dismissWindow] in
                 openWindow(id: AtlasApp.editorWindowID)
-                // 编辑窗口出现后再关闭启动窗口，避免一瞬间没有窗口而退出 App。
+                // Close the launch window only after the editor window appears, so the App does not quit during a moment with no windows.
                 DispatchQueue.main.async { dismissWindow(id: AtlasApp.launchWindowID) }
             }
             start()

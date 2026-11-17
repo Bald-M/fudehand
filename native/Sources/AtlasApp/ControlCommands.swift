@@ -1,7 +1,7 @@
 import AtlasCore
 import Foundation
 
-/// 控制通道命令在主线程上分发到 store；结果是可编码为 JSON 的字典。Agent 的修改与人工修改共用撤销历史。
+/// Control-channel commands are dispatched to the store on the main thread; the result is a dictionary that can be encoded as JSON. Agent edits share the undo history with manual edits.
 extension AtlasStore {
     func handleControl(_ command: ControlCommand) async throws -> Any {
         switch command {

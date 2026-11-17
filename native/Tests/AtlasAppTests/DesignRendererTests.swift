@@ -8,7 +8,7 @@ import Testing
     var frame = DesignNode(id: "f", type: .frame, width: 200, height: 100)
     frame.fill = .white
     var title = DesignNode(id: "t", type: .text, x: 10, y: 10, width: 80, height: 20)
-    title.text = DesignText(content: "标题")
+    title.text = DesignText(content: "Title")
     var dot = DesignNode(id: "e", type: .ellipse, x: 150, y: 10, width: 20, height: 20)
     dot.fill = .black
     frame.children = [title, dot]
@@ -40,7 +40,7 @@ import Testing
     #expect(frameLayer?.position == CGPoint(x: 40, y: 0))
     #expect(renderer.layer(for: "e")?.isHidden == true)
     #expect(renderer.layer(for: "r") == nil && renderer.layerCount == 3)
-    // 层叠顺序跟随数组顺序。
+    // The stacking order follows the array order.
     nodes[0].children.reverse()
     renderer.sync(nodes)
     #expect(renderer.layer(for: "f")?.sublayers?.first === renderer.layer(for: "e"))
@@ -52,7 +52,7 @@ import Testing
     let png = try DesignRenderer.snapshotPNG(frame, scale: 2)
     let image = try #require(NSBitmapImageRep(data: png))
     #expect(image.pixelsWide == 400 && image.pixelsHigh == 200)
-    // 白色背景，右上角的黑色圆点（画布 160,20 → 像素 320,40）。
+    // White background, with the black dot at the top right (canvas 160,20 → pixel 320,40).
     let background = try #require(image.colorAt(x: 20, y: 180)?.usingColorSpace(.sRGB))
     #expect(background.redComponent > 0.95)
     let dot = try #require(image.colorAt(x: 320, y: 40)?.usingColorSpace(.sRGB))
@@ -74,7 +74,7 @@ import Testing
 }
 
 @Test func textMeasureWrapsToWidth() {
-    let text = DesignText(content: "一二三四五六七八九十", fontSize: 16)
+    let text = DesignText(content: "one two three four five six seven eight nine ten", fontSize: 16)
     let single = TextMetrics.measure(text, nil)
     let wrapped = TextMetrics.measure(text, single.width / 2)
     #expect(single.height > 0 && single.width > 100)
@@ -82,7 +82,7 @@ import Testing
     #expect(TextMetrics.measure(DesignText(content: ""), nil).height > 0)
 }
 
-/// “▀”的笔画在上半行，“▄”在下半行；文字倒置时两者的上下关系会颠倒。
+/// The strokes of "▀" are in the upper half of the line and those of "▄" in the lower half; when text is upside down their vertical relationship is reversed.
 @Test @MainActor func snapshotTextIsNotUpsideDown() throws {
     func inkCenterY(_ content: String) throws -> Double {
         var frame = DesignNode(id: "f", type: .frame, width: 120, height: 60)

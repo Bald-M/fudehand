@@ -4,7 +4,7 @@ import Testing
 @testable import AtlasApp
 @testable import AtlasCore
 
-/// 转发给真实 store，同时记录画布报告的稳定视口。
+/// Forwards to the real store while recording the stable viewport the canvas reports.
 @MainActor
 final class RecordingHost: CanvasHost {
     let store: AtlasStore
@@ -25,7 +25,7 @@ final class RecordingHost: CanvasHost {
     func canvasSizeChanged(_ size: CGSize) { store.canvasSizeChanged(size) }
 }
 
-/// 顶层画框 a（0,0 400×300，含卡片 card 20,20 100×50）与矩形 b（600,0 300×300）；视口 (0, 100) 100%，画框名称标签在屏幕上可见。
+/// Top-level frame a (0,0 400×300, containing card 20,20 100×50) and rectangle b (600,0 300×300); viewport (0, 100) at 100%, with the frame's name label visible on screen.
 @MainActor
 final class CanvasHarness {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled], backing: .buffered, defer: true)
@@ -35,7 +35,7 @@ final class CanvasHarness {
     private var token = 1
 
     nonisolated static func document() -> DesignDocument {
-        var frame = DesignNode(id: "a", type: .frame, name: "首页", width: 400, height: 300)
+        var frame = DesignNode(id: "a", type: .frame, name: "Home", width: 400, height: 300)
         frame.fill = .white
         var card = DesignNode(id: "card", type: .rectangle, x: 20, y: 20, width: 100, height: 50)
         card.fill = .black
@@ -73,7 +73,7 @@ final class CanvasHarness {
         case .leftMouseDown: canvas.mouseDown(with: event)
         case .leftMouseDragged: canvas.mouseDragged(with: event)
         case .leftMouseUp: canvas.mouseUp(with: event)
-        default: Issue.record("未处理的事件类型 \(type)")
+        default: Issue.record("Unhandled event type \(type)")
         }
     }
 
@@ -120,7 +120,7 @@ final class CanvasHarness {
     #expect(h.canvas.hitTarget(at: NSPoint(x: 5, y: 88)) == .label("a"))
     h.click(NSPoint(x: 5, y: 88))
     #expect(h.store.selection == ["a"])
-    #expect(h.canvas.overlay.labelTexts == ["a": "首页"])
+    #expect(h.canvas.overlay.labelTexts == ["a": "Home"])
 }
 
 @Test @MainActor func dragMovesAsOneUndoStep() {
@@ -274,7 +274,7 @@ final class CanvasHarness {
     defer { h.dispose() }
     h.request(Viewport(x: 0, y: 0, scale: 1))
     h.canvas.magnify(by: 1, at: NSPoint(x: 0, y: 0), phase: .changed)
-    // 画框 a 在屏幕上放大为 0–800；矩形 b 从屏幕 1200 开始。
+    // Frame a is magnified to 0–800 on screen; rectangle b starts at screen 1200.
     #expect(h.canvas.hitTarget(at: NSPoint(x: 700, y: 300)) == .node("a"))
     #expect(h.canvas.hitTarget(at: NSPoint(x: 900, y: 300)) == .empty)
 }

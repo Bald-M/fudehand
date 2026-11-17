@@ -1,7 +1,7 @@
 import AppKit
 import AtlasCore
 
-/// 画在图层上方的屏幕空间装饰：悬停、选框、缩放把手、顶层画框名称、框选与吸附参考线。从不接收指针输入。
+/// Screen-space decorations drawn above the layers: hover, selection box, resize handles, top-level frame names, marquee selection, and snapping guides. Never receives pointer input.
 final class CanvasOverlay: NSView {
     override var isFlipped: Bool { true }
     private let hoverLayer = CAShapeLayer()
@@ -82,7 +82,7 @@ final class CanvasOverlay: NSView {
         return NSPoint(x: r.minX + r.width * handle.anchor.x, y: r.minY + r.height * handle.anchor.y)
     }
 
-    /// 顶层画框名称标签的屏幕矩形：画框左上角上方，宽度不超过画框。
+    /// The screen rectangle of a top-level frame's name label: above the frame's top-left corner, no wider than the frame.
     static func labelRect(for node: DesignNode, viewport: Viewport) -> NSRect {
         let frame = screenRect(node.frame, viewport: viewport)
         let textWidth = (node.name as NSString).size(withAttributes: [.font: labelFont]).width + 2

@@ -15,7 +15,7 @@ extension NodeType {
     }
 }
 
-/// 图层面板：层级树（上层在前，与画布层叠顺序一致），显示/隐藏、锁定、重命名，与画布选择同步。
+/// The layers panel: the hierarchy tree (upper layers first, matching the canvas stacking order), show/hide, lock, rename, kept in sync with the canvas selection.
 struct LayersPanel: View {
     @ObservedObject var store: AtlasStore
     @State private var collapsed: Set<String> = []
@@ -23,7 +23,7 @@ struct LayersPanel: View {
     @State private var draftName = ""
     @FocusState private var renameFocused: Bool
 
-    /// 一行只带自身属性（不含子树），列表比较的开销与图层数成线性关系。
+    /// A row carries only its own properties (not the subtree), so the cost of comparing the list is linear in the number of layers.
     private struct Row: Identifiable {
         let node: DesignNode
         let hasChildren: Bool
@@ -34,7 +34,7 @@ struct LayersPanel: View {
     private var rows: [Row] {
         var result: [Row] = []
         func visit(_ nodes: [DesignNode], depth: Int) {
-            // 列表里上层在前。
+            // Upper layers come first in the list.
             for node in nodes.reversed() {
                 var shallow = node
                 shallow.children = []
@@ -133,7 +133,7 @@ struct LayersPanel: View {
         if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
     }
 
-    /// ⌘ 点击加入或移出选择，Shift 点击加入选择，普通点击单选。
+    /// ⌘-click adds to or removes from the selection, Shift-click adds to the selection, a plain click selects one.
     private func select(_ id: String) {
         let flags = NSEvent.modifierFlags
         if flags.contains(.command) { store.setSelection(store.selection.symmetricDifference([id])) }
@@ -155,7 +155,7 @@ struct LayersPanel: View {
         store.updateNode(id, "Rename Layer") { $0.name = name }
     }
 
-    /// 在同一父图层内上移（+1）或下移（-1）一层；已在最上或最下时不变。
+    /// Moves up (+1) or down (-1) one level within the same parent layer; unchanged when already at the top or bottom.
     private func step(_ id: String, by offset: Int) {
         let document = store.editor.document
         guard let parent = document.parentID(of: id), let index = document.indexPath(of: id)?.last else { return }

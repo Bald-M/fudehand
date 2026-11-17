@@ -30,10 +30,10 @@ private func temporaryFile() -> URL {
 @Test @MainActor func agentBuildsNestedNodesAsOneUndoStep() async throws {
     let store = makeStore()
     let created = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
-        "type": "frame", "name": "首页", "width": 390, "height": 844, "fill": "#FFFFFF",
+        "type": "frame", "name": "Home", "width": 390, "height": 844, "fill": "#FFFFFF",
         "layout": ["direction": "vertical", "spacing": 12, "padding": ["top": 16, "right": 16, "bottom": 16, "left": 16], "crossAlign": "stretch"],
         "children": [["id": "nav", "type": "rectangle", "height": 56, "fill": "#F2F2F7"],
-                     ["type": "text", "text": ["content": "卡片"]]],
+                     ["type": "text", "text": ["content": "Card"]]],
     ])))
     let frameID = try #require(created["id"] as? String)
     #expect((created["ids"] as? [String])?.count == 3)
@@ -48,15 +48,15 @@ private func temporaryFile() -> URL {
 
 @Test @MainActor func agentSeesManualEditsAndUpdatesMergeFields() async throws {
     let store = makeStore()
-    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "t", "type": "text", "text": ["content": "你好"]])))
-    store.updateNode("t", "修改字号") { $0.text?.fontSize = 30 }
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "t", "type": "text", "text": ["content": "Hello"]])))
+    store.updateNode("t", "Change Font Size") { $0.text?.fontSize = 30 }
     let node = try await control(store, .getNode("t"))
     #expect((node["text"] as? [String: Any])?["fontSize"] as? Double == 30)
-    let updated = try await control(store, .updateNode("t", changes: JSONObject(["text": ["content": "再见"], "opacity": 0.5])))
+    let updated = try await control(store, .updateNode("t", changes: JSONObject(["text": ["content": "Goodbye"], "opacity": 0.5])))
     #expect((updated["text"] as? [String: Any])?["fontSize"] as? Double == 30)
-    #expect(store.editor.document.node("t")?.text?.content == "再见")
+    #expect(store.editor.document.node("t")?.text?.content == "Goodbye")
     store.undo()
-    #expect(store.editor.document.node("t")?.text?.content == "你好")
+    #expect(store.editor.document.node("t")?.text?.content == "Hello")
     store.undo()
     #expect(store.editor.document.node("t")?.text?.fontSize == 16)
 }
@@ -134,8 +134,8 @@ private func temporaryFile() -> URL {
 
 @Test @MainActor func manualEditsCoalesceAndPanelsSkipLiveGestureFrames() throws {
     let store = makeStore()
-    try store.perform("新建") { try $0.insert(DesignNode(id: "r", type: .rectangle), parent: nil, index: nil) }
-    for value in [0.9, 0.8, 0.7] { store.updateNode("r", "修改透明度", coalescing: "opacity") { $0.opacity = value } }
+    try store.perform("Create") { try $0.insert(DesignNode(id: "r", type: .rectangle), parent: nil, index: nil) }
+    for value in [0.9, 0.8, 0.7] { store.updateNode("r", "Change Opacity", coalescing: "opacity") { $0.opacity = value } }
     store.undo()
     #expect(store.editor.document.node("r")?.opacity == 1)
     store.canvasBeginGesture("Move Layers")
@@ -150,7 +150,7 @@ private func temporaryFile() -> URL {
     let store = makeStore()
     var frame = DesignNode(id: "f", type: .frame, width: 300, height: 300)
     frame.children = [DesignNode(id: "c", type: .rectangle, x: 10, y: 10)]
-    try store.perform("新建") { try $0.insert(frame, parent: nil, index: nil) }
+    try store.perform("Create") { try $0.insert(frame, parent: nil, index: nil) }
     store.canvasNudge(["f", "c"], by: Point(x: 5, y: 0))
     #expect(store.editor.document.node("f")?.x == 5 && store.editor.document.node("c")?.x == 10)
     store.canvasBeginGesture("Move Layers")
@@ -164,13 +164,13 @@ private func temporaryFile() -> URL {
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
     let store = AtlasStore(defaults: defaults)
-    // 记录中的路径解析了符号链接（临时目录 /var → /private/var）。
+    // The path in the entry has symlinks resolved (temporary directory /var → /private/var).
     let first = temporaryFile().resolvingSymlinksInPath(), second = temporaryFile().resolvingSymlinksInPath()
     _ = try await control(store, .saveDocument(first.path))
     _ = try await control(store, .saveDocument(second.path))
     _ = try await control(store, .openDocument(first.path, discard: false))
     #expect(store.recents.items.map(\.path) == [first.path, second.path])
-    // 重启后（同一份 defaults）记录仍在。
+    // After a restart (the same defaults) the entry is still there.
     let relaunched = AtlasStore(defaults: defaults)
     #expect(relaunched.recents.items.map(\.path) == [first.path, second.path])
     relaunched.removeRecent(first.path)
@@ -193,14 +193,14 @@ private func temporaryFile() -> URL {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     #expect(AtlasStore.templates(in: directory).isEmpty)
     let document = DesignDocument(nodes: [DesignNode(id: "f", type: .frame, x: 0, y: 0, width: 390, height: 844)])
-    try document.encoded().write(to: directory.appendingPathComponent("移动端.uiatlas"))
-    try document.encoded().write(to: directory.appendingPathComponent("桌面端.uiatlas"))
-    try Data().write(to: directory.appendingPathComponent("说明.md"))
-    try document.encoded().write(to: directory.appendingPathComponent("模板 10.uiatlas"))
-    try document.encoded().write(to: directory.appendingPathComponent("模板 2.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("Mobile.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("Desktop.uiatlas"))
+    try Data().write(to: directory.appendingPathComponent("Notes.md"))
+    try document.encoded().write(to: directory.appendingPathComponent("Template 10.uiatlas"))
+    try document.encoded().write(to: directory.appendingPathComponent("Template 2.uiatlas"))
     let templates = AtlasStore.templates(in: directory)
-    // 按访达的方式排序：数字按数值比较。
-    #expect(templates.map(\.name).filter { $0.hasPrefix("模板") } == ["模板 2", "模板 10"])
+    // Sorted the way Finder does: numbers compare by value.
+    #expect(templates.map(\.name).filter { $0.hasPrefix("Template") } == ["Template 2", "Template 10"])
     #expect(templates.count == 4)
 
     let store = makeStore()

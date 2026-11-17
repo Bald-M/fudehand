@@ -7,7 +7,7 @@ private let rectB = Rect(x: 470, y: 0, width: 1440, height: 900)
 private func context(selection: Set<String> = [], tool: CanvasTool = .move, spaceHeld: Bool = false,
                      movable: Set<String> = ["a", "b"]) -> InteractionContext {
     let rects = ["a": rectA, "b": rectB]
-    // 吸附目标是除被拖动图层外的其他图层；测试里拖动的总是 a。
+    // Snap targets are the layers other than the one being dragged; the tests always drag a.
     return InteractionContext(viewport: Viewport(x: 0, y: 0, scale: 0.5), rects: rects, marqueeCandidates: ["a", "b"],
                               snapTargets: [rectB], movable: movable, selection: selection, tool: tool, spaceHeld: spaceHeld)
 }
@@ -56,7 +56,7 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
 }
 
 @Test func dragSnapsAndControlDisablesIt() {
-    // 屏幕 dx 38、缩放 0.5 即画布 76：a.maxX = 466，距 b.minX（470）4。
+    // Screen dx 38 at zoom 0.5 is canvas 76: a.maxX = 466, 4 away from b.minX (470).
     var machine = CanvasInteraction()
     let ctx = context(selection: ["a"])
     _ = down(&machine, 10, 10, hit: .node("a"), context: ctx)
@@ -124,7 +124,7 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     var machine = CanvasInteraction()
     #expect(down(&machine, 10, 10, hit: .label("b"), clickCount: 2, context: context()) == [.focus("b")])
     #expect(down(&machine, 10, 20, hit: .node("a"), clickCount: 2, context: context(selection: ["a"])) == [.enter("a", Point(x: 20, y: 40))])
-    // 双击未选图层时第一下已经选中它，第二下按普通按下处理。
+    // When double-clicking an unselected layer, the first click already selects it and the second is handled as an ordinary press.
     #expect(down(&machine, 10, 20, hit: .node("a"), clickCount: 2, context: context(selection: ["b"])) == [.select(["a"])])
 }
 
@@ -136,7 +136,7 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
             == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884))])
     #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx) == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844))])
     #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture])
-    // 只点把手不拖动不产生修改。
+    // Clicking a handle without dragging produces no edit.
     _ = down(&machine, 0, 0, hit: .handle("a", .left), context: ctx)
     #expect(machine.pointerUp(at: Point(x: 0, y: 0), context: ctx) == [])
 }
