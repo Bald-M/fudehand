@@ -55,23 +55,33 @@ function launch(root: string) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
     await exited
   })
-  async function ready() {
-    for (let count = 0; count < 100; count++) {
-      if (output.split('\n').includes('UI_ATLAS_READY')) return
+  async function line(prefix: string) {
+    for (let count = 0; count < 150; count++) {
+      const found = output.split('\n').find(item => item.startsWith(prefix))
+      if (found) return found
       if (child.exitCode !== null) throw new Error(`Preview exited: ${errors}`)
       await delay(30)
     }
-    throw new Error(`Preview did not become ready: ${errors}`)
+    throw new Error(`Missing ${prefix}: ${output} ${errors}`)
   }
-  return { child, exited, ready, output: () => output, errors: () => errors }
+  const send = (command: string) => child.stdin.write(`${command}\n`)
+  async function ready(id = 'demo') {
+    await line('UI_ATLAS_LISTENING')
+    send(`start ${id}`)
+    await line(`UI_ATLAS_READY ${id}`)
+  }
+  return { child, exited, line, send, ready, output: () => output, errors: () => errors }
 }
 
 describe('原生案例服务入口', () => {
-  it('启动案例，并在 App 管道关闭后释放案例端口', async () => {
+  it('启动时不拉起任何作品，收到请求后才启动，并在 App 管道关闭后释放端口', async () => {
     const sample = await fixture()
     const running = launch(sample.root)
-    await running.ready()
-    expect(running.output()).toBe('UI_ATLAS_READY\n')
+    await running.line('UI_ATLAS_LISTENING')
+    await expect(assertPortsAvailable([{ ...sample.preview, title: '案例' }])).resolves.toBeUndefined()
+    running.send('start demo')
+    await running.line('UI_ATLAS_READY demo')
+    expect(running.output()).toBe('UI_ATLAS_LISTENING\nUI_ATLAS_READY demo\n')
     expect(await (await fetch(sample.preview.url)).text()).toBe('native-preview')
     const pid = Number(await readFile(sample.marker, 'utf8'))
     running.child.stdin.end()
@@ -89,19 +99,22 @@ describe('原生案例服务入口', () => {
     await expect(assertPortsAvailable([{ ...sample.preview, title: '案例' }])).resolves.toBeUndefined()
   })
 
-  it('案例端口被占用时报告失败，保留占用该端口的服务', async () => {
+  it('案例端口被占用时报告该作品失败，保留占用者，释放后可以重试', async () => {
     const sample = await fixture()
     const occupied = createServer((_request, response) => response.end('keep-running'))
     await new Promise<void>((done, reject) => {
       occupied.once('error', reject)
       occupied.listen(sample.preview.port, '127.0.0.1', done)
     })
-    cleanup.push(() => new Promise<void>(done => occupied.close(() => done())))
     const running = launch(sample.root)
-    expect(await running.exited).toBe(1)
-    expect(running.output()).toBe('')
-    expect(running.errors()).toContain(String(sample.preview.port))
+    await running.line('UI_ATLAS_LISTENING')
+    running.send('start demo')
+    const failed = await running.line('UI_ATLAS_FAILED demo ')
+    expect(JSON.parse(failed.slice('UI_ATLAS_FAILED demo '.length))).toContain(String(sample.preview.port))
     expect(await (await fetch(sample.preview.url)).text()).toBe('keep-running')
+    await new Promise<void>(done => occupied.close(() => done()))
+    running.send('start demo')
+    await running.line('UI_ATLAS_READY demo')
   })
 
   it('已就绪的案例异常退出时报告失败并释放端口', async () => {
@@ -110,8 +123,18 @@ describe('原生案例服务入口', () => {
     await running.ready()
     const pid = Number(await readFile(sample.marker, 'utf8'))
     process.kill(pid, 'SIGKILL')
-    expect(await running.exited).toBe(1)
-    expect(running.errors()).toContain('意外退出')
+    const failed = await running.line('UI_ATLAS_FAILED demo ')
+    expect(failed).toContain('意外退出')
     await expect(assertPortsAvailable([{ ...sample.preview, title: '案例' }])).resolves.toBeUndefined()
+    expect(running.child.exitCode).toBeNull()
+  })
+
+  it('目录无效时直接退出并报告原因', async () => {
+    const sample = await fixture()
+    await writeFile(join(sample.root, 'catalog.json'), '{"version": 2}')
+    const running = launch(sample.root)
+    expect(await running.exited).toBe(1)
+    expect(running.output()).toBe('')
+    expect(running.errors()).toContain('catalog.version')
   })
 })

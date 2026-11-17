@@ -98,7 +98,7 @@ struct WorkspaceView: View {
     }
 
     private var statusLabel: String {
-        switch session.phase {
+        switch session.phase(for: store.project?.id) {
         case .ready: return "案例服务已就绪"
         case .starting: return "正在启动案例…"
         case .failed: return "案例服务启动失败"
@@ -115,23 +115,23 @@ struct WorkspaceView: View {
         } else if store.project == nil {
             ContentUnavailableView("没有已启用的作品", systemImage: "square.dashed", description: Text("在 catalog.json 中添加作品或启用已有作品，然后重新打开项目。"))
         } else {
-            switch session.phase {
+            switch session.phase(for: store.project?.id) {
             case .starting, .stopped:
                 VStack(spacing: 16) {
                     ProgressView()
-                    Text("正在准备案例").font(.headline)
-                    Text("首次启动可能需要一些时间。每个作品保留自己的开发服务。").foregroundStyle(.secondary)
+                    Text("正在启动「\(store.project?.title ?? "")」").font(.headline)
+                    Text("首次打开作品时启动它的案例服务，可能需要一些时间。").foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 VStack(spacing: 18) {
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(.orange)
                     Text("案例服务未能启动").font(.title2)
-                    Text("确认已在项目目录执行 pnpm install，并检查下方端口或命令错误。").foregroundStyle(.secondary)
+                    Text("确认已在项目目录执行 pnpm install，并检查下方端口或命令错误。修改过 catalog.json 时，请用“重新读取目录并启动服务”。").foregroundStyle(.secondary)
                     ScrollView { Text(message).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(14) }
                         .frame(maxWidth: 650, maxHeight: 220).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                     HStack {
                         Button("选择项目目录…") { store.chooseWorkspace() }
-                        Button("重新启动") { store.restart() }.buttonStyle(.borderedProminent).disabled(store.opening)
+                        Button("重新启动") { store.retryPreview() }.buttonStyle(.borderedProminent).disabled(store.opening)
                     }
                 }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
