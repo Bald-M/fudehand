@@ -132,7 +132,7 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const model = await fakeModel([openaiTool('call_1', 'canvas_focus_frame', { frame: 'home' }), openaiText('App 没有运行。')])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     const events = await chat.ask('聚焦首页')
-    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: '界面图鉴未运行' })
+    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'ui-atlas 未运行' })
   })
 
   it('HTTP 错误、网络失败与未配置 key 显示中文错误', async () => {

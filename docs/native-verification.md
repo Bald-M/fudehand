@@ -9,7 +9,7 @@
 - `pnpm check`：通过网页工作区类型检查、24 项 Vitest 测试和三个网页构建。其中包含 4 项新增原生服务入口真实进程测试。
 - 默认执行沙箱禁止监听本机端口，首次 HTTP 测试因此失败；在允许 loopback 的执行环境重跑全部通过，未删除或跳过测试。
 - `pnpm test:native`：7 项 Swift Testing 测试通过，覆盖有效配置、无效配置组、几何、布局恢复及切换作品后调整窗口保持用户视角的回归。
-- `pnpm build:native`：Release 编译、链接和 App 打包成功；`codesign --verify --deep --strict dist/界面图鉴.app` 通过。
+- `pnpm build:native`：Release 编译、链接和 App 打包成功；`codesign --verify --deep --strict dist/ui-atlas.app` 通过。
 
 ## 实际 App 验收
 

@@ -20,7 +20,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     /// 网页最近的控制台输出与未捕获错误；网页重载后仍保留。
     private(set) var console = FrameConsole()
     /// 读取和交互脚本在独立的脚本世界执行，页面自己的脚本改不到它们。
-    private static let agentWorld = WKContentWorld.world(name: "界面图鉴")
+    private static let agentWorld = WKContentWorld.world(name: "ui-atlas")
     /// Agent 交互进行中及结束后片刻，页面脚本代为触发的外站导航一律取消，不打开系统浏览器。
     private var agentInteractionUntil = Date.distantPast
     private var agentInteracting: Bool { Date() < agentInteractionUntil }

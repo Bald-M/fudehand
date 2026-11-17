@@ -17,12 +17,12 @@ final class ControlServer: @unchecked Sendable {
     static func defaultPath(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if let path = environment["UI_ATLAS_CONTROL_SOCKET"], !path.isEmpty { return path }
         return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/界面图鉴/control.sock").path
+            .appendingPathComponent("Library/Application Support/ui-atlas/control.sock").path
     }
 
     let path: String
     private let handler: Handler
-    private let queue = DispatchQueue(label: "界面图鉴.control")
+    private let queue = DispatchQueue(label: "ui-atlas.control")
     private var source: DispatchSourceRead?
     private static let maximumLine = 1 << 20
     /// 每个连接占用一个阻塞线程，因此限制并发连接数，并在空闲 60 秒后断开。
@@ -45,7 +45,7 @@ final class ControlServer: @unchecked Sendable {
         var status = stat()
         if lstat(path, &status) == 0 {
             guard status.st_mode & S_IFMT == S_IFSOCK else { throw ControlCommandError("控制通道路径已被其他文件占用：\(path)") }
-            if Self.isLive(&address) { throw ControlCommandError("另一个界面图鉴已在监听控制通道") }
+            if Self.isLive(&address) { throw ControlCommandError("另一个 ui-atlas 已在监听控制通道") }
             unlink(path)
         }
         let listener = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -159,7 +159,7 @@ final class ControlServer: @unchecked Sendable {
         lock.lock()
         let isStopped = stopped
         lock.unlock()
-        if isStopped { return ControlProtocol.failure(id: request.id, message: "界面图鉴正在退出") }
+        if isStopped { return ControlProtocol.failure(id: request.id, message: "ui-atlas 正在退出") }
         let box = ResponseBox()
         let done = DispatchSemaphore(value: 0)
         let handler = handler

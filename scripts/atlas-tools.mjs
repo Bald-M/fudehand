@@ -52,7 +52,7 @@ async function writeCatalog(root, change) {
     throw error
   }
   // App 只在打开项目时读取 catalog.json。
-  return { content: [{ type: 'text', text: `${message}。界面图鉴正在运行时，需要重启预览后生效。` }] }
+  return { content: [{ type: 'text', text: `${message}。ui-atlas 正在运行时，需要重启预览后生效。` }] }
 }
 
 const frameFields = ['title', 'platform', 'path', 'width', 'height', 'x', 'y']
@@ -68,7 +68,7 @@ const frameProperties = {
 export const tools = [
   {
     name: 'list_projects',
-    description: '列出界面图鉴中的全部作品摘要（id、标题、框架、是否启用、画框数、预览 baseUrl）。',
+    description: '列出 ui-atlas 中的全部作品摘要（id、标题、框架、是否启用、画框数、预览 baseUrl）。',
     inputSchema: { type: 'object', properties: {} },
     async run(_args, { root }) {
       const catalog = await loadCatalog(root)
@@ -166,7 +166,7 @@ export const tools = [
 /** 画布控制层：经本地控制通道转发给正在运行的 App。 */
 function canvasTool(name, command, description, properties = {}, required = Object.keys(properties)) {
   return {
-    name, description: `${description}需要界面图鉴正在运行。`,
+    name, description: `${description}需要 ui-atlas 正在运行。`,
     inputSchema: { type: 'object', properties, required },
     async run(args, { socketPath }) {
       const forwarded = Object.fromEntries(Object.keys(properties).map(key => [key, args[key]]))
@@ -187,7 +187,7 @@ tools.push(
   canvasTool('canvas_restart_preview', 'restart_preview', '重新读取 catalog.json 并重启预览服务（之后按需启动当前作品）；修改 catalog 后用它让 App 生效。'),
   {
     name: 'frame_snapshot',
-    description: '截取当前作品中某个画框在 App 内实际渲染的网页，返回 PNG。需要界面图鉴正在运行且画框已加载。',
+    description: '截取当前作品中某个画框在 App 内实际渲染的网页，返回 PNG。需要 ui-atlas 正在运行且画框已加载。',
     inputSchema: { type: 'object', properties: { frame: { type: 'string', description: '画框 id' } }, required: ['frame'] },
     async run({ frame }, { socketPath }) {
       const shot = await sendControl('frame_snapshot', { frame }, { socketPath })
@@ -206,7 +206,7 @@ tools.push(
     { ...frameArg, limit: { type: 'integer', minimum: 1, maximum: 200, description: '返回最近多少条，默认 50' } }, ['frame']),
   {
     name: 'frame_read',
-    description: '读取画框网页当前可见内容的精简大纲：标题、文本和可交互元素；可交互元素后的 → 是可用于 frame_interact 的 CSS 选择器。最多约 20000 字。需要界面图鉴正在运行且画框已加载。',
+    description: '读取画框网页当前可见内容的精简大纲：标题、文本和可交互元素；可交互元素后的 → 是可用于 frame_interact 的 CSS 选择器。最多约 20000 字。需要 ui-atlas 正在运行且画框已加载。',
     inputSchema: { type: 'object', properties: frameArg, required: ['frame'] },
     async run({ frame }, { socketPath }) {
       const page = await sendControl('frame_read', { frame }, { socketPath })

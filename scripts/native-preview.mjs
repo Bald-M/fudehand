@@ -35,7 +35,7 @@ try {
   await finished
   commands.close()
 } catch (error) {
-  console.error(`[界面图鉴] ${error instanceof Error ? error.message : String(error)}`)
+  console.error(`[ui-atlas] ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 } finally {
   await pool?.close()

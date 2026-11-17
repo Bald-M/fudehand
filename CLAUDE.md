@@ -2,7 +2,7 @@
 
 本文件为 Claude Code（claude.ai/code）在本仓库中工作提供指引。
 
-界面图鉴（UI Atlas）是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
+ui-atlas 是一个用于研究界面设计的本地 macOS 应用：SwiftUI + AppKit 外壳把 Vue/React/HTML 学习项目（“作品”）以固定尺寸的网页框（“画框”）显示在可平移、可缩放的“画布”上。文档、界面文案和错误信息均为中文，术语以 `GLOSSARY.md` 为准。探索代码前先读 `GLOSSARY.md` 和相关的 `docs/adr/`；画布交互行为以 `docs/macos.md` 为权威规范。
 
 ## 工作方式：superpowers 技能
 
@@ -26,7 +26,7 @@
 ```bash
 pnpm install
 pnpm dev               # 以 debug 构建应用并打开
-pnpm build:native      # release 构建 + ad-hoc 签名 → dist/界面图鉴.app
+pnpm build:native      # release 构建 + ad-hoc 签名 → dist/ui-atlas.app
 pnpm test:native       # 对 native/ 运行 swift test（AtlasCoreTests + AtlasAppTests）
 pnpm check             # 示例类型检查 + Vitest（tests/）+ 构建全部示例
 pnpm mcp               # 以 stdio 启动 ui-atlas MCP server（通常由 Agent 自动启动）
@@ -55,7 +55,7 @@ swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
 
 画布持有实时视口和选区，只把稳定后的值回报给 `AtlasStore`；store 通过带 token 的请求（`ViewportRequest`、`positionsToken`、`reloadToken`）向下推送一次性变更——新 token 表示“应用一次”。画框整体做视觉缩放；每个 web view 保持其配置的 CSS 视口尺寸，因此响应式断点不会随缩放改变。
 
-**Agent 接入**（ADR 0003）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。写 `catalog.json` 的工具先调用 `servicesFromCatalog` 再原子写入，不要另写校验。画布工具经 `scripts/control-client.mjs` 连接 App 的控制通道（`~/Library/Application Support/界面图鉴/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
+**Agent 接入**（ADR 0003）。`scripts/atlas-tools.mjs` 是唯一的工具实现，被 MCP server（`scripts/mcp-server.mjs`，`.mcp.json` 注册为 `ui-atlas`）和 App 对话面板的 Agent harness（`scripts/agent-chat.mjs`，JSON 行协议，模型适配在 `agent-providers.mjs`）共用。写 `catalog.json` 的工具先调用 `servicesFromCatalog` 再原子写入，不要另写校验。画布工具经 `scripts/control-client.mjs` 连接 App 的控制通道（`~/Library/Application Support/ui-atlas/control.sock`，可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）；协议在 `AtlasCore/ControlProtocol.swift`，监听在 `AtlasApp/ControlServer.swift`，命令分发在 `ControlCommands.swift`。对话面板的 API key 存在钥匙串，只经环境变量 `UI_ATLAS_API_KEY` 传给 harness。
 
 **示例**位于 `examples/*`（pnpm workspace）。应用直接从各自端口加载它们（不经代理）。没有后端，也没有静态站点打包产物。
 

@@ -1,6 +1,6 @@
 # macOS 使用说明
 
-界面图鉴运行 SwiftUI/AppKit 原生外壳。案例继续保留各自的 Vue、React 或 HTML 工具链，在系统 WKWebView 中展示。
+ui-atlas 运行 SwiftUI/AppKit 原生外壳。案例继续保留各自的 Vue、React 或 HTML 工具链，在系统 WKWebView 中展示。
 
 ## 启动与构建
 
@@ -10,7 +10,7 @@
 pnpm install
 pnpm dev                 # Debug 构建并打开 App
 pnpm build:native        # Release 构建并进行本地 ad-hoc 签名
-open dist/界面图鉴.app
+open dist/ui-atlas.app
 ```
 
 App 启动后会读取仓库 `catalog.json`，只启动当前作品的案例服务；切换到其他已启用作品时再按需启动它，已启动的服务保留到 App 退出。关闭最后一个窗口或使用 ⌘Q 退出，会停止本次启动的案例。App 异常退出后，案例启动器也会通过所有权管道关闭来清理进程。
@@ -53,7 +53,7 @@ SwiftPM 构建和模块缓存默认写到系统临时目录。`UI_ATLAS_SWIFT_SC
 **其他**
 
 - 在侧栏搜索或切换作品；底部显示介绍、作者与原作出处。
-- 侧栏每个作品显示缩略图（作品第一个画框加载后截取，缓存在 `~/Library/Caches/界面图鉴/thumbnails/`；未生成时显示占位图）和作品目录的最近修改时间；可在“目录顺序”和“最近修改”之间切换排序，右键作品可置顶，置顶作品始终排在最前。
+- 侧栏每个作品显示缩略图（作品第一个画框加载后截取，缓存在 `~/Library/Caches/ui-atlas/thumbnails/`；未生成时显示占位图）和作品目录的最近修改时间；可在“目录顺序”和“最近修改”之间切换排序，右键作品可置顶，置顶作品始终排在最前。
 - 重新加载当前作品用 ⌘R 或工具栏；画框标题栏按钮可用默认浏览器打开对应页面。
 - 右上角菜单选择跟随系统、浅色或深色，或恢复默认布局。
 
@@ -71,7 +71,7 @@ SwiftPM 构建和模块缓存默认写到系统临时目录。`UI_ATLAS_SWIFT_SC
 pnpm test:native
 pnpm check
 pnpm build:native
-codesign --verify --deep --strict dist/界面图鉴.app
+codesign --verify --deep --strict dist/ui-atlas.app
 ```
 
 Swift 测试覆盖目录校验、URL 解析、鼠标锚点缩放、拖动坐标、适应全部与布局恢复。Node 集成测试使用真实本机 HTTP 服务验证按需启动与停止、管道关闭清理、SIGTERM、单个作品失败隔离与重试、异常退出以及保留外部占端口程序。

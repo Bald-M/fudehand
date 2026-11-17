@@ -80,11 +80,11 @@ describe('画布控制工具', () => {
     expect(text(result)).toBe('当前作品没有画框：tv')
   })
 
-  it('App 未运行时返回“界面图鉴未运行”', async () => {
+  it('App 未运行时返回“ui-atlas 未运行”', async () => {
     const socketPath = join(tmpdir(), `uia-missing-${randomUUID().slice(0, 8)}.sock`)
     const result = await callTool('canvas_get_state', {}, { root: '/unused', socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('界面图鉴未运行')
+    expect(text(result)).toBe('ui-atlas 未运行')
   })
 
   it('frame_snapshot 以 MCP image 内容返回截图', async () => {

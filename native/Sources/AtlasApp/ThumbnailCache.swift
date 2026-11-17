@@ -8,7 +8,7 @@ struct ThumbnailCache {
 
     static var defaultBase: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("界面图鉴", isDirectory: true).appendingPathComponent("thumbnails", isDirectory: true)
+            .appendingPathComponent("ui-atlas", isDirectory: true).appendingPathComponent("thumbnails", isDirectory: true)
     }
 
     /// 以工作区路径的哈希区分目录，不同检出的同名作品互不覆盖。

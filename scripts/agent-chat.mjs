@@ -6,7 +6,7 @@ import { callTool, tools } from './atlas-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 
 /**
- * App 内对话面板的 Agent harness。由界面图鉴按需启动，经 stdin/stdout 交换 JSON 行：
+ * App 内对话面板的 Agent harness。由 ui-atlas 按需启动，经 stdin/stdout 交换 JSON 行：
  *   输入：{type:'user',text} | {type:'stop'} | {type:'clear'}
  *   输出：{type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
  *        | {type:'error',message} | {type:'done',stopped}
@@ -20,7 +20,7 @@ const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
 const maximumRounds = 8
 
 const system = [
-  '你是界面图鉴（UI Atlas）内置的助手，帮助使用者整理作品与画框、操作画布。',
+  '你是 ui-atlas 内置的助手，帮助使用者整理作品与画框、操作画布。',
   '作品与画框保存在 catalog.json，用 list_projects、get_project 等工具读取，用 add_frame、update_frame、remove_frame、set_project_enabled 修改。',
   '修改 catalog.json 后，App 需要重启预览才会显示变更，可以调用 canvas_restart_preview。',
   '画布工具（canvas_*、frame_*）直接操作正在运行的 App；修改作品后可用 frame_console 查看报错、frame_read 读取页面、frame_interact 验证交互。',
