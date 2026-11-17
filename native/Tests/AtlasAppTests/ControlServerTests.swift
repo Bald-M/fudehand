@@ -154,3 +154,43 @@ private func leaveStaleSocket(_ path: String) {
     let responses = try await exchange(path, [#"{"id":1,"command":"get_state"}"#])
     #expect(responses.first?["error"] as? String == "Too many connections; try again later")
 }
+
+/// A `create_node` request line of exactly `length` bytes, padded with base64 image data.
+private func imageRequest(id: Int, length: Int) -> String {
+    let head = #"{"id":\#(id),"command":"create_node","args":{"node":{"type":"image","image":{"data":""#
+    let tail = #""}}}}"#
+    return head + String(repeating: "A", count: length - head.utf8.count - tail.utf8.count) + tail
+}
+
+@Test func controlServerAcceptsARequestCarryingATenMegabyteImage() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { command in
+        guard case .createNode(_, _, let node) = command else { return [:] }
+        return ["bytes": ((node.value["image"] as? [String: Any])?["data"] as? String)?.utf8.count ?? 0]
+    }
+    try server.start()
+    defer { server.stop() }
+    // 10 MB of image data is about 13.4 MB of base64; a request exactly at the limit must still pass.
+    #expect(ControlServer.maximumLine >= 14 << 20)
+    let responses = try await exchange(path, [imageRequest(id: 7, length: ControlServer.maximumLine)])
+    #expect(responses.first?["id"] as? Int == 7)
+    #expect(responses.first?["ok"] as? Bool == true)
+    #expect(((responses.first?["result"] as? [String: Any])?["bytes"] as? Int ?? 0) > 13 << 20)
+}
+
+@Test func controlServerRejectsAnOversizedRequestWithItsIDAndKeepsServing() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { _ in ["handled": true] }
+    try server.start()
+    defer { server.stop() }
+    let responses = try await exchange(path, [
+        imageRequest(id: 8, length: ControlServer.maximumLine + 1),
+        #"{"id":9,"command":"get_state"}"#,
+    ])
+    #expect(responses.count == 2)
+    #expect(responses[0]["id"] as? Int == 8)
+    #expect(responses[0]["ok"] as? Bool == false)
+    #expect(responses[0]["error"] as? String == "Request is too large: a request, including images embedded as base64, is limited to 32 MB (about 24 MB of image files)")
+    #expect(responses[1]["id"] as? Int == 9)
+    #expect(responses[1]["ok"] as? Bool == true)
+}

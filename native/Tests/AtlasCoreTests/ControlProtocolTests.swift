@@ -91,3 +91,12 @@ private func object(_ data: Data) throws -> [String: Any] {
     let anonymous = try object(ControlProtocol.failure(id: nil, message: "Request is not valid JSON"))
     #expect(anonymous["id"] is NSNull)
 }
+
+@Test func controlProtocolReadsTheLeadingIDOfATruncatedRequest() {
+    func leadingID(_ text: String) -> ControlID? { ControlProtocol.leadingID(Data(text.utf8)) }
+    #expect(leadingID(#"{"id":12,"command":"create_node","args":{"node":{"image":{"data":"AAAA"#) == .int(12))
+    #expect(leadingID(#" { "id" : "a\"b" , "command":"create_"#) == .string("a\"b"))
+    #expect(leadingID(#"{"command":"create_node","id":3,"args":{"#) == nil)
+    #expect(leadingID(#"{"id":1"#) == nil)
+    #expect(leadingID("oops") == nil)
+}

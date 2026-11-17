@@ -24,7 +24,9 @@ final class ControlServer: @unchecked Sendable {
     private let handler: Handler
     private let queue = DispatchQueue(label: "ui-atlas.control")
     private var source: DispatchSourceRead?
-    private static let maximumLine = 1 << 20
+    /// Longest accepted request line. An image travels as base64 inside the request, so this allows about 24 MB of image files.
+    static let maximumLine = 32 << 20
+    static let tooLargeMessage = "Request is too large: a request, including images embedded as base64, is limited to \(maximumLine >> 20) MB (about \((maximumLine * 3 / 4) >> 20) MB of image files)"
     /// 每个连接占用一个阻塞线程，因此限制并发连接数，并在空闲 60 秒后断开。
     static let maximumConnections = 8
     private let lock = NSLock()
@@ -130,22 +132,40 @@ final class ControlServer: @unchecked Sendable {
             lock.unlock()
             close(client)
         }
-        var pending = Data()
-        var chunk = [UInt8](repeating: 0, count: 16384)
+        var line = Data()
+        // Once a line passes the limit its bytes are dropped up to the newline, then the request is refused.
+        var oversized = false
+        var oversizedID: ControlID?
+        var chunk = [UInt8](repeating: 0, count: 65536)
         while true {
             let count = read(client, &chunk, chunk.count)
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { return }
-            pending.append(contentsOf: chunk[0..<count])
-            while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
-                let line = pending[pending.startIndex..<newline]
-                pending = Data(pending[pending.index(after: newline)...])
-                if line.allSatisfy({ $0 == UInt8(ascii: " ") || $0 == UInt8(ascii: "\r") }) { continue }
-                guard Self.write(respond(to: Data(line)), to: client) else { return }
-            }
-            if pending.count > Self.maximumLine {
-                _ = Self.write(ControlProtocol.failure(id: nil, message: "Request is too long"), to: client)
-                return
+            // Only the newly read bytes are searched for a newline, and each byte is copied into `line` once.
+            var start = 0
+            while start < count {
+                let newline = chunk[start..<count].firstIndex(of: UInt8(ascii: "\n"))
+                if !oversized {
+                    line.append(contentsOf: chunk[start..<(newline ?? count)])
+                    if line.count > Self.maximumLine {
+                        oversized = true
+                        oversizedID = ControlProtocol.leadingID(line.prefix(256))
+                        line = Data()
+                    }
+                }
+                guard let newline else { break }
+                start = newline + 1
+                let response: Data?
+                if oversized {
+                    response = ControlProtocol.failure(id: oversizedID, message: Self.tooLargeMessage)
+                    oversized = false
+                } else if line.allSatisfy({ $0 == UInt8(ascii: " ") || $0 == UInt8(ascii: "\r") }) {
+                    response = nil
+                } else {
+                    response = respond(to: line)
+                }
+                line = Data()
+                if let response, !Self.write(response, to: client) { return }
             }
         }
     }

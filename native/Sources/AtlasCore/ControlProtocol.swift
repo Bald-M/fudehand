@@ -80,6 +80,17 @@ public enum ControlProtocol {
         line(["id": id?.json ?? NSNull(), "ok": false, "error": message])
     }
 
+    /// The id of a request whose line was cut short, readable only when `id` is the first key (as the Node client writes it).
+    public static func leadingID(_ head: Data) -> ControlID? {
+        let text = String(decoding: head, as: UTF8.self)
+        let pattern = #"^\s*\{\s*"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")\s*,"#
+        guard let range = text.range(of: pattern, options: .regularExpression),
+              let literal = text[range].range(of: #"(-?\d+|"(?:[^"\\]|\\.)*")\s*,$"#, options: .regularExpression),
+              let value = try? JSONSerialization.jsonObject(with: Data(text[literal].dropLast().utf8), options: .fragmentsAllowed)
+        else { return nil }
+        return (value as? String).map(ControlID.string) ?? integer(value).map(ControlID.int)
+    }
+
     private struct Message: Error { let text: String }
 
     private static func command(_ object: [String: Any]) throws -> ControlCommand {
