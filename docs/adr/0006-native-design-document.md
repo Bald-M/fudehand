@@ -1,18 +1,18 @@
-# 画布改为原生设计文档
+# Canvas Switches to a Native Design Document
 
-2026-11-17（#46）。ui-atlas 从展示网页作品改为原生设计工具：画布上是 ui-atlas 自己的设计文档（图层树），由 App 用 Core Animation 直接渲染；人和 Agent 编辑同一份文档，Agent 经控制通道发送编辑命令，App 是文档的唯一持有者。设计稿保存为带版本号的公开 JSON 工程文件（`.uiatlas`）。
+2026-11-17 (#46). ui-atlas changes from displaying web projects to a native design tool: the canvas shows ui-atlas's own design document (a tree of layers), rendered directly by the App with Core Animation; people and agents edit the same document, agents send edit commands through the control channel, and the App is the document's single owner. Designs are saved as versioned, public JSON project files (`.uiatlas`).
 
-随之移除网页作品链路：`WKWebView` 画框、Node 预览启动器与案例服务、`catalog.json` 及其 Swift/Node 两份校验、`examples/` 中的网页作品。ADR 0004（案例服务按需启动）与 0005（作品只在 App 画框中打开）失效，只作历史记录保留。ADR 0003 的结构保留：MCP server 与对话面板 harness 仍共用 `scripts/atlas-tools.mjs`，但工具改为转发设计命令；文档字段的校验只在 Swift 一处。
+The web-project pipeline is removed along with it: `WKWebView` frames, the Node preview launcher and example servers, `catalog.json` and its two validators (Swift and Node), and the web projects in `examples/`. ADR 0004 (start example servers on demand) and 0005 (web projects open only in App frames) no longer apply and are kept only as historical records. The structure of ADR 0003 is kept: the MCP server and the chat panel harness still share `scripts/atlas-tools.mjs`, but the tools now forward design commands; document fields are validated in only one place, in Swift.
 
-## 否决的方案
+## Rejected Alternatives
 
-- **继续用网页作品，Agent 改源码**：每个作品要有前端工程和常驻 Node/Vite/WebKit 进程，Agent 每次修改都经过编译与热更新，无法做到图层级的选择和属性编辑。
-- **Node 端持有文档，App 只渲染**：文档会有两个持有者，人工编辑与 Agent 编辑需要同步与冲突处理。
-- **Core Graphics 整体重绘或 SwiftUI 画布**：前者在 100 个以上图层时无法保证平移、缩放流畅；后者与现有 AppKit 画布的输入与视口实现割裂。
-- **读写 Figma 格式**：本期非目标；自定义 JSON 便于 Agent 直接理解与版本管理。
+- **Keep the web projects and have agents edit source code**: every web project would need a front-end project and resident Node/Vite/WebKit processes, every agent edit would go through compilation and hot updates, and layer-level selection and property editing would be impossible.
+- **The Node side owns the document, and the App only renders**: the document would have two owners, and human and agent edits would need synchronization and conflict resolution.
+- **Full redraws with Core Graphics, or a SwiftUI canvas**: the former cannot keep panning and zooming smooth with more than 100 layers; the latter would be disconnected from the existing AppKit canvas's input and viewport implementation.
+- **Read and write the Figma format**: a non-goal for this phase; a custom JSON format is easier for agents to understand directly and for version control.
 
-## 影响
+## Consequences
 
-- App 启动不再启动任何 Node 进程；对话面板发送消息时才启动 harness，仍依赖本检出目录与 Node（`workspace.json`）。
-- 之前基于网页作品的 Issue（#18、#20、#23、#36）需要重新评估。
-- 渲染能力受 Core Animation 约束：本期不支持旋转、渐变、阴影、矢量路径。
+- App startup no longer starts any Node process; the harness starts only when the chat panel sends a message, and still depends on this checkout and Node (`workspace.json`).
+- Earlier Issues based on web projects (#18, #20, #23, #36) need to be re-evaluated.
+- Rendering capabilities are constrained by Core Animation: rotation, gradients, shadows, and vector paths are not supported in this phase.

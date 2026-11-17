@@ -1,23 +1,23 @@
-# 全项目中文化
+# Full-Project Chinese Localization
 
-> 历史任务记录：其中的“工作台”“退出桥”和消息协议指已移除的浏览器兼容版，见 [ADR 0002](adr/0002-remove-browser-shell.md)。
+> Historical task record: it describes the localization of the browser-compatible version, and the "workbench", "exit bridge", and message protocol it mentions were removed with that version; see [ADR 0002](adr/0002-remove-browser-shell.md). The current convention is different: project documentation is written in English, while the App UI is currently Chinese only.
 
-## 目标与验收范围
+## Goal and Acceptance Scope
 
-将 ui-atlas 工作台、留白三端案例、灵感原野案例及项目自有说明统一为自然的简体中文。覆盖主页面、装饰插画中的文字、空态、动态按钮、弹窗、表单验证、无障碍标签、页面标题和语言属性，也覆盖说明文档、代码注释、测试描述及自有启动提示。
+Make the ui-atlas workbench, the Liubai (留白) three-platform example, the Inspiration Field (灵感原野) example, and the project's own documentation consistently natural Simplified Chinese. This covers main pages, text in decorative illustrations, empty states, dynamic buttons, dialogs, form validation, accessibility labels, page titles, and language attributes, as well as documentation, code comments, test descriptions, and the project's own startup messages.
 
-显示名称统一为“ui-atlas”“留白”“灵感原野”。技术专名（如 Vue、React、CSS）、真实快捷键名称、版本和单位按通用写法保留。
+Display names are uniformly "ui-atlas", "留白", and "灵感原野". Technical proper nouns (such as Vue, React, CSS), real shortcut key names, versions, and units keep their usual spelling.
 
-代码标识符、类型、样式类名、目录、包名、导入路径、命令、配置键、内部分类值、存储键和消息协议保持兼容。分类内部值与中文展示标签分离，避免翻译破坏筛选和新增行为。不修改依赖、第三方命令输出或 Git 历史，也不引入国际化运行依赖。
+Code identifiers, types, style class names, directories, package names, import paths, commands, configuration keys, internal category values, storage keys, and the message protocol stay compatible. Internal category values are separated from the Chinese display labels so that translation does not break filtering or adding items. Dependencies, third-party command output, and Git history are not modified, and no internationalization runtime dependency is introduced.
 
-## 必查场景
+## Required Scenarios
 
-- 工作台与作品索引显示中文名称，原有作品 ID、布局和视角仍可恢复。
-- 留白的移动、网页、桌面画框，以及专注前后、新建任务弹窗均显示中文。
-- 灵感原野的全部分类、搜索空态、收藏前后、作品详情、新增验证和关于弹窗均显示中文。
-- 中文分类能够正确筛选，新建作品仍保存到所选分类；快捷键与退出桥继续工作。
-- 检查桌面与窄屏宽度、明暗主题、标题换行与溢出。
-- 扫描项目源码和文档残留英文自然语言，逐项区分需翻译内容与保留的技术标识。
-- 运行现有类型检查、测试和构建，并对最终修改完成规范、需求两项本地审查。
+- The workbench and the web-project index show Chinese names, and existing web-project IDs, layouts, and viewpoints can still be restored.
+- Liubai's mobile, web, and desktop frames, before and after focus mode, and the new-task dialog all show Chinese.
+- All of Inspiration Field's categories, the empty search state, before and after favoriting, the web-project details, new-item validation, and the About dialog all show Chinese.
+- Chinese categories filter correctly, and new web projects are still saved to the chosen category; shortcuts and the exit bridge keep working.
+- Check desktop and narrow widths, light and dark themes, and title wrapping and overflow.
+- Scan the project source and documentation for leftover natural-language English, distinguishing case by case between content to translate and technical identifiers to keep.
+- Run the existing type checks, tests, and builds, and complete the two local reviews, Standards and Spec, on the final changes.
 
-本次仍仅本地交付，不创建远程仓库或执行部署。
+This task is still delivered locally only; no remote repository is created and no deployment is performed.

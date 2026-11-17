@@ -1,25 +1,25 @@
-# 作品只在 App 画框中打开
+# Web Projects Open Only in App Frames
 
-> 已被 [ADR 0006](0006-native-design-document.md) 取代：网页作品链路已移除，本文只作历史记录。
+> Superseded by [ADR 0006](0006-native-design-document.md): the web-project pipeline has been removed, and this document is kept only as a historical record.
 
-2026-11-17。ui-atlas 的定位是作品只在 App 的画框里查看（#36）。此前画框标题栏有“在浏览器打开”按钮，跨域链接、`window.open` 与 `target=_blank` 会交给默认浏览器，且任何浏览器都能直接访问 `127.0.0.1` 上的预览端口。
+2026-11-17. ui-atlas is positioned so that web projects are viewed only in the App's frames (#36). Previously the frame title bar had an Open in Browser (在浏览器打开) button, cross-origin links, `window.open`, and `target=_blank` were handed to the default browser, and any browser could access the preview ports on `127.0.0.1` directly.
 
-现在画框不再调起浏览器：标题栏按钮删除，主框架离开作品本机服务的导航和新窗口请求一律忽略。预览端口用**预览令牌**把关：
+Frames no longer launch a browser: the title bar button is removed, and main-frame navigations and new-window requests that leave the web project's local server are ignored. The preview ports are guarded by a **preview token**:
 
-- App（`PreviewSession`）每次启动启动器生成 32 字节随机令牌，经环境变量 `UI_ATLAS_PREVIEW_TOKEN` 交给 `native-preview.mjs`；启动器按需拉起的每个案例进程都继承它，就绪检查带上同一 Cookie。
-- 启动启动器的同时，App 把令牌写入默认 `WKWebsiteDataStore` 的会话 Cookie `ui_atlas_preview`（`127.0.0.1`、`localhost`、`::1` 各一条；Cookie 不区分端口）。写入完成前，即使案例服务已就绪，作品也仍显示为启动中，所以画框创建时 Cookie 总已就位。
-- 案例的 `vite.config.ts` 使用 `scripts/preview-gate.mjs` 的 `previewGate()` 插件，在 Vite 自身中间件之前拒绝没有该 Cookie 的 HTTP 请求（403）。页面、子资源和 HMR 客户端都由画框带 Cookie 请求，热更新不受影响。
+- The App (`PreviewSession`) generates a 32-byte random token each time it starts the launcher and passes it to `native-preview.mjs` through the environment variable `UI_ATLAS_PREVIEW_TOKEN`; every example process the launcher starts on demand inherits it, and readiness checks carry the same cookie.
+- While starting the launcher, the App writes the token into the session cookie `ui_atlas_preview` of the default `WKWebsiteDataStore` (one each for `127.0.0.1`, `localhost`, and `::1`; cookies are not port-specific). Until the write completes, a web project still shows as starting even if its example server is ready, so the cookie is always in place when the frame is created.
+- Each example's `vite.config.ts` uses the `previewGate()` plugin from `scripts/preview-gate.mjs`, which rejects HTTP requests without that cookie (403) ahead of Vite's own middleware. The page, subresources, and the HMR client are all requested by the frame with the cookie, so hot updates are unaffected.
 
-## 否决的方案
+## Rejected Alternatives
 
-- **自定义 URL scheme 或去掉 HTTP 开发服务**：要重写资源加载与热更新，超出范围（Issue 非目标）。
-- **令牌放在画框 URL 的查询参数里，由服务端写 Cookie**：令牌会出现在页面地址与 Agent 返回的状态里，且同源导航需要额外处理；直接写 WKWebView 的 Cookie 更简单。
-- **由启动器生成令牌再经 stdout 交给 App**：需要扩展启动器的 stdout 协议；App 本来就启动启动器，自己生成后经环境变量下传更直接。
+- **A custom URL scheme, or dropping the HTTP dev server**: would require rewriting resource loading and hot updates, which is out of scope (an Issue non-goal).
+- **Put the token in a query parameter of the frame URL and have the server set the cookie**: the token would appear in the page address and in the state returned to the agent, and same-origin navigation would need extra handling; writing the WKWebView cookie directly is simpler.
+- **Have the launcher generate the token and pass it to the App over stdout**: would require extending the launcher's stdout protocol; the App already starts the launcher, so generating the token itself and passing it down through an environment variable is more direct.
 
-## 影响
+## Consequences
 
-- 这是“浏览器无法顺手打开”，不是安全边界：本机其他程序仍可读取进程环境或抓取回环流量，不在防护范围内。
-- 不经 App、单独运行案例的 `pnpm dev` 时没有令牌，插件不拦截，便于调试单个案例。
-- 非 Vite 案例需自行实现同样的 Cookie 校验，否则仍可被浏览器直接访问。
-- 内置案例都使用 `127.0.0.1`（已在真实 App 中验证）；`localhost` 与 `::1` 的 Cookie 一并写入，但 `::1` 尚未在 WebKit 中实测。
-- MCP 的 `get_preview_urls` 只返回地址供参考；查看渲染结果用 `frame_snapshot`。
+- This makes the preview "not casually openable in a browser"; it is not a security boundary: other programs on the machine can still read the process environment or capture loopback traffic, which is outside the scope of protection.
+- When running an example's `pnpm dev` on its own, without the App, there is no token and the plugin does not block, which makes debugging a single example easier.
+- Non-Vite examples must implement the same cookie check themselves, or they can still be accessed directly from a browser.
+- The built-in examples all use `127.0.0.1` (verified in the real App); cookies for `localhost` and `::1` are written as well, but `::1` has not yet been tested in WebKit.
+- MCP's `get_preview_urls` returns addresses for reference only; use `frame_snapshot` to see the rendered result.

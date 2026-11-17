@@ -1,25 +1,25 @@
-# macOS 原生界面图鉴
+# macOS Native UI Atlas
 
 Status: complete
 
-用户于 2026-11-06 确认：macOS 桌面 App，SwiftUI 原生画布外壳，WebKit 内嵌现有网页案例；保留中文界面。
+Confirmed by the user on 2026-11-06: a macOS desktop App, a SwiftUI native canvas shell, WebKit embedding the existing web examples; keep the Chinese UI.
 
-- 保留作品搜索、切换、介绍与出处，支持停用作品、空目录与错误状态。
-- 保留画框原始 CSS 视口尺寸、标题拖动、键盘移动、背景与滚轮平移、鼠标锚点缩放、触控板捏合、100%、适应全部、画框聚焦。
-- 保留单画框交互模式、固定退出操作、尊重网页弹窗的 Escape、重载与外部打开。
-- 保留系统/浅/深主题，按项目保存位置、缩放与视角；恢复默认布局；损坏或版本不匹配数据回退。
-- 同一 catalog.json 驱动原生和网页入口；App 自行管理案例服务，只启动案例，退出或异常时清理自己拥有的进程，不结束外部占端口程序。
-- 交付可双击的本地 .app 和可复现构建/启动命令；允许选择项目目录，失败时提供可读信息与重试。
-- 已确认自动测试边界：目录配置、画布几何、布局恢复和服务入口/进程生命周期；真实 UI 验收加载、空、失败、明暗主题和不同窗口宽度。
-- 保留原有未提交中文本地化改动；无远端，不创建远端、不发布。
+- Keep web project search, switching, descriptions, and attribution; support disabled web projects, empty directories, and error states.
+- Keep frames at their original CSS viewport size, title dragging, keyboard moves, background and scroll-wheel panning, mouse-anchored zoom, trackpad pinch, 100%, Fit All (适应全部), and frame focus.
+- Keep single-frame interaction mode, a fixed exit control, Escape that respects web page dialogs, reload, and opening externally.
+- Keep the system/light/dark themes, and save position, zoom, and viewport per project; restore the default layout; fall back on corrupted or version-mismatched data.
+- The same catalog.json drives both the native and web entry points; the App manages the example servers itself, starts only the examples, and on quit or failure cleans up the processes it owns, without killing external programs holding the port.
+- Deliver a double-clickable local .app and reproducible build/launch commands; allow choosing the project directory, with readable messages and retry on failure.
+- Confirmed automated test boundaries: directory configuration, canvas geometry, layout restore, and the server entry point / process lifecycle; real UI acceptance covers loading, empty, failure, light and dark themes, and different window widths.
+- Keep the existing uncommitted Chinese localization changes; no remote, so do not create a remote or publish.
 
-## 计划与验收
+## Plan and Acceptance
 
-1. 移植可测试核心，通过逐个 red-green 测试验证配置、几何和存储。
-2. 实现原生画布与 WebKit，保留网页响应式断点和交互。
-3. 集成案例进程所有权、SwiftUI 工作台及 .app 构建，运行原生与现有检查。
-4. Standards 与 Spec 独立审查，修复有效发现，形成仅本任务的本地提交。
+1. Port the testable core, verifying configuration, geometry, and storage through red-green tests one by one.
+2. Implement the native canvas and WebKit, keeping the web pages' responsive breakpoints and interactions.
+3. Integrate example process ownership, the SwiftUI workbench, and the .app build; run the native and existing checks.
+4. Independent Standards and Spec reviews; fix valid findings and make a local commit containing only this task.
 
-## 交付记录
+## Delivery Record
 
-已完成原生 App、打包与服务所有权管理。24 项网页测试和 7 项 Swift 测试通过；Release 构建与签名验证通过。真实 UI 验收及限制见 `docs/native-verification.md`。Standards 与 Spec 最终均 PASS；原有中文化修改保持未提交，无远端发布步骤。
+The native App, packaging, and server ownership management are done. 24 web tests and 7 Swift tests pass; the Release build and signature verification pass. Real UI acceptance and limitations are in `docs/native-verification.md`. Standards and Spec both ended with PASS; the existing Chinese localization changes remain uncommitted, and there is no remote publishing step.
