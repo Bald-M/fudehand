@@ -1,16 +1,16 @@
-## 自动开发与交付
+## Automatic development and delivery
 
-项目修改遵循 `/Users/zhangzihan/.codex/skills/automatic-dev-delivery/SKILL.md`。远端为 GitHub `Bald-M/ui-atlas`（默认分支 `main`），未配置 CI 与部署，以本地检查为准；在任务分支开发，推送后向 `main` 发起 PR。
+Project changes follow `/Users/zhangzihan/.codex/skills/automatic-dev-delivery/SKILL.md`. The remote is GitHub `Bald-M/ui-atlas` (default branch `main`). No CI or deployment is configured, so local checks are the gate; develop on a task branch, push, and open a PR against `main`.
 
 ## Agent skills
 
 ### Issue tracker
 
-任务直接用 `gh issue` 在 GitHub Issues（`Bald-M/ui-atlas`）创建和跟踪，不在本地维护任务记录。
+Create and track tasks directly in GitHub Issues (`Bald-M/ui-atlas`) with `gh issue`; do not keep task records locally.
 
 ### ui-atlas MCP
 
-本仓库提供 `ui-atlas` MCP server（`scripts/mcp-server.mjs`），在 App 运行时读取和编辑设计文档、操作视口并截图。Codex 在 `~/.codex/config.toml` 中配置：
+This repository provides the `ui-atlas` MCP server (`scripts/mcp-server.mjs`), which reads and edits the design document, controls the viewport, and takes screenshots while the App is running. Configure it for Codex in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.ui-atlas]
@@ -18,8 +18,8 @@ command = "node"
 args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 ```
 
-Codex 默认每次调用 MCP 工具前请求批准；无人值守运行时可在该段加 `default_tools_approval_mode = "approve"`。工具说明见 [README.zh-CN.md](README.zh-CN.md) 的“AI Agent 接入”（英文版见 [README.md](README.md) 的“AI agent integration”），设计见 `docs/adr/0003-agent-mcp.md`。
+By default Codex asks for approval before each MCP tool call; for unattended runs, add `default_tools_approval_mode = "approve"` to that section. See "AI agent integration" in [README.md](README.md) for the tools (Chinese version: [README.zh-CN.md](README.zh-CN.md)), and `docs/adr/0003-agent-mcp.md` for the design.
 
 ### Domain docs
 
-使用根目录 `GLOSSARY.md` 和 `docs/adr/`，见 `docs/agents/domain.md`。
+Use the root `GLOSSARY.md` and `docs/adr/`; see `docs/agents/domain.md`.
