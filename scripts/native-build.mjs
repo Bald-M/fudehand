@@ -19,7 +19,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   // Local build metadata: the chat panel starts the source workspace's Agent harness with this Node.
   await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
   await runCommand('codesign', ['--force', '--deep', '--sign', '-', app])
-  console.log(`原生 App 已构建：${app}`)
+  console.log(`Native app built: ${app}`)
   return app
 }
 

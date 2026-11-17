@@ -18,6 +18,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - `CHANGELOG.md` is now written in English, and future entries must be in English; `GLOSSARY.md` lists an English name for each term (#78).
 - `README.md` is now in English and is the repository's default README; the Chinese version moved to `README.zh-CN.md`, and both link to each other at the top (#72).
 - `CLAUDE.md` is now in English and states the project language convention: docs, code comments, test descriptions, MCP tool descriptions, and error messages in English; App UI copy stays Chinese for now (#79).
+- Build script output (`pnpm build:native`, `pnpm test:native`), the non-macOS error, and the control channel startup log are now in English; the `.uiatlas` file kind shown in Finder is now `ui-atlas Project` (#84).
 
 ## [0.0.1] - 2026-11-17
 

@@ -34,7 +34,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
             return try await store.handleControl(command)
         }
         do { try server.start(); control = server }
-        catch { FileHandle.standardError.write(Data("[ui-atlas] 控制通道未启动：\(error.localizedDescription)\n".utf8)) }
+        catch { FileHandle.standardError.write(Data("[ui-atlas] Control channel not started: \(error.localizedDescription)\n".utf8)) }
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
