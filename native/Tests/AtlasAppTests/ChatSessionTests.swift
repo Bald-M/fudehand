@@ -129,3 +129,24 @@ private let repository = URL(fileURLWithPath: #filePath)
     let missing = await ChatSession.listModels(root: repository, runtime: nil, settings: settings, apiKey: nil)
     #expect(missing == .failure(ModelListError(message: "No API key configured")))
 }
+
+@Test @MainActor func chatSettingsChangeDuringAReplyEndsTheReply() async throws {
+    let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
+    session.send("你好", root: repository, runtime: nil)
+    #expect(session.transcript.busy)
+    session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
+    #expect(!session.transcript.busy)
+    #expect(session.transcript.entries.map(\.text) == ["你好", "Reply stopped", "Model settings changed; new replies do not include the earlier context."])
+
+    // The panel is usable again: a new message reaches a fresh harness, and the transcript can be cleared.
+    session.send("再试一次", root: repository, runtime: nil)
+    #expect(session.transcript.busy)
+    session.keyUpdated(provider: "openai", saved: false)
+    #expect(!session.transcript.busy)
+    session.send("第三次", root: repository, runtime: nil)
+    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
+    #expect(session.transcript.entries.last?.text == "No API key configured")
+    session.clear()
+    #expect(session.transcript.entries.isEmpty)
+    await session.shutdown()
+}

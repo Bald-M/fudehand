@@ -181,6 +181,8 @@ final class ChatSession: ObservableObject {
     private func restart() {
         guard process != nil else { return }
         terminate()
+        // terminate() discards the old harness's `done` and exit callbacks, so end the running reply here.
+        transcript.stop()
         transcript.note(L("Model settings changed; new replies do not include the earlier context."))
     }
 
