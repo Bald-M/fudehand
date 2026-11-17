@@ -10,7 +10,7 @@ The App UI comes in US English (the default), British English, Simplified Chines
 
 ![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/readme-main-light.jpg)
 
-The current version is v0.0.1; see the [CHANGELOG](CHANGELOG.md) for changes.
+The current version is v0.0.2; see the [CHANGELOG](CHANGELOG.md) for changes.
 
 ## Install and build
 

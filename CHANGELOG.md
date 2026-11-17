@@ -10,6 +10,12 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-11-17
+
+### Summary
+
+The App now comes in four UI languages and starts in US English, and has a macOS app icon. Project docs, code comments, MCP tool descriptions, and error messages moved to English. This release also fixes several agent, chat panel, and project file defects found after v0.0.1.
+
 ### Added
 
 - UI languages: the App now comes in US English, British English, Simplified Chinese, and Traditional Chinese, chosen in the app menu's *Language* submenu. The choice applies immediately, is remembered across launches, and does not follow the system language; system-provided menu items (About, Quit, Edit, Window) switch at the next launch (#89).
@@ -35,6 +41,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 - Changing the model settings or deleting the saved API key while a reply is in progress no longer leaves the chat panel stuck on "Replying…"; the running reply is ended as stopped, and you can send, clear, and stop again (#55).
 - Agents can insert images of up to about 24 MB through `design_create_node` / `design_update_node`: the control channel's request limit rose from 1 MB to 32 MB (about 760 KB of image before). A request over the limit now gets an error that says it is too large and carries the request id, and the connection stays usable (#53).
+- A project file can always be reopened after editing: moving or laying out a layer to an extreme position used to save coordinates or sizes that failed validation on open. Layer x/y are now clamped to ±1,000,000 and width/height to 0–1,000,000 after every edit; a layer past the limit stops at the limit (#56).
+- `~` and `~/…` in agent tool paths (`design_open_document`, `design_save_document`, and a layer's `image.path`) now expand to the user's home directory instead of resolving under the ui-atlas repository directory (#58).
+- Chat panel with OpenAI: the default model is now `gpt-5.3-codex` (the previous default, `gpt-5-codex`, returned 404), and function tools are sent with `strict: false` (#61).
+- Chat panel with Anthropic: the output limit rose from 4,096 to 16,000 tokens so larger design tasks are no longer cut off, thinking blocks are passed back during tool use, and a refused or paused reply now shows an error instead of ending silently (#61).
 
 ## [0.0.1] - 2026-11-17
 
@@ -84,5 +94,6 @@ The first release of ui-atlas: a native macOS AI design tool that runs locally. 
 - After the rename, the app bundle is `dist/ui-atlas.app`, the control channel lives at `~/Library/Application Support/ui-atlas/control.sock`, and the Keychain service name is `ui-atlas.agent`. A chat panel API key saved in the Keychain before the rename must be entered again (#45).
 - See the [README](README.md) for Codex approval settings for MCP tool calls (#33); see [ADR 0003](docs/adr/0003-agent-mcp.md) for the design of MCP, the control channel, and the chat panel (#27).
 
-[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Bald-M/ui-atlas/releases/tag/v0.0.1
