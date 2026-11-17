@@ -74,6 +74,11 @@ public enum CanvasGeometry {
         precise ? delta : Point(x: delta.x * wheelLineHeight, y: delta.y * wheelLineHeight)
     }
 
+    /// ⌘ / ⌃ + wheel: a positive vertical delta zooms in, a negative one zooms out.
+    public static func wheelZoomScale(_ scale: Double, deltaY: Double) -> Double {
+        scale * exp(deltaY * 0.01)
+    }
+
     public static func screenToWorld(_ point: Point, viewport: Viewport) -> Point {
         Point(x: (point.x - viewport.x) / viewport.scale, y: (point.y - viewport.y) / viewport.scale)
     }
