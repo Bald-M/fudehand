@@ -92,3 +92,22 @@ import Testing
     #expect(await failure(.click(selector: "#blank"), in: frame) == "不能点击在新窗口打开的链接：http://127.0.0.1:9/b")
     #expect(await failure(.fill(selector: "#box", value: "x"), in: frame) == "元素不能填写：#box")
 }
+
+/// SVG 链接、图像热区和页面脚本代为点击的外站链接，都不能借 Agent 交互打开系统浏览器。
+@Test @MainActor func agentClicksNeverOpenExternalSites() async throws {
+    let frame = try await loadedFrame("""
+    <svg width=100 height=40><a id=svg href="https://example.com/s"><text y=20>外</text></a></svg>
+    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" usemap="#m" width=40 height=40>
+    <map name=m><area id=area shape=rect coords="0,0,40,40" href="https://example.com/a"></map>
+    <a id=hidden href="https://example.com/h" style="display:none">隐藏</a>
+    <button id=relay onclick="document.getElementById('hidden').click()">转发</button>
+    """)
+    defer { frame.dispose() }
+    var opened: [URL] = []
+    frame.openInBrowser = { opened.append($0) }
+    #expect(await failure(.click(selector: "#svg"), in: frame) == "不能点击指向其他站点的链接：https://example.com/s")
+    #expect(await failure(.click(selector: "#area"), in: frame) == "不能点击指向其他站点的链接：https://example.com/a")
+    _ = try await frame.interact(.click(selector: "#relay"))
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(opened.isEmpty)
+}

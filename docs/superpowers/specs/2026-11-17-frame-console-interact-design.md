@@ -17,8 +17,8 @@ Agent 经 MCP 修改作品源码后，需要确认改动生效、没有运行时
 ## 做法
 
 - **控制台记录**：`PreviewFrameView` 在页面世界注入脚本（document start、仅主框架），包装 `console.log/info/warn/error/debug`，监听 `error` 与 `unhandledrejection`，经 `atlasConsole` 消息通道发回原生。原生侧只接受主框架、预览同源的消息，按画框存入 `FrameConsole`（AtlasCore，环形，最多 200 条，单条最多 2000 字）。记录在原生侧，因此页面重载后仍保留；每次加载完成追加一条 `atlas` 来源的“页面已加载”记录作为分界。
-- **读取与交互**：在独立的 `WKContentWorld`（页面脚本改不到我们的函数）里 `callAsyncJavaScript`，10 秒超时。读取输出缩进大纲，最多 20000 字并标记截断。交互：点击依次派发 pointer/mouse 事件再 `click()`；填值用原生 setter 再派发 `input`、`change`（兼容 React 受控组件）；滚动可滚到元素或按 `deltaX/deltaY` 滚动页面。
-- **边界**：不新增导航能力。点击目标位于指向非预览源的链接内时拒绝；页面脚本触发的跨源导航仍由现有导航策略取消。
+- **读取与交互**：在独立的 `WKContentWorld`（页面脚本改不到我们的函数）里 `callAsyncJavaScript`，10 秒超时。读取输出缩进大纲，最多 20000 字并标记截断。交互：点击依次派发 pointer/mouse 事件再 `click()`；填值在隔离世界直接设置 value（不经页面对属性的改写）再派发 `input`、`change`（兼容 React 受控组件）；滚动可滚到元素或按 `deltaX/deltaY` 滚动页面。
+- **边界**：不新增导航能力。点击目标位于指向非预览源的链接（含 SVG `<a>`、`<area>`）内时拒绝；交互进行中及结束后 1 秒内，页面脚本代为触发的外站链接与新窗口不打开系统浏览器。
 - **错误**：App 未运行沿用“界面图鉴未运行”；画框未加载返回“画框尚未加载：<id>”；选择器无效或找不到元素返回中文错误。
 
 ## 考虑过的方案

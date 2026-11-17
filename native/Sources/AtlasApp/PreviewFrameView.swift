@@ -21,6 +21,11 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     private(set) var console = FrameConsole()
     /// 读取和交互脚本在独立的脚本世界执行，页面自己的脚本改不到它们。
     private static let agentWorld = WKContentWorld.world(name: "界面图鉴")
+    /// Agent 交互进行中及结束后片刻，页面脚本代为触发的外站导航一律取消，不打开系统浏览器。
+    private var agentInteractionUntil = Date.distantPast
+    private var agentInteracting: Bool { Date() < agentInteractionUntil }
+    /// 打开系统浏览器；测试可替换。
+    var openInBrowser: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// True once the page has loaded; only a ready frame can become the active frame that receives web input.
     /// Set only by navigation callbacks; settable internally so tests can simulate a loaded page.
     var isReady = false {
@@ -193,6 +198,8 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
             arguments["action"] = "scroll"; arguments["selector"] = selector ?? NSNull()
             arguments["deltaX"] = deltaX; arguments["deltaY"] = deltaY
         }
+        agentInteractionUntil = .distantFuture
+        defer { agentInteractionUntil = Date().addingTimeInterval(1) }
         let result = try await runAgentScript(FramePageScripts.interact, arguments: arguments)
         if let message = result["error"] as? String { throw ControlCommandError(message) }
         return result
@@ -208,7 +215,10 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
                 continuation.resume(with: result)
             }
             webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: Self.agentWorld) { result in
-                finish(result.map { $0 as Any? }.mapError { ControlCommandError("页面脚本执行失败：\($0.localizedDescription)") })
+                finish(result.map { $0 as Any? }.mapError { error in
+                    let detail = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription
+                    return ControlCommandError("页面脚本执行失败：\(detail)")
+                })
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { finish(.failure(ControlCommandError("页面没有响应"))) }
         }
@@ -219,7 +229,7 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     @objc private func openExternal() {
         guard let previewURL else { return }
         let current = webView.url.flatMap { isPreviewOrigin($0) ? $0 : nil } ?? previewURL
-        NSWorkspace.shared.open(current)
+        openInBrowser(current)
     }
 
     func reload() {
@@ -287,8 +297,8 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if navigationAction.targetFrame?.isMainFrame == false { decisionHandler(.allow); return }
         if isPreviewOrigin(url) { decisionHandler(.allow); return }
-        if navigationAction.navigationType == .linkActivated, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            NSWorkspace.shared.open(url)
+        if navigationAction.navigationType == .linkActivated, !agentInteracting, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            openInBrowser(url)
         }
         decisionHandler(.cancel)
     }
@@ -303,8 +313,8 @@ final class PreviewFrameView: NSView, WKNavigationDelegate, WKUIDelegate, WKScri
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            NSWorkspace.shared.open(url)
+        if !agentInteracting, let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            openInBrowser(url)
         }
         return nil
     }

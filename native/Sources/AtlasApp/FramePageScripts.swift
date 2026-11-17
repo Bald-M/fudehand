@@ -10,7 +10,7 @@ enum FramePageScripts {
         return String(value);
       };
       const post = (level, source, parts) => {
-        try { window.webkit.messageHandlers.atlasConsole.postMessage({ level, source, message: parts.map(format).join(' ') }); } catch {}
+        try { window.webkit.messageHandlers.atlasConsole.postMessage({ level, source, message: parts.map(format).join(' ').slice(0, 2001) }); } catch {}
       };
       for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
         const original = console[level];
@@ -113,11 +113,11 @@ enum FramePageScripts {
       let target = null;
       if (action === 'click') {
         target = find();
-        const link = target.closest('a[href]');
+        const link = target.closest('a[href], area[href]');
         if (link) {
-          const url = new URL(link.href, location.href);
+          const url = new URL(link.getAttribute('href'), document.baseURI);
           if (url.origin !== location.origin) throw `不能点击指向其他站点的链接：${url.href}`;
-          if (link.target && link.target !== '_self') throw `不能点击在新窗口打开的链接：${url.href}`;
+          if (link.getAttribute('target') && link.getAttribute('target') !== '_self') throw `不能点击在新窗口打开的链接：${url.href}`;
         }
         target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
         const rect = target.getBoundingClientRect();
