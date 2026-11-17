@@ -144,6 +144,8 @@ args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 
 也可以执行 `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`。MCP server 默认使用脚本所在的仓库目录，需要指向其他检出目录时追加 `--root <目录>`。
 
+Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人值守模式下会直接拒绝调用。需要免批准时，在上面的配置中加一行 `default_tools_approval_mode = "approve"`（写工具会直接修改 `catalog.json`，按需开启）。
+
 ### App 内对话面板
 
 点击工具栏的“对话”按钮（⌘⇧A）打开对话面板，可以直接让 AI 列出作品、增删画框或聚焦画框；每次工具调用和结果都显示在面板中，可展开查看详情。回复过程中可以停止，停止后不再执行后续工具调用。
