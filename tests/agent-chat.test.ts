@@ -124,6 +124,9 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
     expect(third[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })
+    const system = third[0].content
+    expect(system).not.toMatch(/[一-鿿]/)
+    expect(system).toMatch(/same language as the user/)
   })
 
   it('hands the App error to the model when an edit is rejected, sending only that one command', async () => {

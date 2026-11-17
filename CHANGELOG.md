@@ -17,6 +17,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Changed
 
+- MCP tool descriptions, parameter descriptions, and the layer field guide are now in English; tool names and parameter schemas are unchanged. The chat panel's system prompt is now in English, and the agent replies in the language of the user's latest message instead of always in Simplified Chinese (#82).
 - The docs under `docs/` (including the ADRs, design specs, and plans), the template README, and the committed drafts in `.scratch/` are now in English; `docs/localization.md` is marked as a historical record (#81).
 - Error messages returned to agents and shown in the App are now in English: control channel argument errors, layer field validation, project file loading, editing commands (undo, save, missing layers), snapshots, the Node control client, and model API errors in the chat panel (#83).
 - `AGENTS.md` and `GLOSSARY.md` are now in English; each glossary term leads with its English name and keeps the App's Chinese label in parentheses, and serves as the shared translation for the other English docs (#80).
