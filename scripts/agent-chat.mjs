@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
 import { callTool, tools } from './atlas-tools.mjs'
-import { createProvider } from './agent-providers.mjs'
+import { createProvider, listModels } from './agent-providers.mjs'
 
 /**
  * App 内对话面板的 Agent harness。由界面图鉴按需启动，经 stdin/stdout 交换 JSON 行：
@@ -11,9 +11,10 @@ import { createProvider } from './agent-providers.mjs'
  *   输出：{type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
  *        | {type:'error',message} | {type:'done',stopped}
  * 提供方、模型、baseUrl 与 API key 只经环境变量传入；stdin 关闭时退出。
+ * 带 --list-models 时只输出一行 {type:'models',models,default} 或 {type:'error',message} 后退出。
  */
 
-const { values } = parseArgs({ options: { root: { type: 'string' } } })
+const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
 const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
 const maximumRounds = 8
@@ -33,6 +34,19 @@ function redact(text) {
 
 function emit(event) {
   process.stdout.write(JSON.stringify(event, (_key, value) => typeof value === 'string' ? redact(value) : value) + '\n')
+}
+
+if (values['list-models']) {
+  try {
+    if (!apiKey) throw new Error('尚未配置 API key')
+    const settings = { provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }
+    emit({ type: 'models', ...await listModels(settings, AbortSignal.timeout(15000)) })
+  } catch (error) {
+    emit({ type: 'error', message: error?.name === 'TimeoutError' ? '获取模型列表超时' : String(error?.message ?? error) })
+  }
+  // macOS 上管道写入是异步的，等输出写完再退出，避免模型很多时被截断。
+  await new Promise(resolve => process.stdout.write('', resolve))
+  process.exit(0)
 }
 
 let provider = null

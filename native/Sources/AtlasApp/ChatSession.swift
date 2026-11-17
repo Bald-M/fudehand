@@ -12,6 +12,24 @@ struct ChatSettings: Equatable {
     var baseUrl: String
 
     var providerTitle: String { Self.providers.first { $0.id == provider }?.title ?? provider }
+
+    /// 只保留首尾各 4 位，用于在界面上辨认 key；过短的 key 全部遮蔽。
+    static func maskedKey(_ key: String) -> String {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "" }
+        guard trimmed.count >= 12 else { return "••••••••" }
+        return "\(trimmed.prefix(4))••••••••\(trimmed.suffix(4))"
+    }
+}
+
+/// 提供方模型列表接口返回的模型 ID，以及模型留空时 harness 使用的默认模型。
+struct ModelListing: Equatable {
+    var models: [String]
+    var defaultModel: String
+}
+
+struct ModelListError: Error, Equatable {
+    let message: String
 }
 
 /// 管理 App 内的 Agent harness（scripts/agent-chat.mjs）子进程：按需启动，经 stdin/stdout 交换 JSON 行。
@@ -62,15 +80,27 @@ final class ChatSession: ObservableObject {
 
     func savedKey(for provider: String) -> Bool { defaults.bool(forKey: "agent.\(provider).hasKey") }
 
+    /// 已保存 key 的遮蔽形式；完整 key 只在钥匙串。
+    func keyHint(for provider: String) -> String? { defaults.string(forKey: "agent.\(provider).keyHint") }
+
+    /// 读取钥匙串中保存的 key（可能触发授权提示），并为旧版本保存、没有遮蔽提示的 key 补上提示。
+    func savedKeyValue(for provider: String) -> String? {
+        guard savedKey(for: provider), let key = readKey(provider) else { return nil }
+        if keyHint(for: provider) == nil { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
+        return key
+    }
+
     /// 钥匙串中某个提供方的 key 保存或删除后调用；只有当前提供方的变化才需要重启对话程序。
-    func keyUpdated(provider: String, saved: Bool) {
+    func keyUpdated(provider: String, saved: Bool, key: String? = nil) {
         defaults.set(saved, forKey: "agent.\(provider).hasKey")
+        if !saved { defaults.removeObject(forKey: "agent.\(provider).keyHint") }
+        else if let key { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
         guard provider == settings.provider else { return }
         hasKey = saved
         restart()
     }
 
-    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String]) -> Launch {
+    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String], listModels: Bool = false) -> Launch {
         var environment = inherited.filter { !$0.key.hasPrefix("UI_ATLAS_") || $0.key == "UI_ATLAS_CONTROL_SOCKET" }
         environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"].compactMap { $0 }.joined(separator: ":")
         environment["UI_ATLAS_PROVIDER"] = settings.provider
@@ -78,10 +108,49 @@ final class ChatSession: ObservableObject {
         if !settings.baseUrl.isEmpty { environment["UI_ATLAS_BASE_URL"] = settings.baseUrl }
         if let apiKey, !apiKey.isEmpty { environment["UI_ATLAS_API_KEY"] = apiKey }
         let script = root.appendingPathComponent("scripts/agent-chat.mjs").path
+        let arguments = [script, "--root", root.path] + (listModels ? ["--list-models"] : [])
         if let node = runtime?.node {
-            return Launch(executable: URL(fileURLWithPath: node), arguments: [script, "--root", root.path], environment: environment)
+            return Launch(executable: URL(fileURLWithPath: node), arguments: arguments, environment: environment)
         }
-        return Launch(executable: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script, "--root", root.path], environment: environment)
+        return Launch(executable: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node"] + arguments, environment: environment)
+    }
+
+    /// 用 harness 的 --list-models 模式读取提供方的模型列表；key 同样只经环境变量传入。
+    nonisolated static func listModels(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?) async -> Result<ModelListing, ModelListError> {
+        let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: apiKey,
+                                 environment: ProcessInfo.processInfo.environment, listModels: true)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let child = Process()
+                child.executableURL = launch.executable
+                child.arguments = launch.arguments
+                child.environment = launch.environment
+                child.currentDirectoryURL = root
+                let output = Pipe()
+                child.standardOutput = output
+                child.standardError = FileHandle.nullDevice
+                child.standardInput = FileHandle.nullDevice
+                do { try child.run() } catch {
+                    continuation.resume(returning: .failure(ModelListError(message: "无法启动对话程序：\(error.localizedDescription)")))
+                    return
+                }
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                child.waitUntilExit()
+                continuation.resume(returning: parseModelListing(data))
+            }
+        }
+    }
+
+    nonisolated static func parseModelListing(_ data: Data) -> Result<ModelListing, ModelListError> {
+        let line = data.split(separator: UInt8(ascii: "\n")).first.map { Data($0) } ?? Data()
+        let event = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
+        if event?["type"] as? String == "models", let models = event?["models"] as? [String] {
+            return .success(ModelListing(models: models, defaultModel: event?["default"] as? String ?? ""))
+        }
+        if event?["type"] as? String == "error", let message = event?["message"] as? String {
+            return .failure(ModelListError(message: message))
+        }
+        return .failure(ModelListError(message: "对话程序没有返回模型列表，请确认已在项目目录执行 pnpm install。"))
     }
 
     func send(_ text: String, root: URL?, runtime: WorkspaceLocation?) {

@@ -22,7 +22,7 @@ struct WorkspaceView: View {
                 .navigationSubtitle("本地界面学习画布")
         }
         .inspector(isPresented: $store.showingChat) {
-            ChatPanel(chat: store.chat) { store.chat.send($0, root: store.root, runtime: store.runtime) }
+            ChatPanel(chat: store.chat, root: store.root, runtime: store.runtime) { store.chat.send($0, root: store.root, runtime: store.runtime) }
                 .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
         }
         .toolbar { toolbar }
