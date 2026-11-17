@@ -41,8 +41,7 @@ public struct ChatTranscript: Equatable, Sendable {
         case "error":
             append(.error, event["message"] as? String ?? L("Unknown error"))
         case "done":
-            busy = false
-            if event["stopped"] as? Bool == true { append(.notice, L("Reply stopped")) }
+            if event["stopped"] as? Bool == true { stop() } else { busy = false }
         default:
             return
         }
@@ -52,6 +51,13 @@ public struct ChatTranscript: Equatable, Sendable {
     public mutating func fail(_ message: String) {
         append(.error, message)
         busy = false
+    }
+
+    /// Ends the running reply as stopped; also used when the harness is terminated before it can report `done`.
+    public mutating func stop() {
+        guard busy else { return }
+        busy = false
+        append(.notice, L("Reply stopped"))
     }
 
     /// 不打断回复状态的提示，例如切换了模型设置。

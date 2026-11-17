@@ -31,6 +31,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Fixed
 
+- Changing the model settings or deleting the saved API key while a reply is in progress no longer leaves the chat panel stuck on "Replying…"; the running reply is ended as stopped, and you can send, clear, and stop again (#55).
 - Agents can insert images of up to about 24 MB through `design_create_node` / `design_update_node`: the control channel's request limit rose from 1 MB to 32 MB (about 760 KB of image before). A request over the limit now gets an error that says it is too large and carries the request id, and the connection stays usable (#53).
 
 ## [0.0.1] - 2026-11-17
