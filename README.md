@@ -1,16 +1,20 @@
 # ui-atlas
 
-一个放在本机的原生 AI 设计工具。画布上是由图层组成的设计文档，交互参照 Figma；你和 AI Agent 编辑同一份文档，每次修改都立即显示在画布上，设计稿保存为 ui-atlas 自己的工程文件（`.uiatlas`）。
+English | [简体中文](README.zh-CN.md)
 
-App 是 **SwiftUI + AppKit 原生 macOS App**，画布用 Core Animation 直接渲染图层，不依赖网页服务。Node 只用于 MCP server 和 App 内对话面板的 Agent harness。
+A native AI design tool that runs on your own Mac. The canvas shows a design document made of layers, with Figma-style interaction; you and AI agents edit the same document, every change shows up on the canvas immediately, and designs are saved as ui-atlas's own project files (`.uiatlas`).
 
-![ui-atlas 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
+The App is a **native SwiftUI + AppKit macOS App**. The canvas renders layers directly with Core Animation and does not depend on a web server. Node is used only for the MCP server and the Agent harness behind the in-app chat panel.
 
-当前版本 v0.0.1，变更记录见 [CHANGELOG](CHANGELOG.md)。
+The App UI is currently Chinese-only. In this README, menus, panels, and buttons are described in English with the label shown in the App in parentheses the first time they appear, e.g. *Layers panel (图层)*. Terms follow the English names in [GLOSSARY.md](GLOSSARY.md).
 
-## 安装与构建
+![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/readme-main-light.jpg)
 
-需要 macOS 14+、Swift 6+（Xcode Command Line Tools 即可，不需要完整 Xcode）、Node.js **22.12+** 和 pnpm **11.7.0**。App 只从源码在本机构建，没有预编译安装包。
+The current version is v0.0.1; see the [CHANGELOG](CHANGELOG.md) for changes.
+
+## Install and build
+
+Requires macOS 14+, Swift 6+ (the Xcode Command Line Tools are enough; full Xcode is not needed), Node.js **22.12+**, and pnpm **11.7.0**. The App is only built from source on your own machine; there is no prebuilt installer.
 
 ```bash
 pnpm install
@@ -18,21 +22,21 @@ pnpm build:native        # Release 构建并 ad-hoc 签名，产出 dist/ui-atla
 open dist/ui-atlas.app
 ```
 
-开发时用 `pnpm dev` 以 Debug 构建并打开 App。`dist/ui-atlas.app` 可以拖进“应用程序”文件夹使用，但对话面板和 MCP 连接器依赖构建时的源码目录，请保留本检出目录。
+During development, use `pnpm dev` to build a Debug build and open the App. You can drag `dist/ui-atlas.app` into the Applications folder, but the chat panel and the MCP connector depend on the source directory used at build time, so keep this checkout.
 
-## 开始使用
+## Getting started
 
-App 启动时先显示启动窗口：新建设计文档（⌘N）、打开工程文件（⌘O）、从“最近打开”继续上次的文件，或从 App 自带模板开始。进入编辑后，用工具栏的画框（F）、矩形（R）、椭圆（O）、文字（T）工具在画布上创建图层，在左侧图层面板和右侧属性面板中编辑，或让 Agent 搭建界面。
+When the App starts it first shows the launch window (启动窗口): create a new design document (New, 新建, ⌘N), open a project file (Open, 打开, ⌘O), continue a file from Recent (最近打开), or start from one of the App's built-in templates (模板). Once you are editing, use the toolbar's Frame (画框, F), Rectangle (矩形, R), Ellipse (椭圆, O), and Text (文字, T) tools to create layers on the canvas, edit them in the layers panel (图层) on the left and the properties panel (the Design (设计) tab of the inspector) on the right, or let an agent build the UI.
 
-画布操作、面板、文件与快捷键见 [macOS 使用说明](docs/macos.md)。
+For canvas operations, panels, files, and keyboard shortcuts, see the [macOS guide (macOS 使用说明)](docs/macos.md).
 
-## `.uiatlas` 工程文件
+## `.uiatlas` project files
 
-设计稿用文件菜单的保存（⌘S）、另存为（⇧⌘S）存为 `.uiatlas` 工程文件，打开（⌘O）或“打开最近”重新打开。App 导出了 `.uiatlas` 文件类型，Finder 双击、拖到 Dock 图标或“打开方式”都会用 ui-atlas 打开；有未保存修改时会先询问是否保存。
+Use Save (保存, ⌘S) and Save As (另存为…, ⇧⌘S) in the File menu (文件) to save a design as a `.uiatlas` project file, and Open (⌘O) or Open Recent (打开最近) to reopen it. The App exports the `.uiatlas` file type, so double-clicking in Finder, dragging onto the Dock icon, or Open With all open the file with ui-atlas; if there are unsaved changes, the App first asks whether to save them.
 
-### 文档格式
+### Document format
 
-设计文档是一棵图层树，支持画框、矩形、椭圆、文字、图片、分组，以及填充、描边、圆角、透明度、显示/隐藏、锁定和画框的自动布局。工程文件是带格式版本号的公开 JSON：
+A design document is a tree of layers. It supports frames, rectangles, ellipses, text, images, and groups, as well as fill, stroke, corner radius, opacity, show/hide, lock, and auto layout on frames. A project file is public JSON with a format version number:
 
 ```json
 {
@@ -50,9 +54,9 @@ App 启动时先显示启动窗口：新建设计文档（⌘N）、打开工程
 }
 ```
 
-坐标相对父图层；数组顺序即层叠顺序，后者在上。保存的是自动布局计算后的几何。完整字段与校验规则见 [设计文档](docs/superpowers/specs/2026-11-17-native-design-document-design.md) 和 [ADR 0006](docs/adr/0006-native-design-document.md)。本期不与 Figma 互通。
+Coordinates are relative to the parent layer; array order is stacking order, with later items on top. What is saved is the geometry after auto layout has been computed. For the full set of fields and validation rules, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md). This release does not interoperate with Figma.
 
-## 目录
+## Directory layout
 
 ```text
 native/                    SwiftUI + AppKit 原生 App 与 Swift 测试
@@ -62,28 +66,34 @@ scripts/                   原生构建与测试、MCP server、Agent harness �
 tests/                     Node 测试（Vitest）
 ```
 
-## AI Agent 接入
+- `native/`: the native SwiftUI + AppKit App and the Swift tests.
+  - `Sources/AtlasCore/`: document model, validation, auto layout, edit history, interaction rules, and the control protocol (no AppKit dependency).
+  - `Sources/AtlasApp/`: canvas rendering, layers and properties panels, chat panel, and control channel.
+- `scripts/`: native build and test, the MCP server, the Agent harness, and shared tools.
+- `tests/`: Node tests (Vitest).
 
-ui-atlas 为 AI Agent 提供一组设计工具（`scripts/atlas-tools.mjs`），MCP server 和 App 内对话面板共用，设计见 [ADR 0003](docs/adr/0003-agent-mcp.md) 与 [ADR 0006](docs/adr/0006-native-design-document.md)。所有工具都转发给正在运行的 App，App 是设计文档的唯一持有者；App 未运行时返回“ui-atlas 未运行”。
+## AI agent integration
 
-- **读取**：`design_get_state`（文件、选择、可否撤销、顶层图层摘要）、`design_get_document`（完整图层树）、`design_get_node`。
-- **编辑**：`design_create_node`（可用 `children` 一次创建整棵子树）、`design_update_node`（部分字段补丁，嵌套对象逐字段合并）、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo`。每次调用是一步撤销，画布立即更新；字段错误返回中文说明且文档不变。图片可以给 `image.path`（本机 PNG/JPEG 路径），由工具读成 base64。
-- **文件**：`design_new_document`、`design_open_document`、`design_save_document`。有未保存修改时新建或打开会被拒绝，除非传 `discard: true`。
-- **视口与核对**：`canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`，以及按实际渲染返回 PNG 的 `design_snapshot`。
+ui-atlas provides a set of design tools for AI agents (`scripts/atlas-tools.mjs`), shared by the MCP server and the in-app chat panel; see [ADR 0003](docs/adr/0003-agent-mcp.md) and [ADR 0006](docs/adr/0006-native-design-document.md) for the design. Every tool is forwarded to the running App, which is the sole owner of the design document; when the App is not running, tools return "ui-atlas 未运行" (ui-atlas is not running).
 
-工具经 App 的**控制通道**通信：`~/Library/Application Support/ui-atlas/control.sock`（可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖），只对当前用户开放，不监听网络地址。
+- **Read**: `design_get_state` (file, selection, whether undo is available, and a summary of top-level layers), `design_get_document` (the full layer tree), `design_get_node`.
+- **Edit**: `design_create_node` (use `children` to create a whole subtree at once), `design_update_node` (partial field patch; nested objects are merged field by field), `design_delete_nodes`, `design_move_node`, `design_select`, `design_undo`, `design_redo`. Each call is one undo step and the canvas updates immediately; field errors return an explanation in Chinese and leave the document unchanged. For images you can pass `image.path` (a local PNG/JPEG path), which the tool reads into base64.
+- **File**: `design_new_document`, `design_open_document`, `design_save_document`. When there are unsaved changes, creating or opening a document is rejected unless you pass `discard: true`.
+- **Viewport and checking**: `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom`, and `design_snapshot`, which returns a PNG of the actual rendering.
 
-### MCP 连接器
+The tools communicate through the App's **control channel**: `~/Library/Application Support/ui-atlas/control.sock` (override with `UI_ATLAS_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
 
-App 的应用菜单“ui-atlas → MCP 连接器…”列出 Claude Code 和 Codex 的连接状态：未连接时点“连接”，App 会调用对应 CLI 把本检出目录的 MCP server 注册到该 Agent 的用户级配置（`claude mcp add --scope user` / `codex mcp add`）；已连接时点“断开连接”移除注册。本机没装对应 CLI 时显示“不可用”。连接后在新开的 Agent 会话中生效，下面的手动方式仍然可用。
+### MCP connector
+
+The App menu item *ui-atlas → MCP Connector… (MCP 连接器…)* lists the connection status of Claude Code and Codex. When one is not connected, click Connect (连接) and the App calls the matching CLI to register this checkout's MCP server in that agent's user-level configuration (`claude mcp add --scope user` / `codex mcp add`); when it is connected, click Disconnect (断开连接) to remove the registration. If the matching CLI is not installed on this Mac, it is shown as unavailable. Once connected, the server takes effect in newly opened agent sessions; the manual setup below still works.
 
 ### Claude Code
 
-仓库根目录的 `.mcp.json` 已注册 `ui-atlas`。在仓库根目录启动 `claude`，首次会询问是否启用项目 MCP server，同意后即可在 `/mcp` 中看到它。
+The `.mcp.json` at the repository root already registers `ui-atlas`. Start `claude` from the repository root; the first time, it asks whether to enable the project MCP server, and after you agree you can see it in `/mcp`.
 
 ### Codex
 
-在 `~/.codex/config.toml` 中加入（路径换成本检出目录的绝对路径）：
+Add the following to `~/.codex/config.toml` (replace the path with the absolute path of this checkout):
 
 ```toml
 [mcp_servers.ui-atlas]
@@ -91,31 +101,31 @@ command = "node"
 args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 ```
 
-也可以执行 `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`。MCP server 默认使用脚本所在的仓库目录，需要指向其他检出目录时追加 `--root <目录>`。
+You can also run `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`. By default the MCP server uses the repository directory that contains the script; append `--root <directory>` to point it at another checkout.
 
-Codex 默认在每次调用 MCP 工具前请求批准；`codex exec` 等无人值守模式下会直接拒绝调用。需要免批准时，在上面的配置中加一行 `default_tools_approval_mode = "approve"`（写工具会直接修改设计文档，按需开启）。
+By default Codex asks for approval before every MCP tool call; in unattended modes such as `codex exec` the call is rejected outright. To skip approval, add the line `default_tools_approval_mode = "approve"` to the configuration above (write tools modify the design document directly, so enable it only when you need it).
 
-### App 内对话面板
+### In-app chat panel
 
-在右侧检查器切换到“对话”页（⇧⌘A），可以直接让 AI 搭建或修改界面；每次工具调用和结果都显示在面板中，可展开查看详情。回复过程中可以停止，停止后不再执行后续工具调用。
+Switch the inspector on the right to the Chat (对话) tab (⇧⌘A) to have AI build or modify the UI directly; every tool call and its result is shown in the panel and can be expanded for details. You can stop a reply while it is in progress, and no further tool calls run after stopping.
 
-在面板的“模型设置”中选择模型提供方并填写 API key：
+In the panel's Model Settings (模型设置), choose a model provider (模型提供方) and enter an API key:
 
-| 模型提供方 | 接口 | 默认接口地址 | 默认模型 |
+| Model provider | API | Default API URL | Default model |
 | --- | --- | --- | --- |
-| DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-chat` |
+| DeepSeek | OpenAI-compatible | `https://api.deepseek.com` | `deepseek-chat` |
 | Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5-codex` |
 
-“模型”和“接口地址”留空时使用上表默认值；OpenAI 的 Codex 系列模型只支持 Responses API；其他兼容 OpenAI Chat Completions 的服务可以选 DeepSeek 并填写自己的接口地址和模型名。API key 只保存在本机钥匙串（服务名 `ui-atlas.agent`），由 App 在启动对话程序（Agent harness，`scripts/agent-chat.mjs`）时经环境变量传入，不写入仓库、工程文件、偏好设置或日志。
+When Model (模型) and API URL (接口地址) are left empty, the defaults in the table above are used. OpenAI's Codex models support only the Responses API; for other services compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name. The API key is stored only in the local Keychain (service name `ui-atlas.agent`) and is passed by the App through an environment variable when it starts the chat program (the Agent harness, `scripts/agent-chat.mjs`); it is never written to the repository, project files, preferences, or logs.
 
-## 验证
+## Verification
 
 ```bash
 pnpm test:native   # Swift 测试：AtlasCoreTests 与 AtlasAppTests
 pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
 ```
 
-Node 测试会启动子进程和本机 socket，需要回环网络；禁止监听本机端口的沙箱会让它们误报失败。
+`pnpm test:native` runs the Swift tests (AtlasCoreTests and AtlasAppTests); `pnpm check` runs Vitest (MCP tools, the MCP server, and the chat harness). The Node tests start child processes and local sockets, so they need loopback networking; a sandbox that forbids listening on local ports makes them fail spuriously.
 
-源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)，以 Apache-2.0 许可发布。App 仅在本机构建和运行，不配置 CI、云同步或生产部署。
+The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas) and released under the Apache-2.0 license. The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.

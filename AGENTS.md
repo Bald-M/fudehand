@@ -18,7 +18,7 @@ command = "node"
 args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 ```
 
-Codex 默认每次调用 MCP 工具前请求批准；无人值守运行时可在该段加 `default_tools_approval_mode = "approve"`。工具说明见 README 的“AI Agent 接入”，设计见 `docs/adr/0003-agent-mcp.md`。
+Codex 默认每次调用 MCP 工具前请求批准；无人值守运行时可在该段加 `default_tools_approval_mode = "approve"`。工具说明见 [README.zh-CN.md](README.zh-CN.md) 的“AI Agent 接入”（英文版见 [README.md](README.md) 的“AI agent integration”），设计见 `docs/adr/0003-agent-mcp.md`。
 
 ### Domain docs
 
