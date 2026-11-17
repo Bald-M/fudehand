@@ -1,117 +1,116 @@
-# ui-atlas
+<p align="center">
+  <img src="native/Resources/AppIcon/AppIcon-1024.png" width="128" alt="ui-atlas app icon">
+</p>
 
-English | [简体中文](README.zh-CN.md)
+<h1 align="center">ui-atlas</h1>
 
-A native AI design tool that runs on your own Mac. The canvas shows a design document made of layers, with Figma-style interaction; you and AI agents edit the same document, every change shows up on the canvas immediately, and designs are saved as ui-atlas's own project files (`.uiatlas`).
+<p align="center">
+  A native macOS design tool where you and AI agents edit the same canvas.
+</p>
 
-The App is a **native SwiftUI + AppKit macOS App**. The canvas renders layers directly with Core Animation and does not depend on a web server. Node is used only for the MCP server and the Agent harness behind the in-app chat panel.
+<p align="center">
+  English | <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-The App UI comes in US English (the default), British English, Simplified Chinese, and Traditional Chinese; switch in the app menu's *Language* submenu. This README describes menus, panels, and buttons in English, with the Simplified Chinese label in parentheses the first time they appear, e.g. *Layers panel (图层)*. Terms follow the English names in [GLOSSARY.md](GLOSSARY.md).
+![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/localization-en-US-light.jpg)
 
-![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/readme-main-light.jpg)
+ui-atlas runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.uiatlas` project files, which are plain JSON.
 
 The current version is v0.0.2; see the [CHANGELOG](CHANGELOG.md) for changes.
 
-## Install and build
+## Highlights
 
-Requires macOS 14+, Swift 6+ (the Xcode Command Line Tools are enough; full Xcode is not needed), Node.js **22.12+**, and pnpm **11.7.0**. The App is only built from source on your own machine; there is no prebuilt installer.
+- **Native canvas.** A SwiftUI + AppKit app that renders layers directly with Core Animation. There is no web view and no web server.
+- **One document for people and agents.** The App is the sole owner of the design document. Your edits and an agent's edits go through the same editor and share one undo history.
+- **Design tools for agents.** An MCP server lets Claude Code, Codex, or any MCP client read, create, and change layers, then take a snapshot to check the result.
+- **Built-in chat panel.** Ask a model to build or change the UI from inside the App, using DeepSeek, Anthropic Claude, or OpenAI with your own API key.
+- **Open file format.** `.uiatlas` files are versioned JSON that you can read, diff, and keep in Git.
+- **Four UI languages.** US English (the default), British English, Simplified Chinese, and Traditional Chinese.
+
+## Requirements
+
+- macOS 14 or later
+- Swift 6 or later (the Xcode Command Line Tools are enough; full Xcode is not needed)
+- Node.js 22.12 or later
+- pnpm 11.7.0
+
+Node is used only for the MCP server and the Agent harness behind the chat panel. The App has no third-party Swift dependencies.
+
+## Quick start
+
+There is no prebuilt installer; build the App from source on your own Mac.
 
 ```bash
 pnpm install
-pnpm build:native        # Release 构建并 ad-hoc 签名，产出 dist/ui-atlas.app
+pnpm build:native        # release build with ad-hoc signing → dist/ui-atlas.app
 open dist/ui-atlas.app
 ```
 
-During development, use `pnpm dev` to build a Debug build and open the App. You can drag `dist/ui-atlas.app` into the Applications folder, but the chat panel and the MCP connector depend on the source directory used at build time, so keep this checkout.
+You can drag `dist/ui-atlas.app` into the Applications folder. Keep this checkout, though: the chat panel and the MCP connector use the source directory the App was built from.
 
-## Getting started
+## Using the App
 
-When the App starts it first shows the launch window (启动窗口): create a new design document (New, 新建, ⌘N), open a project file (Open, 打开, ⌘O), continue a file from Recent (最近打开), or start from one of the App's built-in templates (模板). Once you are editing, use the toolbar's Frame (画框, F), Rectangle (矩形, R), Ellipse (椭圆, O), and Text (文字, T) tools to create layers on the canvas, edit them in the layers panel (图层) on the left and the properties panel (the Design (设计) tab of the inspector) on the right, or let an agent build the UI.
+The App opens on the launch window, where you can:
 
-For canvas operations, panels, files, and keyboard shortcuts, see the [macOS guide (macOS 使用说明)](docs/macos.md).
+- create a new design document (⌘N),
+- open a project file (⌘O),
+- continue a file from *Recent*, or
+- start from a built-in template.
 
-Before contributing, read the [contributing guide](CONTRIBUTING.md).
+In the editor, use the toolbar tools to create layers on the canvas: Frame (F), Rectangle (R), Ellipse (O), and Text (T). Arrange layers in the layers panel on the left, and edit position, size, fill, stroke, text, and auto layout in the *Design* tab on the right.
 
-## `.uiatlas` project files
+To change the UI language, choose *ui-atlas → Language*. The choice applies immediately and is remembered across launches.
 
-Use Save (保存, ⌘S) and Save As (另存为…, ⇧⌘S) in the File menu (文件) to save a design as a `.uiatlas` project file, and Open (⌘O) or Open Recent (打开最近) to reopen it. The App exports the `.uiatlas` file type, so double-clicking in Finder, dragging onto the Dock icon, or Open With all open the file with ui-atlas; if there are unsaved changes, the App first asks whether to save them.
+The [macOS guide](docs/macos.md) covers canvas interaction, panels, files, and keyboard shortcuts in full.
 
-### Document format
+## Working with AI agents
 
-A design document is a tree of layers. It supports frames, rectangles, ellipses, text, images, and groups, as well as fill, stroke, corner radius, opacity, show/hide, lock, and auto layout on frames. A project file is public JSON with a format version number:
+Agents work through a set of design tools that the MCP server and the in-app chat panel share. Every tool call is forwarded to the running App, so the App must be open; otherwise a tool returns `ui-atlas is not running`.
 
-```json
-{
-  "format": "ui-atlas.design",
-  "version": 1,
-  "nodes": [
-    { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
-      "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
-                  "align": "start", "crossAlign": "stretch" },
-      "children": [
-        { "id": "title", "type": "text", "name": "标题", "x": 16, "y": 16, "width": 358, "height": 30,
-          "text": { "content": "今日计划", "fontSize": 24, "fontWeight": 700, "color": "#111111", "align": "left", "autoResize": "height" } }
-      ] }
-  ]
-}
-```
+### Connect an agent
 
-Coordinates are relative to the parent layer; array order is stacking order, with later items on top. What is saved is the geometry after auto layout has been computed. For the full set of fields and validation rules, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md). This release does not interoperate with Figma.
+The quickest way is *ui-atlas → MCP Connector…*. It shows whether Claude Code and Codex are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`). *Disconnect* removes the registration. An agent whose CLI is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
 
-## Directory layout
+You can also set it up by hand:
 
-```text
-native/                    SwiftUI + AppKit 原生 App 与 Swift 测试
-  Sources/AtlasCore/       文档模型、校验、自动布局、编辑历史、交互规则、控制协议（不依赖 AppKit）
-  Sources/AtlasApp/        画布渲染、图层与属性面板、对话面板、控制通道
-scripts/                   原生构建与测试、MCP server、Agent harness 与共用工具
-tests/                     Node 测试（Vitest）
-```
+- **Claude Code.** The `.mcp.json` at the repository root already registers `ui-atlas`. Start `claude` from the repository root and approve the project MCP server when asked; it then appears in `/mcp`.
+- **Codex.** Run `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`, or add this to `~/.codex/config.toml`, using the absolute path of this checkout:
 
-- `native/`: the native SwiftUI + AppKit App and the Swift tests.
-  - `Sources/AtlasCore/`: document model, validation, auto layout, edit history, interaction rules, and the control protocol (no AppKit dependency).
-  - `Sources/AtlasApp/`: canvas rendering, layers and properties panels, chat panel, and control channel.
-- `scripts/`: native build and test, the MCP server, the Agent harness, and shared tools.
-- `tests/`: Node tests (Vitest).
+  ```toml
+  [mcp_servers.ui-atlas]
+  command = "node"
+  args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+  ```
 
-## AI agent integration
+  Codex asks for approval before every MCP tool call, and rejects the call outright in unattended modes such as `codex exec`. To skip approval, add `default_tools_approval_mode = "approve"` to the block above. Write tools change the design document directly, so enable this only when you need it.
 
-ui-atlas provides a set of design tools for AI agents (`scripts/atlas-tools.mjs`), shared by the MCP server and the in-app chat panel; see [ADR 0003](docs/adr/0003-agent-mcp.md) and [ADR 0006](docs/adr/0006-native-design-document.md) for the design. Every tool is forwarded to the running App, which is the sole owner of the design document; when the App is not running, tools return "ui-atlas 未运行" (ui-atlas is not running).
+The MCP server uses the repository that contains the script. Append `--root <directory>` to point it at another checkout.
 
-- **Read**: `design_get_state` (file, selection, whether undo is available, and a summary of top-level layers), `design_get_document` (the full layer tree), `design_get_node`.
-- **Edit**: `design_create_node` (use `children` to create a whole subtree at once), `design_update_node` (partial field patch; nested objects are merged field by field), `design_delete_nodes`, `design_move_node`, `design_select`, `design_undo`, `design_redo`. Each call is one undo step and the canvas updates immediately; field errors return an explanation in Chinese and leave the document unchanged. For images you can pass `image.path` (a local PNG/JPEG path), which the tool reads into base64. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
-- **File**: `design_new_document`, `design_open_document`, `design_save_document`. When there are unsaved changes, creating or opening a document is rejected unless you pass `discard: true`.
-- **Viewport and checking**: `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom`, and `design_snapshot`, which returns a PNG of the actual rendering.
+### Tools
 
-The tools communicate through the App's **control channel**: `~/Library/Application Support/ui-atlas/control.sock` (override with `UI_ATLAS_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
+| Group | Tools | Notes |
+| --- | --- | --- |
+| Read | `design_get_state`, `design_get_document`, `design_get_node` | The state is an overview: file, selection, undo availability, and top-level layers. |
+| Edit | `design_create_node`, `design_update_node`, `design_delete_nodes`, `design_move_node`, `design_select`, `design_undo`, `design_redo` | Each call is one undo step and updates the canvas immediately. |
+| File | `design_new_document`, `design_open_document`, `design_save_document` | New and open are refused while there are unsaved changes, unless you pass `discard: true`. |
+| Viewport | `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom` | |
+| Check | `design_snapshot` | Returns a PNG of the actual rendering. |
 
-### MCP connector
+A few details worth knowing:
 
-The App menu item *ui-atlas → MCP Connector… (MCP 连接器…)* lists the connection status of Claude Code and Codex. When one is not connected, click Connect (连接) and the App calls the matching CLI to register this checkout's MCP server in that agent's user-level configuration (`claude mcp add --scope user` / `codex mcp add`); when it is connected, click Disconnect (断开连接) to remove the registration. If the matching CLI is not installed on this Mac, it is shown as unavailable. Once connected, the server takes effect in newly opened agent sessions; the manual setup below still works.
+- `design_create_node` can create a whole subtree at once through `children`.
+- `design_update_node` is a partial patch: nested objects are merged field by field.
+- A field error explains what is wrong and leaves the document unchanged.
+- For an image, pass `image.path` (a local PNG or JPEG) and the tool reads the file for you. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
+- In file and image paths, `~` expands to your home directory.
 
-### Claude Code
+The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/ui-atlas/control.sock` (override it with `UI_ATLAS_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
 
-The `.mcp.json` at the repository root already registers `ui-atlas`. Start `claude` from the repository root; the first time, it asks whether to enable the project MCP server, and after you agree you can see it in `/mcp`.
+### Chat panel
 
-### Codex
+Open the *Chat* tab of the inspector (⇧⌘A) to have a model build or change the UI directly. Each tool call and its result is shown in the panel and can be expanded. You can stop a reply while it is in progress; no further tool calls run after that.
 
-Add the following to `~/.codex/config.toml` (replace the path with the absolute path of this checkout):
-
-```toml
-[mcp_servers.ui-atlas]
-command = "node"
-args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
-```
-
-You can also run `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`. By default the MCP server uses the repository directory that contains the script; append `--root <directory>` to point it at another checkout.
-
-By default Codex asks for approval before every MCP tool call; in unattended modes such as `codex exec` the call is rejected outright. To skip approval, add the line `default_tools_approval_mode = "approve"` to the configuration above (write tools modify the design document directly, so enable it only when you need it).
-
-### In-app chat panel
-
-Switch the inspector on the right to the Chat (对话) tab (⇧⌘A) to have AI build or modify the UI directly; every tool call and its result is shown in the panel and can be expanded for details. You can stop a reply while it is in progress, and no further tool calls run after stopping.
-
-In the panel's Model Settings (模型设置), choose a model provider (模型提供方) and enter an API key:
+In *Model Settings*, choose a model provider and enter an API key:
 
 | Model provider | API | Default API URL | Default model |
 | --- | --- | --- | --- |
@@ -119,26 +118,81 @@ In the panel's Model Settings (模型设置), choose a model provider (模型提
 | Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
-When Model (模型) and API URL (接口地址) are left empty, the defaults in the table above are used. OpenAI's Codex models support only the Responses API; for other services compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name. The API key is stored only in the local Keychain (service name `ui-atlas.agent`) and is passed by the App through an environment variable when it starts the chat program (the Agent harness, `scripts/agent-chat.mjs`); it is never written to the repository, project files, preferences, or logs.
+Leave *Model* and *API URL* empty to use the defaults above. For another service that is compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name.
 
-## Verification
+The API key is stored only in your local Keychain (service name `ui-atlas.agent`). The App passes it to the chat program through an environment variable, and never writes it to the repository, project files, preferences, or logs.
 
-```bash
-pnpm test:native   # Swift 测试：AtlasCoreTests 与 AtlasAppTests
-pnpm check   # Vitest：MCP 工具、MCP server 与对话 harness
+## Project files
+
+*File → Save* (⌘S) and *Save As…* (⇧⌘S) write a design to a `.uiatlas` project file; *Open…* (⌘O) and *Open Recent* reopen it. The App registers the `.uiatlas` file type, so double-clicking a file in Finder, dragging it onto the Dock icon, or choosing *Open With* opens it in ui-atlas. If the current document has unsaved changes, the App asks whether to save them first.
+
+A design document is a tree of layers: frames, rectangles, ellipses, text, images, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout. A project file is JSON with a format version number:
+
+```json
+{
+  "format": "ui-atlas.design",
+  "version": 1,
+  "nodes": [
+    { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
+      "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
+                  "align": "start", "crossAlign": "stretch" },
+      "children": [
+        { "id": "title", "type": "text", "name": "Title", "x": 16, "y": 16, "width": 358, "height": 30,
+          "text": { "content": "Today", "fontSize": 24, "fontWeight": 700, "color": "#111111", "align": "left", "autoResize": "height" } }
+      ] }
+  ]
+}
 ```
 
-`pnpm test:native` runs the Swift tests (AtlasCoreTests and AtlasAppTests); `pnpm check` runs Vitest (MCP tools, the MCP server, and the chat harness). The Node tests start child processes and local sockets, so they need loopback networking; a sandbox that forbids listening on local ports makes them fail spuriously.
+Coordinates are relative to the parent layer. Array order is stacking order, with later items on top. The saved geometry is the result after auto layout. For every field and validation rule, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md).
 
-## Releasing
+ui-atlas does not import or export Figma files.
 
-Before a release, unify the version number, then archive the release in the [CHANGELOG](CHANGELOG.md) by hand and update the current version at the top of this README:
+## Development
 
 ```bash
-pnpm version:set 0.0.2   # set the version in package.json and Info.plist; bump the build number (CFBundleVersion) by 1
-pnpm version:check       # check that every location agrees; lists the differences and exits non-zero otherwise
+pnpm dev               # debug build, then open the App
+pnpm build:native      # release build with ad-hoc signing → dist/ui-atlas.app
+pnpm test:native       # Swift tests: AtlasCoreTests and AtlasAppTests
+pnpm check             # Vitest: MCP tools, MCP server, and chat harness
+pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
 ```
 
-The MCP server reads its version from `package.json` at runtime; the App's About window shows the version from `native/Resources/Info.plist`.
+The Node tests start child processes and local sockets, so they need loopback networking. A sandbox that forbids listening on local ports makes them fail spuriously.
 
-The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas) and released under the Apache-2.0 license. The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.
+The repository is laid out like this:
+
+| Path | Contents |
+| --- | --- |
+| `native/Sources/AtlasCore/` | Document model, validation, auto layout, edit history, interaction rules, and the control protocol. No AppKit dependency. |
+| `native/Sources/AtlasApp/` | The SwiftUI shell, canvas rendering, layers and properties panels, chat panel, and control channel. |
+| `native/Tests/` | Swift tests. |
+| `scripts/` | Native build and test scripts, the MCP server, the Agent harness, and the shared design tools. |
+| `tests/` | Node tests (Vitest). |
+| `docs/` | The macOS guide, architecture decision records, and specs. |
+
+Read the [contributing guide](CONTRIBUTING.md) before you open a pull request.
+
+### Releasing
+
+The release steps are in the [contributing guide](CONTRIBUTING.md#releasing). The version number lives in two places, and one command keeps them in step:
+
+```bash
+pnpm version:set X.Y.Z   # set the version in package.json and Info.plist; bump the build number (CFBundleVersion) by 1
+pnpm version:check       # check that every location agrees; otherwise list the differences and exit non-zero
+```
+
+- `package.json` is the version the MCP server reports; it is read at runtime.
+- `native/Resources/Info.plist` is the version shown in the App's About window.
+
+## Documentation
+
+- [macOS guide](docs/macos.md): canvas interaction, panels, files, and shortcuts
+- [GLOSSARY](GLOSSARY.md): the project's terms
+- [ADR 0003](docs/adr/0003-agent-mcp.md): MCP, the control channel, and the chat panel
+- [ADR 0006](docs/adr/0006-native-design-document.md): the native design document
+- [CHANGELOG](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
+
+## License
+
+ui-atlas is released under the [Apache-2.0 license](LICENSE). The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas). The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.

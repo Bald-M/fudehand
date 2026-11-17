@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Changed
+
+- `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
+
 ## [0.0.2] - 2026-11-17
 
 ### Summary

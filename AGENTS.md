@@ -18,7 +18,7 @@ command = "node"
 args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
 ```
 
-By default Codex asks for approval before each MCP tool call; for unattended runs, add `default_tools_approval_mode = "approve"` to that section. See "AI agent integration" in [README.md](README.md) for the tools (Chinese version: [README.zh-CN.md](README.zh-CN.md)), and `docs/adr/0003-agent-mcp.md` for the design.
+By default Codex asks for approval before each MCP tool call; for unattended runs, add `default_tools_approval_mode = "approve"` to that section. See "Working with AI agents" in [README.md](README.md) for the tools (Chinese version: [README.zh-CN.md](README.zh-CN.md)), and `docs/adr/0003-agent-mcp.md` for the design.
 
 ### Domain docs
 
