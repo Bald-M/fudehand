@@ -44,12 +44,12 @@ final class ControlServer: @unchecked Sendable {
         // 只清理崩溃残留的 socket；另一个实例仍在监听时不抢占，也不删除普通文件。
         var status = stat()
         if lstat(path, &status) == 0 {
-            guard status.st_mode & S_IFMT == S_IFSOCK else { throw ControlCommandError("控制通道路径已被其他文件占用：\(path)") }
-            if Self.isLive(&address) { throw ControlCommandError("另一个 ui-atlas 已在监听控制通道") }
+            guard status.st_mode & S_IFMT == S_IFSOCK else { throw ControlCommandError("Control channel path is taken by another file: \(path)") }
+            if Self.isLive(&address) { throw ControlCommandError("Another ui-atlas is already listening on the control channel") }
             unlink(path)
         }
         let listener = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard listener >= 0 else { throw ControlCommandError("无法创建控制通道：\(String(cString: strerror(errno)))") }
+        guard listener >= 0 else { throw ControlCommandError("Could not create the control channel: \(String(cString: strerror(errno)))") }
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
@@ -57,13 +57,13 @@ final class ControlServer: @unchecked Sendable {
             // 绑定失败时文件不属于本进程，不能删除。
             let message = String(cString: strerror(errno))
             close(listener)
-            throw ControlCommandError("无法监听控制通道：\(message)")
+            throw ControlCommandError("Could not listen on the control channel: \(message)")
         }
         guard chmod(path, 0o600) == 0, listen(listener, 8) == 0 else {
             let message = String(cString: strerror(errno))
             close(listener)
             unlink(path)
-            throw ControlCommandError("无法监听控制通道：\(message)")
+            throw ControlCommandError("Could not listen on the control channel: \(message)")
         }
         _ = fcntl(listener, F_SETFL, fcntl(listener, F_GETFL) | O_NONBLOCK)
         let source = DispatchSource.makeReadSource(fileDescriptor: listener, queue: queue)
@@ -111,7 +111,7 @@ final class ControlServer: @unchecked Sendable {
             if accepted { clients.insert(client) }
             lock.unlock()
             guard accepted else {
-                _ = Self.write(ControlProtocol.failure(id: nil, message: "连接过多，请稍后再试"), to: client)
+                _ = Self.write(ControlProtocol.failure(id: nil, message: "Too many connections; try again later"), to: client)
                 close(client)
                 continue
             }
@@ -144,7 +144,7 @@ final class ControlServer: @unchecked Sendable {
                 guard Self.write(respond(to: Data(line)), to: client) else { return }
             }
             if pending.count > Self.maximumLine {
-                _ = Self.write(ControlProtocol.failure(id: nil, message: "请求过长"), to: client)
+                _ = Self.write(ControlProtocol.failure(id: nil, message: "Request is too long"), to: client)
                 return
             }
         }
@@ -159,7 +159,7 @@ final class ControlServer: @unchecked Sendable {
         lock.lock()
         let isStopped = stopped
         lock.unlock()
-        if isStopped { return ControlProtocol.failure(id: request.id, message: "ui-atlas 正在退出") }
+        if isStopped { return ControlProtocol.failure(id: request.id, message: "ui-atlas is quitting") }
         let box = ResponseBox()
         let done = DispatchSemaphore(value: 0)
         let handler = handler
@@ -190,7 +190,7 @@ final class ControlServer: @unchecked Sendable {
         address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(path.utf8)
         let capacity = MemoryLayout.size(ofValue: address.sun_path)
-        guard bytes.count < capacity else { throw ControlCommandError("控制通道路径过长：\(path)") }
+        guard bytes.count < capacity else { throw ControlCommandError("Control channel path is too long: \(path)") }
         withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
         return address
     }

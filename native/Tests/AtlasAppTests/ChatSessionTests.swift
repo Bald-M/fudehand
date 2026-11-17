@@ -33,7 +33,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.busy)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     #expect(!session.transcript.busy)
-    #expect(session.transcript.entries.last?.text == "尚未配置 API key")
+    #expect(session.transcript.entries.last?.text == "No API key configured")
     await session.shutdown()
 }
 
@@ -116,8 +116,8 @@ private let repository = URL(fileURLWithPath: #filePath)
 @Test func modelListingIsParsedFromTheHarnessOutput() {
     #expect(ChatSession.parseModelListing(Data(#"{"type":"models","models":["a","b"],"default":"a"}"#.utf8) + Data("\n".utf8))
             == .success(ModelListing(models: ["a", "b"], defaultModel: "a")))
-    #expect(ChatSession.parseModelListing(Data(#"{"type":"error","message":"API key 无效或无权限"}"#.utf8))
-            == .failure(ModelListError(message: "API key 无效或无权限")))
+    #expect(ChatSession.parseModelListing(Data(#"{"type":"error","message":"Invalid API key or insufficient permissions"}"#.utf8))
+            == .failure(ModelListError(message: "Invalid API key or insufficient permissions")))
     #expect(ChatSession.parseModelListing(Data()) == .failure(ModelListError(message: "The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
 }
 
@@ -127,5 +127,5 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(launch.arguments.last == "--list-models")
     #expect(!launch.arguments.joined().contains("sk-secret"))
     let missing = await ChatSession.listModels(root: repository, runtime: nil, settings: settings, apiKey: nil)
-    #expect(missing == .failure(ModelListError(message: "尚未配置 API key")))
+    #expect(missing == .failure(ModelListError(message: "No API key configured")))
 }

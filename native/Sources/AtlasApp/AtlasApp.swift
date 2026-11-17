@@ -30,7 +30,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
     func startControl(_ store: AtlasStore) {
         guard control == nil else { return }
         let server = ControlServer { [weak store] command in
-            guard let store else { throw ControlCommandError("ui-atlas 正在退出") }
+            guard let store else { throw ControlCommandError("ui-atlas is quitting") }
             return try await store.handleControl(command)
         }
         do { try server.start(); control = server }

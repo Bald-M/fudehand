@@ -15,7 +15,7 @@ public struct DesignColor: Hashable, Sendable {
     public init(hex: String) throws {
         let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : ""
         guard digits.count == 6 || digits.count == 8, let value = UInt64(digits, radix: 16) else {
-            throw DesignError("颜色格式应为 #RRGGBB 或 #RRGGBBAA：\(hex)")
+            throw DesignError("Color must be #RRGGBB or #RRGGBBAA: \(hex)")
         }
         let rgba = digits.count == 6 ? value << 8 | 0xFF : value
         func channel(_ shift: UInt64) -> Double { Double((rgba >> shift) & 0xFF) / 255 }
@@ -168,12 +168,12 @@ public struct DesignDocument: Equatable, Sendable {
               object["format"] as? String == format else { throw DesignError(L("Not a ui-atlas project file")) }
         guard let version = object["version"] as? NSNumber, !DesignJSON.isBool(version), version.doubleValue == version.doubleValue.rounded(),
               version.intValue >= 1 else {
-            throw DesignError(L("The project file has no format version"))
+            throw DesignError(L("Project file is missing its format version"))
         }
         if version.intValue > formatVersion {
-            throw DesignError(L("This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it.", version.intValue))
+            throw DesignError(L("File was created by a newer version of ui-atlas (format version %d); upgrade ui-atlas to open it", version.intValue))
         }
-        guard let nodes = object["nodes"] as? [Any] else { throw DesignError(L("The project file has no nodes")) }
+        guard let nodes = object["nodes"] as? [Any] else { throw DesignError(L("Project file is missing nodes")) }
         let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) })
         try document.validateUniqueIDs()
         return document
@@ -191,7 +191,7 @@ public struct DesignDocument: Equatable, Sendable {
         var seen = Set<String>()
         var duplicate: String?
         forEach { node in if !seen.insert(node.id).inserted, duplicate == nil { duplicate = node.id } }
-        if let duplicate { throw DesignError("图层 id 重复：\(duplicate)") }
+        if let duplicate { throw DesignError("Duplicate layer id: \(duplicate)") }
     }
 
     /// 深度优先遍历全部节点。

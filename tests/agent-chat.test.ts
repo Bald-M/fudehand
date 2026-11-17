@@ -124,10 +124,13 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
     expect(third[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })
+    const system = third[0].content
+    expect(system).not.toMatch(/[一-鿿]/)
+    expect(system).toMatch(/same language as the user/)
   })
 
-  it('App 拒绝修改时把中文错误交给模型，且只发出这一条命令', async () => {
-    const app = await startApp(() => ({ ok: false, error: '找不到图层：nope' }))
+  it('hands the App error to the model when an edit is rejected, sending only that one command', async () => {
+    const app = await startApp(() => ({ ok: false, error: 'Layer not found: nope' }))
     const model = await fakeModel([
       openaiTool('call_1', 'design_update_node', { id: 'nope', changes: { name: '标题' } }),
       openaiText('没有这个图层。'),
@@ -135,19 +138,19 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('把 nope 改名为标题')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false })
-    expect(events[1].text).toContain('找不到图层：nope')
-    expect(model.requests[1].body.messages.at(-1).content).toContain('找不到图层：nope')
+    expect(events[1].text).toContain('Layer not found: nope')
+    expect(model.requests[1].body.messages.at(-1).content).toContain('Layer not found: nope')
     expect(app.received).toEqual([{ id: expect.anything(), command: 'update_node', args: { id: 'nope', changes: { name: '标题' } } }])
   })
 
-  it('画布工具在 App 未运行时返回中文错误', async () => {
+  it('canvas tools return an English error when the App is not running', async () => {
     const model = await fakeModel([openaiTool('call_1', 'canvas_focus_node', { id: 'home' }), openaiText('App 没有运行。')])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     const events = await chat.ask('聚焦首页')
-    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'ui-atlas 未运行' })
+    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'ui-atlas is not running' })
   })
 
-  it('HTTP 错误、网络失败与未配置 key 显示中文错误', async () => {
+  it('HTTP errors, network failures and a missing key show English errors', async () => {
     const model = await fakeModel([
       { status: 401, body: { error: { message: `Incorrect API key provided: ${KEY}` } } },
       { status: 429, body: { error: { message: 'rate limited' } } },
@@ -157,13 +160,13 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     const messages = []
     for (let i = 0; i < 4; i++) messages.push((await chat.ask('你好')).find(event => event.type === 'error')?.message)
-    expect(messages).toEqual(['API key 无效或无权限', '额度不足或请求过于频繁', '额度不足或请求过于频繁', '模型 API 报错（HTTP 500）：boom'])
+    expect(messages).toEqual(['Invalid API key or insufficient permissions', 'Quota exceeded or too many requests', 'Quota exceeded or too many requests', 'Model API error (HTTP 500): boom'])
 
     const offline = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: 'http://127.0.0.1:9', UI_ATLAS_API_KEY: KEY })
-    expect((await offline.ask('你好')).find(event => event.type === 'error')?.message).toMatch(/^无法连接模型 API/)
+    expect((await offline.ask('你好')).find(event => event.type === 'error')?.message).toMatch(/^Could not connect to the model API/)
 
     const missing = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl })
-    expect((await missing.ask('你好')).find(event => event.type === 'error')?.message).toBe('尚未配置 API key')
+    expect((await missing.ask('你好')).find(event => event.type === 'error')?.message).toBe('No API key configured')
   })
 
   it('停止后不再执行后续工具调用', async () => {
@@ -187,7 +190,7 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('删除首页')
-    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: '工具参数不是合法 JSON' })
+    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'Tool arguments are not valid JSON' })
     expect(app.received).toEqual([])
   })
 
@@ -220,7 +223,7 @@ describe('Agent harness：OpenAI 兼容接口（DeepSeek / OpenAI）', () => {
     const model = await fakeModel(Array.from({ length: 17 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})))
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('一直查')
-    expect(events.at(-2)).toEqual({ type: 'error', message: '工具调用轮数过多，已停止本次回复' })
+    expect(events.at(-2)).toEqual({ type: 'error', message: 'Too many tool-call rounds; stopped this reply' })
     expect(model.requests).toHaveLength(16)
     expect(app.received).toHaveLength(16)
   })
@@ -284,20 +287,20 @@ describe('Agent harness：Anthropic Messages API', () => {
       anthropicTool('toolu_1', 'design_get_node', { id: 'nope' }), anthropicText('没有这个图层。'),
       { body: { content: [{ type: 'tool_use', id: 'toolu_2', name: 'design_get_state', input: {} }], stop_reason: 'max_tokens' } },
     ])
-    const app = await startApp(() => ({ ok: false, error: '找不到图层：nope' }))
+    const app = await startApp(() => ({ ok: false, error: 'Layer not found: nope' }))
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
     await chat.ask('看看 nope')
     expect(model.requests[1].body.messages[2].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true })
     const truncated = await chat.ask('看看文档')
     expect(truncated.map(event => event.type)).toEqual(['error', 'done'])
-    expect(truncated[0].message).toBe('模型回复因长度限制被截断，已停止本次回复')
+    expect(truncated[0].message).toBe('The model reply was cut off by the length limit; stopped this reply')
     expect(app.received.map(request => request.command)).toEqual(['get_node'])
   })
 
-  it('HTTP 错误显示中文', async () => {
+  it('HTTP errors are shown in English', async () => {
     const model = await fakeModel([{ status: 529, body: { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } } }])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    expect((await chat.ask('你好')).find(event => event.type === 'error')?.message).toBe('模型 API 报错（HTTP 529）：Overloaded')
+    expect((await chat.ask('你好')).find(event => event.type === 'error')?.message).toBe('Model API error (HTTP 529): Overloaded')
   })
 })
 
@@ -337,13 +340,13 @@ describe('Agent harness：列出可用模型', () => {
     expect(model.requests[0].headers['anthropic-version']).toBe('2023-06-01')
   })
 
-  it('错误显示中文，且 key 不出现在输出中', async () => {
+  it('errors are shown in English and the key never appears in the output', async () => {
     const model = await fakeModel([{ status: 401, body: { error: { message: `bad key ${KEY}` } } }, { status: 404, body: { error: { message: `no route for ${KEY}` } } }])
     const unauthorized = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    expect(unauthorized.event).toEqual({ type: 'error', message: 'API key 无效或无权限' })
+    expect(unauthorized.event).toEqual({ type: 'error', message: 'Invalid API key or insufficient permissions' })
     const missing = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     expect(missing.event.type).toBe('error')
     expect(missing.output).not.toContain(KEY)
-    expect((await listModels({ UI_ATLAS_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: '尚未配置 API key' })
+    expect((await listModels({ UI_ATLAS_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: 'No API key configured' })
   })
 })

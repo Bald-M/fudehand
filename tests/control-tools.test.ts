@@ -74,22 +74,28 @@ describe('设计工具', () => {
     expect(fake.received[1].args.changes).toEqual({ image: { data: PNG } })
     const missing = await callTool('design_create_node', { node: { type: 'image', image: { path: 'nope.png' } } }, ctx)
     expect(missing.isError).toBe(true)
-    expect(text(missing)).toBe('无法读取图片：nope.png')
+    expect(text(missing)).toBe('Could not read image: nope.png')
     expect(fake.received).toHaveLength(2)
   })
 
-  it('透传 App 返回的中文错误', async () => {
-    const fake = await app(() => ({ ok: false, error: '图层 e：ellipse 不支持 layout' }))
+  it('passes through error messages returned by the App', async () => {
+    const fake = await app(() => ({ ok: false, error: 'Layer e: ellipse does not support layout' }))
     const result = await callTool('design_update_node', { id: 'e', changes: { layout: {} } }, { root: '/repo', socketPath: fake.socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('图层 e：ellipse 不支持 layout')
+    expect(text(result)).toBe('Layer e: ellipse does not support layout')
   })
 
-  it('App 未运行时返回“ui-atlas 未运行”', async () => {
+  it('returns "ui-atlas is not running" when the App is not running', async () => {
     const socketPath = join(tmpdir(), `uia-missing-${randomUUID().slice(0, 8)}.sock`)
     const result = await callTool('design_get_state', {}, { root: '/repo', socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('ui-atlas 未运行')
+    expect(text(result)).toBe('ui-atlas is not running')
+  })
+
+  it('工具描述与参数描述为英文，不含中文', () => {
+    for (const tool of tools) {
+      expect(JSON.stringify({ description: tool.description, inputSchema: tool.inputSchema }), tool.name).not.toMatch(/[一-鿿]/)
+    }
   })
 
   it('design_snapshot 以 MCP image 内容返回截图', async () => {
@@ -103,8 +109,8 @@ describe('设计工具', () => {
   })
 
   it('响应跨数据块且切在中文字符中间时仍完整解析', async () => {
-    const error = '找不到图层：手机'
-    const fake = await app(() => ({ ok: false, error }), { splitInside: '图' })
+    const error = 'Layer not found: 手机'
+    const fake = await app(() => ({ ok: false, error }), { splitInside: '手' })
     const result = await callTool('design_get_node', { id: '手机' }, { root: '/repo', socketPath: fake.socketPath })
     expect(text(result)).toBe(error)
   })

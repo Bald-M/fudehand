@@ -68,7 +68,7 @@ private func leaveStaleSocket(_ path: String) {
     leaveStaleSocket(path)
     #expect(FileManager.default.fileExists(atPath: path))
     let server = ControlServer(path: path) { command in
-        if case .getNode(let id) = command { throw ControlCommandError("找不到图层：\(id)") }
+        if case .getNode(let id) = command { throw ControlCommandError("Layer not found: \(id)") }
         return ["handled": "\(command)"]
     }
     try server.start()
@@ -84,8 +84,8 @@ private func leaveStaleSocket(_ path: String) {
     #expect(responses[0]["id"] as? Int == 1)
     #expect(responses[0]["ok"] as? Bool == true)
     #expect((responses[0]["result"] as? [String: Any])?["handled"] as? String == "getState")
-    #expect(responses[1]["error"] as? String == "找不到图层：x")
-    #expect(responses[2]["error"] as? String == "请求不是有效 JSON")
+    #expect(responses[1]["error"] as? String == "Layer not found: x")
+    #expect(responses[2]["error"] as? String == "Request is not valid JSON")
 }
 
 @Test func controlServerRefusesToStealALiveSocketAndRemovesItsFileOnStop() throws {
@@ -152,5 +152,5 @@ private func leaveStaleSocket(_ path: String) {
     for _ in 0..<ControlServer.maximumConnections { idle.append(try connectSocket(path)) }
     try await Task.sleep(nanoseconds: 100_000_000)
     let responses = try await exchange(path, [#"{"id":1,"command":"get_state"}"#])
-    #expect(responses.first?["error"] as? String == "连接过多，请稍后再试")
+    #expect(responses.first?["error"] as? String == "Too many connections; try again later")
 }

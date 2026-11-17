@@ -26,24 +26,24 @@
 "Untitled" = "未命名";
 "%@ — Edited" = "%@ — 已編輯";
 "Insert Image" = "插入圖片";
-"Cannot read image: %@" = "無法讀取圖片：%@";
+"Could not read image: %@" = "無法讀取圖片：%@";
 "Do you want to save the changes made to “%@”?" = "要儲存對「%@」的修改嗎？";
 "Your changes will be lost if you don’t save them." = "如果不儲存，修改將會遺失。";
 "Cancel" = "取消";
 "Don’t Save" = "不儲存";
 "Open Project File" = "打開專案檔";
-"Cannot read file: %@" = "無法讀取檔案：%@";
+"Could not read file: %@" = "無法讀取檔案：%@";
 "“%@” cannot be found" = "找不到「%@」";
 "The file may have been deleted or moved." = "檔案可能已被刪除或移動。";
 "Remove from List" = "從列表移除";
-"Cannot read template: %@" = "無法讀取範本：%@";
+"Could not read template: %@" = "無法讀取範本：%@";
 "Cannot save to the keychain (%d)" = "無法儲存到鑰匙圈（%d）";
 "Operation Failed" = "操作失敗";
 "OK" = "好";
 "Not a ui-atlas project file" = "不是 ui-atlas 專案檔";
-"The project file has no format version" = "專案檔缺少格式版本號";
-"This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it." = "檔案由較新版本的 ui-atlas 建立（格式版本 %d），請更新後再打開";
-"The project file has no nodes" = "專案檔缺少 nodes";
+"Project file is missing its format version" = "專案檔缺少格式版本號";
+"File was created by a newer version of ui-atlas (format version %d); upgrade ui-atlas to open it" = "檔案由較新版本的 ui-atlas 建立（格式版本 %d），請更新後再打開";
+"Project file is missing nodes" = "專案檔缺少 nodes";
 
 /* Layer types and tools */
 "Frame" = "畫框";

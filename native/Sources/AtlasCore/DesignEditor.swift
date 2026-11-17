@@ -64,9 +64,9 @@ extension DesignDocument {
 
     private func children(of parent: String?) throws -> (path: [Int]?, list: [DesignNode]) {
         guard let parent else { return (nil, nodes) }
-        guard let path = indexPath(of: parent) else { throw DesignError("找不到图层：\(parent)") }
+        guard let path = indexPath(of: parent) else { throw DesignError("Layer not found: \(parent)") }
         let node = self[path]
-        guard node.type.hasChildren else { throw DesignError("图层 \(parent) 不能包含子图层") }
+        guard node.type.hasChildren else { throw DesignError("Layer \(parent) cannot contain child layers") }
         return (path, node.children)
     }
 
@@ -79,17 +79,17 @@ extension DesignDocument {
         let existing = allIDs()
         var duplicate: String?
         DesignDocument(nodes: [node]).forEach { if duplicate == nil, existing.contains($0.id) { duplicate = $0.id } }
-        if let duplicate { throw DesignError("图层 id 重复：\(duplicate)") }
+        if let duplicate { throw DesignError("Duplicate layer id: \(duplicate)") }
         try DesignDocument(nodes: [node]).validateUniqueIDs()
         let position = index ?? list.count
-        guard (0...list.count).contains(position) else { throw DesignError("index 超出范围：0–\(list.count)") }
+        guard (0...list.count).contains(position) else { throw DesignError("index out of range: 0–\(list.count)") }
         var next = list
         next.insert(node, at: position)
         setChildren(next, at: path)
     }
 
     public mutating func update(_ id: String, _ change: (inout DesignNode) throws -> Void) throws {
-        guard let path = indexPath(of: id) else { throw DesignError("找不到图层：\(id)") }
+        guard let path = indexPath(of: id) else { throw DesignError("Layer not found: \(id)") }
         var node = self[path]
         try change(&node)
         self[path] = node
@@ -98,7 +98,7 @@ extension DesignDocument {
     /// 删除节点及其子树；任何一个 id 不存在时什么都不删。
     public mutating func delete(_ ids: Set<String>) throws {
         let existing = allIDs()
-        if let missing = ids.sorted().first(where: { !existing.contains($0) }) { throw DesignError("找不到图层：\(missing)") }
+        if let missing = ids.sorted().first(where: { !existing.contains($0) }) { throw DesignError("Layer not found: \(missing)") }
         func prune(_ list: [DesignNode]) -> [DesignNode] {
             list.filter { !ids.contains($0.id) }.map { node in
                 var copy = node
@@ -111,13 +111,13 @@ extension DesignDocument {
 
     /// 移动到新的父节点（nil 为顶层）与位置，保持画布上的绝对位置。`index` 是移出后在新父节点中的位置。
     public mutating func move(_ id: String, parent: String?, index: Int?) throws {
-        guard let path = indexPath(of: id), let world = worldRect(id) else { throw DesignError("找不到图层：\(id)") }
-        if let parent, ancestry(of: parent).contains(id) { throw DesignError("不能把图层移动到它自己或子图层中") }
+        guard let path = indexPath(of: id), let world = worldRect(id) else { throw DesignError("Layer not found: \(id)") }
+        if let parent, ancestry(of: parent).contains(id) { throw DesignError("Cannot move a layer into itself or its descendants") }
         var node = self[path]
         var copy = self
         try copy.delete([id])
         let origin = try parent.map { parent -> Rect in
-            guard let rect = copy.worldRect(parent) else { throw DesignError("找不到图层：\(parent)") }
+            guard let rect = copy.worldRect(parent) else { throw DesignError("Layer not found: \(parent)") }
             return rect
         }
         node.x = world.x - (origin?.x ?? 0)

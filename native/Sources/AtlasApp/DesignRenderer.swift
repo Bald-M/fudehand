@@ -153,13 +153,13 @@ final class DesignRenderer {
         renderer.sync([placed])
         let pixels = (width: (node.width * scale).rounded(.up), height: (node.height * scale).rounded(.up))
         guard pixels.width <= 16_384, pixels.height <= 16_384 else {
-            throw ControlCommandError("截图过大（\(Int(pixels.width))×\(Int(pixels.height)) 像素），请减小 scale")
+            throw ControlCommandError("Snapshot is too large (\(Int(pixels.width))×\(Int(pixels.height)) pixels); reduce scale")
         }
         let width = max(1, Int(pixels.width)), height = max(1, Int(pixels.height))
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            throw ControlCommandError("无法创建截图画布")
+            throw ControlCommandError("Could not create the snapshot canvas")
         }
         // 位图以左下角为原点，翻转后与图层的左上角原点一致。文字图层的位图在这个翻转的上下文里
         // 会被整体倒置，所以预先反向绘制。
@@ -169,13 +169,13 @@ final class DesignRenderer {
         renderer.root.layoutIfNeeded()
         for case let layer as TextLayer in renderer.layers.values { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
         renderer.root.render(in: context)
-        guard let image = context.makeImage() else { throw ControlCommandError("截图失败") }
+        guard let image = context.makeImage() else { throw ControlCommandError("Snapshot failed") }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
-            throw ControlCommandError("截图编码失败")
+            throw ControlCommandError("Could not encode the snapshot")
         }
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { throw ControlCommandError("截图编码失败") }
+        guard CGImageDestinationFinalize(destination) else { throw ControlCommandError("Could not encode the snapshot") }
         return data as Data
     }
 }

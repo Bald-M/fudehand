@@ -48,28 +48,28 @@ private func object(_ data: Data) throws -> [String: Any] {
     #expect(try parse(#"{"id":1e300,"command":"fit_all"}"#).get().id == nil)
 }
 
-@Test func controlProtocolRejectsInvalidRequestsInChinese() {
+@Test func controlProtocolRejectsInvalidRequestsWithEnglishMessages() {
     let cases: [(String, String)] = [
-        ("not json", "请求不是有效 JSON"),
-        ("[1,2]", "请求不是有效 JSON"),
-        (#"{"id":1}"#, "缺少参数：command"),
-        (#"{"id":1,"command":3}"#, "参数类型错误：command"),
-        (#"{"id":1,"command":"select_project"}"#, "未知命令：select_project"),
-        (#"{"id":1,"command":"get_node"}"#, "缺少参数：id"),
-        (#"{"id":1,"command":"get_node","args":{"id":7}}"#, "参数类型错误：id"),
-        (#"{"id":1,"command":"create_node","args":{}}"#, "缺少参数：node"),
-        (#"{"id":1,"command":"create_node","args":{"node":[]}}"#, "参数类型错误：node"),
-        (#"{"id":1,"command":"create_node","args":{"node":{},"index":-1}}"#, "参数类型错误：index"),
-        (#"{"id":1,"command":"update_node","args":{"id":"a"}}"#, "缺少参数：changes"),
-        (#"{"id":1,"command":"delete_nodes","args":{"ids":[]}}"#, "参数类型错误：ids"),
-        (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "参数类型错误：ids"),
-        (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "参数类型错误：discard"),
-        (#"{"id":1,"command":"open_document","args":{}}"#, "缺少参数：path"),
-        (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "参数类型错误：scale"),
-        (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "参数类型错误：scale"),
-        (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "参数类型错误：scale"),
-        (#"{"id":1,"command":"node_snapshot","args":{"id":"f","scale":5}}"#, "参数类型错误：scale"),
-        (#"{"id":1,"command":"fit_all","args":[]}"#, "参数类型错误：args"),
+        ("not json", "Request is not valid JSON"),
+        ("[1,2]", "Request is not valid JSON"),
+        (#"{"id":1}"#, "Missing argument: command"),
+        (#"{"id":1,"command":3}"#, "Invalid argument type: command"),
+        (#"{"id":1,"command":"select_project"}"#, "Unknown command: select_project"),
+        (#"{"id":1,"command":"get_node"}"#, "Missing argument: id"),
+        (#"{"id":1,"command":"get_node","args":{"id":7}}"#, "Invalid argument type: id"),
+        (#"{"id":1,"command":"create_node","args":{}}"#, "Missing argument: node"),
+        (#"{"id":1,"command":"create_node","args":{"node":[]}}"#, "Invalid argument type: node"),
+        (#"{"id":1,"command":"create_node","args":{"node":{},"index":-1}}"#, "Invalid argument type: index"),
+        (#"{"id":1,"command":"update_node","args":{"id":"a"}}"#, "Missing argument: changes"),
+        (#"{"id":1,"command":"delete_nodes","args":{"ids":[]}}"#, "Invalid argument type: ids"),
+        (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "Invalid argument type: ids"),
+        (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "Invalid argument type: discard"),
+        (#"{"id":1,"command":"open_document","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
+        (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
+        (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),
+        (#"{"id":1,"command":"node_snapshot","args":{"id":"f","scale":5}}"#, "Invalid argument type: scale"),
+        (#"{"id":1,"command":"fit_all","args":[]}"#, "Invalid argument type: args"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("应拒绝：\(line)"); continue }
@@ -84,10 +84,10 @@ private func object(_ data: Data) throws -> [String: Any] {
     #expect(success["id"] as? Int == 3)
     #expect(success["ok"] as? Bool == true)
     #expect((success["result"] as? [String: Any])?["text"] as? String == "a\nb")
-    let failure = try object(ControlProtocol.failure(id: .string("x"), message: "未知命令：nope"))
+    let failure = try object(ControlProtocol.failure(id: .string("x"), message: "Unknown command: nope"))
     #expect(failure["id"] as? String == "x")
     #expect(failure["ok"] as? Bool == false)
-    #expect(failure["error"] as? String == "未知命令：nope")
-    let anonymous = try object(ControlProtocol.failure(id: nil, message: "请求不是有效 JSON"))
+    #expect(failure["error"] as? String == "Unknown command: nope")
+    let anonymous = try object(ControlProtocol.failure(id: nil, message: "Request is not valid JSON"))
     #expect(anonymous["id"] is NSNull)
 }

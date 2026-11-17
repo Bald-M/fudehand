@@ -13,24 +13,24 @@ export const providerDefaults = {
   anthropic: { kind: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
 }
 
-/** 把 HTTP 状态和网络错误转成面板里显示的中文。 */
+/** Turns HTTP statuses and network errors into the messages shown in the chat panel. */
 async function request(url, init, signal) {
   let response
   try {
     response = await fetch(url, { ...init, signal })
   } catch (error) {
     if (signal.aborted) throw error
-    throw new Error(`无法连接模型 API：${error.cause?.message ?? error.message}`)
+    throw new Error(`Could not connect to the model API: ${error.cause?.message ?? error.message}`)
   }
   const body = await response.json().catch(() => null)
   if (response.ok) {
-    if (!body || typeof body !== 'object') throw new Error('模型 API 返回了无法解析的响应')
+    if (!body || typeof body !== 'object') throw new Error('The model API returned an unparseable response')
     return body
   }
-  if (response.status === 401 || response.status === 403) throw new Error('API key 无效或无权限')
-  if (response.status === 402 || response.status === 429) throw new Error('额度不足或请求过于频繁')
+  if (response.status === 401 || response.status === 403) throw new Error('Invalid API key or insufficient permissions')
+  if (response.status === 402 || response.status === 429) throw new Error('Quota exceeded or too many requests')
   const detail = body?.error?.message ?? body?.message ?? response.statusText
-  throw new Error(`模型 API 报错（HTTP ${response.status}）：${String(detail).slice(0, 300)}`)
+  throw new Error(`Model API error (HTTP ${response.status}): ${String(detail).slice(0, 300)}`)
 }
 
 function openaiMessages(system, history) {
@@ -75,20 +75,20 @@ function anthropicMessages(history) {
   return messages
 }
 
-const truncated = '模型回复因长度限制被截断，已停止本次回复'
+const truncated = 'The model reply was cut off by the length limit; stopped this reply'
 
 function functionCall(id, name, raw) {
   try {
     const args = raw ? JSON.parse(raw) : {}
     if (args && typeof args === 'object' && !Array.isArray(args)) return { id, name, args }
   } catch {}
-  return { id, name, args: {}, error: '工具参数不是合法 JSON' }
+  return { id, name, args: {}, error: 'Tool arguments are not valid JSON' }
 }
 
 /** 读取提供方的模型列表，返回 { models: [id], default }；用于设置面板的下拉菜单。 */
 export async function listModels({ provider, baseUrl, apiKey }, signal) {
   const defaults = providerDefaults[provider]
-  if (!defaults) throw new Error(`未知的模型提供方：${provider}`)
+  if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
   const base = (baseUrl || defaults.baseUrl).replace(/\/+$/, '')
   const body = defaults.kind === 'anthropic'
     ? await request(`${base}/v1/models?limit=1000`, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } }, signal)
@@ -100,7 +100,7 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
 /** 返回 { model, turn(system, history, tools, signal) → { text, toolCalls } }。 */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
-  if (!defaults) throw new Error(`未知的模型提供方：${provider}`)
+  if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
   const base = (baseUrl || defaults.baseUrl).replace(/\/+$/, '')
   const name = model || defaults.model
   if (defaults.kind === 'openai') {

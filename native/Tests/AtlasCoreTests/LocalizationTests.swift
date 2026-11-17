@@ -79,7 +79,7 @@ private func specifiers(_ text: String) -> [String] {
     #expect(L10n.string("Layers", language: .zhHans) == "图层")
     #expect(L10n.string("Layers", language: .zhHant) == "圖層")
     #expect(L10n.string("%d layers selected", language: .zhHans, 3) == "已选 3 个图层")
-    #expect(L10n.string("Cannot read file: %@", language: .enGB, "a.uiatlas") == "Cannot read file: a.uiatlas")
+    #expect(L10n.string("Could not read file: %@", language: .enGB, "a.uiatlas") == "Could not read file: a.uiatlas")
     #expect(L10n.string("no such key %@", language: .zhHans, "x") == "no such key x")
     #expect(L10n.string("Light|font weight", language: .enUS) == "Light")
     #expect(L10n.string("Light|font weight", language: .zhHans) == "细" && L10n.string("Light", language: .zhHans) == "浅色")

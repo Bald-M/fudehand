@@ -26,24 +26,24 @@
 "Untitled" = "Untitled";
 "%@ — Edited" = "%@ — Edited";
 "Insert Image" = "Insert Image";
-"Cannot read image: %@" = "Cannot read image: %@";
+"Could not read image: %@" = "Could not read image: %@";
 "Do you want to save the changes made to “%@”?" = "Do you want to save the changes made to “%@”?";
 "Your changes will be lost if you don’t save them." = "Your changes will be lost if you don’t save them.";
 "Cancel" = "Cancel";
 "Don’t Save" = "Don’t Save";
 "Open Project File" = "Open Project File";
-"Cannot read file: %@" = "Cannot read file: %@";
+"Could not read file: %@" = "Could not read file: %@";
 "“%@” cannot be found" = "“%@” cannot be found";
 "The file may have been deleted or moved." = "The file may have been deleted or moved.";
 "Remove from List" = "Remove from List";
-"Cannot read template: %@" = "Cannot read template: %@";
+"Could not read template: %@" = "Could not read template: %@";
 "Cannot save to the keychain (%d)" = "Cannot save to the keychain (%d)";
 "Operation Failed" = "Operation Failed";
 "OK" = "OK";
 "Not a ui-atlas project file" = "Not a ui-atlas project file";
-"The project file has no format version" = "The project file has no format version";
-"This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it." = "This file was created by a newer version of ui-atlas (format version %d). Update ui-atlas to open it.";
-"The project file has no nodes" = "The project file has no nodes";
+"Project file is missing its format version" = "Project file is missing its format version";
+"File was created by a newer version of ui-atlas (format version %d); upgrade ui-atlas to open it" = "File was created by a newer version of ui-atlas (format version %d); upgrade ui-atlas to open it";
+"Project file is missing nodes" = "Project file is missing nodes";
 
 /* Layer types and tools */
 "Frame" = "Frame";

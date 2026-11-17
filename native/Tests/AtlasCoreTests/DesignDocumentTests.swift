@@ -47,17 +47,17 @@ let sampleDocument = """
     #expect(try DesignColor(hex: "#ff0000") == DesignColor(r: 1, g: 0, b: 0, a: 1))
     #expect(DesignColor(r: 1, g: 0, b: 0, a: 1).hex == "#FF0000")
     #expect(DesignColor(r: 0, g: 0, b: 0, a: 0.5).hex == "#00000080")
-    #expect(message { _ = try DesignColor(hex: "red") } == "颜色格式应为 #RRGGBB 或 #RRGGBBAA：red")
+    #expect(message { _ = try DesignColor(hex: "red") } == "Color must be #RRGGBB or #RRGGBBAA: red")
 }
 
 @Test func rejectsNewerVersion() {
     #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":2,"nodes":[]}"#) }
-            == "This file was created by a newer version of ui-atlas (format version 2). Update ui-atlas to open it.")
+            == "File was created by a newer version of ui-atlas (format version 2); upgrade ui-atlas to open it")
 }
 
 @Test func rejectsMissingOrInvalidVersion() {
-    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":0,"nodes":[]}"#) } == "The project file has no format version")
-    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","nodes":[]}"#) } == "The project file has no format version")
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":0,"nodes":[]}"#) } == "Project file is missing its format version")
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","nodes":[]}"#) } == "Project file is missing its format version")
 }
 
 @Test func rejectsWrongFormat() {
@@ -67,14 +67,14 @@ let sampleDocument = """
 
 @Test func rejectsDuplicateIDs() {
     let json = #"{"format":"ui-atlas.design","version":1,"nodes":[{"id":"a","type":"rectangle","name":"","x":0,"y":0,"width":1,"height":1},{"id":"a","type":"ellipse","name":"","x":0,"y":0,"width":1,"height":1}]}"#
-    #expect(message { _ = try decode(json) } == "图层 id 重复：a")
+    #expect(message { _ = try decode(json) } == "Duplicate layer id: a")
 }
 
 @Test func rejectsFieldsOnWrongType() {
     let missingText = #"{"format":"ui-atlas.design","version":1,"nodes":[{"id":"t","type":"text","name":"","x":0,"y":0,"width":1,"height":1}]}"#
-    #expect(message { _ = try decode(missingText) } == "图层 t：文字图层缺少 text")
+    #expect(message { _ = try decode(missingText) } == "Layer t: text layer is missing text")
     let layoutOnEllipse = #"{"format":"ui-atlas.design","version":1,"nodes":[{"id":"e","type":"ellipse","name":"","x":0,"y":0,"width":1,"height":1,"layout":{"direction":"vertical","spacing":0,"padding":{"top":0,"right":0,"bottom":0,"left":0},"align":"start","crossAlign":"start"}}]}"#
-    #expect(message { _ = try decode(layoutOnEllipse) } == "图层 e：ellipse 不支持 layout")
+    #expect(message { _ = try decode(layoutOnEllipse) } == "Layer e: ellipse does not support layout")
     let negative = #"{"format":"ui-atlas.design","version":1,"nodes":[{"id":"r","type":"rectangle","name":"","x":0,"y":0,"width":-1,"height":1}]}"#
-    #expect(message { _ = try decode(negative) } == "图层 r：width 不能为负数")
+    #expect(message { _ = try decode(negative) } == "Layer r: width must not be negative")
 }
