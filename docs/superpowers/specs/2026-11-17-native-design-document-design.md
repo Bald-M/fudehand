@@ -1,148 +1,148 @@
-# 原生设计文档与 Figma 式工作流（#46）
+# Native Design Document and Figma-Style Workflow (#46)
 
-日期：2026-11-17。需求来源：Issue #46。用户以 `/goal` 下达，要求自主推进；本文中标注“实现方决定”的条目是实现方按 Issue 意图做出的取舍，未经单独确认。
+Date: 2026-11-17. Source: Issue #46. The user issued this via `/goal` and asked for autonomous progress; items in this document marked "implementer decides" are trade-offs the implementer made according to the issue's intent, without separate confirmation.
 
-## 意图
+## Intent
 
-ui-atlas 从“在画布上展示网页作品”改为“原生的 AI 设计工具”：画布上放的是图层数据，Agent 和人编辑同一份设计文档，画布用原生方式实时渲染，设计稿保存为 ui-atlas 自己的工程文件。目的是去掉每个作品一套前端工程、常驻 Node/Vite/WebKit 进程的重链路，并让 Agent 直接创建和修改界面元素，而不是改网页源码。
+ui-atlas changes from "showing web projects on a canvas" to "a native AI design tool": the canvas holds layer data, agents and people edit the same design document, the canvas renders natively in real time, and designs are saved as ui-atlas's own project files. The goal is to remove the heavy pipeline of one front-end project per web project with resident Node/Vite/WebKit processes, and to let agents create and modify interface elements directly instead of editing web source code.
 
-## 目标
+## Goals
 
-- 设计文档是一棵图层树：画框、矩形、椭圆、文字、图片、分组；画框支持自动布局；所有图层支持填充、描边、圆角（适用的类型）、透明度、显示/隐藏、锁定。
-- 画布直接渲染图层数据，任何修改立即可见，不需要编译，不依赖 Node 或网页服务。
-- Agent 经 MCP 工具读取文档结构、增删改节点、截图核对；所有修改经控制通道交给 App，App 是文档状态的唯一持有者。
-- 人工编辑：图层面板（层级、显示/隐藏、锁定、重命名）、属性面板（位置、尺寸、填充、描边、文字、自动布局），画布上可选中、移动、缩放图层。
-- 工程文件：新建、打开、保存、另存为；格式为带版本号的公开 JSON。启动时是空白文档。
-- 撤销/重做覆盖人工与 Agent 编辑，共用一条历史。
-- 移除网页作品链路：`WKWebView` 画框、Node 预览启动器、`catalog.json`、`examples/`。
+- The design document is a tree of layers: frame, rectangle, ellipse, text, image, group; frames support auto layout; all layers support fill, stroke, corner radius (for applicable types), opacity, show/hide, and lock.
+- The canvas renders layer data directly; any change is visible immediately, with no compilation and no dependency on Node or a web server.
+- Agents use MCP tools to read the document structure, add/delete/modify nodes, and take screenshots to check; all changes go to the App through the control channel, and the App is the sole owner of document state.
+- Manual editing: layers panel (hierarchy, show/hide, lock, rename), properties panel (position, size, fill, stroke, text, auto layout); layers can be selected, moved, and resized on the canvas.
+- Project files: New, Open, Save, Save As; the format is public JSON with a version number. The App starts with a blank document.
+- Undo/redo covers both manual and agent edits, sharing one history.
+- Remove the web-project pipeline: `WKWebView` frames, the Node preview launcher, `catalog.json`, `examples/`.
 
-## 非目标
+## Non-goals
 
-与 Issue 相同：不与 Figma 互通，不做多人协作、原型交互、组件/变体/变量、代码生成，不保留网页作品。另外本期不做：旋转、渐变与多重填充、阴影与模糊、矢量路径与布尔运算、画布上直接编辑文字（文字在属性面板编辑）、自动布局子项拖动重排（用图层面板或 Agent 调整顺序）。
+Same as the issue: no Figma interoperability, no multiplayer collaboration, prototyping interactions, components/variants/variables, or code generation, and no retention of web projects. Also out of scope this round: rotation, gradients and multiple fills, shadows and blur, vector paths and boolean operations, editing text directly on the canvas (text is edited in the properties panel), and drag-to-reorder of auto layout children (use the layers panel or an agent to adjust order).
 
-## 反目标
+## Anti-goals
 
-- Agent 修改需要重启 App、重新加载或编译才能看到——这等于没做。
-- 文档状态出现第二个持有者（例如 Node 端缓存一份文档再写回），导致人工修改与 Agent 修改互相覆盖。
-- 平移、缩放因图层数增加而明显掉帧。
+- Agent changes require restarting the App, reloading, or compiling to become visible — that would be the same as not doing it.
+- A second owner of document state appears (for example, the Node side caching a copy of the document and writing it back), causing manual and agent changes to overwrite each other.
+- Panning and zooming visibly drop frames as the number of layers grows.
 
-## 方案
+## Approach
 
-考虑过的做法：
+Options considered:
 
-1. **Core Animation 图层树（采用）**：每个设计节点对应一个 `CALayer`（形状用 `CAShapeLayer`，文字用 `CATextLayer`，图片设置 `contents`），按节点 id 增量更新。平移、缩放沿用现有画布的 `world.bounds` 与 GPU 变换，矢量与背景由 Core Animation 按任意缩放渲染；文字与图片在缩放稳定后按缩放比例更新 `contentsScale`。截图用同一套构建函数离屏 `render(in:)`。
-2. **单个 NSView 用 Core Graphics 整体重绘**：实现最简单，但每次平移/缩放和每次修改都要重绘全部节点，100 个以上图层时难以保持流畅。
-3. **SwiftUI `Canvas` 或 SwiftUI 视图树**：与现有 AppKit 画布（输入路由、视口动画、框选）割裂，需要重写交互层，收益不明显。
+1. **Core Animation layer tree (adopted)**: each design node maps to a `CALayer` (`CAShapeLayer` for shapes, `CATextLayer` for text, `contents` for images), updated incrementally by node id. Panning and zooming keep the existing canvas's `world.bounds` and GPU transform; vectors and backgrounds are rendered by Core Animation at any zoom; text and images update `contentsScale` to the zoom factor once zoom settles. Screenshots use the same build functions with offscreen `render(in:)`.
+2. **A single NSView redrawn entirely with Core Graphics**: simplest to implement, but every pan/zoom and every change redraws all nodes, making it hard to stay smooth beyond 100 layers.
+3. **SwiftUI `Canvas` or a SwiftUI view tree**: disconnected from the existing AppKit canvas (input routing, viewport animation, marquee selection), requires rewriting the interaction layer, with no obvious benefit.
 
-文档状态放在哪里：
+Where document state lives:
 
-- **App 持有（采用）**：`AtlasCore` 中的纯 Swift 文档模型与编辑器，App 的 `AtlasStore` 持有唯一实例；Agent 通过控制通道发送命令。符合 Issue “App 是文档状态的唯一持有者”。
-- Node 端持有文档、App 只渲染：会出现两个持有者，被 Issue 排除。
+- **Owned by the App (adopted)**: a pure Swift document model and editor in `AtlasCore`, with the App's `AtlasStore` holding the only instance; agents send commands through the control channel. This matches the issue's "the App is the sole owner of document state".
+- Node side owns the document and the App only renders: there would be two owners, which the issue rules out.
 
-## 设计
+## Design
 
-### 文档格式（`AtlasCore/DesignDocument.swift`）
+### Document format (`AtlasCore/DesignDocument.swift`)
 
-扩展名 `.uiatlas`，内容为 UTF-8 JSON：
+Extension `.uiatlas`, content is UTF-8 JSON:
 
 ```json
 {
   "format": "ui-atlas.design",
   "version": 1,
   "nodes": [
-    { "id": "screen", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844,
+    { "id": "screen", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844,
       "fill": "#FFFFFF", "cornerRadius": 0, "clipsContent": true,
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
                   "align": "start", "crossAlign": "stretch" },
       "children": [
-        { "id": "title", "type": "text", "name": "标题", "x": 16, "y": 16, "width": 120, "height": 28,
-          "text": { "content": "今日计划", "fontSize": 22, "fontWeight": 600, "color": "#111111", "align": "left", "autoResize": "height" },
+        { "id": "title", "type": "text", "name": "Title", "x": 16, "y": 16, "width": 120, "height": 28,
+          "text": { "content": "Today's plan", "fontSize": 22, "fontWeight": 600, "color": "#111111", "align": "left", "autoResize": "height" },
           "sizing": { "horizontal": "fill", "vertical": "hug" } }
       ] }
   ]
 }
 ```
 
-- 所有坐标相对父节点，单位为点；顶层节点相对画布原点。数组顺序即层叠顺序，后者在上。
-- 通用字段：`id`（文档内唯一）、`type`、`name`、`x`、`y`、`width`、`height`、`visible`（默认 true）、`locked`（默认 false）、`opacity`（0–1，默认 1）、`fill`（`#RRGGBB` 或 `#RRGGBBAA`，可省略表示无填充）、`stroke`（`{color, width}`，可省略）、`sizing`（`{horizontal, vertical}`，取值 `fixed`/`hug`/`fill`，默认 fixed）。
-- `cornerRadius`：frame、rectangle、image。`clipsContent`：frame（默认 true）。`children`：frame、group。
-- `text`：`content`、`fontSize`、`fontWeight`（100–900）、`fontFamily`（可省略，用系统字体）、`color`、`align`（left/center/right）、`lineHeight`（可省略，倍数）、`autoResize`（`none`/`height`/`width-and-height`）。
-- `image`：`data`（base64 的 PNG 或 JPEG）与 `fit`（`fill`/`fit`/`stretch`）。
-- `layout`（frame）：`direction`（horizontal/vertical）、`spacing`、`padding`、`align`（主轴 start/center/end/space-between）、`crossAlign`（start/center/end/stretch）。
-- 读取时校验：`format` 必须匹配；`version` 大于当前支持版本时拒绝并提示“文件由更新版本的 ui-atlas 创建”；id 重复、类型与字段不匹配、数值非有限或为负的尺寸都报出具体路径。写入使用排序键、两空格缩进，便于 diff。
+- All coordinates are relative to the parent node, in points; top-level nodes are relative to the canvas origin. Array order is stacking order, with later items on top.
+- Common fields: `id` (unique within the document), `type`, `name`, `x`, `y`, `width`, `height`, `visible` (default true), `locked` (default false), `opacity` (0–1, default 1), `fill` (`#RRGGBB` or `#RRGGBBAA`; omit for no fill), `stroke` (`{color, width}`, optional), `sizing` (`{horizontal, vertical}`, values `fixed`/`hug`/`fill`, default fixed).
+- `cornerRadius`: frame, rectangle, image. `clipsContent`: frame (default true). `children`: frame, group.
+- `text`: `content`, `fontSize`, `fontWeight` (100–900), `fontFamily` (optional; system font if omitted), `color`, `align` (left/center/right), `lineHeight` (optional, a multiplier), `autoResize` (`none`/`height`/`width-and-height`).
+- `image`: `data` (base64 PNG or JPEG) and `fit` (`fill`/`fit`/`stretch`).
+- `layout` (frame): `direction` (horizontal/vertical), `spacing`, `padding`, `align` (main axis start/center/end/space-between), `crossAlign` (start/center/end/stretch).
+- Validation on read: `format` must match; a `version` greater than the currently supported version is rejected with "file was created by a newer version of ui-atlas" (文件由更新版本的 ui-atlas 创建); duplicate ids, type/field mismatches, non-finite values, and negative sizes are all reported with the specific path. Writes use sorted keys and two-space indentation for easy diffing.
 
-### 布局（`AtlasCore/DesignLayout.swift`）
+### Layout (`AtlasCore/DesignLayout.swift`)
 
-布局结果直接写回节点的 `x/y/width/height`（与 Figma 一样，文件中保存的是计算后的几何），渲染器只读这些值。每次编辑后整体重新布局一次，文字尺寸由 App 注入的测量函数提供（`AtlasCore` 不依赖 AppKit）：
+Layout results are written straight back to the nodes' `x/y/width/height` (as in Figma, the file stores computed geometry), and the renderer reads only these values. After every edit the whole document is re-laid out once; text sizes come from a measurement function injected by the App (`AtlasCore` does not depend on AppKit):
 
-1. 自底向上：文字按 `autoResize` 测量；`hug` 的自动布局画框按子项尺寸、间距与内边距求尺寸；分组收缩为子项并集（分组原点移到并集左上角，子项相应平移）。
-2. 自顶向下：自动布局画框按主轴分配 `fill` 子项尺寸、交叉轴 `stretch`/`fill` 设为内容区尺寸，再按 `align` 摆放子项；然后递归处理子项。
-3. 宽度变化会影响 `autoResize: height` 文字的高度，因此整个过程运行两遍。
+1. Bottom-up: text is measured according to `autoResize`; `hug` auto layout frames compute their size from child sizes, spacing, and padding; groups shrink to the union of their children (the group origin moves to the top-left of the union and children shift accordingly).
+2. Top-down: auto layout frames distribute `fill` child sizes along the main axis, set `stretch`/`fill` on the cross axis to the content area size, then place children according to `align`; then recurse into children.
+3. Width changes affect the height of `autoResize: height` text, so the whole process runs twice.
 
-不参与自动布局的父节点里，子项 `fill` 与 `hug`（非文字、非自动布局画框）按 fixed 处理。
+In parents that do not use auto layout, children with `fill` and `hug` (other than text and auto layout frames) are treated as fixed.
 
-### 编辑器与撤销（`AtlasCore/DesignEditor.swift`）
+### Editor and undo (`AtlasCore/DesignEditor.swift`)
 
-`DesignEditor` 是值类型，持有文档和历史快照：
+`DesignEditor` is a value type holding the document and history snapshots:
 
-- `perform(_ name:, change:)`：记录修改前的快照，执行修改，重新布局；文档有变化时压入撤销栈并清空重做栈。一次 Agent 命令（包括一次创建整棵子树）就是一步撤销。
-- 画布拖动和缩放把手：`beginGesture()` 记录快照，过程中只修改文档不记录，`endGesture(name:)` 压入一步。
-- 属性面板连续调整（如颜色取色器）带合并键，相同键的连续修改合并为一步。
-- 节点操作：插入（可带嵌套子节点，未给 id 时生成 8 位随机 id）、按补丁更新（嵌套对象逐字段合并）、删除、移动/重新指定父节点（保持画布上的绝对位置）、设置可见/锁定。
-- 记录修订号；保存时记下已保存的修订号，用于“已编辑”标记。
+- `perform(_ name:, change:)`: records a snapshot before the change, applies the change, and re-lays out; if the document changed, pushes onto the undo stack and clears the redo stack. One agent command (including creating an entire subtree at once) is one undo step.
+- Canvas drags and resize handles: `beginGesture()` records a snapshot, the document is modified without recording during the gesture, and `endGesture(name:)` pushes one step.
+- Continuous adjustments in the properties panel (such as the color picker) carry a coalescing key; consecutive changes with the same key are merged into one step.
+- Node operations: insert (may include nested children; generates an 8-character random id when none is given), update by patch (nested objects merged field by field), delete, move/reparent (keeping the absolute position on the canvas), set visible/locked.
+- Tracks a revision number; on save, the saved revision is recorded and used for the "Edited" (已编辑) indicator.
 
-### 控制通道与 MCP 工具
+### Control channel and MCP tools
 
-控制协议（行分隔 JSON，沿用现有 socket 与安全约束）的命令替换为：
+The control protocol (newline-delimited JSON, keeping the existing socket and security constraints) replaces its commands with:
 
-| 命令 | 作用 |
+| Command | Purpose |
 | --- | --- |
-| `get_state` | 文件名、路径、是否已编辑、选择、视口、可否撤销/重做、顶层节点摘要 |
-| `get_document` | 完整图层树；图片数据以 `"<N 字节>"` 代替 |
-| `get_node` | 单个节点子树 |
-| `create_node` | `{parent?, index?, node}`，`node` 可含嵌套 `children`；返回新建 id |
-| `update_node` | `{id, changes}`，部分字段补丁 |
+| `get_state` | File name, path, whether edited, selection, viewport, whether undo/redo is available, summary of top-level nodes |
+| `get_document` | Full layer tree; image data is replaced by `"<N bytes>"` |
+| `get_node` | Subtree of a single node |
+| `create_node` | `{parent?, index?, node}`; `node` may contain nested `children`; returns the new id |
+| `update_node` | `{id, changes}`, a partial field patch |
 | `delete_nodes` | `{ids}` |
-| `move_node` | `{id, parent?, index?}`，`parent` 为 null 表示顶层 |
+| `move_node` | `{id, parent?, index?}`; `parent` of null means top level |
 | `select` | `{ids}` |
-| `undo` / `redo` | 撤销、重做一步 |
-| `new_document` / `open_document` / `save_document` | 新建（有未保存修改时拒绝，除非 `discard: true`）、打开 `{path}`、保存 `{path?}` |
-| `focus_node` / `fit_all` / `zoom` | 视口 |
-| `node_snapshot` | `{id, scale?}`，返回该节点渲染的 PNG |
+| `undo` / `redo` | Undo or redo one step |
+| `new_document` / `open_document` / `save_document` | New (refused when there are unsaved changes unless `discard: true`), open `{path}`, save `{path?}` |
+| `focus_node` / `fit_all` / `zoom` | Viewport |
+| `node_snapshot` | `{id, scale?}`; returns a PNG of that node's rendering |
 
-字段校验只在 Swift 一处（`AtlasCore/DesignJSON.swift`，文件读取与 Agent 补丁共用）。`scripts/atlas-tools.mjs` 只把参数转发给控制通道，MCP 工具名为 `design_*` 与 `canvas_*`；图片可以给 `image.path`（本机文件路径），由 Node 端读成 base64 的 `image.data` 再转发。harness 的系统提示改为设计助手。
+Field validation exists in only one place in Swift (`AtlasCore/DesignJSON.swift`, shared by file reading and agent patches). `scripts/atlas-tools.mjs` only forwards arguments to the control channel; MCP tool names are `design_*` and `canvas_*`; images may be given as `image.path` (a local file path), which the Node side reads into base64 `image.data` before forwarding. The harness's system prompt changes to a design assistant.
 
 ### App
 
-- `AtlasStore` 持有 `DesignEditor`、当前文件 URL、选择和视口请求；启动时新建空白文档，不启动任何 Node 进程（对话面板只在发送消息时按需启动 harness）。
-- `DesignRenderer` 把文档同步到 `CALayer` 树，按 id 复用图层，只更新变化的属性；隐藏的节点不渲染；画框 `clipsContent` 时裁剪子层。
-- 画布交互（Figma 式）：
-  - 点击选中顶层画框里的直接子项；点击画框名称标签或画框空白处选中画框；分组点击选中整个分组，双击进入下一层；⌘ + 点击选中最深的图层。锁定和隐藏的图层不能在画布上点中。
-  - 拖动移动选中图层（3pt 阈值，吸附到兄弟图层边缘与中线，⌃ 关闭吸附）；自动布局画框里的子项不随拖动移动。
-  - 单选时显示 8 个缩放把手，拖动改变尺寸并把对应方向设为 fixed。
-  - 拖动空白框选顶层图层，Shift 追加。
-  - 工具：移动 V、抓手 H、画框 F、矩形 R、椭圆 O、文字 T；创建工具在画布上拖出尺寸（单击用默认尺寸），落在起点所在的顶层画框内，创建后回到移动工具。
-  - 键盘：方向键移动 1，Shift + 方向键移动 10；Delete/Backspace 删除；Esc 选中父图层，无父图层时取消选择；⌘A 选中当前层级全部；平移缩放沿用现有规则。
-- 图层面板（左侧栏）：缩进树，类型图标，双击重命名，眼睛与锁按钮，点击选中、⌘/Shift 多选，与画布选择同步。
-- 右侧检查器分“设计 / 对话”两页。设计页：未选中时显示文档信息；单选时显示名称、X/Y/W/H、尺寸模式、透明度、圆角、填充、描边、文字、自动布局、裁剪内容、图片适应方式与替换图片；多选时显示数量与透明度。
-- 菜单：文件（新建 ⌘N、打开 ⌘O、保存 ⌘S、另存为 ⇧⌘S）、编辑（撤销 ⌘Z、重做 ⇧⌘Z；文字输入框有焦点时交给输入框）、画布（缩放）。新建、打开或退出时有未保存修改则询问保存。
-- 窗口标题显示文件名，未保存时带“已编辑”。
+- `AtlasStore` holds the `DesignEditor`, the current file URL, the selection, and viewport requests; on launch it creates a blank document and does not start any Node process (the chat panel starts the harness on demand only when a message is sent).
+- `DesignRenderer` syncs the document to a `CALayer` tree, reusing layers by id and updating only changed properties; hidden nodes are not rendered; frames with `clipsContent` clip their sublayers.
+- Canvas interaction (Figma-style):
+  - Clicking selects a direct child inside a top-level frame; clicking a frame's name label or empty area of a frame selects the frame; clicking a group selects the whole group, and double-clicking enters the next level; ⌘ + click selects the deepest layer. Locked and hidden layers cannot be clicked on the canvas.
+  - Dragging moves selected layers (3pt threshold, snapping to sibling layer edges and center lines, ⌃ disables snapping); children inside auto layout frames do not move when dragged.
+  - With a single selection, 8 resize handles are shown; dragging changes the size and sets the corresponding direction to fixed.
+  - Dragging on empty space performs marquee selection of top-level layers; Shift adds to the selection.
+  - Tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T; creation tools drag out a size on the canvas (a single click uses the default size), the new layer lands inside the top-level frame containing the start point, and the tool returns to Move after creation.
+  - Keyboard: arrow keys move by 1, Shift + arrow keys move by 10; Delete/Backspace deletes; Esc selects the parent layer, or clears the selection when there is no parent; ⌘A selects everything at the current level; pan and zoom keep the existing rules.
+- Layers panel (left sidebar): indented tree, type icons, double-click to rename, eye and lock buttons, click to select, ⌘/Shift for multiple selection, synced with the canvas selection.
+- The right-hand inspector has two tabs, Design (设计) / Chat (对话). Design tab: with nothing selected, shows document info; with a single selection, shows name, X/Y/W/H, sizing mode, opacity, corner radius, fill, stroke, text, auto layout, clip content, image fit mode, and replace image; with multiple selection, shows the count and opacity.
+- Menus: File (文件) (New (新建) ⌘N, Open (打开) ⌘O, Save (保存) ⌘S, Save As (另存为) ⇧⌘S), Edit (编辑) (Undo (撤销) ⌘Z, Redo (重做) ⇧⌘Z; when a text field has focus, these go to the text field), Canvas (画布) (zoom). On New, Open, or Quit with unsaved changes, the App asks whether to save.
+- The window title shows the file name, with "Edited" when unsaved.
 
-### 移除
+### Removal
 
-删除 `PreviewFrameView`、`PreviewSession`、`FramePageScripts`、`ThumbnailCache`、`Catalog`、`LayoutStore`、`ScrollRouting`（滚动永远平移画布）、`SidebarOrdering`、`FrameConsole`，以及 `scripts/launcher.mjs`、`native-preview.mjs`、`preview-gate.*`、`catalog.json`、`tests/fixtures/catalog-conformance.json`、`examples/` 和对应测试。`pnpm check` 改为只运行 Vitest（不再有示例需要类型检查和构建）。`native-build.mjs` 仍写入 `workspace.json`，供对话面板找到 harness 与 Node。
+Delete `PreviewFrameView`, `PreviewSession`, `FramePageScripts`, `ThumbnailCache`, `Catalog`, `LayoutStore`, `ScrollRouting` (scrolling always pans the canvas), `SidebarOrdering`, `FrameConsole`, as well as `scripts/launcher.mjs`, `native-preview.mjs`, `preview-gate.*`, `catalog.json`, `tests/fixtures/catalog-conformance.json`, `examples/`, and the corresponding tests. `pnpm check` changes to run only Vitest (there are no longer examples to type-check and build). `native-build.mjs` still writes `workspace.json` so the chat panel can find the harness and Node.
 
-## 留给实现方
+## Left to the implementer
 
-- 控件样式、图标、默认颜色与默认尺寸。
-- 文字测量与 `CATextLayer` 渲染的细节对齐。
-- 自动布局中的边界情况（例如 hug 父节点内的 fill 子项按 fixed 处理）。
+- Control styles, icons, default colors, and default sizes.
+- Detailed alignment between text measurement and `CATextLayer` rendering.
+- Edge cases in auto layout (for example, fill children inside a hug parent are treated as fixed).
 
-## 验收
+## Acceptance
 
-见 Issue #46 的验收标准；另外：
+See the acceptance criteria in Issue #46; in addition:
 
-- `AtlasCore` 单元测试覆盖文档读写与版本校验、补丁校验、布局、编辑与撤销、画布交互状态机。
-- `AtlasApp` 测试覆盖控制命令分发、渲染器增量更新和截图。
-- Node 测试覆盖 MCP 工具转发与 `image.path` 读取。
-- 真实 App 中用 MCP 工具逐步搭建移动端画框，并截取浅色、深色截图放入 `docs/evidence/`。
+- `AtlasCore` unit tests cover document read/write and version validation, patch validation, layout, editing and undo, and the canvas interaction state machine.
+- `AtlasApp` tests cover control command dispatch, incremental renderer updates, and screenshots.
+- Node tests cover MCP tool forwarding and `image.path` reading.
+- In the real App, build a mobile frame step by step with MCP tools, and put light and dark screenshots in `docs/evidence/`.

@@ -1,20 +1,20 @@
-# 案例服务按需启动
+# Start Example Servers on Demand
 
-> 已被 [ADR 0006](0006-native-design-document.md) 取代：网页作品链路已移除，本文只作历史记录。
+> Superseded by [ADR 0006](0006-native-design-document.md): the web-project pipeline has been removed, and this document is kept only as a historical record.
 
-2026-11-17。App 启动时原本会拉起所有已启用作品的开发服务，全部就绪后才可交互；作品越多启动越慢、后台进程越多，而用户通常一次只看一个作品（#23）。
+2026-11-17. At startup the App used to launch the dev servers of all enabled web projects, and became interactive only once all of them were ready; the more web projects, the slower the startup and the more background processes, while users usually look at only one web project at a time (#23).
 
-改为按需启动：`native-preview.mjs` 校验 catalog 后只打印 `UI_ATLAS_LISTENING`，不启动任何服务。App 选中作品时向 stdin 写 `start <id>`，启动器用 `launcher.mjs` 的 `createServicePool` 启动该作品，HTTP 就绪后在 stdout 打印 `UI_ATLAS_READY <id>`，失败打印 `UI_ATLAS_FAILED <id> <JSON 消息>`。stdout 只承载协议，日志改走 stderr，App 在失败说明中附上最近的日志。
+Switch to on-demand startup: after validating the catalog, `native-preview.mjs` only prints `UI_ATLAS_LISTENING` and starts no servers. When the App selects a web project it writes `start <id>` to stdin; the launcher starts that web project with `createServicePool` from `launcher.mjs`, prints `UI_ATLAS_READY <id>` to stdout once HTTP is ready, and on failure prints `UI_ATLAS_FAILED <id> <JSON message>`. stdout carries only the protocol; logs go to stderr, and the App attaches the most recent logs to the failure description.
 
-保持的约束：启动前检查端口，不杀占用端口的外部进程，也不换端口；单个作品启动失败或意外退出时只清理该作品的进程组，其他作品继续运行，用户可单独重试；stdin EOF 或终止信号时关闭全部进程组。已启动的作品在 App 运行期间一直保留，切回时无需再等。
+Constraints kept: check the port before starting, never kill an external process holding the port, and never switch ports; when a single web project fails to start or exits unexpectedly, clean up only that web project's process group while the others keep running, and the user can retry it alone; on stdin EOF or a termination signal, close all process groups. Started web projects stay up for as long as the App runs, so switching back to one needs no further wait.
 
-## 否决的方案
+## Rejected Alternatives
 
-- **每个作品一个启动器进程**：App 需要管理多根管道和多个子进程的退出，且 stdin EOF 清理全部进程组的约束要在每个进程上分别保证。单一启动器加行协议更简单。
-- **长时间未查看的作品自动停止**：Issue 中为可选项。目前作品数量少，自动停止会让切回作品重新等待启动；`createServicePool` 已提供 `stop(id)`，需要时再在 App 中接入空闲策略。
+- **One launcher process per web project**: the App would need to manage multiple pipes and the exits of multiple child processes, and the constraint that stdin EOF cleans up all process groups would have to be guaranteed separately for each process. A single launcher with a line protocol is simpler.
+- **Automatically stop web projects that have not been viewed for a long time**: listed as optional in the Issue. There are few web projects for now, and auto-stopping would make switching back wait for startup again; `createServicePool` already provides `stop(id)`, so an idle policy can be wired into the App when needed.
 
-## 影响
+## Consequences
 
-- 首个作品就绪即可交互，不再受最慢或失败作品的影响；未查看的作品不占用开发服务进程。
-- 启动耗时（仓库中两个 Vite 示例，从启动 `native-preview.mjs` 到可交互，各测 3 次，首次为冷启动）：改前等两个作品全部就绪打印 `UI_ATLAS_READY`，1687 / 465 / 462ms；改后只启动当前作品到 `UI_ATLAS_READY still`，568 / 463 / 462ms。两个示例原本并行启动，所以热启动耗时相当，收益在于开发服务进程从 2 个降到 1 个、失败不再拖累其他作品；作品增多或某个作品较慢时差异随之扩大。
-- `canvas_restart_preview` 仍重启整个启动器，之后只重新启动当前作品。
+- The App becomes interactive as soon as the first web project is ready, no longer held back by the slowest or a failed web project; web projects not being viewed do not occupy dev-server processes.
+- Startup time (the two Vite examples in the repository, from starting `native-preview.mjs` until interactive, measured 3 times each, the first being a cold start): before the change, waiting for both web projects to print `UI_ATLAS_READY` took 1687 / 465 / 462ms; after the change, starting only the current web project until `UI_ATLAS_READY still` took 568 / 463 / 462ms. The two examples were already started in parallel, so warm startup times are similar; the gains are going from 2 dev-server processes to 1 and failures no longer holding back other web projects. The difference grows as web projects are added or when one is slow.
+- `canvas_restart_preview` still restarts the whole launcher, after which only the current web project is started again.
