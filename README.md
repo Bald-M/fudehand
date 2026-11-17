@@ -6,7 +6,7 @@ A native AI design tool that runs on your own Mac. The canvas shows a design doc
 
 The App is a **native SwiftUI + AppKit macOS App**. The canvas renders layers directly with Core Animation and does not depend on a web server. Node is used only for the MCP server and the Agent harness behind the in-app chat panel.
 
-The App UI is currently Chinese-only. In this README, menus, panels, and buttons are described in English with the label shown in the App in parentheses the first time they appear, e.g. *Layers panel (图层)*. Terms follow the English names in [GLOSSARY.md](GLOSSARY.md).
+The App UI comes in US English (the default), British English, Simplified Chinese, and Traditional Chinese; switch in the app menu's *Language* submenu. This README describes menus, panels, and buttons in English, with the Simplified Chinese label in parentheses the first time they appear, e.g. *Layers panel (图层)*. Terms follow the English names in [GLOSSARY.md](GLOSSARY.md).
 
 ![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/readme-main-light.jpg)
 

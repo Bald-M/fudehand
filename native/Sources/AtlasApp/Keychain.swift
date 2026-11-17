@@ -1,3 +1,4 @@
+import AtlasCore
 import Foundation
 import Security
 
@@ -36,5 +37,5 @@ enum Keychain {
 
 struct KeychainError: LocalizedError {
     let status: OSStatus
-    var errorDescription: String? { "无法保存到钥匙串（\(status)）" }
+    var errorDescription: String? { L("Cannot save to the keychain (%d)", status) }
 }

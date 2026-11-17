@@ -49,7 +49,7 @@ struct LayersPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("图层").font(.headline)
+                Text(L("Layers")).font(.headline)
                 Spacer()
                 Text("\(store.document.nodeCount)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }.padding(.horizontal, 14).padding(.vertical, 10)
@@ -57,8 +57,8 @@ struct LayersPanel: View {
             if store.document.nodes.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "square.3.layers.3d").font(.title2).foregroundStyle(.secondary)
-                    Text("还没有图层").font(.callout)
-                    Text("用工具栏的画框、矩形、文字工具在画布上创建，或让 Agent 搭建界面。")
+                    Text(L("No layers yet")).font(.callout)
+                    Text(L("Create layers on the canvas with the Frame, Rectangle, or Text tool in the toolbar, or ask an Agent to build the interface."))
                         .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -82,11 +82,11 @@ struct LayersPanel: View {
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
             .opacity(row.hasChildren ? 1 : 0).disabled(!row.hasChildren)
-            .accessibilityLabel(collapsed.contains(node.id) ? "展开" : "折叠")
+            .accessibilityLabel(collapsed.contains(node.id) ? L("Expand") : L("Collapse"))
             Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
                 .font(.system(size: 11)).frame(width: 16).foregroundStyle(selected ? Color.accentColor : .secondary)
             if renaming == node.id {
-                TextField("名称", text: $draftName)
+                TextField(L("Name"), text: $draftName)
                     .textFieldStyle(.plain).focused($renameFocused)
                     .onSubmit { commitRename(node.id) }
                     .onExitCommand { renaming = nil }
@@ -96,16 +96,16 @@ struct LayersPanel: View {
                     .foregroundStyle(node.visible ? .primary : .secondary)
                 Spacer(minLength: 4)
             }
-            Button { store.updateNode(node.id, node.locked ? "解锁图层" : "锁定图层") { $0.locked.toggle() } } label: {
+            Button { store.updateNode(node.id, node.locked ? "Unlock Layer" : "Lock Layer") { $0.locked.toggle() } } label: {
                 Image(systemName: node.locked ? "lock.fill" : "lock.open").font(.system(size: 10))
             }
             .buttonStyle(.plain).foregroundStyle(.secondary).opacity(node.locked ? 1 : 0.35)
-            .help(node.locked ? "解锁" : "锁定").accessibilityLabel(node.locked ? "解锁\(node.name)" : "锁定\(node.name)")
-            Button { store.updateNode(node.id, node.visible ? "隐藏图层" : "显示图层") { $0.visible.toggle() } } label: {
+            .help(node.locked ? L("Unlock") : L("Lock")).accessibilityLabel(node.locked ? L("Unlock %@", node.name) : L("Lock %@", node.name))
+            Button { store.updateNode(node.id, node.visible ? "Hide Layer" : "Show Layer") { $0.visible.toggle() } } label: {
                 Image(systemName: node.visible ? "eye" : "eye.slash").font(.system(size: 10))
             }
             .buttonStyle(.plain).foregroundStyle(.secondary).opacity(node.visible ? 0.35 : 1)
-            .help(node.visible ? "隐藏" : "显示").accessibilityLabel(node.visible ? "隐藏\(node.name)" : "显示\(node.name)")
+            .help(node.visible ? L("Hide") : L("Show")).accessibilityLabel(node.visible ? L("Hide %@", node.name) : L("Show %@", node.name))
         }
         .font(.system(size: 12))
         .padding(.horizontal, 10).frame(height: 26)
@@ -114,15 +114,15 @@ struct LayersPanel: View {
         .onTapGesture(count: 2) { beginRename(node) }
         .onTapGesture { select(node.id) }
         .contextMenu {
-            Button("重命名") { beginRename(node) }
-            Button("上移一层") { step(node.id, by: 1) }
-            Button("下移一层") { step(node.id, by: -1) }
-            Button("移到最上层") { reorder(node.id, toTop: true) }
-            Button("移到最下层") { reorder(node.id, toTop: false) }
+            Button(L("Rename")) { beginRename(node) }
+            Button(L("Bring Forward")) { step(node.id, by: 1) }
+            Button(L("Send Backward")) { step(node.id, by: -1) }
+            Button(L("Bring to Front")) { reorder(node.id, toTop: true) }
+            Button(L("Send to Back")) { reorder(node.id, toTop: false) }
             Divider()
-            Button("缩放至图层") { store.focus(node.id) }
+            Button(L("Zoom to Layer")) { store.focus(node.id) }
             Divider()
-            Button("删除", role: .destructive) { store.canvasDelete([node.id]) }
+            Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(node.type.title) \(node.name)")
@@ -152,7 +152,7 @@ struct LayersPanel: View {
         renaming = nil
         let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        store.updateNode(id, "重命名图层") { $0.name = name }
+        store.updateNode(id, "Rename Layer") { $0.name = name }
     }
 
     /// 在同一父图层内上移（+1）或下移（-1）一层；已在最上或最下时不变。
@@ -162,13 +162,13 @@ struct LayersPanel: View {
         let count = (parent.flatMap { document.node($0)?.children } ?? document.nodes).count
         let target = index + offset
         guard (0..<count).contains(target) else { return }
-        store.edit(offset > 0 ? "上移一层" : "下移一层") { try $0.move(id, parent: parent, index: target) }
+        store.edit(offset > 0 ? "Bring Forward" : "Send Backward") { try $0.move(id, parent: parent, index: target) }
     }
 
     private func reorder(_ id: String, toTop: Bool) {
         let document = store.editor.document
         guard let parent = document.parentID(of: id) else { return }
         let count = (parent.flatMap { document.node($0)?.children } ?? document.nodes).count
-        store.edit(toTop ? "移到最上层" : "移到最下层") { try $0.move(id, parent: parent, index: toTop ? count - 1 : 0) }
+        store.edit(toTop ? "Bring to Front" : "Send to Back") { try $0.move(id, parent: parent, index: toTop ? count - 1 : 0) }
     }
 }

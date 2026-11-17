@@ -39,10 +39,10 @@ public struct ChatTranscript: Equatable, Sendable {
         case "tool_result":
             append(.toolResult(ok: event["ok"] as? Bool ?? false), name, detail: event["text"] as? String)
         case "error":
-            append(.error, event["message"] as? String ?? "未知错误")
+            append(.error, event["message"] as? String ?? L("Unknown error"))
         case "done":
             busy = false
-            if event["stopped"] as? Bool == true { append(.notice, "已停止回复") }
+            if event["stopped"] as? Bool == true { append(.notice, L("Reply stopped")) }
         default:
             return
         }

@@ -23,7 +23,7 @@ private func temporaryFile() -> URL {
 @Test @MainActor func startsWithAnEmptyCleanDocument() {
     let store = makeStore()
     store.bootstrap()
-    #expect(store.document.nodes.isEmpty && !store.isDirty && store.title == "未命名")
+    #expect(store.document.nodes.isEmpty && !store.isDirty && store.title == "Untitled")
     #expect(store.fileURL == nil)
 }
 
@@ -104,7 +104,7 @@ private func temporaryFile() -> URL {
     let bad = temporaryFile()
     try Data(#"{"format":"ui-atlas.design","version":9,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "文件由更新版本的 ui-atlas 创建（格式版本 9），请升级后再打开")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "This file was created by a newer version of ui-atlas (format version 9). Update ui-atlas to open it.")
     #expect(store.editor.document.node("r") != nil)
 }
 
@@ -138,7 +138,7 @@ private func temporaryFile() -> URL {
     for value in [0.9, 0.8, 0.7] { store.updateNode("r", "修改透明度", coalescing: "opacity") { $0.opacity = value } }
     store.undo()
     #expect(store.editor.document.node("r")?.opacity == 1)
-    store.canvasBeginGesture("移动图层")
+    store.canvasBeginGesture("Move Layers")
     store.canvasMove(["r": Point(x: 50, y: 0)])
     #expect(store.editor.document.node("r")?.x == 50)
     #expect(store.document.node("r")?.x == 0)
@@ -153,7 +153,7 @@ private func temporaryFile() -> URL {
     try store.perform("新建") { try $0.insert(frame, parent: nil, index: nil) }
     store.canvasNudge(["f", "c"], by: Point(x: 5, y: 0))
     #expect(store.editor.document.node("f")?.x == 5 && store.editor.document.node("c")?.x == 10)
-    store.canvasBeginGesture("移动图层")
+    store.canvasBeginGesture("Move Layers")
     store.canvasMove(["f": Point(x: 25, y: 0), "c": Point(x: 35, y: 10)])
     store.canvasEndGesture()
     #expect(store.editor.document.node("f")?.x == 25 && store.editor.document.worldRect("c")?.x == 35)
@@ -207,7 +207,7 @@ private func temporaryFile() -> URL {
     var presented = 0
     store.presentEditor = { presented += 1 }
     try store.openTemplate(templates[0].url)
-    #expect(store.fileURL == nil && store.title == "未命名" && !store.isDirty)
+    #expect(store.fileURL == nil && store.title == "Untitled" && !store.isDirty)
     #expect(store.editor.document == document && store.recents.items.isEmpty && presented == 1)
 }
 
@@ -220,4 +220,16 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .saveDocument(url.path))
     _ = try await control(store, .openDocument(url.path, discard: false))
     #expect(presented == 2)
+}
+
+@Test @MainActor func languageDefaultsToUSEnglishAndPersists() {
+    let defaults = UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!
+    #expect(AtlasStore(defaults: defaults).language == .enUS)
+    AppLanguage.zhHant.save(in: defaults)
+    let store = AtlasStore(defaults: defaults)
+    #expect(store.language == .zhHant)
+    // Switching back to the default keeps the process-wide language other tests rely on.
+    store.language = .enUS
+    #expect(AppLanguage.saved(in: defaults) == .enUS && AtlasStore(defaults: defaults).language == .enUS)
+    #expect(defaults.stringArray(forKey: "AppleLanguages") == ["en-US"])
 }

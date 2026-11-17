@@ -52,17 +52,17 @@ let sampleDocument = """
 
 @Test func rejectsNewerVersion() {
     #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":2,"nodes":[]}"#) }
-            == "文件由更新版本的 ui-atlas 创建（格式版本 2），请升级后再打开")
+            == "This file was created by a newer version of ui-atlas (format version 2). Update ui-atlas to open it.")
 }
 
 @Test func rejectsMissingOrInvalidVersion() {
-    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":0,"nodes":[]}"#) } == "工程文件缺少格式版本号")
-    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","nodes":[]}"#) } == "工程文件缺少格式版本号")
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":0,"nodes":[]}"#) } == "The project file has no format version")
+    #expect(message { _ = try decode(#"{"format":"ui-atlas.design","nodes":[]}"#) } == "The project file has no format version")
 }
 
 @Test func rejectsWrongFormat() {
-    #expect(message { _ = try decode(#"{"format":"figma","version":1,"nodes":[]}"#) } == "不是 ui-atlas 工程文件")
-    #expect(message { _ = try decode("not json") } == "不是 ui-atlas 工程文件")
+    #expect(message { _ = try decode(#"{"format":"figma","version":1,"nodes":[]}"#) } == "Not a ui-atlas project file")
+    #expect(message { _ = try decode("not json") } == "Not a ui-atlas project file")
 }
 
 @Test func rejectsDuplicateIDs() {

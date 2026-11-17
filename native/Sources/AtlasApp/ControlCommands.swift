@@ -15,18 +15,18 @@ extension AtlasStore {
         case .createNode(let parent, let index, let object):
             var existing = editor.document.allIDs()
             let node = try DesignJSON.node(from: DesignDocument.assigningIDs(object.value, existing: &existing))
-            try perform("Agent 新建图层") { try $0.insert(node, parent: parent, index: index) }
+            try perform("Agent: Create Layers") { try $0.insert(node, parent: parent, index: index) }
             var ids: [String] = []
             DesignDocument(nodes: [node]).forEach { ids.append($0.id) }
             return ["id": node.id, "ids": ids, "node": DesignJSON.object(try requireNode(node.id), includeImageData: false)]
         case .updateNode(let id, let changes):
-            try perform("Agent 修改图层") { try $0.update(id) { try DesignJSON.apply(changes.value, to: &$0) } }
+            try perform("Agent: Update Layer") { try $0.update(id) { try DesignJSON.apply(changes.value, to: &$0) } }
             return DesignJSON.object(try requireNode(id), includeImageData: false)
         case .deleteNodes(let ids):
-            try perform("Agent 删除图层") { try $0.delete(Set(ids)) }
+            try perform("Agent: Delete Layers") { try $0.delete(Set(ids)) }
             return ["deleted": ids]
         case .moveNode(let id, let parent, let index):
-            try perform("Agent 移动图层") { try $0.move(id, parent: parent, index: index) }
+            try perform("Agent: Move Layer") { try $0.move(id, parent: parent, index: index) }
             return DesignJSON.object(try requireNode(id), includeImageData: false)
         case .select(let ids):
             for id in ids { _ = try requireNode(id) }

@@ -202,7 +202,7 @@ public struct CanvasInteraction {
                 return []
             }
             let moving = Moving(origin: press.origin, startRects: rects, current: [:])
-            return [.beginGesture("移动图层")] + move(moving, to: point, modifiers: modifiers, context: context)
+            return [.beginGesture("Move Layers")] + move(moving, to: point, modifiers: modifiers, context: context)
         case .moving(let moving):
             return move(moving, to: point, modifiers: modifiers, context: context)
         case .resizing(var resizing):
@@ -212,7 +212,7 @@ public struct CanvasInteraction {
             let rect = Self.resized(resizing.start, handle: resizing.handle,
                                     by: Point(x: (point.x - resizing.origin.x) / context.viewport.scale,
                                               y: (point.y - resizing.origin.y) / context.viewport.scale))
-            return (started ? [] : [.beginGesture("调整尺寸")]) + [.resize(resizing.id, rect)]
+            return (started ? [] : [.beginGesture("Resize")]) + [.resize(resizing.id, rect)]
         case .marquee(let origin, let base):
             let world = Rect.spanning(CanvasGeometry.screenToWorld(origin, viewport: context.viewport),
                                       CanvasGeometry.screenToWorld(point, viewport: context.viewport))

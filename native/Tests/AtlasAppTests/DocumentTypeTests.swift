@@ -43,7 +43,7 @@ private func infoPlist() throws -> [String: Any] {
     try Data("not json".utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
     delegate.application(NSApplication.shared, open: [bad])
-    #expect(store.alert == "不是 ui-atlas 工程文件" && store.fileURL == url)
+    #expect(store.alert == "Not a ui-atlas project file" && store.fileURL == url)
 }
 
 @Test @MainActor func uppercaseExtensionsOpenToo() throws {

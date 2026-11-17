@@ -54,12 +54,12 @@ final class ConnectorsModel: ObservableObject {
     }
 
     func connect(_ connector: AgentConnector) async {
-        guard let script else { entries[connector]?.error = "找不到 ui-atlas 源码目录，无法连接"; return }
-        await perform(connector, connector.addArguments(script: script), failure: "连接失败")
+        guard let script else { entries[connector]?.error = L("Cannot find the ui-atlas source directory, so it cannot connect"); return }
+        await perform(connector, connector.addArguments(script: script), failure: L("Connection failed"))
     }
 
     func disconnect(_ connector: AgentConnector) async {
-        await perform(connector, connector.removeArguments, failure: "断开连接失败")
+        await perform(connector, connector.removeArguments, failure: L("Disconnect failed"))
     }
 
     private func perform(_ connector: AgentConnector, _ arguments: [String], failure: String) async {
@@ -69,7 +69,7 @@ final class ConnectorsModel: ObservableObject {
         let result = await run(executable, arguments, environment)
         if result.exitCode != 0 {
             let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
-            entries[connector]?.error = detail.isEmpty ? "\(failure)（\(result.exitCode)）" : "\(failure)：\(detail)"
+            entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
         }
         await refresh(connector)
         entries[connector]?.busy = false
@@ -89,7 +89,8 @@ final class ConnectorsModel: ObservableObject {
             // 未注册时 codex 报 “No MCP server named”；其他失败（如配置文件损坏）要显示出来，而不是只显示未连接。
             if result.exitCode != 0, !result.error.contains("No MCP server named"), entries[connector]?.error == nil {
                 let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
-                entries[connector]?.error = "检测连接状态失败" + (detail.isEmpty ? "（\(result.exitCode)）" : "：\(detail)")
+                let failure = L("Could not check the connection status")
+                entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
             }
         }
     }
@@ -132,10 +133,12 @@ final class ConnectorsModel: ObservableObject {
 /// “MCP 连接器”窗口：每个 Agent 一行，显示连接状态与连接 / 断开连接按钮。
 struct ConnectorsView: View {
     @ObservedObject var model: ConnectorsModel
+    @Environment(\.locale) private var locale
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         VStack(alignment: .leading, spacing: 12) {
-            Text("把 ui-atlas 的设计工具接入外部 Agent。连接后，在 Agent 中即可读取和编辑 App 里打开的设计文档。")
+            Text(L("Connect ui-atlas’s design tools to external Agents. Once connected, an Agent can read and edit the design document open in the App."))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
                 ForEach(Array(AgentConnector.allCases.enumerated()), id: \.element) { index, connector in
@@ -146,13 +149,15 @@ struct ConnectorsView: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
             HStack {
-                Text("修改的是各 Agent 的用户级配置，对新开的会话生效。").font(.caption).foregroundStyle(.secondary)
+                Text(L("This changes each Agent’s user-level configuration and applies to new sessions.")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("刷新") { Task { await model.refresh() } }
+                Button(L("Refresh")) { Task { await model.refresh() } }
             }
         }
         .padding(20)
         .frame(width: 520)
+        // The scene's title is not refreshed while the window is open; this one is.
+        .navigationTitle(L("MCP Connectors"))
         .task { await model.refresh() }
     }
 }
@@ -161,8 +166,10 @@ private struct ConnectorRow: View {
     let connector: AgentConnector
     let entry: ConnectorsModel.Entry
     let model: ConnectorsModel
+    @Environment(\.locale) private var locale
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         HStack(alignment: .top, spacing: 12) {
             Circle().fill(color).frame(width: 8, height: 8).padding(.top, 6)
             VStack(alignment: .leading, spacing: 3) {
@@ -177,7 +184,7 @@ private struct ConnectorRow: View {
                 ProgressView().controlSize(.small).frame(height: 22)
             } else if let action {
                 Button(action.title) { Task { await action.run() } }
-                    .disabled(action.title == "连接" && model.script == nil)
+                    .disabled(entry.status == .disconnected && model.script == nil)
             }
         }
         .padding(12)
@@ -185,11 +192,11 @@ private struct ConnectorRow: View {
 
     private var statusText: String {
         switch entry.status {
-        case nil: "正在检测…"
-        case .unavailable: "未找到 \(connector.executable) 命令，请先安装 \(connector.title)。"
-        case .disconnected: "未连接"
-        case .connected: "已连接"
-        case .elsewhere(let command): "已注册到其他目录：\(command)。断开后可重新连接到本目录。"
+        case nil: L("Checking…")
+        case .unavailable: L("The %1$@ command was not found. Install %2$@ first.", connector.executable, connector.title)
+        case .disconnected: L("Not connected")
+        case .connected: L("Connected")
+        case .elsewhere(let command): L("Registered to another directory: %@. Disconnect to reconnect it to this one.", command)
         }
     }
 
@@ -203,8 +210,8 @@ private struct ConnectorRow: View {
 
     private var action: (title: String, run: () async -> Void)? {
         switch entry.status {
-        case .disconnected: ("连接", { await model.connect(connector) })
-        case .connected, .elsewhere: ("断开连接", { await model.disconnect(connector) })
+        case .disconnected: (L("Connect"), { await model.connect(connector) })
+        case .connected, .elsewhere: (L("Disconnect"), { await model.disconnect(connector) })
         default: nil
         }
     }

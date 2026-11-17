@@ -131,7 +131,7 @@ final class ChatSession: ObservableObject {
                 child.standardError = FileHandle.nullDevice
                 child.standardInput = FileHandle.nullDevice
                 do { try child.run() } catch {
-                    continuation.resume(returning: .failure(ModelListError(message: "无法启动对话程序：\(error.localizedDescription)")))
+                    continuation.resume(returning: .failure(ModelListError(message: L("Cannot start the chat process: %@", error.localizedDescription))))
                     return
                 }
                 let data = output.fileHandleForReading.readDataToEndOfFile()
@@ -150,17 +150,17 @@ final class ChatSession: ObservableObject {
         if event?["type"] as? String == "error", let message = event?["message"] as? String {
             return .failure(ModelListError(message: message))
         }
-        return .failure(ModelListError(message: "对话程序没有返回模型列表，请确认已在项目目录执行 pnpm install。"))
+        return .failure(ModelListError(message: L("The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
     }
 
     func send(_ text: String, root: URL?, runtime: WorkspaceLocation?) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !transcript.busy else { return }
         transcript.send(trimmed)
-        guard let root else { transcript.fail("找不到 ui-atlas 源码目录，无法启动对话程序"); return }
+        guard let root else { transcript.fail(L("Cannot find the ui-atlas source directory, so the chat process cannot start")); return }
         if process == nil {
             do { try start(root: root, runtime: runtime) }
-            catch { transcript.fail("无法启动对话程序：\(error.localizedDescription)"); return }
+            catch { transcript.fail(L("Cannot start the chat process: %@", error.localizedDescription)); return }
         }
         write(["type": "user", "text": trimmed])
     }
@@ -181,7 +181,7 @@ final class ChatSession: ObservableObject {
     private func restart() {
         guard process != nil else { return }
         terminate()
-        transcript.note("已切换模型设置，新的回复不包含之前的上下文。")
+        transcript.note(L("Model settings changed; new replies do not include the earlier context."))
     }
 
     private func start(root: URL, runtime: WorkspaceLocation?) throws {
@@ -255,7 +255,7 @@ final class ChatSession: ObservableObject {
         guard transcript.busy else { return }
         // harness 自己会去掉 key，这里不显示 stderr 之外的内容。
         let detail = errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-        transcript.fail("对话程序意外退出（\(status)）。请确认已在项目目录执行 pnpm install。" + (detail.isEmpty ? "" : "\n\(detail)"))
+        transcript.fail(L("The chat process exited unexpectedly (%d). Make sure you have run pnpm install in the project directory.", status) + (detail.isEmpty ? "" : "\n\(detail)"))
     }
 
     private func terminate() {

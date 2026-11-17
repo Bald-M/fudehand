@@ -21,6 +21,8 @@ When the App starts it first shows the launch window and starts no Node processe
 
 Once editing starts — via New, Open, a recent item, a template, opening a file from Finder, or the Agent's `new_document` / `open_document` — the editor window opens and the launch window closes; Window › Launch Window (窗口 › 启动窗口) reopens it. The editor window is not restored on quit, so the next launch shows the launch window first again. The Agent harness starts only when the chat panel sends its first message.
 
+**UI language.** The App comes in US English, British English, Simplified Chinese, and Traditional Chinese. The first launch uses US English whatever the system language is. The app menu's Language submenu switches language: every window and the App's own menu items change immediately, the choice is saved and used at the next launch, and the system-provided menu items (About, Quit, Hide, the standard Edit and Window items) change at the next launch, as the submenu notes. Switching never changes a design document: layer names stay as they are, and a new layer gets its default name in the language in use when it is created. Errors returned to Agents over the control channel are not localized.
+
 Templates live in `native/Resources/Templates/`: put a `.uiatlas` file there and rebuild, and it appears in the Templates section, named after the file, with no code changes.
 
 The build script writes the local source directory, the Node path, and the PATH at launch time into the App's `Contents/Resources/workspace.json`; the chat panel uses it to find `scripts/agent-chat.mjs` and Node. The canvas, layers, and project files do not depend on the source directory; if the App is copied to another machine, only the chat panel stops working.

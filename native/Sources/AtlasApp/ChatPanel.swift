@@ -10,8 +10,10 @@ struct ChatPanel: View {
     @State private var draft = ""
     @State private var showingSettings = false
     @FocusState private var inputFocused: Bool
+    @Environment(\.locale) private var locale
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         VStack(spacing: 0) {
             header
             Divider()
@@ -27,20 +29,20 @@ struct ChatPanel: View {
     private var header: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("对话").font(.headline)
+                Text(L("Chat")).font(.headline)
                 Text(modelLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             Button { chat.clear() } label: { Image(systemName: "trash") }
-                .buttonStyle(.borderless).help("清空会话").accessibilityLabel("清空会话")
+                .buttonStyle(.borderless).help(L("Clear conversation")).accessibilityLabel(L("Clear conversation"))
                 .disabled(chat.transcript.entries.isEmpty || chat.transcript.busy)
             Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                .buttonStyle(.borderless).help("模型设置").accessibilityLabel("模型设置")
+                .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     private var modelLabel: String {
-        let model = chat.settings.model.isEmpty ? "默认模型" : chat.settings.model
+        let model = chat.settings.model.isEmpty ? L("Default model") : chat.settings.model
         return "\(chat.settings.providerTitle) · \(model)"
     }
 
@@ -48,8 +50,8 @@ struct ChatPanel: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "key").foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 6) {
-                Text("尚未配置 \(chat.settings.providerTitle) 的 API key").font(.callout)
-                Button("设置 API key…") { showingSettings = true }.controlSize(.small)
+                Text(L("No API key set for %@", chat.settings.providerTitle)).font(.callout)
+                Button(L("Set API Key…")) { showingSettings = true }.controlSize(.small)
             }
             Spacer()
         }
@@ -65,7 +67,7 @@ struct ChatPanel: View {
                     if chat.transcript.entries.isEmpty { emptyState }
                     ForEach(chat.transcript.entries) { entry in ChatEntryRow(entry: entry).id(entry.id) }
                     if chat.transcript.busy {
-                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("正在回复…").font(.caption).foregroundStyle(.secondary) }
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("Replying…")).font(.caption).foregroundStyle(.secondary) }
                             .id("progress")
                     }
                 }.padding(16)
@@ -81,8 +83,8 @@ struct ChatPanel: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("让 AI 帮你搭建和修改界面。").font(.callout).foregroundStyle(.secondary)
-            ForEach(["新建一个 390×844 的移动端首页，含导航栏、卡片列表和按钮", "把所有按钮改成圆角 12", "截图核对当前画框"], id: \.self) { example in
+            Text(L("Let AI build and edit the interface for you.")).font(.callout).foregroundStyle(.secondary)
+            ForEach([L("Create a 390×844 mobile home screen with a navigation bar, a card list, and a button"), L("Give every button a corner radius of 12"), L("Take a screenshot to check the current frame")], id: \.self) { example in
                 Button { draft = example; inputFocused = true } label: {
                     Text(example).font(.caption).padding(.horizontal, 10).padding(.vertical, 6)
                         .background(.quaternary.opacity(0.6), in: Capsule())
@@ -93,16 +95,16 @@ struct ChatPanel: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入消息", text: $draft, axis: .vertical)
+            TextField(L("Message"), text: $draft, axis: .vertical)
                 .textFieldStyle(.plain).lineLimit(1...5).focused($inputFocused)
                 .onSubmit(submit)
-                .accessibilityLabel("对话输入")
+                .accessibilityLabel(L("Chat input"))
             if chat.transcript.busy {
                 Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
-                    .buttonStyle(.borderless).help("停止回复").accessibilityLabel("停止回复")
+                    .buttonStyle(.borderless).help(L("Stop replying")).accessibilityLabel(L("Stop replying"))
             } else {
                 Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
-                    .buttonStyle(.borderless).help("发送（Return）").accessibilityLabel("发送")
+                    .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }.padding(12)
@@ -118,8 +120,10 @@ struct ChatPanel: View {
 private struct ChatEntryRow: View {
     let entry: ChatEntry
     @State private var expanded = false
+    @Environment(\.locale) private var locale
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         switch entry.kind {
         case .user:
             HStack {
@@ -142,9 +146,9 @@ private struct ChatEntryRow: View {
 
     private var tool: some View {
         let (symbol, color, title): (String, Color, String) = switch entry.kind {
-        case .toolResult(ok: true): ("checkmark.circle", .green, "结果 · \(entry.text)")
-        case .toolResult(ok: false): ("xmark.circle", .red, "失败 · \(entry.text)")
-        default: ("wrench.and.screwdriver", .secondary, "调用 · \(entry.text)")
+        case .toolResult(ok: true): ("checkmark.circle", .green, L("Result · %@", entry.text))
+        case .toolResult(ok: false): ("xmark.circle", .red, L("Failed · %@", entry.text))
+        default: ("wrench.and.screwdriver", .secondary, L("Call · %@", entry.text))
         }
         return VStack(alignment: .leading, spacing: 4) {
             Button { expanded.toggle() } label: {
@@ -181,32 +185,34 @@ private struct ChatSettingsSheet: View {
     @State private var listError: String?
     @State private var listToken = UUID()
     @FocusState private var keyFocused: Bool
+    @Environment(\.locale) private var locale
 
     private var trimmedKey: String { key.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes.
         VStack(alignment: .leading, spacing: 16) {
-            Text("模型设置").font(.title3.bold())
+            Text(L("Model settings")).font(.title3.bold())
             Form {
-                Picker("模型提供方", selection: $provider) {
+                Picker(L("Model provider"), selection: $provider) {
                     ForEach(ChatSettings.providers, id: \.id) { Text($0.title).tag($0.id) }
                 }
-                LabeledContent("模型") {
+                LabeledContent(L("Model")) {
                     HStack(spacing: 4) {
-                        TextField("模型", text: $model, prompt: Text(defaultModel.map { "默认：\($0)" } ?? "留空使用默认模型")).labelsHidden()
+                        TextField(L("Model"), text: $model, prompt: Text(defaultModel.map { L("Default: %@", $0) } ?? L("Leave empty to use the default model"))).labelsHidden()
                         modelMenu
                     }
                 }
-                TextField("接口地址", text: $baseUrl, prompt: Text("留空使用官方地址")).onSubmit(refreshModels)
-                LabeledContent("API key") { keyField }
+                TextField(L("Base URL"), text: $baseUrl, prompt: Text(L("Leave empty to use the official endpoint"))).onSubmit(refreshModels)
+                LabeledContent(L("API key")) { keyField }
             }
             listStatus
-            Text("API key 只保存在本机钥匙串，启动对话程序时经环境变量传入，不写入仓库或日志；界面只显示首尾各 4 位。DeepSeek 使用 OpenAI 兼容接口，OpenAI 使用 Responses API。")
+            Text(L("The API key is stored only in this Mac’s keychain and passed to the chat process through an environment variable when it starts; it is never written to the repository or logs, and the UI shows only the first and last 4 characters. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API."))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             HStack {
                 if hasSavedKey {
-                    Button("删除已保存的 key", role: .destructive) {
+                    Button(L("Delete Saved Key"), role: .destructive) {
                         Keychain.delete(provider)
                         chat.keyUpdated(provider: provider, saved: false)
                         key = ""; hasSavedKey = false; editingKey = false
@@ -215,8 +221,8 @@ private struct ChatSettingsSheet: View {
                     }
                 }
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存", action: save).keyboardShortcut(.defaultAction)
+                Button(L("Cancel"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L("Save"), action: save).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20).frame(width: 460)
@@ -241,7 +247,7 @@ private struct ChatSettingsSheet: View {
 
     private var modelMenu: some View {
         Menu {
-            Button { model = "" } label: { menuLabel(defaultModel.map { "默认模型（\($0)）" } ?? "默认模型", selected: model.isEmpty) }
+            Button { model = "" } label: { menuLabel(defaultModel.map { L("Default model (%@)", $0) } ?? L("Default model"), selected: model.isEmpty) }
             if !models.isEmpty {
                 Divider()
                 ForEach(models, id: \.self) { id in
@@ -249,12 +255,12 @@ private struct ChatSettingsSheet: View {
                 }
             }
             Divider()
-            Button("重新获取模型列表", action: refreshModels).disabled(listing)
+            Button(L("Reload Model List"), action: refreshModels).disabled(listing)
         } label: {
             Image(systemName: "chevron.up.chevron.down")
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .help("选择模型").accessibilityLabel("选择模型")
+        .help(L("Choose model")).accessibilityLabel(L("Choose model"))
     }
 
     @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
@@ -263,15 +269,15 @@ private struct ChatSettingsSheet: View {
 
     @ViewBuilder private var keyField: some View {
         if editingKey || (trimmedKey.isEmpty && !hasSavedKey) {
-            SecureField("API key", text: $key, prompt: Text(hasSavedKey ? "输入新的 key，留空不修改" : "必填"))
+            SecureField(L("API key"), text: $key, prompt: Text(hasSavedKey ? L("Enter a new key, or leave empty to keep the current one") : L("Required")))
                 .labelsHidden().focused($keyFocused).onSubmit { keyFocused = false }
         } else {
             HStack(spacing: 8) {
-                Text(trimmedKey.isEmpty ? chat.keyHint(for: provider) ?? "已保存" : ChatSettings.maskedKey(trimmedKey))
+                Text(trimmedKey.isEmpty ? chat.keyHint(for: provider) ?? L("Saved") : ChatSettings.maskedKey(trimmedKey))
                     .font(.body.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                    .accessibilityLabel(trimmedKey.isEmpty ? "已保存的 API key" : "新输入的 API key")
+                    .accessibilityLabel(trimmedKey.isEmpty ? L("Saved API key") : L("Newly entered API key"))
                 Spacer()
-                Button("更换") {
+                Button(L("Replace")) {
                     key = ""; editingKey = true
                     DispatchQueue.main.async { keyFocused = true }
                 }.controlSize(.small)
@@ -283,15 +289,15 @@ private struct ChatSettingsSheet: View {
         HStack(spacing: 6) {
             if listing {
                 ProgressView().controlSize(.small)
-                Text("正在获取可用模型…")
+                Text(L("Loading available models…"))
             } else if let listError {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                Text("获取模型列表失败：\(listError)。仍可手动填写模型。")
+                Text(L("Could not load the model list: %@. You can still enter a model manually.", listError))
             } else if !models.isEmpty {
                 Image(systemName: "checkmark.circle").foregroundStyle(.green)
-                Text("已获取 \(models.count) 个可用模型，可在模型右侧的菜单中选择。")
+                Text(L("%d models available; choose one from the menu next to the model field.", models.count))
             } else if trimmedKey.isEmpty && !hasSavedKey {
-                Text("填写 API key 后会自动获取可用模型。")
+                Text(L("Available models load automatically once you enter an API key."))
             }
         }
         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -307,7 +313,7 @@ private struct ChatSettingsSheet: View {
         let token = UUID()
         listToken = token
         listError = nil
-        guard let root else { listing = false; listError = "找不到 ui-atlas 源码目录，无法读取模型列表"; return }
+        guard let root else { listing = false; listError = L("Cannot find the ui-atlas source directory, so the model list is unavailable"); return }
         let typed = trimmedKey
         guard !typed.isEmpty || hasSavedKey else { listing = false; models = []; return }
         let settings = ChatSettings(provider: provider, model: "", baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))

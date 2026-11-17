@@ -92,7 +92,7 @@ Keep the PR as a **draft** until verification, evidence, and external dependenci
 
 - [ ] `pnpm check`
 - [ ] `pnpm test:native`
-- [ ] For native UI changes: `pnpm build:native`, plus a check in the real App in both light and dark appearance
+- [ ] For native UI changes: `pnpm build:native`, plus a check in the real App in both light and dark appearance; for new or changed copy, also in each UI language
 
 When fixing a bug, first write a test that reproduces it. Testable rules belong in `AtlasCore` (no AppKit dependency). Never delete or skip a valid test to make a check pass.
 
@@ -102,7 +102,7 @@ Check UI changes in the real App in both **light and dark** appearance, and put 
 
 ## Documentation conventions
 
-- Language: project docs (README, CHANGELOG, `GLOSSARY.md`, `docs/`, ADRs), code comments, test descriptions, MCP tool descriptions, and error messages are in English. The App UI copy is in Chinese for now; when docs name a menu, panel, or button, describe it in English and keep the App's Chinese label in parentheses the first time, e.g. *File menu → Open Recent (打开最近)*.
+- Language: project docs (README, CHANGELOG, `GLOSSARY.md`, `docs/`, ADRs), code comments, test descriptions, MCP tool descriptions, and error messages are in English. The App UI is localized (US English by default, plus British English, Simplified Chinese, and Traditional Chinese); when docs name a menu, panel, or button, use its US English label, e.g. *File menu → Open Recent*. New UI copy goes through `L("…")` with an entry in all four `Localizable.strings` tables under `native/Sources/AtlasCore/Resources/`.
 - Record new terms in [GLOSSARY.md](GLOSSARY.md) and architecture decisions in [docs/adr/](docs/adr/).
 - Record user-visible changes under `Unreleased` in [CHANGELOG.md](CHANGELOG.md); they are moved into the matching version on release ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
 - When canvas interaction behavior changes, update [docs/macos.md](docs/macos.md) too.

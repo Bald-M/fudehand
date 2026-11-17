@@ -55,7 +55,7 @@ private func textNode() -> DesignNode {
 
 @Test func buildsNestedNodeWithDefaults() throws {
     let node = try DesignJSON.node(from: ["id": "f", "type": "frame", "children": [["id": "t", "type": "text", "text": ["content": "Hi"]]]])
-    #expect(node.name == "画框" && node.width == 100 && node.clipsContent)
+    #expect(node.name == "Frame" && node.width == 100 && node.clipsContent)
     #expect(node.children[0].text == DesignText(content: "Hi"))
 }
 
