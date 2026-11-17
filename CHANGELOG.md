@@ -29,6 +29,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - `CLAUDE.md` is now in English and states the project language convention: docs, code comments, test descriptions, MCP tool descriptions, and error messages in English; App UI copy stays Chinese for now (#79).
 - Build script output (`pnpm build:native`, `pnpm test:native`), the non-macOS error, and the control channel startup log are now in English; the `.uiatlas` file kind shown in Finder is now `ui-atlas Project` (#84).
 
+### Fixed
+
+- Changing the model settings or deleting the saved API key while a reply is in progress no longer leaves the chat panel stuck on "Replying…"; the running reply is ended as stopped, and you can send, clear, and stop again (#55).
+
 ## [0.0.1] - 2026-11-17
 
 ### Summary
