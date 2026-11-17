@@ -74,9 +74,10 @@ public enum CanvasGeometry {
         precise ? delta : Point(x: delta.x * wheelLineHeight, y: delta.y * wheelLineHeight)
     }
 
-    /// ⌘ / ⌃ + wheel: a positive vertical delta zooms in, a negative one zooms out.
-    public static func wheelZoomScale(_ scale: Double, deltaY: Double) -> Double {
-        scale * exp(deltaY * 0.01)
+    /// ⌘ / ⌃ + wheel: scrolling up zooms in and down zooms out, whatever the natural scrolling setting.
+    /// `invertedFromDevice` is `NSEvent.isDirectionInvertedFromDevice` (true with natural scrolling).
+    public static func wheelZoomScale(_ scale: Double, deltaY: Double, invertedFromDevice: Bool) -> Double {
+        scale * exp((invertedFromDevice ? -deltaY : deltaY) * 0.01)
     }
 
     public static func screenToWorld(_ point: Point, viewport: Viewport) -> Point {
