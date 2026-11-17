@@ -248,7 +248,7 @@ describe('Agent harness：OpenAI Responses API（Codex 系列）', () => {
     await chat.ask('谢谢')
     expect(model.requests[0].url).toBe('/responses')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
-    expect(model.requests[0].body.model).toBe('gpt-5-codex')
+    expect(model.requests[0].body.model).toBe('gpt-5.3-codex')
     expect(typeof model.requests[0].body.instructions).toBe('string')
     expect(model.requests[0].body.tools[0]).toMatchObject({ type: 'function', name: 'design_get_state' })
     // The tool schemas have optional fields and free-form objects, which strict mode rejects.
@@ -359,9 +359,9 @@ describe('Agent harness：列出可用模型', () => {
   })
 
   it('OpenAI Responses 提供方同样读取 /models', async () => {
-    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5-codex' }] } }])
+    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5.3-codex' }] } }])
     const result = await listModels({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
-    expect(result.event).toEqual({ type: 'models', models: ['gpt-5-codex'], default: 'gpt-5-codex' })
+    expect(result.event).toEqual({ type: 'models', models: ['gpt-5.3-codex'], default: 'gpt-5.3-codex' })
     expect(model.requests[0].url).toBe('/models')
   })
 

@@ -10,7 +10,7 @@
 export const providerDefaults = {
   deepseek: { kind: 'openai', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
   // Codex 系列模型只支持 Responses API。
-  openai: { kind: 'responses', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
+  openai: { kind: 'responses', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.3-codex' },
   anthropic: { kind: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
 }
 
