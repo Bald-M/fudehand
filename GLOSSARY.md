@@ -42,6 +42,8 @@ _Avoid_: preview mode, present mode
 
 **MCP server**: A local tool process (`scripts/mcp-server.mjs`) that external AI agents (Claude Code, Codex, DeepSeek Harness, and others) start on demand; it forwards design tools to the running App.
 
+**Agent parity**: The rule that every App feature a person can use, settings included, is also an Agent tool ([ADR 0007](docs/adr/0007-agent-parity.md), `docs/agent-tools.md`).
+
 **Launch window (启动窗口 / 啟動視窗)**: The window shown when the App starts, with three areas: New, Recent, and Templates. It closes once editing begins and can be reopened from *Window → Launch Window (窗口 › 启动窗口)*.
 _Avoid_: welcome page (欢迎页), home page (首页)
 

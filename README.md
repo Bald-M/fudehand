@@ -207,6 +207,7 @@ pnpm version:check       # check that every location agrees; otherwise list the 
 - [GLOSSARY](GLOSSARY.md): the project's terms
 - [ADR 0003](docs/adr/0003-agent-mcp.md): MCP, the control channel, and the chat panel
 - [ADR 0006](docs/adr/0006-native-design-document.md): the native design document
+- [Agent tools](docs/agent-tools.md) and [ADR 0007](docs/adr/0007-agent-parity.md): every App feature is an Agent tool
 - [CHANGELOG](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
 
 ## License

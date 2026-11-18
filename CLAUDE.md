@@ -63,4 +63,5 @@ The store calls `canvas.show(index)` (the document with its `DesignIndex`) direc
 - Remote: `origin` → https://github.com/Bald-M/fudehand (default branch `main`). No CI or deployment is configured; local checks are the gate. Deliver on a task branch, push, then open a PR against `main`.
 - Create and track tasks directly in GitHub Issues with `gh issue`; do not keep local task records. `.scratch/<feature>/` is only for drafting longer specs or plans.
 - Record new terms in `GLOSSARY.md` and architecture decisions in `docs/adr/`. ADR 0002 fully removed the browser shell and ADR 0006 removed the web-work pipeline — do not reintroduce `apps/atlas`, `catalog.json`, `examples/`, the preview launcher, or WKWebView frames.
+- Agent parity (ADR 0007): every App feature, settings included, is also an Agent tool. A PR that adds or changes a feature adds or changes its tool, its tests, and the coverage table in `docs/agent-tools.md`, following the rules there.
 - UI changes must be checked in the real app in both light and dark appearance; put evidence screenshots in `docs/evidence/`.
