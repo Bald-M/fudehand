@@ -260,3 +260,29 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .redo)
     #expect(store.isDirty)
 }
+
+@Test @MainActor func editedStateFollowsUndoAndRedoAroundTheSavePoint() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "box", "type": "rectangle", "x": 10, "y": 20])))
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    _ = try await control(store, .saveDocument(url.path))
+
+    // Undoing past the save point leaves content that differs from the file.
+    _ = try await control(store, .undo)
+    #expect(try await control(store, .getState)["dirty"] as? Bool == true)
+    _ = try await control(store, .redo)
+    #expect(try await control(store, .getState)["dirty"] as? Bool == false)
+
+    // A drag is still one undo step, and undoing it returns to the save point.
+    store.canvasBeginGesture("Move")
+    store.canvasMove(["box": Point(x: 30, y: 40)])
+    store.canvasMove(["box": Point(x: 50, y: 60)])
+    store.canvasEndGesture()
+    #expect(try await control(store, .getState)["dirty"] as? Bool == true)
+    _ = try await control(store, .undo)
+    #expect(store.editor.document.node("box")?.frame.x == 10 && store.canRedo)
+    #expect(try await control(store, .getState)["dirty"] as? Bool == false)
+    _ = try await control(store, .redo)
+    #expect(store.editor.document.node("box")?.frame.x == 50 && store.isDirty)
+}
