@@ -15,12 +15,12 @@ export function runCommand(executable, args, options = {}) {
 
 export async function runSwift(operation, { configuration = 'debug', args = [], env = {} } = {}) {
   if (process.platform !== 'darwin') throw new Error('The native app must be built and tested on macOS.')
-  const configured = process.env.UI_ATLAS_SWIFT_SCRATCH
+  const configured = process.env.FUDEHAND_SWIFT_SCRATCH
   const scratch = configured
     ? resolve(configured, operation === 'test' ? 'tests' : '.')
-    : `/private/tmp/ui-atlas-native-${operation === 'test' ? 'tests' : 'release'}`
+    : `/private/tmp/fudehand-native-${operation === 'test' ? 'tests' : 'release'}`
   const cache = join(scratch, 'cache')
-  const modules = resolve(process.env.UI_ATLAS_SWIFT_MODULE_CACHE || '/private/tmp/ui-atlas-core-module-cache')
+  const modules = resolve(process.env.FUDEHAND_SWIFT_MODULE_CACHE || '/private/tmp/fudehand-core-module-cache')
   await Promise.all([mkdir(cache, { recursive: true }), mkdir(modules, { recursive: true })])
   await runCommand('swift', [
     operation, '--package-path', join(root, 'native'), '--configuration', configuration,

@@ -1,15 +1,15 @@
-# ui-atlas
+# Fudehand
 
 A native AI design tool: people and agents edit the same design document on the same canvas.
 
 ## Terms
 
-The App UI comes in US English (the default), British English, Simplified Chinese, and Traditional Chinese. Each term leads with its English name, the same in both English variants, followed in parentheses by the Simplified and Traditional Chinese names the App uses. The App's string tables (`native/Sources/AtlasCore/Resources/`) must use these names.
+The App UI comes in US English (the default), British English, Simplified Chinese, and Traditional Chinese. Each term leads with its English name, the same in both English variants, followed in parentheses by the Simplified and Traditional Chinese names the App uses. The App's string tables (`native/Sources/FudehandCore/Resources/`) must use these names.
 
 **Design document (设计文档 / 設計文件)**: A tree of layers; everything shown on the canvas. The App is its only owner; changes from people and agents both apply to it and share one undo history.
 _Avoid_: work (作品), project directory (项目目录) (these refer to the removed web-project pipeline)
 
-**Project file (工程文件 / 專案檔)**: The file a design document is saved as, with the extension `.uiatlas`; its content is public JSON with a format name (`ui-atlas.design`) and a format version.
+**Project file (工程文件 / 專案檔)**: The file a design document is saved as, with the extension `.fudehand`; its content is public JSON with a format name (`fudehand.design`) and a format version.
 
 **Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
@@ -32,7 +32,7 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 **Launch window (启动窗口 / 啟動視窗)**: The window shown when the App starts, with three areas: New, Recent, and Templates. It closes once editing begins and can be reopened from *Window → Launch Window (窗口 › 启动窗口)*.
 _Avoid_: welcome page (欢迎页), home page (首页)
 
-**Template (模板 / 範本)**: A `.uiatlas` design bundled with the App (`native/Resources/Templates/`), used in the launch window to create a new untitled design document; the new document is not linked to the template file, so saving never overwrites the template.
+**Template (模板 / 範本)**: A `.fudehand` design bundled with the App (`native/Resources/Templates/`), used in the launch window to create a new untitled design document; the new document is not linked to the template file, so saving never overwrites the template.
 _Avoid_: example (示例), work template (作品模板) (these refer to the removed web-project pipeline)
 
 **MCP connector (MCP 连接器 / MCP 連接器)**: The window opened from the app menu's *MCP Connectors… (MCP 连接器…)*. It detects whether the MCP server is registered in the user-level configuration of Claude Code, Codex, and DeepSeek Harness, and connects or disconnects it with one click (through the CLI for Claude Code and Codex; for DeepSeek Harness, which has no such command, by editing a marked block in its home patch file `~/.dsh/cordis.patch.yml`).

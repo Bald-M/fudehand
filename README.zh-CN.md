@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="native/Resources/AppIcon/AppIcon-1024.png" width="128" alt="ui-atlas 应用图标">
+  <img src="native/Resources/AppIcon/AppIcon-1024.png" width="128" alt="Fudehand 应用图标">
 </p>
 
-<h1 align="center">ui-atlas</h1>
+<h1 align="center">Fudehand</h1>
 
 <p align="center">
   原生 macOS 设计工具，你和 AI Agent 在同一块画布上编辑。
@@ -12,9 +12,9 @@
   <a href="README.md">English</a> | 简体中文
 </p>
 
-![ui-atlas 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
+![fudehand 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
 
-ui-atlas 完全运行在你自己的 Mac 上。设计稿是一份由图层组成的文档，显示在可平移、可缩放的画布上，交互参照 Figma。AI Agent 通过 MCP 或 App 内的对话面板编辑同一份文档，每次修改都立即显示在画布上。设计稿保存为 `.uiatlas` 工程文件，内容是普通 JSON。
+Fudehand 完全运行在你自己的 Mac 上。设计稿是一份由图层组成的文档，显示在可平移、可缩放的画布上，交互参照 Figma。AI Agent 通过 MCP 或 App 内的对话面板编辑同一份文档，每次修改都立即显示在画布上。设计稿保存为 `.fudehand` 工程文件，内容是普通 JSON。
 
 当前版本 v0.0.3，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
 
@@ -24,7 +24,7 @@ ui-atlas 完全运行在你自己的 Mac 上。设计稿是一份由图层组成
 - **人和 Agent 共用一份文档。** App 是设计文档的唯一持有者。你的修改和 Agent 的修改走同一个编辑器，共用一条撤销历史。
 - **给 Agent 用的设计工具。** Claude Code、Codex 或任何 MCP 客户端都能通过 MCP server 读取、创建和修改图层，再截图核对结果。
 - **内置对话面板。** 在 App 里直接让模型搭建或修改界面，支持 DeepSeek、Claude 和 ChatGPT，使用你自己的 API key（ChatGPT 需要 OpenAI API key）。
-- **公开的文件格式。** `.uiatlas` 是带版本号的 JSON，可以直接阅读、对比，也可以放进 Git。
+- **公开的文件格式。** `.fudehand` 是带版本号的 JSON，可以直接阅读、对比，也可以放进 Git。
 - **四种界面语言。** 美式英语（默认）、英式英语、简体中文和繁体中文。
 
 ## 环境要求
@@ -42,11 +42,11 @@ Node 只用于 MCP server 和对话面板背后的 Agent harness。App 没有第
 
 ```bash
 pnpm install
-pnpm build:native        # Release 构建并 ad-hoc 签名 → dist/ui-atlas.app
-open dist/ui-atlas.app
+pnpm build:native        # Release 构建并 ad-hoc 签名 → dist/Fudehand.app
+open dist/Fudehand.app
 ```
 
-`dist/ui-atlas.app` 可以拖进“应用程序”文件夹。但请保留本检出目录：对话面板和 MCP 连接器要用到构建时的源码目录。
+`dist/Fudehand.app` 可以拖进“应用程序”文件夹。但请保留本检出目录：对话面板和 MCP 连接器要用到构建时的源码目录。
 
 ## 使用 App
 
@@ -59,27 +59,27 @@ App 启动后先显示启动窗口，在这里可以：
 
 进入编辑后，用画布底部工具栏的工具在画布上创建图层：画框（F）、矩形（R）、椭圆（O）、文字（T）。在左侧的图层面板里整理图层，在右侧的“设计”标签里修改位置、尺寸、填充、描边、文字和自动布局。
 
-界面语言默认是美式英语。在应用菜单的 *ui-atlas → Language*（语言）里切换，选择立即生效，并保留到下次启动。下文的菜单和按钮名称都按简体中文界面来写。
+界面语言默认是美式英语。在应用菜单的 *Fudehand → Language*（语言）里切换，选择立即生效，并保留到下次启动。下文的菜单和按钮名称都按简体中文界面来写。
 
 画布操作、面板、文件和快捷键的完整说明见 [macOS 使用说明](docs/macos.md)（英文）。
 
 ## 接入 AI Agent
 
-Agent 通过一组设计工具工作，MCP server 和 App 内的对话面板共用这组工具。每次工具调用都转发给运行中的 App，所以 App 必须开着；否则工具返回 `ui-atlas is not running`。
+Agent 通过一组设计工具工作，MCP server 和 App 内的对话面板共用这组工具。每次工具调用都转发给运行中的 App，所以 App 必须开着；否则工具返回 `Fudehand is not running`。
 
 ### 连接 Agent
 
-最快的方式是应用菜单的 *ui-atlas → MCP 连接器…*。窗口里显示 Claude Code 和 Codex 是否已连接；点“连接”，App 会把本检出目录的 MCP server 注册到该 Agent 的用户级配置里（通过 `claude mcp add --scope user` 或 `codex mcp add`），点“断开连接”则移除注册。本机没有安装对应 CLI 的 Agent 会显示为不可用。新建立的连接在之后打开的 Agent 会话中生效。
+最快的方式是应用菜单的 *Fudehand → MCP 连接器…*。窗口里显示 Claude Code 和 Codex 是否已连接；点“连接”，App 会把本检出目录的 MCP server 注册到该 Agent 的用户级配置里（通过 `claude mcp add --scope user` 或 `codex mcp add`），点“断开连接”则移除注册。本机没有安装对应 CLI 的 Agent 会显示为不可用。新建立的连接在之后打开的 Agent 会话中生效。
 
 也可以手动配置：
 
-- **Claude Code。** 仓库根目录的 `.mcp.json` 已经注册了 `ui-atlas`。在仓库根目录启动 `claude`，按提示同意启用项目 MCP server，之后就能在 `/mcp` 里看到它。
-- **Codex。** 运行 `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`，或者把下面这段加到 `~/.codex/config.toml`，路径换成本检出目录的绝对路径：
+- **Claude Code。** 仓库根目录的 `.mcp.json` 已经注册了 `fudehand`。在仓库根目录启动 `claude`，按提示同意启用项目 MCP server，之后就能在 `/mcp` 里看到它。
+- **Codex。** 运行 `codex mcp add fudehand -- node /path/to/fudehand/scripts/mcp-server.mjs`，或者把下面这段加到 `~/.codex/config.toml`，路径换成本检出目录的绝对路径：
 
   ```toml
-  [mcp_servers.ui-atlas]
+  [mcp_servers.fudehand]
   command = "node"
-  args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+  args = ["/path/to/fudehand/scripts/mcp-server.mjs"]
   ```
 
   Codex 默认在每次 MCP 工具调用前询问审批，在 `codex exec` 这类无人值守模式下会直接拒绝调用。要跳过审批，在上面的配置块里加一行 `default_tools_approval_mode = "approve"`。写入类工具会直接修改设计文档，请只在需要时开启。
@@ -104,7 +104,7 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 - 插入图片时传 `image.path`（本地 PNG 或 JPEG），工具会替你读取文件。单次请求上限 32 MB，大约可以放下 24 MB 的图片文件。
 - 文件路径和图片路径里的 `~` 会展开为你的主目录。
 
-工具通过 App 的控制通道与 App 通信。控制通道是一个 Unix socket，位于 `~/Library/Application Support/ui-atlas/control.sock`（可用 `UI_ATLAS_CONTROL_SOCKET` 覆盖）。它只对当前用户开放，不监听任何网络地址。
+工具通过 App 的控制通道与 App 通信。控制通道是一个 Unix socket，位于 `~/Library/Application Support/fudehand/control.sock`（可用 `FUDEHAND_CONTROL_SOCKET` 覆盖）。它只对当前用户开放，不监听任何网络地址。
 
 ### 对话面板
 
@@ -122,17 +122,17 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 
 Claude 和 ChatGPT 能收到 `design_snapshot` 返回的图片，模型可以看到自己做出来的效果。OpenAI 兼容接口的工具结果无法携带图片，所以使用 DeepSeek 时，模型会被告知图片已省略，改为读回图层数据来检查修改。
 
-API key 只保存在本机钥匙串里（服务名 `ui-atlas.agent`）。App 通过环境变量把它传给对话程序，不会写入仓库、工程文件、偏好设置或日志。
+API key 只保存在本机钥匙串里（服务名 `fudehand.agent`）。App 通过环境变量把它传给对话程序，不会写入仓库、工程文件、偏好设置或日志。
 
 ## 工程文件
 
-用“文件”菜单的“保存”（⌘S）和“另存为…”（⇧⌘S）把设计稿存为 `.uiatlas` 工程文件，用“打开…”（⌘O）或“打开最近”重新打开。App 注册了 `.uiatlas` 文件类型，所以在 Finder 里双击文件、把文件拖到 Dock 图标上，或选择“打开方式”，都会用 ui-atlas 打开。当前文档有未保存修改时，App 会先询问是否保存。
+用“文件”菜单的“保存”（⌘S）和“另存为…”（⇧⌘S）把设计稿存为 `.fudehand` 工程文件，用“打开…”（⌘O）或“打开最近”重新打开。App 注册了 `.fudehand` 文件类型，所以在 Finder 里双击文件、把文件拖到 Dock 图标上，或选择“打开方式”，都会用 Fudehand 打开。当前文档有未保存修改时，App 会先询问是否保存。
 
 设计文档是一棵图层树，包含画框、矩形、椭圆、文字、图片和分组。图层有填充、描边、圆角、透明度、显示/隐藏和锁定；画框还可以使用自动布局。工程文件是带格式版本号的 JSON：
 
 ```json
 {
-  "format": "ui-atlas.design",
+  "format": "fudehand.design",
   "version": 1,
   "nodes": [
     { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
@@ -148,14 +148,14 @@ API key 只保存在本机钥匙串里（服务名 `ui-atlas.agent`）。App 通
 
 坐标相对于父图层。数组顺序就是叠放顺序，靠后的在上层。保存的是自动布局计算之后的几何结果。全部字段和校验规则见[设计文档规格](docs/superpowers/specs/2026-11-17-native-design-document-design.md)和 [ADR 0006](docs/adr/0006-native-design-document.md)（均为英文）。
 
-ui-atlas 不能导入或导出 Figma 文件。
+Fudehand 不能导入或导出 Figma 文件。
 
 ## 开发
 
 ```bash
 pnpm dev               # Debug 构建并打开 App
-pnpm build:native      # Release 构建并 ad-hoc 签名 → dist/ui-atlas.app
-pnpm test:native       # Swift 测试：AtlasCoreTests 与 AtlasAppTests
+pnpm build:native      # Release 构建并 ad-hoc 签名 → dist/Fudehand.app
+pnpm test:native       # Swift 测试：FudehandCoreTests 与 FudehandAppTests
 pnpm bench:native      # 大文档下的画布拖动与悬停基准（release 构建）
 pnpm check             # Vitest：MCP 工具、MCP server 与对话 harness
 pnpm mcp               # 以 stdio 启动 MCP server（通常由 Agent 拉起）
@@ -167,8 +167,8 @@ Node 测试会启动子进程和本地 socket，需要本机回环网络。禁�
 
 | 路径 | 内容 |
 | --- | --- |
-| `native/Sources/AtlasCore/` | 文档模型、校验、自动布局、编辑历史、交互规则和控制协议。不依赖 AppKit。 |
-| `native/Sources/AtlasApp/` | SwiftUI 外壳、画布渲染、图层面板与属性面板、对话面板和控制通道。 |
+| `native/Sources/FudehandCore/` | 文档模型、校验、自动布局、编辑历史、交互规则和控制协议。不依赖 AppKit。 |
+| `native/Sources/FudehandApp/` | SwiftUI 外壳、画布渲染、图层面板与属性面板、对话面板和控制通道。 |
 | `native/Tests/` | Swift 测试。 |
 | `scripts/` | 原生构建与测试脚本、MCP server、Agent harness，以及共用的设计工具。 |
 | `tests/` | Node 测试（Vitest）。 |
@@ -200,6 +200,6 @@ pnpm version:check       # 检查各处版本号一致，不一致时列出差�
 
 ## 许可
 
-ui-atlas 以 [Apache-2.0 许可证](LICENSE)发布，源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)。App 只在你自己的机器上构建和运行，没有 CI、云同步或生产部署。
+Fudehand 以 [Apache-2.0 许可证](LICENSE)发布，源码托管在 [GitHub](https://github.com/Bald-M/fudehand)。App 只在你自己的机器上构建和运行，没有 CI、云同步或生产部署。
 
 `scripts/design-guidance.mjs` 中的 Agent 设计指引改写自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) 的 `frontend-design` skill（版权归 Anthropic, PBC 所有，Apache-2.0 许可）；该文件内注明了改动内容。

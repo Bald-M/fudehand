@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { callTool, tools } from '../scripts/atlas-tools.mjs'
+import { callTool, tools } from '../scripts/fudehand-tools.mjs'
 import { fakeApp } from './helpers/fake-app'
 
 const cleanup: (() => Promise<unknown>)[] = []
@@ -43,9 +43,9 @@ describe('design tools', () => {
     await callTool('design_select', { ids: [] }, ctx)
     await callTool('design_undo', {}, ctx)
     await callTool('design_new_document', { discard: true }, ctx)
-    await callTool('design_open_document', { path: 'designs/home.uiatlas' }, ctx)
+    await callTool('design_open_document', { path: 'designs/home.fudehand' }, ctx)
     await callTool('design_save_document', {}, ctx)
-    await callTool('design_save_document', { path: '/tmp/a.uiatlas' }, ctx)
+    await callTool('design_save_document', { path: '/tmp/a.fudehand' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
@@ -55,9 +55,9 @@ describe('design tools', () => {
       { command: 'select', args: { ids: [] } },
       { command: 'undo', args: {} },
       { command: 'new_document', args: { discard: true } },
-      { command: 'open_document', args: { path: '/repo/designs/home.uiatlas' } },
+      { command: 'open_document', args: { path: '/repo/designs/home.fudehand' } },
       { command: 'save_document', args: {} },
-      { command: 'save_document', args: { path: '/tmp/a.uiatlas' } },
+      { command: 'save_document', args: { path: '/tmp/a.fudehand' } },
       { command: 'zoom', args: { scale: 0.5 } },
     ])
   })
@@ -70,15 +70,15 @@ describe('design tools', () => {
     cleanup.push(async () => vi.unstubAllEnvs())
     const fake = await app(echo)
     const ctx = { root: '/repo', socketPath: fake.socketPath }
-    await callTool('design_save_document', { path: '~/Desktop/a.uiatlas' }, ctx)
+    await callTool('design_save_document', { path: '~/Desktop/a.fudehand' }, ctx)
     await callTool('design_open_document', { path: '~' }, ctx)
     await callTool('design_create_node', { node: { type: 'image', image: { path: '~/dot.png' } } }, ctx)
-    await callTool('design_open_document', { path: '~other/a.uiatlas' }, ctx)
+    await callTool('design_open_document', { path: '~other/a.fudehand' }, ctx)
     expect(fake.received.map(({ args }) => args)).toEqual([
-      { path: join(home, 'Desktop/a.uiatlas') },
+      { path: join(home, 'Desktop/a.fudehand') },
       { path: home },
       { node: { type: 'image', image: { data: PNG } } },
-      { path: '/repo/~other/a.uiatlas' },
+      { path: '/repo/~other/a.fudehand' },
     ])
   })
 
@@ -105,11 +105,11 @@ describe('design tools', () => {
     expect(text(result)).toBe('Layer e: ellipse does not support layout')
   })
 
-  it('returns "ui-atlas is not running" when the App is not running', async () => {
+  it('returns "Fudehand is not running" when the App is not running', async () => {
     const socketPath = join(tmpdir(), `uia-missing-${randomUUID().slice(0, 8)}.sock`)
     const result = await callTool('design_get_state', {}, { root: '/repo', socketPath })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('ui-atlas is not running')
+    expect(text(result)).toBe('Fudehand is not running')
   })
 
   it('has English tool and parameter descriptions, with no Chinese', () => {

@@ -1,8 +1,8 @@
 # Canvas Switches to a Native Design Document
 
-2026-11-17 (#46). ui-atlas changes from displaying web projects to a native design tool: the canvas shows ui-atlas's own design document (a tree of layers), rendered directly by the App with Core Animation; people and agents edit the same document, agents send edit commands through the control channel, and the App is the document's single owner. Designs are saved as versioned, public JSON project files (`.uiatlas`).
+2026-11-17 (#46). Fudehand changes from displaying web projects to a native design tool: the canvas shows Fudehand's own design document (a tree of layers), rendered directly by the App with Core Animation; people and agents edit the same document, agents send edit commands through the control channel, and the App is the document's single owner. Designs are saved as versioned, public JSON project files (`.fudehand`).
 
-The web-project pipeline is removed along with it: `WKWebView` frames, the Node preview launcher and example servers, `catalog.json` and its two validators (Swift and Node), and the web projects in `examples/`. ADR 0004 (start example servers on demand) and 0005 (web projects open only in App frames) no longer apply and are kept only as historical records. The structure of ADR 0003 is kept: the MCP server and the chat panel harness still share `scripts/atlas-tools.mjs`, but the tools now forward design commands; document fields are validated in only one place, in Swift.
+The web-project pipeline is removed along with it: `WKWebView` frames, the Node preview launcher and example servers, `catalog.json` and its two validators (Swift and Node), and the web projects in `examples/`. ADR 0004 (start example servers on demand) and 0005 (web projects open only in App frames) no longer apply and are kept only as historical records. The structure of ADR 0003 is kept: the MCP server and the chat panel harness still share `scripts/fudehand-tools.mjs`, but the tools now forward design commands; document fields are validated in only one place, in Swift.
 
 ## Rejected Alternatives
 

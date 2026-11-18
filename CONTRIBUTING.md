@@ -1,4 +1,4 @@
-# Contributing to ui-atlas
+# Contributing to Fudehand
 
 Thanks for contributing. This guide is the shared entry point for human contributors and AI agents: how to set up the environment, which checks to run, how to write issues, branches, commits, and pull requests, and what evidence UI changes need. For what the product is and how to use it, see the [README](README.md) ([简体中文](README.zh-CN.md)).
 
@@ -17,28 +17,28 @@ Requires macOS 14+, Swift 6 (the Xcode Command Line Tools are enough; no full Xc
 ```bash
 pnpm install
 pnpm dev               # build the app in debug and open it
-pnpm build:native      # release build + ad-hoc signing → dist/ui-atlas.app
-pnpm test:native       # run swift test on native/ (AtlasCoreTests + AtlasAppTests)
+pnpm build:native      # release build + ad-hoc signing → dist/Fudehand.app
+pnpm test:native       # run swift test on native/ (FudehandCoreTests + FudehandAppTests)
 pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness
-pnpm mcp               # start the ui-atlas MCP server over stdio (usually launched by the agent)
+pnpm mcp               # start the Fudehand MCP server over stdio (usually launched by the agent)
 ```
 
 Run a single test (these call Vitest and SwiftPM directly; they are not `package.json` scripts):
 
 ```bash
 pnpm vitest run tests/control-tools.test.ts -t "<name>"
-swift test --package-path native --filter AtlasCoreTests.<SuiteOrTest>
+swift test --package-path native --filter FudehandCoreTests.<SuiteOrTest>
 ```
 
 Notes:
 
 - The Node tests start real local sockets, HTTP servers, and child processes, so they need loopback networking. A sandbox that forbids listening on localhost makes them fail spuriously.
-- `pnpm test:native` and `pnpm build:native` pin SwiftPM's scratch/cache directories under `/private/tmp/ui-atlas-native-*` (override with `UI_ATLAS_SWIFT_SCRATCH` / `UI_ATLAS_SWIFT_MODULE_CACHE`). **Do not run two Swift builds on the same scratch directory at once.**
-- When tuning pan/zoom performance, set `UI_ATLAS_FRAME_LOG=1`; the app prints `[frame] hitches=N frames=M` once per second.
+- `pnpm test:native` and `pnpm build:native` pin SwiftPM's scratch/cache directories under `/private/tmp/fudehand-native-*` (override with `FUDEHAND_SWIFT_SCRATCH` / `FUDEHAND_SWIFT_MODULE_CACHE`). **Do not run two Swift builds on the same scratch directory at once.**
+- When tuning pan/zoom performance, set `FUDEHAND_FRAME_LOG=1`; the app prints `[frame] hitches=N frames=M` once per second.
 
 ## Issues
 
-Create and track tasks in [GitHub Issues](https://github.com/Bald-M/ui-atlas/issues); do not keep task records in the repository. `.scratch/<feature>/` is only for drafting longer specs or plans.
+Create and track tasks in [GitHub Issues](https://github.com/Bald-M/fudehand/issues); do not keep task records in the repository. `.scratch/<feature>/` is only for drafting longer specs or plans.
 
 **Title**: `[Type][Priority] Area: summary`, e.g. `[Bug][P1] Canvas: layers flicker while dragging`.
 
@@ -69,7 +69,7 @@ Write acceptance criteria as a verifiable `- [ ]` checklist, and **always includ
 - Commit messages and PR titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): `type(scope): summary`, with the summary in Chinese, matching the existing history.
   - type: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `style`, `chore`
   - scope: a product area or engineering boundary; common ones are `canvas`, `app`, `agent`, `file`, `readme`, `changelog`, `release`, `repo`. Never a branch name or "update files".
-  - Examples from the history: `feat(canvas): 按住空格时光标立即变为抓手`, `fix(file): 导出 .uiatlas 文件类型，打开面板与 Finder 都能打开工程文件`
+  - Examples from the history: `feat(canvas): 按住空格时光标立即变为抓手`, `fix(file): 导出 .fudehand 文件类型，打开面板与 Finder 都能打开工程文件`
 - Stage only your task's files; do not `git add -A` / `git add .`.
 
 ## Pull requests
@@ -80,7 +80,7 @@ The PR title uses the commit format. PRs are squash-merged, and the merge commit
 - **Related issue**: `Closes #n`, `Refs #n`, or `N/A: reason`
 - **Verification**: tick only commands you actually ran and that passed, with results; list anything not run and why
 - **Release notes**: one user-facing sentence, or N/A
-- **Risk and compatibility**: API / shared contracts (including MCP tools and the control protocol), the `.uiatlas` file format, permissions / security, configuration / rollback; write N/A where nothing is affected
+- **Risk and compatibility**: API / shared contracts (including MCP tools and the control protocol), the `.fudehand` file format, permissions / security, configuration / rollback; write N/A where nothing is affected
 - **UI evidence**: light and dark screenshots for UI changes, otherwise N/A
 - **Checklist**
 
@@ -94,7 +94,7 @@ Keep the PR as a **draft** until verification, evidence, and external dependenci
 - [ ] `pnpm test:native`
 - [ ] For native UI changes: `pnpm build:native`, plus a check in the real App in both light and dark appearance; for new or changed copy, also in each UI language
 
-When fixing a bug, first write a test that reproduces it. Testable rules belong in `AtlasCore` (no AppKit dependency). Never delete or skip a valid test to make a check pass.
+When fixing a bug, first write a test that reproduces it. Testable rules belong in `FudehandCore` (no AppKit dependency). Never delete or skip a valid test to make a check pass.
 
 ## UI evidence
 
@@ -102,7 +102,7 @@ Check UI changes in the real App in both **light and dark** appearance, and put 
 
 ## Documentation conventions
 
-- Language: project docs (README, CHANGELOG, `GLOSSARY.md`, `docs/`, ADRs), code comments, test descriptions, MCP tool descriptions, and error messages are in English. The App UI is localized (US English by default, plus British English, Simplified Chinese, and Traditional Chinese); when docs name a menu, panel, or button, use its US English label, e.g. *File menu → Open Recent*. New UI copy goes through `L("…")` with an entry in all four `Localizable.strings` tables under `native/Sources/AtlasCore/Resources/`.
+- Language: project docs (README, CHANGELOG, `GLOSSARY.md`, `docs/`, ADRs), code comments, test descriptions, MCP tool descriptions, and error messages are in English. The App UI is localized (US English by default, plus British English, Simplified Chinese, and Traditional Chinese); when docs name a menu, panel, or button, use its US English label, e.g. *File menu → Open Recent*. New UI copy goes through `L("…")` with an entry in all four `Localizable.strings` tables under `native/Sources/FudehandCore/Resources/`.
 - Record new terms in [GLOSSARY.md](GLOSSARY.md) and architecture decisions in [docs/adr/](docs/adr/).
 - Record user-visible changes under `Unreleased` in [CHANGELOG.md](CHANGELOG.md); they are moved into the matching version on release ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
 - When canvas interaction behavior changes, update [docs/macos.md](docs/macos.md) too.
@@ -127,5 +127,5 @@ After the PR is merged, tag the merge commit `vX.Y.Z` and create a GitHub Releas
 ## Security
 
 - Never commit, or paste into issues, PRs, or comments, `.env` files, API keys, tokens, Keychain contents, or other secrets (`.env` is in `.gitignore`).
-- The chat panel's API key lives only in the local Keychain (service `ui-atlas.agent`) and reaches the harness only through the `UI_ATLAS_API_KEY` environment variable. Do not write it into the repository, project files, preferences, or logs.
+- The chat panel's API key lives only in the local Keychain (service `fudehand.agent`) and reaches the harness only through the `FUDEHAND_API_KEY` environment variable. Do not write it into the repository, project files, preferences, or logs.
 - The control channel is open only to the current user and does not listen on a network address; do not turn it into a network service.

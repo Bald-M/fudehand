@@ -8,12 +8,12 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 
 export async function buildNativeApp({ configuration = 'release' } = {}) {
   const scratch = await runSwift('build', { configuration })
-  const app = join(root, 'dist', 'ui-atlas.app')
+  const app = join(root, 'dist', 'Fudehand.app')
   const contents = join(app, 'Contents')
   await mkdir(join(contents, 'MacOS'), { recursive: true })
   await mkdir(join(contents, 'Resources'), { recursive: true })
-  await copyFile(join(scratch, configuration, 'AtlasApp'), join(contents, 'MacOS', 'AtlasApp'))
-  await chmod(join(contents, 'MacOS', 'AtlasApp'), 0o755)
+  await copyFile(join(scratch, configuration, 'FudehandApp'), join(contents, 'MacOS', 'FudehandApp'))
+  await chmod(join(contents, 'MacOS', 'FudehandApp'), 0o755)
   await copyFile(join(root, 'native', 'Resources', 'Info.plist'), join(contents, 'Info.plist'))
   await copyFile(join(root, 'native', 'Resources', 'AppIcon.icns'), join(contents, 'Resources', 'AppIcon.icns'))
   await copyTemplates(join(contents, 'Resources', 'Templates'))
@@ -25,20 +25,20 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   return app
 }
 
-// The launch window's templates: the .uiatlas files under native/Resources/Templates/; clear first so deleted templates do not stay in the app bundle.
+// The launch window's templates: the .fudehand files under native/Resources/Templates/; clear first so deleted templates do not stay in the app bundle.
 async function copyTemplates(target) {
   const source = join(root, 'native', 'Resources', 'Templates')
   await rm(target, { recursive: true, force: true })
   await mkdir(target, { recursive: true })
   for (const name of await readdir(source)) {
-    if (name.toLowerCase().endsWith('.uiatlas')) await copyFile(join(source, name), join(target, name))
+    if (name.toLowerCase().endsWith('.fudehand')) await copyFile(join(source, name), join(target, name))
   }
 }
 
 // UI string tables: the App reads them from its own bundle, and their presence tells AppKit which languages
 // the system-provided menu items may use. Clear old ones first so a removed language does not linger.
 async function copyLocalizations(resources) {
-  const source = join(root, 'native', 'Sources', 'AtlasCore', 'Resources')
+  const source = join(root, 'native', 'Sources', 'FudehandCore', 'Resources')
   for (const name of await readdir(resources)) {
     if (name.endsWith('.lproj')) await rm(join(resources, name), { recursive: true, force: true })
   }

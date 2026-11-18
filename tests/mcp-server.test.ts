@@ -11,11 +11,11 @@ const cleanup: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await action() })
 
 async function connect(socketPath: string) {
-  const client = new Client({ name: 'ui-atlas-test', version: '0.0.0' })
+  const client = new Client({ name: 'fudehand-test', version: '0.0.0' })
   const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
   await client.connect(new StdioClientTransport({
     command: process.execPath, args: [server, '--root', '/repo'], stderr: 'ignore',
-    env: { ...env, UI_ATLAS_CONTROL_SOCKET: socketPath },
+    env: { ...env, FUDEHAND_CONTROL_SOCKET: socketPath },
   }))
   cleanup.push(() => client.close())
   return client
@@ -44,7 +44,7 @@ describe('MCP server', () => {
     expect(client.getInstructions()).toContain(designGuidance)
   })
 
-  it('forwards calls to the App through UI_ATLAS_CONTROL_SOCKET', async () => {
+  it('forwards calls to the App through FUDEHAND_CONTROL_SOCKET', async () => {
     const app = await fakeApp(request => ({ ok: true, result: { id: 'abc', got: request.args } }))
     cleanup.push(app.close)
     const client = await connect(app.socketPath)
@@ -56,9 +56,9 @@ describe('MCP server', () => {
   })
 
   it('returns an English error when the App is not running', async () => {
-    const client = await connect('/tmp/ui-atlas-missing.sock')
+    const client = await connect('/tmp/fudehand-missing.sock')
     const result = await client.callTool({ name: 'design_get_state', arguments: {} })
     expect(result.isError).toBe(true)
-    expect(text(result)).toBe('ui-atlas is not running')
+    expect(text(result)).toBe('Fudehand is not running')
   })
 })

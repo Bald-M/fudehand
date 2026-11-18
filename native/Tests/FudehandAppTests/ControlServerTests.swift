@@ -1,0 +1,196 @@
+import Darwin
+import Foundation
+import Testing
+@testable import FudehandApp
+@testable import FudehandCore
+
+private func temporarySocketPath() -> String {
+    // The path limit of sockaddr_un is about 104 bytes, and the temporary directory may be too long.
+    "/tmp/uia-\(UUID().uuidString.prefix(8)).sock"
+}
+
+private func connectSocket(_ path: String) throws -> Int32 {
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    var on: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    withUnsafeMutableBytes(of: &address.sun_path) { buffer in
+        buffer.copyBytes(from: path.utf8.prefix(buffer.count - 1))
+    }
+    let connected = withUnsafePointer(to: &address) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    guard connected == 0 else { close(fd); throw POSIXError(.ECONNREFUSED) }
+    return fd
+}
+
+/// Sends some lines as an ordinary client and reads back the same number of response lines.
+private func exchange(_ path: String, _ lines: [String]) async throws -> [[String: Any]] {
+    let raw = try await Task.detached { () throws -> String in
+        let fd = try connectSocket(path)
+        defer { close(fd) }
+        let payload = Array(lines.map { $0 + "\n" }.joined().utf8)
+        _ = payload.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        return readLines(fd, count: lines.count)
+    }.value
+    return try raw.split(separator: "\n").map { try #require(try JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]) }
+}
+
+private func readLines(_ fd: Int32, count expected: Int) -> String {
+    var received = [UInt8]()
+    var chunk = [UInt8](repeating: 0, count: 65536)
+    var newlines = 0
+    while newlines < expected {
+        let count = read(fd, &chunk, chunk.count)
+        guard count > 0 else { break }
+        received += chunk[0..<count]
+        newlines += chunk[0..<count].filter { $0 == UInt8(ascii: "\n") }.count
+    }
+    return String(decoding: received, as: UTF8.self)
+}
+
+/// Simulates a socket file left behind by a crash: listen, then close, without deleting the file.
+private func leaveStaleSocket(_ path: String) {
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: path.utf8.prefix($0.count - 1)) }
+    _ = withUnsafePointer(to: &address) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+    }
+    listen(fd, 1)
+    close(fd)
+}
+
+@Test func controlServerAnswersOverAPrivateSocketAndReplacesAStaleFile() async throws {
+    let path = temporarySocketPath()
+    leaveStaleSocket(path)
+    #expect(FileManager.default.fileExists(atPath: path))
+    let server = ControlServer(path: path) { command in
+        if case .getNode(let id) = command { throw ControlCommandError("Layer not found: \(id)") }
+        return ["handled": "\(command)"]
+    }
+    try server.start()
+    defer { server.stop() }
+    let mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+    #expect(mode == 0o600)
+    let responses = try await exchange(path, [
+        #"{"id":1,"command":"get_state"}"#,
+        #"{"id":2,"command":"get_node","args":{"id":"x"}}"#,
+        "oops",
+    ])
+    #expect(responses.count == 3)
+    #expect(responses[0]["id"] as? Int == 1)
+    #expect(responses[0]["ok"] as? Bool == true)
+    #expect((responses[0]["result"] as? [String: Any])?["handled"] as? String == "getState")
+    #expect(responses[1]["error"] as? String == "Layer not found: x")
+    #expect(responses[2]["error"] as? String == "Request is not valid JSON")
+}
+
+@Test func controlServerRefusesToStealALiveSocketAndRemovesItsFileOnStop() throws {
+    let path = temporarySocketPath()
+    let first = ControlServer(path: path) { _ in [:] }
+    try first.start()
+    let second = ControlServer(path: path) { _ in [:] }
+    #expect(throws: ControlCommandError.self) { try second.start() }
+    #expect(FileManager.default.fileExists(atPath: path))
+    first.stop()
+    #expect(!FileManager.default.fileExists(atPath: path))
+}
+
+@Test func controlSocketPathDefaultsToApplicationSupport() {
+    let path = ControlServer.defaultPath(environment: [:])
+    #expect(path.hasSuffix("/Library/Application Support/fudehand/control.sock"))
+    #expect(ControlServer.defaultPath(environment: ["FUDEHAND_CONTROL_SOCKET": "/tmp/x.sock"]) == "/tmp/x.sock")
+}
+
+@Test func controlServerWritesLargeResponsesCompletely() async throws {
+    let path = temporarySocketPath()
+    let payload = String(repeating: "a", count: 4 << 20)
+    let server = ControlServer(path: path) { _ in ["data": payload] }
+    try server.start()
+    defer { server.stop() }
+    let responses = try await exchange(path, [#"{"id":1,"command":"node_snapshot","args":{"id":"x"}}"#])
+    #expect((responses.first?["result"] as? [String: Any])?["data"] as? String == payload)
+}
+
+@Test func controlServerKeepsANonSocketFileAtItsPath() throws {
+    let path = temporarySocketPath()
+    FileManager.default.createFile(atPath: path, contents: Data("keep".utf8))
+    defer { unlink(path) }
+    let server = ControlServer(path: path) { _ in [:] }
+    #expect(throws: ControlCommandError.self) { try server.start() }
+    #expect(FileManager.default.contents(atPath: path) == Data("keep".utf8))
+}
+
+@Test func controlServerClosesOpenConnectionsOnStop() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { _ in [:] }
+    try server.start()
+    let fd = try connectSocket(path)
+    defer { close(fd) }
+    // Wait until the connection is accepted before stopping.
+    _ = try await exchange(path, [#"{"id":1,"command":"get_state"}"#])
+    try await Task.sleep(nanoseconds: 50_000_000)
+    server.stop()
+    let reply = await Task.detached { () -> String in
+        let request = Array(#"{"id":2,"command":"restart_preview"}"#.utf8) + [UInt8(ascii: "\n")]
+        _ = request.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        return readLines(fd, count: 1)
+    }.value
+    #expect(reply.isEmpty)
+}
+
+@Test func controlServerRefusesConnectionsBeyondTheLimit() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { _ in [:] }
+    try server.start()
+    defer { server.stop() }
+    var idle: [Int32] = []
+    defer { idle.forEach { close($0) } }
+    for _ in 0..<ControlServer.maximumConnections { idle.append(try connectSocket(path)) }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    let responses = try await exchange(path, [#"{"id":1,"command":"get_state"}"#])
+    #expect(responses.first?["error"] as? String == "Too many connections; try again later")
+}
+
+/// A `create_node` request line of exactly `length` bytes, padded with base64 image data.
+private func imageRequest(id: Int, length: Int) -> String {
+    let head = #"{"id":\#(id),"command":"create_node","args":{"node":{"type":"image","image":{"data":""#
+    let tail = #""}}}}"#
+    return head + String(repeating: "A", count: length - head.utf8.count - tail.utf8.count) + tail
+}
+
+@Test func controlServerAcceptsARequestCarryingATenMegabyteImage() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { command in
+        guard case .createNode(_, _, let node) = command else { return [:] }
+        return ["bytes": ((node.value["image"] as? [String: Any])?["data"] as? String)?.utf8.count ?? 0]
+    }
+    try server.start()
+    defer { server.stop() }
+    // 10 MB of image data is about 13.4 MB of base64; a request exactly at the limit must still pass.
+    #expect(ControlServer.maximumLine >= 14 << 20)
+    let responses = try await exchange(path, [imageRequest(id: 7, length: ControlServer.maximumLine)])
+    #expect(responses.first?["id"] as? Int == 7)
+    #expect(responses.first?["ok"] as? Bool == true)
+    #expect(((responses.first?["result"] as? [String: Any])?["bytes"] as? Int ?? 0) > 13 << 20)
+}
+
+@Test func controlServerRejectsAnOversizedRequestWithItsIDAndKeepsServing() async throws {
+    let path = temporarySocketPath()
+    let server = ControlServer(path: path) { _ in ["handled": true] }
+    try server.start()
+    defer { server.stop() }
+    let responses = try await exchange(path, [
+        imageRequest(id: 8, length: ControlServer.maximumLine + 1),
+        #"{"id":9,"command":"get_state"}"#,
+    ])
+    #expect(responses.count == 2)
+    #expect(responses[0]["id"] as? Int == 8)
+    #expect(responses[0]["ok"] as? Bool == false)
+    #expect(responses[0]["error"] as? String == "Request is too large: a request, including images embedded as base64, is limited to 32 MB (about 24 MB of image files)")
+    #expect(responses[1]["id"] as? Int == 9)
+    #expect(responses[1]["ok"] as? Bool == true)
+}
