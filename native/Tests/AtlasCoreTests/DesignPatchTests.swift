@@ -30,6 +30,14 @@ private func textNode() -> DesignNode {
             == "Layer r: sizing.horizontal must be one of fixed, hug, fill; got grow")
 }
 
+@Test func patchRejectsSignedColorAndFractionalFontWeight() throws {
+    #expect(patchMessage(["fill": "#+12345"], on: DesignNode(id: "r", type: .rectangle))?.contains("#RRGGBB") == true)
+    #expect(patchMessage(["text": ["fontWeight": 450.9]], on: textNode()) == "Layer t: text.fontWeight must be an integer")
+    var node = textNode()
+    try DesignJSON.apply(["text": ["fontWeight": 500.0]], to: &node)
+    #expect(node.text?.fontWeight == 500)
+}
+
 @Test func patchMergesNestedFields() throws {
     var node = textNode()
     try DesignJSON.apply(["text": ["fontSize": 20], "fill": "#FF0000"], to: &node)

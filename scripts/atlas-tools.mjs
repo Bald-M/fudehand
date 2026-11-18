@@ -39,7 +39,7 @@ const NODE_GUIDE = [
   'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/group), name, x, y, width, height, ',
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent; a group ignores fill and stretch and keeps the size of its children), ',
-  'text {content, fontSize, fontWeight 100–900, fontFamily, color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
+  'text {content, fontSize, fontWeight integer 100–900, fontFamily, color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
   'image {path (~ expands to the home directory) or data (base64), fit fill/fit/stretch} (required for image), ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',

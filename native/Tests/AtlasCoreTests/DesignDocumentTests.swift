@@ -50,6 +50,12 @@ let sampleDocument = """
     #expect(message { _ = try DesignColor(hex: "red") } == "Color must be #RRGGBB or #RRGGBBAA: red")
 }
 
+@Test func colorRejectsSignedHex() {
+    #expect(message { _ = try DesignColor(hex: "#+12345") } == "Color must be #RRGGBB or #RRGGBBAA: #+12345")
+    #expect(message { _ = try DesignColor(hex: "#-00000") } == "Color must be #RRGGBB or #RRGGBBAA: #-00000")
+    #expect(message { _ = try DesignColor(hex: "#+1234567") } == "Color must be #RRGGBB or #RRGGBBAA: #+1234567")
+}
+
 @Test func rejectsNewerVersion() {
     #expect(message { _ = try decode(#"{"format":"ui-atlas.design","version":2,"nodes":[]}"#) }
             == "File was created by a newer version of ui-atlas (format version 2); upgrade ui-atlas to open it")

@@ -49,6 +49,12 @@ public enum DesignJSON {
             return result
         }
 
+        func integer(_ key: String, default fallback: Double? = nil, min: Double? = nil, max: Double? = nil) throws -> Int {
+            let result = try number(key, default: fallback, min: min, max: max)
+            guard result == result.rounded() else { throw fail("\(name(key)) must be an integer") }
+            return Int(result)
+        }
+
         func optionalNumber(_ key: String, min: Double) throws -> Double? {
             value(key) == nil ? nil : try number(key, min: min)
         }
@@ -140,7 +146,7 @@ public enum DesignJSON {
             let family = try text.string("fontFamily", default: "")
             node.text = DesignText(content: try text.string("content", default: ""),
                                    fontSize: try text.number("fontSize", default: 16, min: 1),
-                                   fontWeight: Int(try text.number("fontWeight", default: 400, min: 100, max: 900)),
+                                   fontWeight: try text.integer("fontWeight", default: 400, min: 100, max: 900),
                                    fontFamily: family.isEmpty ? nil : family,
                                    color: try text.color("color", default: .black)!,
                                    align: try text.choice("align", default: .left),
