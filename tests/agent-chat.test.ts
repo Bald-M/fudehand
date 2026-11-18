@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fakeApp, type ControlRequest } from './helpers/fake-app'
+import { designGuidance } from '../scripts/design-guidance.mjs'
 
 const harness = fileURLToPath(new URL('../scripts/agent-chat.mjs', import.meta.url))
 const cleanup: (() => Promise<unknown>)[] = []
@@ -168,6 +169,23 @@ const responsesTool = (callId: string, name: string, args: object) => ({ body: {
 const anthropicText = (text: string) => ({ body: { content: [{ type: 'text', text }], stop_reason: 'end_turn' } })
 const anthropicTool = (id: string, name: string, input: object) => ({ body: { content: [{ type: 'text', text: 'Let me check.' }, { type: 'tool_use', id, name, input }], stop_reason: 'tool_use' } })
 
+describe('Design guidance', () => {
+  it('gives the design guidance its five-step process, its quality floor, and nothing the layer model cannot do', () => {
+    for (const step of ['1. Ground it.', '2. Plan.', '3. Review.', '4. Build.', '5. Critique.']) expect(designGuidance).toContain(step)
+    expect(designGuidance).toMatch(/4–6 named hex colors/)
+    expect(designGuidance).toMatch(/state (that|the) assumption in your reply/)
+    expect(designGuidance).toMatch(/Quality floor/)
+    expect(designGuidance).toMatch(/Lorem ipsum/)
+    expect(designGuidance).toMatch(/At most two font families/)
+    expect(designGuidance).toMatch(/user's own words take precedence/)
+    expect(designGuidance).not.toMatch(/\bCSS\b|selector|animation|motion|hover|keyboard|focus ring|responsive|breakpoint/i)
+    // MCP clients such as Claude Code cut a server's instructions off at about 2,048 characters.
+    expect(designGuidance.length).toBeLessThan(2000)
+    // The Chinese range is deliberate: the guidance is written in English only.
+    expect(designGuidance).not.toMatch(/[一-鿿]/)
+  })
+})
+
 describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
   it('holds a multi-turn conversation and reads the design document through tools', async () => {
     const app = await startApp()
@@ -192,6 +210,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     // The Chinese range is deliberate: it asserts the system prompt contains no Chinese.
     expect(system).not.toMatch(/[一-鿿]/)
     expect(system).toMatch(/same language as the user/)
+    expect(system).toContain(designGuidance)
   })
 
   it('hands the App error to the model when an edit is rejected, sending only that one command', async () => {

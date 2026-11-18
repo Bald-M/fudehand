@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
 import { callTool, tools } from './atlas-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
+import { designGuidance } from './design-guidance.mjs'
 
 /**
  * The Agent harness of the in-App chat panel. Started on demand by ui-atlas, exchanging JSON lines over stdin/stdout:
@@ -39,6 +40,7 @@ const system = [
     : 'After making changes, take a design_snapshot to check the result, and adjust if something is off.',
   'Undo with design_undo; save with design_save_document.',
   'Reply in the same language as the user\'s latest message, and briefly explain what you did.',
+  `\n${designGuidance}`,
 ].filter(Boolean).join('\n')
 
 /** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */

@@ -201,3 +201,5 @@ pnpm version:check       # 检查各处版本号一致，不一致时列出差�
 ## 许可
 
 ui-atlas 以 [Apache-2.0 许可证](LICENSE)发布，源码托管在 [GitHub](https://github.com/Bald-M/ui-atlas)。App 只在你自己的机器上构建和运行，没有 CI、云同步或生产部署。
+
+`scripts/design-guidance.mjs` 中的 Agent 设计指引改写自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) 的 `frontend-design` skill（版权归 Anthropic, PBC 所有，Apache-2.0 许可）；该文件内注明了改动内容。

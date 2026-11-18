@@ -212,3 +212,5 @@ pnpm version:check       # check that every location agrees; otherwise list the 
 ## License
 
 ui-atlas is released under the [Apache-2.0 license](LICENSE). The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas). The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.
+
+The Agent's design guidance in `scripts/design-guidance.mjs` is adapted from the `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design), Copyright Anthropic, PBC, licensed under Apache-2.0; the file lists what was changed.

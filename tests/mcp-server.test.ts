@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { fakeApp } from './helpers/fake-app'
+import { designGuidance } from '../scripts/design-guidance.mjs'
 
 const server = fileURLToPath(new URL('../scripts/mcp-server.mjs', import.meta.url))
 const cleanup: (() => Promise<unknown>)[] = []
@@ -36,6 +37,11 @@ describe('MCP server', () => {
     const client = await connect('/tmp/unused.sock')
     const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
     expect(client.getServerVersion()?.version).toBe(version)
+  })
+
+  it('gives connecting Agents the design guidance as its instructions', async () => {
+    const client = await connect('/tmp/unused.sock')
+    expect(client.getInstructions()).toContain(designGuidance)
   })
 
   it('forwards calls to the App through UI_ATLAS_CONTROL_SOCKET', async () => {

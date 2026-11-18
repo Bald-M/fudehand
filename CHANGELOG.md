@@ -19,6 +19,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Chat panel: the selected layers appear above the input as removable context tags and are passed to the Agent with the message (#29).
 - Chat panel: *Copy message* and *Regenerate* on assistant replies, and *Edit and resend* on the last user message (#29).
 - Chat panel: *Model settings* lists every model provider with its own API key, base URL, and model, and *Test* checks a key; the model menu lists every provider that has a key and switches provider and model in one step (#133).
+- Agent: the chat panel's Agent and Agents connected through the MCP server now get the same design guidance. For a new or redone screen the Agent states what it assumes about the product, plans the colors, fonts, and layout, checks that plan against the request, builds, and then reviews the result; real copy, at most two font families, readable contrast, and consistent spacing apply however short the request is. A visual direction given in the request always takes precedence. The guidance is adapted from the `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) (Apache-2.0) (#108).
 
 ### Changed
 
