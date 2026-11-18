@@ -43,7 +43,7 @@ _Avoid_: control port (控制端口), API service (API 服务)
 
 **Chat panel (对话面板 / 對話面板)**: The Chat (对话) tab of the right inspector, where AI reads and edits the design document with the same tools as the MCP server.
 
-**Conversation (会话 / 對話)**: One exchange with the Agent in the chat panel, from its first message on. Conversations are saved on this Mac and reopened from the panel's *Conversation history* menu; they are not part of the design document.
+**Conversation (会话 / 對話)**: One exchange with the Agent in the chat panel, from its first message on. A conversation belongs to one design document's project file: opening the document restores its open conversation tabs, and the panel's *Conversation history* menu lists that document's conversations. Conversations are saved on this Mac, not in the project file.
 _Avoid_: session (the App's `ChatSession` is the object that owns the conversations, not a term in the UI), thread
 
 **Conversation tab (会话标签 / 對話標籤)**: A tab in the chat panel's header for one open conversation. Each has its own messages, model, and Agent harness; closing a tab stops its reply and keeps the conversation in the history.

@@ -76,3 +76,64 @@ private func conversation(_ text: String, at seconds: TimeInterval, id: UUID = U
     follow.update(offset: 990, contentHeight: 1500, viewportHeight: 500)
     #expect(follow.following)
 }
+
+@Test func chatHistoryKeepsEachDocumentsConversationsApart() throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let first = ChatHistory.document(path: "/Users/me/Designs/Login.fudehand", root: root)
+    let second = ChatHistory.document(path: "/Users/me/Designs/Checkout.fudehand", root: root)
+    #expect(first.directory != second.directory)
+    #expect(first.directory.deletingLastPathComponent().path == root.appendingPathComponent("documents").path)
+    // The path is hashed: the file's name is not readable from the directory.
+    #expect(!first.directory.lastPathComponent.contains("Login"))
+    try first.save(conversation("About the login screen", at: 100))
+    #expect(second.list() == [])
+    // The same path finds the same conversations again, as after a relaunch.
+    #expect(ChatHistory.document(path: "/Users/me/Designs/Login.fudehand", root: root).list().map(\.title) == ["About the login screen"])
+    #expect(ChatHistory.unsaved(root: root).list() == [])
+}
+
+@Test func chatHistorySavesTheOpenTabsAndTheModel() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let history = ChatHistory(directory: directory)
+    #expect(history.openTabs() == nil)
+    var transcript = ChatTranscript()
+    transcript.send("Hello")
+    let saved = ChatConversation(id: UUID(), transcript: transcript, updatedAt: Date(timeIntervalSince1970: 100), provider: "openai", model: "gpt-x")
+    try history.save(saved)
+    try history.saveOpenTabs(ChatHistory.OpenTabs(ids: [saved.id], selected: saved.id))
+    #expect(history.openTabs() == ChatHistory.OpenTabs(ids: [saved.id], selected: saved.id))
+    #expect(history.load(saved.id)?.provider == "openai")
+    #expect(history.load(saved.id)?.model == "gpt-x")
+    // The tab list is not a conversation.
+    #expect(history.list().map(\.id) == [saved.id])
+
+    // A conversation saved before the model was recorded still loads.
+    let old = UUID()
+    let json = #"{"id":"\#(old.uuidString)","title":"Old","updatedAt":0,"entries":[]}"#
+    try Data(json.utf8).write(to: directory.appendingPathComponent("\(old.uuidString).json"))
+    #expect(history.load(old)?.title == "Old")
+    #expect(history.load(old)?.provider == nil)
+
+    try Data("not json".utf8).write(to: directory.appendingPathComponent("tabs.json"))
+    #expect(history.openTabs() == nil)
+}
+
+@Test func chatHistoryAdoptsAnotherDocumentsConversations() throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let unsaved = ChatHistory.unsaved(root: root)
+    let document = ChatHistory.document(path: "/Users/me/Designs/Login.fudehand", root: root)
+    try document.save(conversation("Already here", at: 100))
+    try unsaved.save(conversation("From the untitled document", at: 200))
+    document.adopt(unsaved)
+    #expect(document.list().map { $0.title } == ["From the untitled document", "Already here"])
+    #expect(unsaved.list().count == 1)
+    unsaved.remove()
+    #expect(unsaved.list() == [])
+    #expect(!FileManager.default.fileExists(atPath: unsaved.directory.path))
+    // Adopting from a directory that does not exist changes nothing.
+    document.adopt(unsaved)
+    #expect(document.list().count == 2)
+}

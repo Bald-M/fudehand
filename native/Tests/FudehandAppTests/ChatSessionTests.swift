@@ -593,3 +593,207 @@ private func exited(_ pids: [Int32]) async throws -> Bool {
     #expect(session.conversations.map(\.title) == ["First"])
     await session.shutdown()
 }
+
+// MARK: Conversations per design document
+
+@Test @MainActor func chatTabsAndTheirModelsAreRestoredAfterARelaunch() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    defaults.set("https://proxy.example/v1", forKey: "agent.openai.baseUrl")
+    let launch = { ChatSession(defaults: defaults, readKey: { _ in "sk-secret-test-key" }, history: history) }
+    let session = launch()
+    session.send("First", root: harness.root, runtime: nil)
+    try await settle(session)
+    let first = session.conversationID
+    session.newConversation()
+    session.settings = ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://proxy.example/v1")
+    session.send("Second", root: harness.root, runtime: nil)
+    try await settle(session)
+    let second = session.conversationID
+    session.select(first)
+    await session.shutdown()
+
+    // The tabs come back in order, each with its messages and model, and the same one selected.
+    let relaunched = launch()
+    #expect(relaunched.tabs.map(\.id) == [first, second])
+    #expect(relaunched.conversationID == first)
+    #expect(relaunched.tabs.map { $0.transcript.entries.map(\.text) } == [["First", "ok"], ["Second", "ok"]])
+    #expect(relaunched.tabs.map(\.settings) == [ChatSettings(provider: "deepseek", model: "", baseUrl: ""),
+                                                ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://proxy.example/v1")])
+
+    // Neither the key nor the base URL is in what was saved.
+    for file in try FileManager.default.contentsOfDirectory(at: history.directory, includingPropertiesForKeys: nil) {
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(!text.contains("sk-secret-test-key"))
+        #expect(!text.contains("proxy.example"))
+    }
+
+    // A closed conversation does not come back as a tab; it stays in the history.
+    relaunched.close(first)
+    let again = launch()
+    #expect(again.tabs.map(\.id) == [second])
+    #expect(again.conversations.map(\.title).sorted() == ["First", "Second"])
+    // Reopened from the history, it uses the model it was saved with.
+    again.open(first)
+    #expect(again.settings.provider == "deepseek")
+}
+
+@Test @MainActor func chatRestoreSkipsUnreadableConversations() throws {
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    var transcript = ChatTranscript()
+    transcript.send("Still here")
+    transcript.stop()
+    let good = ChatConversation(id: UUID(), transcript: transcript, updatedAt: Date(), provider: "gone", model: "m")
+    try history.save(good)
+    let damaged = UUID()
+    try Data("not json".utf8).write(to: history.directory.appendingPathComponent("\(damaged.uuidString).json"))
+    let missing = UUID()
+    try history.saveOpenTabs(ChatHistory.OpenTabs(ids: [missing, damaged, good.id], selected: missing))
+    let session = temporarySession(history: history)
+    #expect(session.tabs.map(\.id) == [good.id])
+    #expect(session.conversationID == good.id)
+    // A provider this build does not know: the conversation uses the current settings.
+    #expect(session.settings.provider == "deepseek")
+
+    // Without a readable tab list the most recent conversation is reopened; closing it is remembered all the same.
+    try Data("not json".utf8).write(to: history.directory.appendingPathComponent("tabs.json"))
+    let fallback = temporarySession(history: history)
+    #expect(fallback.tabs.map(\.id) == [good.id])
+    fallback.close(good.id)
+    #expect(temporarySession(history: history).transcript.entries.isEmpty)
+    #expect(temporarySession(history: history).conversations.map(\.id) == [good.id])
+
+    // Nothing readable at all: one empty conversation.
+    let broken = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: broken.directory) }
+    try FileManager.default.createDirectory(at: broken.directory, withIntermediateDirectories: true)
+    try Data("not json".utf8).write(to: broken.directory.appendingPathComponent("tabs.json"))
+    let empty = temporarySession(history: broken)
+    #expect(empty.tabs.count == 1)
+    #expect(empty.transcript.entries.isEmpty)
+}
+
+@Test @MainActor func chatShowsTheConversationsOfTheDocumentShown() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-chats-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let a = ChatHistory.document(path: "/tmp/a.fudehand", root: root)
+    let b = ChatHistory.document(path: "/tmp/b.fudehand", root: root)
+    let session = temporarySession(history: a)
+    session.send("About A", root: repository, runtime: nil)
+    try await settle(session)
+    let inA = session.conversationID
+
+    session.show(b)
+    #expect(session.tabs.count == 1)
+    #expect(session.transcript.entries.isEmpty)
+    #expect(session.conversations.isEmpty)
+    session.send("About B", root: repository, runtime: nil)
+    try await settle(session)
+
+    session.show(a)
+    #expect(session.tabs.map(\.id) == [inA])
+    #expect(session.transcript.entries.first?.text == "About A")
+    #expect(session.conversations.map(\.title) == ["About A"])
+    // Nothing of B was written into A, and A's conversation cannot be opened from B.
+    session.show(b)
+    #expect(session.conversations.map(\.title) == ["About B"])
+    session.open(inA)
+    #expect(session.conversationID != inA)
+
+    // A document without a file starts empty each time.
+    let unsaved = ChatHistory.unsaved(root: root)
+    session.show(unsaved, fresh: true)
+    session.send("Scratch", root: repository, runtime: nil)
+    try await settle(session)
+    #expect(session.conversations.map(\.title) == ["Scratch"])
+    session.show(unsaved, fresh: true)
+    #expect(session.transcript.entries.isEmpty)
+    #expect(session.conversations.isEmpty)
+
+    // A document that was only looked at leaves nothing on disk.
+    let c = ChatHistory.document(path: "/tmp/c.fudehand", root: root)
+    session.show(c)
+    session.newConversation()
+    #expect(!FileManager.default.fileExists(atPath: c.directory.path))
+}
+
+@Test @MainActor func chatReplyRunningWhenTheDocumentChangesMovesWithIt() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-chats-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let a = ChatHistory.document(path: "/tmp/a.fudehand", root: root)
+    let b = ChatHistory.document(path: "/tmp/b.fudehand", root: root)
+    let session = temporarySession(history: a)
+    session.send("Done", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.newConversation()
+    session.send("hang", root: harness.root, runtime: nil)
+    let running = session.conversationID
+    _ = try await received(harness, count: 4)
+
+    // The reply acts on the document now shown, so its conversation is open there too; the idle one stays behind.
+    session.show(b)
+    #expect(session.tabs.map(\.id) == [running])
+    #expect(session.conversationID == running)
+    #expect(session.transcript.busy)
+    #expect(b.list().map(\.id) == [running])
+    #expect(b.openTabs()?.ids == [running])
+    // The old document keeps the conversation as it was: nothing said about it is lost if the new document is never saved.
+    #expect(a.list().map(\.title).sorted() == ["Done", "hang"])
+    #expect(a.load(running)?.entries.map(\.text) == ["hang"])
+
+    // Showing the same document again while the reply runs keeps the tabs in their order.
+    session.newConversation()
+    session.send("Later", root: harness.root, runtime: nil)
+    try await settle(session)
+    let later = session.conversationID
+    session.select(running)
+    session.show(b)
+    #expect(session.tabs.map(\.id) == [running, later])
+    #expect(session.tabs.map(\.transcript.busy) == [true, false])
+    #expect(session.conversationID == running)
+
+    session.stopReply()
+    try await settle(session)
+    #expect(b.load(running)?.entries.map(\.text) == ["hang", "Reply stopped"])
+    await session.shutdown()
+}
+
+@Test @MainActor func chatConversationsFollowTheDocumentWhenItIsSaved() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-chats-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let unsaved = ChatHistory.unsaved(root: root)
+    let document = ChatHistory.document(path: "/tmp/a.fudehand", root: root)
+    let session = temporarySession(history: unsaved)
+    session.send("Draft", root: repository, runtime: nil)
+    try await settle(session)
+    let id = session.conversationID
+
+    // The first save moves the conversations to the file.
+    session.rebind(to: document, moving: true)
+    #expect(document.list().map(\.title) == ["Draft"])
+    #expect(!FileManager.default.fileExists(atPath: unsaved.directory.path))
+    #expect(session.conversations.map(\.title) == ["Draft"])
+    session.send("More", root: repository, runtime: nil)
+    try await settle(session)
+    #expect(document.load(id)?.entries.contains { $0.text == "More" } == true)
+    #expect(temporarySession(history: document).tabs.map(\.id) == [id])
+
+    // Save As copies them; the original file keeps its own.
+    let copy = ChatHistory.document(path: "/tmp/copy.fudehand", root: root)
+    session.rebind(to: copy, moving: false)
+    #expect(document.list().map(\.id) == [id])
+    #expect(copy.list().map(\.id) == [id])
+    #expect(copy.openTabs()?.ids == [id])
+
+    // Saving onto a file that already has an older copy of an open conversation: what is open is what is kept.
+    session.send("Newest", root: repository, runtime: nil)
+    try await settle(session)
+    session.rebind(to: document, moving: false)
+    #expect(document.load(id)?.entries.contains { $0.text == "Newest" } == true)
+}
