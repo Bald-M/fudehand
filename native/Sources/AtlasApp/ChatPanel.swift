@@ -1,16 +1,33 @@
+import AppKit
 import AtlasCore
 import SwiftUI
 
-/// The chat panel: a conversation with the in-App Agent, which reads and edits the design document through the same tools as MCP.
+/// The chat panel: conversations with the in-App Agent, which reads and edits the design document through the same tools as MCP.
 struct ChatPanel: View {
     @ObservedObject var chat: ChatSession
     let root: URL?
     let runtime: WorkspaceLocation?
-    let send: (String) -> Void
+    /// The layers selected on the canvas, offered as context for the next message.
+    let selection: [ChatContext]
+    /// A layer's current name by id, for tool card titles.
+    let layerName: (String) -> String?
     @State private var draft = ""
     @State private var showingSettings = false
+    /// Selected layers whose context tag the user removed; forgotten once the layer is no longer selected.
+    @State private var dismissed: Set<String> = []
+    /// The last user message is in the input to be changed; sending replaces it and its reply.
+    @State private var editing = false
+    /// Scroll position bookkeeping, kept out of view state so scrolling does not re-render the panel every frame.
+    @State private var scroll = ScrollTracker()
+    @State private var following = true
+    @State private var atBottom = true
     @FocusState private var inputFocused: Bool
     @Environment(\.locale) private var locale
+
+    private static let bottom = "bottom"
+
+    private var busy: Bool { chat.transcript.busy }
+    private var context: [ChatContext] { selection.filter { !dismissed.contains($0.id) } }
 
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
@@ -19,31 +36,40 @@ struct ChatPanel: View {
             Divider()
             if !chat.hasKey { missingKey }
             messages
-            Divider()
             composer
         }
         .frame(minWidth: 300)
         .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat, root: root, runtime: runtime) }
+        .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
+        // The message being edited is gone: another conversation was opened, or something was sent.
+        .onChange(of: chat.transcript.lastUserID) { editing = false }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("Chat")).font(.headline)
-                Text(modelLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
+            Text(chat.transcript.title.isEmpty ? L("New conversation") : chat.transcript.title).font(.headline).lineLimit(1)
             Spacer()
-            Button { chat.clear() } label: { Image(systemName: "trash") }
-                .buttonStyle(.borderless).help(L("Clear conversation")).accessibilityLabel(L("Clear conversation"))
-                .disabled(chat.transcript.entries.isEmpty || chat.transcript.busy)
+            Button { chat.newConversation(); inputFocused = true } label: { Image(systemName: "square.and.pencil") }
+                .buttonStyle(.borderless).help(L("New conversation")).accessibilityLabel(L("New conversation"))
+                .disabled(chat.transcript.entries.isEmpty || busy)
+            Menu {
+                ForEach(chat.conversations) { conversation in
+                    Button { chat.open(conversation.id) } label: {
+                        if conversation.id == chat.conversationID { Label(conversation.title, systemImage: "checkmark") } else { Text(conversation.title) }
+                    }
+                }
+                if chat.conversations.isEmpty { Text(L("No saved conversations")) }
+                Divider()
+                Button(L("Delete This Conversation"), role: .destructive) { chat.deleteConversation() }
+                    .disabled(chat.transcript.entries.isEmpty)
+            } label: {
+                Label(L("Conversation history"), systemImage: "clock.arrow.circlepath").labelStyle(.iconOnly)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help(L("Conversation history")).disabled(busy)
             Button { showingSettings = true } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.horizontal, 16).padding(.vertical, 12)
-    }
-
-    private var modelLabel: String {
-        let model = chat.settings.model.isEmpty ? L("Default model") : chat.settings.model
-        return "\(chat.settings.providerTitle) · \(model)"
     }
 
     private var missingKey: some View {
@@ -61,24 +87,57 @@ struct ChatPanel: View {
     }
 
     private var messages: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    if chat.transcript.entries.isEmpty { emptyState }
-                    ForEach(chat.transcript.entries) { entry in ChatEntryRow(entry: entry).id(entry.id) }
-                    if chat.transcript.busy {
-                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("Replying…")).font(.caption).foregroundStyle(.secondary) }
-                            .id("progress")
+        let transcript = chat.transcript
+        let groups = transcript.groups
+        let lastReply = transcript.lastReplyID
+        let actions = ChatRowActions(regenerate: { chat.regenerate(root: root, runtime: runtime) }, edit: edit, layerName: layerName)
+        return GeometryReader { viewport in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // Not lazy: a lazy stack only estimates its height, and following the newest text needs the real one.
+                    VStack(alignment: .leading, spacing: 12) {
+                        if groups.isEmpty { emptyState }
+                        ForEach(groups) { group in
+                            ChatGroupRow(group: group, active: busy && group.id == groups.last?.id,
+                                         actionable: !busy && group.id == (group.entries[0].kind == .user ? transcript.lastUserID : lastReply),
+                                         actions: actions)
+                        }
+                        if busy {
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("Replying…")).font(.caption).foregroundStyle(.secondary) }
+                        }
+                        Color.clear.frame(height: 1).id(Self.bottom)
                     }
-                }.padding(16)
-            }
-            .onChange(of: chat.transcript.entries.count) {
-                withAnimation(.easeOut(duration: 0.15)) {
-                    if chat.transcript.busy { proxy.scrollTo("progress", anchor: .bottom) }
-                    else if let last = chat.transcript.entries.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    .padding(16)
+                    .background(GeometryReader { content in
+                        // Where the content sits in the scroll view: scrolled distance and total height.
+                        Color.clear.onChange(of: content.frame(in: .named("chat")), initial: true) { _, frame in
+                            scroll.follow.update(offset: -frame.minY, contentHeight: frame.height, viewportHeight: viewport.size.height)
+                            if following != scroll.follow.following { following = scroll.follow.following }
+                            if atBottom != scroll.follow.atBottom { atBottom = scroll.follow.atBottom }
+                        }
+                    })
+                }
+                .coordinateSpace(name: "chat")
+                .defaultScrollAnchor(.bottom)
+                // Follow new text only while the user is at the bottom.
+                .onChange(of: [transcript.entries.count, transcript.entries.last?.text.count ?? 0, busy ? 1 : 0]) {
+                    if scroll.follow.following { proxy.scrollTo(Self.bottom, anchor: .bottom) }
+                }
+                .overlay(alignment: .bottom) {
+                    // Also offered when the view is merely left behind, for example after a tool card above was opened.
+                    if !following || (!busy && !atBottom) {
+                        Button { scroll.follow = ChatScrollFollow(); following = true; proxy.scrollTo(Self.bottom, anchor: .bottom) } label: {
+                            Image(systemName: "arrow.down").font(.callout.weight(.semibold)).frame(width: 28, height: 28)
+                                .background(.regularMaterial, in: Circle()).overlay(Circle().strokeBorder(.quaternary))
+                                .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
+                        }
+                        .buttonStyle(.plain).help(L("Scroll to bottom")).accessibilityLabel(L("Scroll to bottom")).padding(.bottom, 8)
+                    }
                 }
             }
         }
+        // A different conversation starts over at its newest message, with nothing expanded.
+        .id(chat.conversationID)
     }
 
     private var emptyState: some View {
@@ -94,76 +153,139 @@ struct ChatPanel: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField(L("Message"), text: $draft, axis: .vertical)
-                .textFieldStyle(.plain).lineLimit(1...5).focused($inputFocused)
-                .onSubmit(submit)
-                .accessibilityLabel(L("Chat input"))
-            if chat.transcript.busy {
-                Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
-                    .buttonStyle(.borderless).help(L("Stop replying")).accessibilityLabel(L("Stop replying"))
-            } else {
-                Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
-                    .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        VStack(alignment: .leading, spacing: 8) {
+            if !context.isEmpty { contextTags }
+            if editing {
+                HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                    Text(L("Editing the last message"))
+                    Spacer()
+                    Button { editing = false } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                        .buttonStyle(.plain).help(L("Cancel editing")).accessibilityLabel(L("Cancel editing"))
+                }.font(.caption).foregroundStyle(.secondary)
             }
-        }.padding(12)
+            // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
+            TextField(L("Message"), text: $draft, axis: .vertical)
+                .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
+                .onSubmit(submit)
+                .modifier(ShiftReturnLineBreak(text: $draft, active: inputFocused))
+                .accessibilityLabel(L("Chat input"))
+            HStack(spacing: 8) {
+                modelMenu
+                Spacer()
+                if busy {
+                    Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
+                        .buttonStyle(.borderless).help(L("Stop replying")).accessibilityLabel(L("Stop replying"))
+                } else {
+                    Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
+                        .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(inputFocused ? AnyShapeStyle(Color.accentColor.opacity(0.7)) : AnyShapeStyle(.quaternary)))
+        .padding(12)
+    }
+
+    /// The selected layers as removable tags; with many selected, the row scrolls sideways.
+    private var contextTags: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(context, id: \.id) { layer in
+                    HStack(spacing: 4) {
+                        Image(systemName: NodeType(rawValue: layer.type)?.symbol ?? "square").font(.caption2)
+                        Text(layer.name).font(.caption).lineLimit(1)
+                        Button { dismissed.insert(layer.id) } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .help(L("Remove from context")).accessibilityLabel(L("Remove %@ from context", layer.name))
+                    }
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+                }
+            }
+        }
+        .accessibilityElement(children: .contain).accessibilityLabel(L("Context"))
+    }
+
+    private var modelMenu: some View {
+        Menu {
+            Button { chat.settings.model = "" } label: { menuLabel(L("Default model"), selected: chat.settings.model.isEmpty) }
+            if !chat.models.isEmpty {
+                Divider()
+                ForEach(chat.models, id: \.self) { id in
+                    Button { chat.settings.model = id } label: { menuLabel(id, selected: chat.settings.model == id) }
+                }
+            }
+            Divider()
+            Button(L("Reload Model List")) { Task { await chat.reloadModels(root: root, runtime: runtime) } }.disabled(!chat.hasKey)
+            Button(L("Model Settings…")) { showingSettings = true }
+        } label: {
+            Text(chat.settings.model.isEmpty ? L("Default model") : chat.settings.model).font(.caption).lineLimit(1)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        // Changing the model restarts the harness, which would cut a running reply short.
+        .help("\(L("Choose model")) · \(chat.settings.providerTitle)").accessibilityLabel(L("Choose model")).disabled(busy)
+    }
+
+    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
+        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     private func submit() {
-        guard !chat.transcript.busy, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        send(draft)
+        guard !busy, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Sending always returns to the newest message.
+        scroll.follow = ChatScrollFollow()
+        following = true
+        if editing { _ = chat.editLast() }
+        chat.send(draft, context: context, root: root, runtime: runtime)
         draft = ""
+    }
+
+    /// Copies the last user message into the input to be changed; the conversation is only rewound once the new text is sent.
+    private func edit() {
+        guard let last = chat.transcript.entries.last(where: { $0.kind == .user }) else { return }
+        draft = last.text
+        editing = true
+        inputFocused = true
     }
 }
 
-private struct ChatEntryRow: View {
-    let entry: ChatEntry
-    @State private var expanded = false
-    @Environment(\.locale) private var locale
+private final class ScrollTracker {
+    var follow = ChatScrollFollow()
+}
 
-    var body: some View {
-        let _ = locale // Re-render when the UI language changes.
-        switch entry.kind {
-        case .user:
-            HStack {
-                Spacer(minLength: 40)
-                Text(entry.text).textSelection(.enabled)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+/// Makes Shift-Return insert a line break in the focused text field instead of submitting it; the field itself only does that for Option-Return.
+private struct ShiftReturnLineBreak: ViewModifier {
+    @Binding var text: String
+    /// Whether the field has keyboard focus; keys are only watched while it does.
+    let active: Bool
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: active, initial: true) { _, active in
+                stop()
+                guard active else { return }
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    // Left alone while an input method is composing, where Return confirms the candidate.
+                    guard event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift,
+                          let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor, editor.string == text,
+                          !editor.hasMarkedText() else { return event }
+                    // Change the bound text rather than the field editor, so SwiftUI does not put the old text back.
+                    let range = editor.selectedRange()
+                    text = (text as NSString).replacingCharacters(in: NSIntersectionRange(range, NSRange(location: 0, length: text.utf16.count)), with: "\n")
+                    DispatchQueue.main.async { editor.setSelectedRange(NSRange(location: range.location + 1, length: 0)) }
+                    return nil
+                }
             }
-        case .assistant:
-            Text(entry.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-        case .toolCall, .toolResult:
-            tool
-        case .error:
-            Label(entry.text, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout).foregroundStyle(.red).textSelection(.enabled)
-        case .notice:
-            Text(entry.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-        }
+            .onDisappear(perform: stop)
     }
 
-    private var tool: some View {
-        let (symbol, color, title): (String, Color, String) = switch entry.kind {
-        case .toolResult(ok: true): ("checkmark.circle", .green, L("Result · %@", entry.text))
-        case .toolResult(ok: false): ("xmark.circle", .red, L("Failed · %@", entry.text))
-        default: ("wrench.and.screwdriver", .secondary, L("Call · %@", entry.text))
-        }
-        return VStack(alignment: .leading, spacing: 4) {
-            Button { expanded.toggle() } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: symbol).foregroundStyle(color)
-                    Text(title).font(.caption.monospaced())
-                    if entry.detail?.isEmpty == false { Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2) }
-                }.foregroundStyle(.secondary)
-            }.buttonStyle(.plain).accessibilityLabel(title)
-            if expanded, let detail = entry.detail, !detail.isEmpty {
-                Text(detail).font(.caption.monospaced()).textSelection(.enabled).lineLimit(30)
-                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
-            }
-        }
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 
@@ -326,7 +448,9 @@ private struct ChatSettingsSheet: View {
             guard listToken == token else { return }
             listing = false
             switch result {
-            case .success(let list): models = list.models; defaultModel = list.defaultModel.isEmpty ? nil : list.defaultModel
+            case .success(let list):
+                models = list.models; defaultModel = list.defaultModel.isEmpty ? nil : list.defaultModel
+                chat.cacheModels(list.models, provider: settings.provider)
             case .failure(let failure): models = []; listError = failure.message
             }
         }

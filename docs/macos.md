@@ -74,8 +74,18 @@ Interaction follows Figma.
 ## Panels
 
 - **Layers panel** (left sidebar): a hierarchy tree with upper layers first. Click to select, ⌘-click to add or remove, Shift-click to add; double-click to rename; the eye and lock buttons toggle visibility and locking; the context menu can move a layer up or down one level, bring it to the front or send it to the back, zoom to the layer, or delete it.
-- **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit; with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A).
+- **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit; with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A); see "Chat panel" below.
 - The appearance menu in the top right chooses Follow System, Light, or Dark.
+
+### Chat panel
+
+- **Conversations**: the header shows the conversation's name (the start of its first message), *New conversation*, the *Conversation history* menu, and *Model settings*. Conversations are saved as JSON under `~/Library/Application Support/ui-atlas/chats` (the 50 most recent are kept) when a message is sent and when a reply ends; the most recent one is reopened at launch. Conversations cannot be switched while a reply is running.
+- **Transcript**: replies stream in and render Markdown (headings, lists, inline code, links, quotes, code blocks with *Copy code*; long code lines scroll sideways). A tool call is one card: a running, succeeded, or failed icon and a title naming the action and what it acts on, opening to show the arguments and the result. Two or more consecutive calls fold into "Ran N steps", open while they are the newest thing happening.
+- **Scrolling**: the transcript follows new text while the view is at the bottom. Scrolling up stops the following and shows *Scroll to bottom*; sending a message returns to the bottom.
+- **Input**: grows up to 8 lines; Return sends, Shift-Return starts a new line, and a draft can be typed while a reply is running. Below it are the model menu (the provider's models as last fetched, *Reload Model List*, *Model Settings…*; unavailable while a reply is running) and the send or stop button. Stopping keeps the text received so far.
+- **Context tags**: the layers selected on the canvas appear above the input; each can be removed, and comes back when the layer is selected again. The remaining ones are sent with the message.
+- **Message actions**: *Copy message* on every assistant reply (under the pointer; always shown on the newest one), *Regenerate* on the newest reply, and *Edit and resend* on the last user message, which copies it into the input; sending the changed text replaces the message and its reply, and cancelling leaves the conversation as it was. Neither undoes the edits the replaced reply made to the design document: use Undo first to have them made again from scratch.
+- The Agent harness keeps the full history, including tool results, while it runs. A new harness — after a relaunch, a model change, or switching, regenerating, or editing — is given the conversation's user and assistant texts only.
 
 ## Verification
 

@@ -43,6 +43,11 @@ _Avoid_: control port (控制端口), API service (API 服务)
 
 **Chat panel (对话面板 / 對話面板)**: The Chat (对话) tab of the right inspector, where AI reads and edits the design document with the same tools as the MCP server.
 
+**Conversation (会话 / 對話)**: One exchange with the Agent in the chat panel, from its first message on. Conversations are saved on this Mac and reopened from the panel's *Conversation history* menu; they are not part of the design document.
+_Avoid_: session (the App's `ChatSession` is the object that owns the conversations, not a term in the UI), thread
+
+**Context tag (上下文标签 / 上下文標籤)**: A removable tag above the chat input for a layer selected on the canvas; the layers still tagged when a message is sent are passed to the Agent with it.
+
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
 
 **Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Anthropic Claude, and OpenAI. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API.

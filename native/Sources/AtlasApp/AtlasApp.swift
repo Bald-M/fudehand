@@ -65,7 +65,7 @@ final class AtlasAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct AtlasApp: App {
     @NSApplicationDelegateAdaptor(AtlasAppDelegate.self) private var delegate
-    @StateObject private var store = AtlasStore()
+    @StateObject private var store = AtlasStore(chatHistory: ChatSession.savedHistory)
 
     static let launchWindowID = "launch"
     static let editorWindowID = "main"

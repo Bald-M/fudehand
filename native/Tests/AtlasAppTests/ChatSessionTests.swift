@@ -76,13 +76,14 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.entries.isEmpty)
 }
 
-@Test @MainActor func chatClearIsIgnoredWhileAReplyIsRunning() async throws {
+@Test @MainActor func chatConversationIsNotReplacedWhileAReplyIsRunning() async throws {
     let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
     session.send("Hello", root: repository, runtime: nil)
-    session.clear()
+    session.deleteConversation()
+    session.newConversation()
     #expect(session.transcript.entries.count == 1)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
-    session.clear()
+    session.deleteConversation()
     #expect(session.transcript.entries.isEmpty)
     await session.shutdown()
 }
@@ -136,7 +137,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.busy)
     session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
     #expect(!session.transcript.busy)
-    #expect(session.transcript.entries.map(\.text) == ["Hello", "Reply stopped", "Model settings changed; new replies do not include the earlier context."])
+    #expect(session.transcript.entries.map(\.text) == ["Hello", "Reply stopped"])
 
     // The panel is usable again: a new message reaches a fresh harness, and the transcript can be cleared.
     session.send("Try again", root: repository, runtime: nil)
@@ -146,7 +147,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     session.send("Third time", root: repository, runtime: nil)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     #expect(session.transcript.entries.last?.text == "No API key configured")
-    session.clear()
+    session.deleteConversation()
     #expect(session.transcript.entries.isEmpty)
     await session.shutdown()
 }
@@ -171,4 +172,116 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(!session.savedKey(for: "openai"))
     #expect(session.keyHint(for: "openai") == nil)
     await session.shutdown()
+}
+
+private func temporaryHistory() -> ChatHistory {
+    ChatHistory(directory: FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-chats-\(UUID().uuidString)"))
+}
+
+@MainActor private func settle(_ session: ChatSession) async throws {
+    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
+    #expect(!session.transcript.busy)
+}
+
+@Test @MainActor func chatConversationsAreSavedAndReopenedAfterARelaunch() async throws {
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(session.conversations.isEmpty)
+    session.send("First chat", root: repository, runtime: nil)
+    try await settle(session)
+    let first = session.conversationID
+    session.newConversation()
+    #expect(session.transcript.entries.isEmpty)
+    // An empty conversation is not saved.
+    #expect(session.conversations.map(\.title) == ["First chat"])
+    session.send("Second chat", root: repository, runtime: nil)
+    try await settle(session)
+    #expect(session.conversations.map(\.title) == ["Second chat", "First chat"])
+    await session.shutdown()
+
+    // A relaunch reopens the most recent conversation and lists the others.
+    let relaunched = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(relaunched.transcript.entries.map(\.text) == ["Second chat", "No API key configured"])
+    #expect(relaunched.conversations.map(\.title) == ["Second chat", "First chat"])
+    relaunched.open(first)
+    #expect(relaunched.conversationID == first)
+    #expect(relaunched.transcript.entries.map(\.text) == ["First chat", "No API key configured"])
+    relaunched.deleteConversation()
+    #expect(relaunched.transcript.entries.isEmpty)
+    #expect(relaunched.conversations.map(\.title) == ["Second chat"])
+}
+
+@Test @MainActor func chatReplyCutShortByQuittingIsSaved() async throws {
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil }, history: history)
+    session.send("Hello", root: repository, runtime: nil)
+    await session.shutdown()
+    #expect(history.list().map(\.title) == ["Hello"])
+    #expect(history.load(session.conversationID)?.entries.map(\.text) == ["Hello", "Reply stopped"])
+}
+
+/// A stand-in harness that records what the App sends it and answers every user message with "ok".
+private func recordingHarness() throws -> (root: URL, received: () throws -> [[String: Any]]) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-harness-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+    let script = """
+    import { createInterface } from 'node:readline'
+    import { appendFileSync } from 'node:fs'
+    createInterface({ input: process.stdin }).on('line', line => {
+      appendFileSync(new URL('../received.jsonl', import.meta.url), line + '\\n')
+      if (JSON.parse(line).type === 'user') process.stdout.write('{"type":"assistant","text":"ok"}\\n{"type":"done","stopped":false}\\n')
+    })
+    """
+    try script.write(to: root.appendingPathComponent("scripts/agent-chat.mjs"), atomically: true, encoding: .utf8)
+    return (root, {
+        try String(contentsOf: root.appendingPathComponent("received.jsonl"), encoding: .utf8).split(separator: "\n")
+            .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+    })
+}
+
+@Test @MainActor func chatSendsContextAndRestoresTheHistoryWhenItChanges() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil }, history: history)
+    session.send("Make it blue", context: [ChatContext(id: "n1", name: "Hero", type: "frame")], root: harness.root, runtime: nil)
+    try await settle(session)
+    session.send("Now red", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Make it blue", "ok", "Now red", "ok"])
+
+    // Regenerating replaces the last reply, and tells the harness the conversation up to that message.
+    session.regenerate(root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Make it blue", "ok", "Now red", "ok"])
+
+    // Editing takes the last message back out; with nothing left, the saved conversation is removed.
+    #expect(session.editLast()?.text == "Now red")
+    #expect(session.editLast()?.context.map(\.name) == ["Hero"])
+    #expect(session.transcript.entries.isEmpty)
+    #expect(session.conversations.isEmpty)
+    await session.shutdown()
+
+    let received = try harness.received()
+    #expect(received.map { $0["type"] as? String } == ["load", "user", "user", "load", "user"])
+    #expect((received[0]["messages"] as? [[String: String]]) == [])
+    #expect(received[1]["text"] as? String == "Make it blue")
+    #expect((received[1]["context"] as? [[String: String]]) == [["id": "n1", "name": "Hero", "type": "frame"]])
+    #expect((received[3]["messages"] as? [[String: String]]) == [["role": "user", "text": "Make it blue"], ["role": "assistant", "text": "ok"]])
+    #expect(received[4]["text"] as? String == "Now red")
+}
+
+@Test @MainActor func chatModelListIsCachedPerProvider() {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    session.cacheModels(["deepseek-chat", "deepseek-reasoner"], provider: "deepseek")
+    session.cacheModels(["gpt-x"], provider: "openai")
+    #expect(session.models == ["deepseek-chat", "deepseek-reasoner"])
+    session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
+    #expect(session.models == ["gpt-x"])
+    #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).models == ["gpt-x"])
 }
