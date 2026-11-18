@@ -2,9 +2,10 @@
  * Model provider adapters. The conversation history uses a neutral format and is converted to each API's format on every request:
  *   { role: 'user', text }
  *   { role: 'assistant', text, toolCalls: [{ id, name, args }], blocks? }
- *   { role: 'tool', id, name, text, isError }
+ *   { role: 'tool', id, name, text, isError, images?: [{ data (base64), mimeType }] }
  * When tool arguments cannot be parsed, the item in toolCalls carries an error field and the harness does not execute it.
  * blocks holds the provider's own content blocks for the turn (Anthropic only), sent back unchanged.
+ * images is only set for a provider whose `images` flag is true; the Chat Completions API has no way to carry an image in a tool result.
  */
 
 export const providerDefaults = {
@@ -49,7 +50,13 @@ function openaiMessages(system, history) {
 function responsesInput(history) {
   return history.flatMap(entry => {
     if (entry.role === 'user') return [{ role: 'user', content: entry.text }]
-    if (entry.role === 'tool') return [{ type: 'function_call_output', call_id: entry.id, output: entry.text }]
+    if (entry.role === 'tool') {
+      const output = entry.images?.length ? [
+        ...entry.images.map(image => ({ type: 'input_image', image_url: `data:${image.mimeType};base64,${image.data}` })),
+        { type: 'input_text', text: entry.text },
+      ] : entry.text
+      return [{ type: 'function_call_output', call_id: entry.id, output }]
+    }
     return [
       ...(entry.text ? [{ role: 'assistant', content: entry.text }] : []),
       ...entry.toolCalls.map(call => ({ type: 'function_call', call_id: call.id, name: call.name, arguments: JSON.stringify(call.args) })),
@@ -67,7 +74,13 @@ function anthropicMessages(history) {
   }
   for (const entry of history) {
     if (entry.role === 'user') push('user', [{ type: 'text', text: entry.text }])
-    else if (entry.role === 'tool') push('user', [{ type: 'tool_result', tool_use_id: entry.id, content: entry.text, ...(entry.isError ? { is_error: true } : {}) }])
+    else if (entry.role === 'tool') {
+      const content = entry.images?.length ? [
+        ...entry.images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.mimeType, data: image.data } })),
+        { type: 'text', text: entry.text },
+      ] : entry.text
+      push('user', [{ type: 'tool_result', tool_use_id: entry.id, content, ...(entry.isError ? { is_error: true } : {}) }])
+    }
     // Thinking blocks are only valid when the turn is sent back exactly as the model produced it.
     else push('assistant', entry.blocks ?? [
       ...(entry.text ? [{ type: 'text', text: entry.text }] : []),
@@ -99,7 +112,7 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
   return { models: [...new Set(ids)], default: defaults.model }
 }
 
-/** Returns { model, turn(system, history, tools, signal) → { text, toolCalls } }. */
+/** Returns { model, images, turn(system, history, tools, signal) → { text, toolCalls } }; images says whether tool results can carry images. */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
@@ -108,6 +121,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
   if (defaults.kind === 'openai') {
     return {
       model: name,
+      images: false,
       async turn(system, history, tools, signal) {
         const body = await request(`${base}/chat/completions`, {
           method: 'POST',
@@ -130,6 +144,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
   if (defaults.kind === 'responses') {
     return {
       model: name,
+      images: true,
       async turn(system, history, tools, signal) {
         const body = await request(`${base}/responses`, {
           method: 'POST',
@@ -151,6 +166,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
   }
   return {
     model: name,
+    images: true,
     async turn(system, history, tools, signal) {
       const body = await request(`${base}/v1/messages`, {
         method: 'POST',

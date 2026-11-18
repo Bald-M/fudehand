@@ -120,6 +120,8 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 
 “模型”和“接口地址”留空时使用上表的默认值。其他兼容 OpenAI Chat Completions 的服务，请选择 DeepSeek，再填入自己的接口地址和模型名。
 
+Anthropic Claude 和 OpenAI 能收到 `design_snapshot` 返回的图片，模型可以看到自己做出来的效果。OpenAI 兼容接口的工具结果无法携带图片，所以使用 DeepSeek 时，模型会被告知图片已省略，改为读回图层数据来检查修改。
+
 API key 只保存在本机钥匙串里（服务名 `ui-atlas.agent`）。App 通过环境变量把它传给对话程序，不会写入仓库、工程文件、偏好设置或日志。
 
 ## 工程文件
