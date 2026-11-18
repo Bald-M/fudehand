@@ -529,7 +529,6 @@ describe('Agent harness: Anthropic Messages API', () => {
   })
 })
 
-/** Runs the harness with --list-models, returning its single line of output and the exit code. */
 /** Adds the provider's usage report to a preset reply. */
 const withUsage = (reply: { body: object }, usage: object) => ({ body: { ...reply.body, usage } })
 
@@ -607,6 +606,22 @@ describe('Agent harness: token usage', () => {
     expect(await chat.until(event => event.type === 'done')).toEqual({ type: 'done', stopped: true, usage: { input: 100, output: 10, cached: 0 } })
   })
 
+  it('counts a round whose reply was cut off or declined', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      withUsage(anthropicTool('toolu_1', 'design_get_state', {}), { input_tokens: 100, output_tokens: 10 }),
+      { body: { content: [{ type: 'text', text: 'Half' }], stop_reason: 'max_tokens', usage: { input_tokens: 150, output_tokens: 16000 } } },
+      { body: { choices: [{ finish_reason: 'length', message: { role: 'assistant', content: 'Half' } }], usage: { prompt_tokens: 40, completion_tokens: 8 } } },
+    ])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('Look')
+    expect(events.slice(-2)).toEqual([
+      { type: 'error', message: 'The model reply was cut off by the length limit; stopped this reply' },
+      { type: 'done', stopped: false, usage: { input: 250, output: 16010, cached: 0 } },
+    ])
+    expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 40, output: 8, cached: 0 } })
+  })
+
   it('still reports usage when a later round fails', async () => {
     const app = await startApp()
     const model = await fakeModel([withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }), { status: 500, body: {} }])
@@ -617,6 +632,7 @@ describe('Agent harness: token usage', () => {
   })
 })
 
+/** Runs the harness with --list-models, returning its single line of output and the exit code. */
 async function listModels(env: Record<string, string>) {
   const child = spawn(process.execPath, [harness, '--list-models'], { env: { PATH: process.env.PATH ?? '', ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
   let output = ''

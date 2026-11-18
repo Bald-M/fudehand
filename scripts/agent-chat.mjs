@@ -98,15 +98,18 @@ async function reply(text, controller) {
   const usage = { input: 0, output: 0, cached: 0 }
   let rounds = 0
   let reported = true
+  const count = round => {
+    rounds++
+    if (round.usage) for (const key in usage) usage[key] += round.usage[key]
+    else reported = false
+  }
   try {
     if (providerError) throw new Error(providerError)
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
       if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(system, log, tools, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
-      rounds++
-      if (answer.usage) for (const key in usage) usage[key] += answer.usage[key]
-      else reported = false
+      count(answer)
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
@@ -133,6 +136,8 @@ async function reply(text, controller) {
       if (signal.aborted) break
     }
   } catch (error) {
+    // A request that completed with a reply that cannot be used (cut off, declined) was consumed like any other.
+    if (error instanceof Error && 'usage' in error) count(error)
     if (!signal.aborted) emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
     if (signal.aborted && partial) log.push({ role: 'assistant', text: partial, toolCalls: [] })

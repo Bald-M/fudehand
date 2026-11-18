@@ -137,6 +137,11 @@ const truncated = 'The model reply was cut off by the length limit; stopped this
 // The stream closed without the event that ends a reply; what arrived may be half a sentence or half a tool call.
 const incomplete = 'The model reply ended before it was complete; stopped this reply'
 
+/** The error for a request that completed but whose reply cannot be used; it carries the request's usage, which was consumed all the same. */
+function unusable(message, usage) {
+  return Object.assign(new Error(message), { usage })
+}
+
 function functionCall(id, name, raw) {
   try {
     const args = raw ? JSON.parse(raw) : {}
@@ -208,13 +213,14 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           return { choices: [{ finish_reason, message: { ...message, tool_calls: message.tool_calls.filter(Boolean) } }], usage }
         })
         const choice = body.choices?.[0] ?? {}
-        if (choice.finish_reason === 'length') throw new Error(truncated)
+        // DeepSeek reports cache hits at the top level, OpenAI under prompt_tokens_details.
+        const usage = tokenUsage(body.usage?.prompt_tokens, body.usage?.completion_tokens, body.usage?.prompt_cache_hit_tokens ?? body.usage?.prompt_tokens_details?.cached_tokens)
+        if (choice.finish_reason === 'length') throw unusable(truncated, usage)
         const message = choice.message ?? {}
         return {
           text: message.content ?? '',
           toolCalls: (message.tool_calls ?? []).map(call => functionCall(call.id, call.function?.name, call.function?.arguments)),
-          // DeepSeek reports cache hits at the top level, OpenAI under prompt_tokens_details.
-          usage: tokenUsage(body.usage?.prompt_tokens, body.usage?.completion_tokens, body.usage?.prompt_cache_hit_tokens ?? body.usage?.prompt_tokens_details?.cached_tokens),
+          usage,
         }
       },
     }
@@ -241,13 +247,14 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           if (!response) throw new Error(incomplete)
           return response
         })
-        if (body.status === 'incomplete') throw new Error(truncated)
+        const usage = tokenUsage(body.usage?.input_tokens, body.usage?.output_tokens, body.usage?.input_tokens_details?.cached_tokens)
+        if (body.status === 'incomplete') throw unusable(truncated, usage)
         const output = body.output ?? []
         return {
           text: output.filter(item => item.type === 'message').flatMap(item => item.content ?? [])
             .filter(part => part.type === 'output_text').map(part => part.text).join(''),
           toolCalls: output.filter(item => item.type === 'function_call').map(item => functionCall(item.call_id, item.name, item.arguments)),
-          usage: tokenUsage(body.usage?.input_tokens, body.usage?.output_tokens, body.usage?.input_tokens_details?.cached_tokens),
+          usage,
         }
       },
     }
@@ -288,15 +295,16 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
         if (!stop_reason) throw new Error(incomplete)
         return { content: content.filter(Boolean), stop_reason, usage }
       })
-      if (body.stop_reason === 'max_tokens') throw new Error(truncated)
-      if (body.stop_reason === 'refusal') throw new Error('The model declined this request; stopped this reply')
-      if (body.stop_reason === 'pause_turn') throw new Error('The model paused before finishing; stopped this reply')
-      const blocks = body.content ?? []
       // Anthropic counts cached input apart from input_tokens.
       const { input_tokens, output_tokens, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 } = body.usage ?? {}
+      const usage = tokenUsage(input_tokens + cache_creation_input_tokens + cache_read_input_tokens, output_tokens, cache_read_input_tokens)
+      if (body.stop_reason === 'max_tokens') throw unusable(truncated, usage)
+      if (body.stop_reason === 'refusal') throw unusable('The model declined this request; stopped this reply', usage)
+      if (body.stop_reason === 'pause_turn') throw unusable('The model paused before finishing; stopped this reply', usage)
+      const blocks = body.content ?? []
       return {
         blocks,
-        usage: tokenUsage(input_tokens + cache_creation_input_tokens + cache_read_input_tokens, output_tokens, cache_read_input_tokens),
+        usage,
         text: blocks.filter(block => block.type === 'text').map(block => block.text).join(''),
         toolCalls: blocks.filter(block => block.type === 'tool_use').map(block => ({
           id: block.id, name: block.name, args: block.input ?? {}, ...(malformed.has(block.id) ? { error: 'Tool arguments are not valid JSON' } : {}),

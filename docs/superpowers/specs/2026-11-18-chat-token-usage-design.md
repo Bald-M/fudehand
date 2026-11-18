@@ -30,7 +30,7 @@ The user chose the single "total for this reply" figure over showing input and o
 
 The non-streamed JSON fallback reads the same fields from the body.
 
-**Harness** (`scripts/agent-chat.mjs`): `reply()` adds up the usage of each round and emits `{ type: 'done', stopped, usage?: { input, output, cached } }`. `usage` is left out when any completed round reported none (the sum would understate the reply) or when no round completed. A reply that is stopped or fails still reports the rounds that completed, since those were consumed; the interrupted round is not counted.
+**Harness** (`scripts/agent-chat.mjs`): `reply()` adds up the usage of each round and emits `{ type: 'done', stopped, usage?: { input, output, cached } }`. `usage` is left out when any completed round reported none (the sum would understate the reply) or when no round completed. A reply that is stopped or fails still reports the rounds that completed, since those were consumed; the interrupted round is not counted. A round that completed but whose reply is rejected (cut off by the length limit, declined, paused) is counted, because the request was consumed.
 
 **AtlasCore** (`ChatTranscript.swift`): a `ChatUsage` value (`input`, `output`, `cached`, and `total = input + output`) and an optional `usage` on `ChatEntry`. On `done`, the usage is attached to the last assistant entry of the reply to the last user message; a reply with no assistant text shows no usage. Saved conversations without the field keep loading. A formatter gives the compact count: `856`, `30.3K`, `1.2M`.
 
