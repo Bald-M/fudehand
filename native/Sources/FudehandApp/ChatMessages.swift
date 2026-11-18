@@ -225,13 +225,18 @@ private struct QuestionCard: View {
 
     private func optionLabel(_ option: ChatQuestion.Option, recommended: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(option.label).fontWeight(.semibold)
-                if recommended {
-                    Text(L("Recommended")).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+            let label = Text(option.label).fontWeight(.semibold)
+            if recommended {
+                let tag = Text(L("Recommended")).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                // The tag sits beside a label that fits on one line, and under one that wraps.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { label.lineLimit(1); tag }
+                    VStack(alignment: .leading, spacing: 3) { label; tag }
                 }
+            } else {
+                label
             }
             if let description = option.description {
                 Text(description).font(.callout).foregroundStyle(.secondary)
