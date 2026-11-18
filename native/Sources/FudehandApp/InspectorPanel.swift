@@ -235,6 +235,7 @@ private struct NodeInspector: View {
                 Button(L("Replace Image…")) { replaceImage() }
             }
         }
+        interactionSection(node.interaction)
     }
 
     private func sizingPicker(_ label: String, _ mode: SizingMode, _ commit: @escaping (SizingMode) -> Void) -> some View {
@@ -313,6 +314,76 @@ private struct NodeInspector: View {
             } else {
                 Button(L("Add Auto Layout")) { update("Add Auto Layout") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
             }
+        }
+    }
+
+    /// The top-level frames an interaction can go to; the frame holding this layer comes last, since going to it is rarely meant.
+    private var destinations: [DesignNode] {
+        let own = store.document.ancestry(of: node.id).first
+        let frames = store.document.nodes.filter { $0.type == .frame }
+        return frames.filter { $0.id != own } + frames.filter { $0.id == own }
+    }
+
+    private func interactionSection(_ interaction: DesignInteraction?) -> some View {
+        Section(title: L("Prototype")) {
+            if let interaction {
+                Text(L("On click")).foregroundStyle(.secondary)
+                Picker(L("Action"), selection: Binding(get: { if case .back = interaction { return "back" } else { return "navigate" } }, set: { action in
+                    guard action == "back" || destinations.first != nil else { return }
+                    update("Change Interaction") { $0.interaction = action == "back" ? .back : .navigate(destination: destinations[0].id, transition: PrototypeTransition()) }
+                })) {
+                    Text(L("Navigate to|prototype")).tag("navigate")
+                    Text(L("Back|prototype")).tag("back")
+                }
+                if case .navigate(let destination, let transition) = interaction {
+                    Picker(L("Destination"), selection: Binding(get: { destination }, set: { id in
+                        update("Change Interaction") { $0.interaction = .navigate(destination: id, transition: transition) }
+                    })) {
+                        ForEach(destinations) { Text($0.name).tag($0.id) }
+                        if !destinations.contains(where: { $0.id == destination }) { Text(L("Missing frame")).tag(destination) }
+                    }
+                    Picker(L("Transition"), selection: Binding(get: { transition.type }, set: { type in
+                        update("Change Interaction") { $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(type: type, duration: transition.duration, easing: transition.easing)) }
+                    })) {
+                        ForEach(TransitionType.allCases, id: \.self) { Text(Self.transitionName($0)).tag($0) }
+                    }
+                    if transition.type != .none {
+                        NumberField(label: L("Duration (s)"), value: transition.duration, minimum: 0) { seconds in
+                            update("Change Interaction") {
+                                $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(
+                                    type: transition.type, duration: min(seconds, PrototypeTransition.maximumDuration), easing: transition.easing))
+                            }
+                        }
+                        Picker(L("Easing"), selection: Binding(get: { transition.easing }, set: { easing in
+                            update("Change Interaction") { $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(type: transition.type, duration: transition.duration, easing: easing)) }
+                        })) {
+                            Text(L("Linear")).tag(TransitionEasing.linear)
+                            Text(L("Ease In")).tag(TransitionEasing.easeIn)
+                            Text(L("Ease Out")).tag(TransitionEasing.easeOut)
+                            Text(L("Ease In and Out")).tag(TransitionEasing.easeInOut)
+                        }
+                    }
+                }
+                Button(L("Remove Interaction")) { update("Remove Interaction") { $0.interaction = nil } }
+            } else {
+                Button(L("Add Interaction")) {
+                    update("Add Interaction") { $0.interaction = destinations.first.map { .navigate(destination: $0.id, transition: PrototypeTransition()) } ?? .back }
+                }
+                Text(L("Clicking this layer during playback goes to another frame or back."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    static func transitionName(_ type: TransitionType) -> String {
+        switch type {
+        case .none: return L("None|transition")
+        case .dissolve: return L("Dissolve")
+        case .pushLeft: return L("Push Left")
+        case .pushRight: return L("Push Right")
+        case .pushUp: return L("Push Up")
+        case .pushDown: return L("Push Down")
+        case .sheet: return L("Bottom Sheet")
         }
     }
 

@@ -74,7 +74,7 @@ Interaction follows Figma.
 ## Panels
 
 - **Layers panel** (left sidebar): a hierarchy tree with upper layers first. Pressing a row selects it at once, without waiting for the mouse button to come up; ⌘-click adds or removes, Shift-click adds; double-click to rename. Hovering a row tints it and outlines its layer on the canvas, and hovering a layer on the canvas tints its row; the eye and lock buttons toggle visibility and locking; the context menu can move a layer up or down one level, bring it to the front or send it to the back, zoom to the layer, or delete it.
-- **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit; with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A); see "Chat panel" below.
+- **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit, and the layer's prototype interaction (see "Prototype" below); with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A); see "Chat panel" below.
 - The appearance menu in the top right chooses Follow System, Light, or Dark.
 
 ### Chat panel
@@ -93,6 +93,16 @@ Interaction follows Figma.
 - **Compacting**: sending a message that is exactly `/compact` compacts the selected conversation instead of sending it to the model: the Agent harness asks the model for a summary of the conversation and from then on the model sees that summary instead of the earlier messages. The transcript keeps every message and gains a *Context compacted* row that opens to show the summary; the ring drops to the summary's size until the next reply reports the real amount (to empty when the model API reported no usage for the summary). While it runs the panel shows *Compacting context…* and the stop button stops it. A stop or a failure leaves the messages and the model's context as they were; a stop adds a *Compacting stopped* notice and a failure an error row. The compaction is saved with the conversation, so a reopened conversation continues from the summary. Regenerating or editing a message sent before the compaction takes the compaction back with it: the model is given the messages up to that point again. Nothing is compacted automatically, and `/compact` does nothing in a conversation with no messages since the last compaction.
 - The Agent harness keeps the full history, including tool results, while it runs. A new harness — after a relaunch, a model change, or switching, regenerating, or editing — is given the conversation's user and assistant texts only, starting at the summary when the conversation was compacted.
 
+## Prototype
+
+Any layer can have one click interaction that turns the design document into a clickable prototype (see [ADR 0007](adr/0007-prototype-interactions.md)).
+
+- **Editing**: the Prototype (原型) section at the bottom of the Design tab. *Add Interaction* gives the selected layer *On click → Navigate to* the first other top-level frame (or *Back* when there is none). *Action* switches between *Navigate to* (跳转到) a top-level frame and *Back* (返回); *Destination* lists the top-level frames, the one holding the layer last, and shows *Missing frame* (画框不存在) when the frame it pointed to was deleted. *Transition* is None, Dissolve, Push Left / Right / Up / Down, or Bottom Sheet; when it is not None, *Duration (s)* (0–10, default 0.3) and *Easing* (Linear, Ease In, Ease Out — the default — or Ease In and Out) appear. *Remove Interaction* takes it off. Every change is one undo step in the shared history, and the Agent sets the same field through `design_create_node` / `design_update_node`.
+- **Transitions**: a push names the direction the content travels — Push Left brings the destination in from the right while the current frame leaves to the left. Bottom Sheet slides the destination up from the bottom over the current frame. Back plays the transition that arrived at the current frame in reverse (a push slides back, a dissolve fades the current frame out, a sheet slides down).
+- **Playing**: Canvas › Play Prototype (画布 › 播放原型, ⌥⌘↩) or the ▶ button in the window toolbar opens the prototype window, starting from the top-level frame holding the selection, otherwise the first top-level frame; with no top-level frame it says to add one. Playing again restarts from the current selection.
+- **Prototype window**: a separate window, sized to the frame on show (frames larger than the screen are scaled down to fit), titled with the frame's name. It resizes when it moves to a frame of another size. A click goes to the layer under the pointer — or, when that layer has no interaction, to its nearest ancestor that has one, up to the frame itself; hidden layers and everything in them never answer, and content clipped away by a frame cannot be clicked. The pointer becomes a pointing hand over a layer that answers. While a transition plays, clicks are ignored. An interaction whose destination is missing or not a top-level frame does nothing, and *Back* with no earlier frame does nothing; frames deleted since they were shown are skipped on the way back. Esc or ⌘W closes the window and returns to editing; the editing canvas, its selection, and its viewport are never changed by playback.
+- **Edits during playback**: the prototype window follows the design document: edits by people or the Agent show up when they are committed (a drag on the canvas shows at its end). If the frame on show is deleted, the window says so and offers *Play from the Start*.
+
 ## Verification
 
 ```bash
@@ -102,7 +112,7 @@ pnpm build:native
 codesign --verify --deep --strict dist/Fudehand.app
 ```
 
-The Swift tests cover document reading/writing and version checks, field patches, auto layout, edit history, click-selection rules, the canvas interaction state machine, incremental renderer updates and snapshots, and control commands. The Node tests cover MCP tool forwarding, image reading, and the chat harness.
+The Swift tests cover document reading/writing and version checks, field patches, auto layout, edit history, click-selection rules, the canvas interaction state machine, incremental renderer updates and snapshots, prototype interactions and playback rules, and control commands. The Node tests cover MCP tool forwarding, image reading, and the chat harness.
 
 ## Performance Troubleshooting
 

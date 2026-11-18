@@ -21,6 +21,17 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
 
+**Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
+
+**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, or *Back* (返回 / 返回) to the frame shown before. Saved on the layer in the project file.
+_Avoid_: link, hotspot, action (an interaction's *Action* is only its navigate-or-back choice)
+
+**Transition (转场 / 轉場)**: How the prototype window moves from one frame to the next: None, Dissolve (淡入淡出), Push Left/Right/Up/Down (向左/右/上/下推入), or Bottom Sheet (底部弹出 / 底部彈出), with a duration and an easing. Back plays it in reverse.
+_Avoid_: animation (reserved for a layer's own animation, #151)
+
+**Prototype window (原型窗口 / 原型視窗)**: The separate window opened by *Play Prototype (播放原型)* that plays the prototype at the frames' actual size; clicks there trigger interactions instead of selecting layers.
+_Avoid_: preview mode, present mode
+
 **Canvas (画布 / 畫布)**: The pannable, zoomable workspace that displays the design document.
 
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
