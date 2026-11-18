@@ -854,3 +854,132 @@ describe('Agent harness: design_snapshot images', () => {
     expect(system).toMatch(/design_get_node/)
   })
 })
+
+describe('Agent harness: asking the user a question', () => {
+  const QUESTION = { question: 'How many entries?', detail: 'It decides the icon size.', options: [{ label: '3 entries', description: 'Roomy' }, { label: '4 entries' }] }
+  const deepseek = (model: { baseUrl: string }, extra: Record<string, string> = {}) =>
+    startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, ...extra })
+
+  it('offers ask_user to every provider, and keeps it out of the MCP tools', async () => {
+    const { tools } = await import('../scripts/fudehand-tools.mjs')
+    expect(tools.map((tool: { name: string }) => tool.name)).not.toContain('ask_user')
+    for (const [provider, reply] of [['deepseek', openaiText('Hi')], ['openai', responsesText('Hi')], ['anthropic', anthropicText('Hi')]] as const) {
+      const model = await fakeModel([reply])
+      const chat = await startHarness({ FUDEHAND_PROVIDER: provider, FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
+      await chat.ask('Hello')
+      const names = model.requests[0].body.tools.map((tool: any) => tool.name ?? tool.function.name)
+      expect(names).toContain('ask_user')
+    }
+  })
+
+  it('pauses the reply on a question and hands the answer to the model as the tool result', async () => {
+    for (const [provider, replies] of [
+      ['deepseek', [openaiTool('call_q', 'ask_user', QUESTION), openaiText('Added 3 entries.')]],
+      ['openai', [responsesTool('call_q', 'ask_user', QUESTION), responsesText('Added 3 entries.')]],
+      ['anthropic', [anthropicTool('call_q', 'ask_user', QUESTION), anthropicText('Added 3 entries.')]],
+    ] as const) {
+      const model = await fakeModel([...replies])
+      const chat = await startHarness({ FUDEHAND_PROVIDER: provider, FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
+      chat.send({ type: 'user', text: 'Add a bottom navigation' })
+      const question = await chat.until(event => event.type === 'question')
+      expect(question).toEqual({ type: 'question', id: 'call_q', ...QUESTION })
+      // Nothing happens until the user answers.
+      await new Promise(resolve => setTimeout(resolve, 150))
+      expect(model.requests).toHaveLength(1)
+      expect(chat.events.some(event => event.type === 'done')).toBe(false)
+      chat.send({ type: 'answer', id: 'call_q', question: QUESTION.question, text: '3 entries' })
+      await chat.until(event => event.type === 'done')
+      expect(chat.events.filter(event => event.type === 'tool_call' || event.type === 'tool_result')).toEqual([])
+      expect(chat.events.at(-1)).toMatchObject({ type: 'done', stopped: false })
+      expect(JSON.stringify(model.requests[1].body)).toContain('The user answered: 3 entries')
+    }
+  })
+
+  it('tells the model to decide itself when the question is skipped', async () => {
+    const model = await fakeModel([openaiTool('call_q', 'ask_user', QUESTION), openaiText('Went with 3.')])
+    const chat = await deepseek(model)
+    chat.send({ type: 'user', text: 'Add a bottom navigation' })
+    await chat.until(event => event.type === 'question')
+    chat.send({ type: 'answer', id: 'call_q', question: QUESTION.question, skipped: true })
+    await chat.until(event => event.type === 'done')
+    expect(model.requests[1].body.messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_q', content: 'The user skipped the question: decide yourself and carry on.' })
+  })
+
+  it('cancels the question on a stop and runs no later tool call', async () => {
+    const app = await startApp()
+    const both = { body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+      { id: 'call_q', type: 'function', function: { name: 'ask_user', arguments: JSON.stringify(QUESTION) } },
+      { id: 'call_s', type: 'function', function: { name: 'design_get_state', arguments: '{}' } },
+    ] } }] } }
+    const model = await fakeModel([both, openaiText('Next turn.')])
+    const chat = await deepseek(model, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
+    chat.send({ type: 'user', text: 'Add a bottom navigation' })
+    await chat.until(event => event.type === 'question')
+    chat.send({ type: 'stop' })
+    expect(await chat.until(event => event.type === 'done')).toMatchObject({ stopped: true })
+    expect(app.received).toEqual([])
+    expect(model.requests).toHaveLength(1)
+    // A late answer to the cancelled question does not resume the stopped turn; the history stays valid for the next message.
+    chat.send({ type: 'answer', id: 'call_q', question: QUESTION.question, text: '3 entries' })
+    await new Promise(resolve => setTimeout(resolve, 150))
+    expect(model.requests).toHaveLength(1)
+    await chat.ask('Never mind')
+    const messages = model.requests[1].body.messages
+    expect(messages.filter((message: any) => message.role === 'tool').map((message: any) => message.tool_call_id)).toEqual(['call_q', 'call_s'])
+  })
+
+  it('returns an error to the model instead of showing a malformed or second question', async () => {
+    const calls = [
+      { ...QUESTION, options: [{ label: 'Only one' }] },
+      { ...QUESTION, options: Array.from({ length: 5 }, (_, index) => ({ label: `Option ${index}` })) },
+      { ...QUESTION, question: '  ' },
+      { ...QUESTION, options: [{ label: 'A' }, { description: 'No label' }] },
+    ]
+    const model = await fakeModel([...calls.map((args, index) => openaiTool(`call_${index}`, 'ask_user', args)), openaiText('I will decide myself.')])
+    const chat = await deepseek(model)
+    const events = await chat.ask('Add a bottom navigation')
+    expect(events.map(event => event.type)).toEqual(['assistant', 'done'])
+    for (const [index, request] of model.requests.slice(1).entries()) {
+      expect(request.body.messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: `call_${index}` })
+      expect(request.body.messages.at(-1).content).toMatch(/^ask_user: /)
+    }
+
+    const twice = { body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: ['call_a', 'call_b'].map(id => (
+      { id, type: 'function', function: { name: 'ask_user', arguments: JSON.stringify(QUESTION) } })) } }] } }
+    const second = await fakeModel([twice, openaiText('Done.')])
+    const other = await deepseek(second)
+    other.send({ type: 'user', text: 'Add a bottom navigation' })
+    await other.until(event => event.type === 'question')
+    other.send({ type: 'answer', id: 'call_a', question: QUESTION.question, text: '4 entries' })
+    await other.until(event => event.type === 'done')
+    expect(other.events.filter(event => event.type === 'question')).toHaveLength(1)
+    expect(second.requests[1].body.messages.at(-1).content).toMatch(/^ask_user: .*one question/)
+  })
+
+  it('starts a new turn from an answer when the question is no longer waiting', async () => {
+    const model = await fakeModel([openaiText('Added 3 entries.'), openaiText('Went with my pick.')])
+    const chat = await deepseek(model)
+    chat.send({ type: 'load', messages: [{ role: 'user', text: 'Add a bottom navigation' }] })
+    chat.send({ type: 'answer', id: 'call_old', question: QUESTION.question, text: '3 entries' })
+    await chat.until(event => event.type === 'done')
+    expect(model.requests[0].body.messages.slice(1)).toEqual([
+      { role: 'user', content: 'Add a bottom navigation' },
+      { role: 'user', content: 'You asked the user: How many entries?\nThe user answered: 3 entries' },
+    ])
+    const from = chat.events.length
+    chat.send({ type: 'answer', id: 'call_old', question: QUESTION.question, skipped: true })
+    await chat.until(event => event.type === 'done', from)
+    expect(model.requests[1].body.messages.at(-1).content).toBe('You asked the user: How many entries?\nThe user skipped the question: decide yourself and carry on.')
+  })
+
+  it('ignores an answer that matches no waiting question while a reply is running', async () => {
+    const model = await fakeModel([{ ...openaiText('Working on it.'), delayMs: 300 }])
+    const chat = await deepseek(model)
+    chat.send({ type: 'user', text: 'Add a bottom navigation' })
+    chat.send({ type: 'answer', id: 'call_stale', question: QUESTION.question, text: '3 entries' })
+    await chat.until(event => event.type === 'done')
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(chat.events.filter(event => event.type === 'error')).toEqual([])
+    expect(model.requests).toHaveLength(1)
+  })
+})

@@ -797,3 +797,137 @@ private func exited(_ pids: [Int32]) async throws -> Bool {
     session.rebind(to: document, moving: false)
     #expect(document.load(id)?.entries.contains { $0.text == "Newest" } == true)
 }
+
+/// A stand-in harness that answers every user message with a question, and continues once the question is answered.
+private func askingHarness() throws -> (root: URL, received: () throws -> [[String: Any]]) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-harness-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+    let script = """
+    import { createInterface } from 'node:readline'
+    import { appendFileSync } from 'node:fs'
+    const emit = event => process.stdout.write(JSON.stringify(event) + '\\n')
+    let asked = false
+    const input = createInterface({ input: process.stdin })
+    input.on('line', line => {
+      const message = JSON.parse(line)
+      appendFileSync(new URL('../received.jsonl', import.meta.url), JSON.stringify({ pid: process.pid, ...message }) + '\\n')
+      if (message.type === 'user') {
+        asked = true
+        emit({ type: 'question', id: 'q1', question: 'How many entries?', options: [{ label: '3 entries' }, { label: '4 entries' }] })
+      }
+      if (message.type === 'answer') {
+        emit({ type: 'assistant', text: (asked ? 'continued: ' : 'resumed: ') + (message.skipped ? 'skipped' : message.text) })
+        emit({ type: 'done', stopped: false })
+        asked = false
+      }
+      if (message.type === 'stop') emit({ type: 'done', stopped: true })
+    })
+    input.on('close', () => process.exit(0))
+    """
+    try script.write(to: root.appendingPathComponent("scripts/agent-chat.mjs"), atomically: true, encoding: .utf8)
+    return (root, {
+        try String(contentsOf: root.appendingPathComponent("received.jsonl"), encoding: .utf8).split(separator: "\n")
+            .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+    })
+}
+
+@MainActor private func waiting(_ session: ChatSession) async throws {
+    for _ in 0..<100 where !session.transcript.waiting { try await Task.sleep(nanoseconds: 100_000_000) }
+    #expect(session.transcript.waiting)
+}
+
+@Test @MainActor func answeringAQuestionContinuesTheReplyWithoutBlockingOtherConversations() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    let first = session.conversationID
+    #expect(session.transcript.busy)
+
+    // Another conversation is not held up by the question.
+    session.newConversation()
+    session.send("Other", root: harness.root, runtime: nil)
+    try await waiting(session)
+    session.answer(nil, root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Other", "How many entries?", "continued: skipped"])
+    #expect(session.tabs[0].transcript.waiting)
+
+    session.select(first)
+    session.answer("3 entries", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Add a bottom navigation", "How many entries?", "continued: 3 entries"])
+    #expect(session.transcript.entries[1].question?.state == .answered("3 entries"))
+    await session.shutdown()
+
+    let answers = try harness.received().filter { $0["type"] as? String == "answer" }
+    #expect(answers.map { $0["id"] as? String } == ["q1", "q1"])
+    #expect(answers.last?["text"] as? String == "3 entries")
+    #expect(answers.last?["question"] as? String == "How many entries?")
+}
+
+@Test @MainActor func stoppingTheReplyCancelsTheQuestion() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    session.stopReply()
+    try await settle(session)
+    #expect(!session.transcript.waiting)
+    #expect(session.transcript.entries[1].question?.state == .cancelled)
+    // Nothing is left to answer.
+    session.answer("3 entries", root: harness.root, runtime: nil)
+    #expect(!session.transcript.busy)
+    await session.shutdown()
+    #expect(try harness.received().filter { $0["type"] as? String == "answer" }.isEmpty)
+}
+
+@Test @MainActor func anUnansweredQuestionSurvivesQuittingAndIsAnsweredAfterARelaunch() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    // Saved as soon as it is asked, so it is not lost if the App quits unexpectedly.
+    #expect(history.load(session.conversationID)?.entries.last?.question?.state == .pending)
+    await session.shutdown()
+    #expect(history.load(session.conversationID)?.entries.map(\.text) == ["Add a bottom navigation", "How many entries?"])
+
+    let relaunched = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(relaunched.transcript.waiting)
+    #expect(!relaunched.transcript.busy)
+    relaunched.answer("4 entries", root: harness.root, runtime: nil)
+    #expect(relaunched.transcript.busy)
+    try await settle(relaunched)
+    #expect(relaunched.transcript.entries.map(\.text) == ["Add a bottom navigation", "How many entries?", "resumed: 4 entries"])
+    await relaunched.shutdown()
+
+    // The new harness is given the conversation so far, then the answer.
+    let lines = try harness.received()
+    let pid = lines.last?["pid"] as? Int
+    let resumed = lines.filter { $0["pid"] as? Int == pid }
+    #expect(resumed.map { $0["type"] as? String } == ["load", "answer"])
+    #expect((resumed[0]["messages"] as? [[String: String]]) == [["role": "user", "text": "Add a bottom navigation"]])
+    #expect(history.load(relaunched.conversationID)?.entries.last?.text == "resumed: 4 entries")
+}
+
+@Test @MainActor func closingATabKeepsItsQuestionOpen() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = temporarySession(history: history)
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    let id = session.conversationID
+    session.close(id)
+    #expect(history.load(id)?.entries.last?.question?.state == .pending)
+    session.open(id)
+    #expect(session.transcript.waiting)
+    await session.shutdown()
+}

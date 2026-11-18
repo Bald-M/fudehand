@@ -50,6 +50,8 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 
 **Context tag (上下文标签 / 上下文標籤)**: A removable tag above the chat input for a layer selected on the canvas; the layers still tagged when a message is sent are passed to the Agent with it.
 
+**Question card (问题卡片 / 問題卡片)**: A card in the chat panel's transcript for a question the Agent paused its reply to ask, with up to four options (its recommendation first), a field for another answer, and *Skip, let AI decide*. Once answered it folds down to the question and the answer. The question is a tool of the Agent harness only; external agents on the MCP server do not have it.
+
 **Next-message prediction (下一条消息预测 / 下一則訊息預測)**: The message the Agent harness predicts the user will send next, shown as the placeholder of the empty chat input after a reply ends; Tab puts it in the input. It is not part of the conversation.
 _Avoid_: autocomplete, completion (nothing is completed while typing), suggestion chips
 

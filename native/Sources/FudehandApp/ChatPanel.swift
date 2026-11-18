@@ -33,9 +33,11 @@ struct ChatPanel: View {
     private static let bottom = "bottom"
 
     private var busy: Bool { chat.transcript.busy }
+    /// The Agent asked a question and the reply is paused until it is answered.
+    private var waiting: Bool { chat.transcript.waiting }
     private var context: [ChatContext] { selection.filter { !dismissed.contains($0.id) } }
     /// The predicted next message to offer in the empty input. Not while the last message is being edited: sending would replace that message with it.
-    private var suggestion: String? { editing ? nil : chat.transcript.suggestion }
+    private var suggestion: String? { editing || waiting ? nil : chat.transcript.suggestion }
 
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
@@ -113,7 +115,9 @@ struct ChatPanel: View {
         let selected = tab.id == chat.conversationID
         let title = tab.transcript.title.isEmpty ? L("New conversation") : tab.transcript.title
         return HStack(spacing: 4) {
-            if tab.transcript.busy {
+            if tab.transcript.waiting {
+                Circle().strokeBorder(.orange, lineWidth: 2).frame(width: 8, height: 8).accessibilityLabel(L("Waiting for your answer"))
+            } else if tab.transcript.busy {
                 Circle().fill(Color.accentColor).frame(width: 6, height: 6).accessibilityLabel(L("Replying…"))
             }
             Button { chat.select(tab.id) } label: {
@@ -151,7 +155,7 @@ struct ChatPanel: View {
         let transcript = chat.transcript
         let groups = transcript.groups
         let lastReply = transcript.lastReplyID
-        let actions = ChatRowActions(regenerate: { chat.regenerate(root: root, runtime: runtime) }, edit: edit, layerName: layerName)
+        let actions = ChatRowActions(regenerate: { chat.regenerate(root: root, runtime: runtime) }, edit: edit, answer: answer, layerName: layerName)
         return GeometryReader { viewport in
             ScrollViewReader { proxy in
                 ScrollView {
@@ -163,7 +167,12 @@ struct ChatPanel: View {
                                          actionable: !busy && group.id == (group.entries[0].kind == .user ? transcript.lastUserID : lastReply),
                                          actions: actions)
                         }
-                        if busy {
+                        if waiting {
+                            HStack(spacing: 6) {
+                                Circle().strokeBorder(.orange, lineWidth: 2).frame(width: 8, height: 8)
+                                Text(L("Waiting for your answer")).font(.caption).foregroundStyle(.secondary)
+                            }
+                        } else if busy {
                             HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("Replying…")).font(.caption).foregroundStyle(.secondary) }
                         }
                         Color.clear.frame(height: 1).id(Self.bottom)
@@ -228,7 +237,7 @@ struct ChatPanel: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
                 // The placeholder is the predicted next message when there is one, and Tab puts it in the input.
-                TextField(L("Message"), text: $draft, prompt: Text(verbatim: suggestion ?? L("Message")), axis: .vertical)
+                TextField(L("Message"), text: $draft, prompt: Text(verbatim: waiting ? L("Answer the question above, or add details here") : suggestion ?? L("Message")), axis: .vertical)
                     .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
                     .onSubmit(submit)
                     .modifier(ComposerKeys(text: $draft, suggestion: suggestion, active: inputFocused))
@@ -245,7 +254,8 @@ struct ChatPanel: View {
                 Spacer()
                 if busy {
                     Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
-                        .buttonStyle(.borderless).help(L("Stop replying")).accessibilityLabel(L("Stop replying"))
+                        .buttonStyle(.borderless).help(waiting ? L("Stop and cancel the question") : L("Stop replying"))
+                        .accessibilityLabel(waiting ? L("Stop and cancel the question") : L("Stop replying"))
                 } else {
                     Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
                         .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
@@ -321,13 +331,26 @@ struct ChatPanel: View {
     }
 
     private func submit() {
-        guard !busy, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // While a question waits, what is typed here answers it; editing the last message instead replaces the turn that asked.
+        if waiting && !editing {
+            answer(draft)
+            draft = ""
+            return
+        }
+        guard !busy else { return }
         // Sending always returns to the newest message.
         scroll.follow = ChatScrollFollow()
         following = true
         if editing { _ = chat.editLast() }
         chat.send(draft, context: context, root: root, runtime: runtime)
         draft = ""
+    }
+
+    private func answer(_ text: String?) {
+        scroll.follow = ChatScrollFollow()
+        following = true
+        chat.answer(text, root: root, runtime: runtime)
     }
 
     /// Copies the last user message into the input to be changed; the conversation is only rewound once the new text is sent.
