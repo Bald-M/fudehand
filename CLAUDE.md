@@ -30,7 +30,7 @@ pnpm install
 pnpm dev               # build the app in debug and open it
 pnpm build:native      # release build + ad-hoc signing → dist/Fudehand.app
 pnpm test:native       # run swift test on native/ (FudehandCoreTests + FudehandAppTests)
-pnpm bench:native      # release-build canvas drag/hover benchmark on 510–5100 layers (prints [bench] lines)
+pnpm bench:native      # release-build canvas drag/hover and layer selection benchmarks on 510–5100 layers (prints [bench] lines)
 pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness
 pnpm mcp               # start the Fudehand MCP server over stdio (usually launched by the Agent)
 ```

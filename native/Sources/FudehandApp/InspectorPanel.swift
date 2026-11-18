@@ -5,6 +5,12 @@ import SwiftUI
 /// The inspector on the right: the "Design" tab edits the properties of the selected layers, and the "Chat" tab is the Agent chat panel.
 struct InspectorPanel: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+
+    init(store: FudehandStore) {
+        self.store = store
+        selection = store.layerSelection
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,9 +21,9 @@ struct InspectorPanel: View {
             .pickerStyle(.segmented).labelsHidden().padding(10)
             Divider()
             switch store.inspectorTab {
-            case .design: DesignInspector(store: store)
+            case .design: DesignInspector(store: store, selection: selection)
             case .chat:
-                let selected = store.selection.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                let selected = selection.ids.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
                 ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
                           selection: selected.map { ChatContext(id: $0.id, name: $0.name, type: $0.type.rawValue) },
                           layerName: { store.document.node($0)?.name })
@@ -28,13 +34,16 @@ struct InspectorPanel: View {
 
 private struct DesignInspector: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var selection: LayerSelection
 
     var body: some View {
-        let selected = store.selection.compactMap { store.document.node($0) }
+        let selected = selection.ids.compactMap { store.document.node($0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if selected.count == 1, let node = selected.first {
-                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).id(node.id)
+                    // Kept when the selection moves to another layer, instead of rebuilt: rebuilding every control took most of the
+                    // time of a selection change (#142). Fields reset their drafts on `inspectedLayer` instead.
+                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).environment(\.inspectedLayer, node.id)
                 } else if selected.count > 1 {
                     Section(title: L("%d layers selected", selected.count)) {
                         SliderRow(label: L("Opacity"), value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
@@ -86,6 +95,10 @@ private struct NumberField: View {
     let commit: (Double) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
+    @Environment(\.inspectedLayer) private var layer
+    /// The layer the text was typed for. A draft typed for the previous layer is dropped, never committed to the newly
+    /// selected one, whichever order SwiftUI reports the focus loss and the layer change in.
+    @State private var draftLayer: String?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -97,11 +110,13 @@ private struct NumberField: View {
                 .accessibilityLabel(label)
         }
         .disabled(disabled)
-        .onAppear { text = NumberInput.format(value) }
+        .onAppear { text = NumberInput.format(value); draftLayer = layer }
         .onChange(of: value) { _, next in if !focused { text = NumberInput.format(next) } }
+        .onChange(of: layer) { text = NumberInput.format(value); draftLayer = layer }
     }
 
     private func submit() {
+        guard draftLayer == layer else { text = NumberInput.format(value); draftLayer = layer; return }
         let next = NumberInput.committedValue(text: text, current: value, minimum: minimum)
         if let next { commit(next) }
         text = NumberInput.format(next ?? value)
@@ -122,6 +137,18 @@ private struct SliderRow: View {
     }
 }
 
+/// The layer the inspector shows; fields that hold a draft reset it when this changes.
+private struct InspectedLayerKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    fileprivate var inspectedLayer: String? {
+        get { self[InspectedLayerKey.self] }
+        set { self[InspectedLayerKey.self] = newValue }
+    }
+}
+
 extension DesignColor {
     var swiftUI: Color { Color(.sRGB, red: r, green: g, blue: b, opacity: a) }
 
@@ -136,6 +163,7 @@ private struct ColorRow: View {
     let color: DesignColor
     let commit: (DesignColor) -> Void
     @State private var hex = ""
+    @Environment(\.inspectedLayer) private var layer
 
     var body: some View {
         HStack(spacing: 6) {
@@ -147,6 +175,7 @@ private struct ColorRow: View {
         }
         .onAppear { hex = color.hex }
         .onChange(of: color) { _, next in hex = next.hex }
+        .onChange(of: layer) { hex = color.hex }
     }
 }
 
@@ -167,6 +196,7 @@ private struct NodeInspector: View {
                 .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
                 .onAppear { name = node.name }
                 .onChange(of: node.name) { _, next in name = next }
+                .onChange(of: node.id) { name = node.name; content = node.text?.content ?? "" }
                 .accessibilityLabel(L("Layer name"))
         }
         Section(title: L("Position and Size")) {
