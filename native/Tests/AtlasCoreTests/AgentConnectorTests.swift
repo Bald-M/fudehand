@@ -10,7 +10,7 @@ private let script = "/repo/scripts/mcp-server.mjs"
     #expect(AgentConnector.codex.addArguments(script: script) == ["mcp", "add", "ui-atlas", "--", "node", script])
     #expect(AgentConnector.codex.removeArguments == ["mcp", "remove", "ui-atlas"])
     #expect(AgentConnector.codex.statusArguments == ["mcp", "get", "ui-atlas", "--json"])
-    #expect(AgentConnector.allCases.map(\.title) == ["Claude Code", "Codex"])
+    #expect(AgentConnector.allCases.map(\.title) == ["Claude Code", "Codex", "DeepSeek Harness"])
 }
 
 @Test func claudeStatusReadsTheUserScopeServer() {
@@ -41,4 +41,85 @@ private let script = "/repo/scripts/mcp-server.mjs"
     let found = AgentConnector.codex.locate(path: "/missing:/opt/homebrew/bin:/usr/bin") { $0 == "/opt/homebrew/bin/codex" }
     #expect(found == "/opt/homebrew/bin/codex")
     #expect(AgentConnector.claude.locate(path: "/usr/bin::/bin") { _ in false } == nil)
+}
+
+private let deepseekBlock = """
+# >>> ui-atlas MCP connector (managed by ui-atlas; change it in the MCP Connectors window) >>>
+- insert:
+    - id: mcp-ui-atlas
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: ui-atlas
+        transport: stdio
+        command: "/opt/node/bin/node"
+        args: ["/repo/scripts/mcp-server.mjs"]
+# <<< ui-atlas MCP connector <<<
+
+"""
+
+@Test func deepseekConnectingWritesAManagedBlockIntoTheHomePatch() {
+    // No home patch yet: the file is just the block.
+    #expect(AgentConnector.deepseekConnecting(patch: nil, node: "/opt/node/bin/node", script: script) == deepseekBlock)
+
+    // The user's own entries and comments are kept byte for byte, and the block is appended after them.
+    let own = "# mine\n- id: locale\n  config:\n    preference: !!js process.env.LANG\n"
+    #expect(AgentConnector.deepseekConnecting(patch: own, node: "/opt/node/bin/node", script: script) == own + deepseekBlock)
+    #expect(AgentConnector.deepseekConnecting(patch: "- id: locale", node: "/opt/node/bin/node", script: script) == "- id: locale\n" + deepseekBlock)
+
+    // An empty list written as `[]` cannot be followed by block entries, so it is replaced.
+    #expect(AgentConnector.deepseekConnecting(patch: "# mine\n[]\n", node: "/opt/node/bin/node", script: script) == "# mine\n" + deepseekBlock)
+
+    // Connecting again replaces the old block rather than adding a second server with the same name.
+    let stale = AgentConnector.deepseekConnecting(patch: own, node: "node", script: "/old/scripts/mcp-server.mjs")
+    #expect(AgentConnector.deepseekConnecting(patch: stale, node: "/opt/node/bin/node", script: script) == own + deepseekBlock)
+}
+
+@Test func deepseekStatusReadsTheManagedBlock() {
+    #expect(AgentConnector.deepseekStatus(patch: nil, script: script) == .disconnected)
+    #expect(AgentConnector.deepseekStatus(patch: "- id: locale\n", script: script) == .disconnected)
+    #expect(AgentConnector.deepseekStatus(patch: "- id: locale\n" + deepseekBlock, script: script) == .connected)
+    #expect(AgentConnector.deepseekStatus(patch: deepseekBlock, script: "/other/scripts/mcp-server.mjs")
+        == .elsewhere("/opt/node/bin/node /repo/scripts/mcp-server.mjs"))
+
+    // Paths with spaces and quotes survive the round trip.
+    let odd = "/Users/a \"b\"/ui atlas/scripts/mcp-server.mjs"
+    #expect(AgentConnector.deepseekStatus(patch: AgentConnector.deepseekConnecting(patch: nil, node: "node", script: odd), script: odd) == .connected)
+}
+
+@Test func deepseekDisconnectingRemovesOnlyTheManagedBlock() {
+    let own = "# mine\n- id: locale\n  config:\n    preference: zh\n"
+    #expect(AgentConnector.deepseekDisconnecting(patch: own + deepseekBlock) == own)
+    #expect(AgentConnector.deepseekDisconnecting(patch: deepseekBlock + own) == own)
+    #expect(AgentConnector.deepseekDisconnecting(patch: own) == own)
+
+    // dsh refuses to start on a patch file that is empty or holds only comments: delete the file, or leave an empty list under the user's comments.
+    #expect(AgentConnector.deepseekDisconnecting(patch: deepseekBlock) == nil)
+    #expect(AgentConnector.deepseekDisconnecting(patch: "# mine\n" + deepseekBlock) == "# mine\n[]\n")
+}
+
+@Test func deepseekIsLocatedInTheAppBundleWhenNotOnThePath() {
+    let bundled = "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"
+    #expect(AgentConnector.deepseek.locate(path: "/usr/bin") { $0 == bundled } == bundled)
+    #expect(AgentConnector.deepseek.locate(path: "/tools:/usr/bin") { $0 == "/tools/dsh" || $0 == bundled } == "/tools/dsh")
+    #expect(AgentConnector.deepseek.locate(path: "/usr/bin") { _ in false } == nil)
+    #expect(AgentConnector.codex.locate(path: "/usr/bin") { $0 == bundled } == nil)
+}
+
+@Test func deepseekPatchEditingKeepsWindowsLineEndings() {
+    let own = "# mine\r\n- id: locale\r\n"
+    let connected = AgentConnector.deepseekConnecting(patch: own, node: "/opt/node/bin/node", script: script)
+    #expect(connected == own + deepseekBlock)
+    #expect(AgentConnector.deepseekDisconnecting(patch: connected) == own)
+    #expect(AgentConnector.deepseekConnecting(patch: "[]\r\n", node: "/opt/node/bin/node", script: script) == deepseekBlock)
+    // An editor may have converted the block itself.
+    let converted = deepseekBlock.replacingOccurrences(of: "\n", with: "\r\n")
+    #expect(AgentConnector.deepseekStatus(patch: own + converted, script: script) == .connected)
+    #expect(AgentConnector.deepseekDisconnecting(patch: own + converted) == own)
+}
+
+@Test func deepseekBlockNeedsBothMarkers() {
+    // A begin marker whose end marker was deleted by hand is not a block: nothing after it may be removed with it.
+    let orphan = "# >>> ui-atlas MCP connector >>>\n- id: locale\n"
+    #expect(AgentConnector.deepseekStatus(patch: orphan, script: script) == .disconnected)
+    #expect(AgentConnector.deepseekDisconnecting(patch: orphan + deepseekBlock) == orphan)
 }

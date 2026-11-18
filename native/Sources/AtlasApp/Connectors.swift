@@ -8,7 +8,7 @@ struct CommandResult: Sendable {
     var error: String
 }
 
-/// MCP connectors: detects whether the ui-atlas MCP server is registered in the user-level configuration of Claude Code / Codex, and connects or disconnects it with their CLIs.
+/// MCP connectors: detects whether the ui-atlas MCP server is registered in the user-level configuration of Claude Code / Codex / DeepSeek Harness, and connects or disconnects it (through the CLI for Claude Code and Codex, by editing the home patch file for DeepSeek Harness).
 @MainActor
 final class ConnectorsModel: ObservableObject {
     typealias Runner = @Sendable (_ executable: String, _ arguments: [String], _ environment: [String: String]) async -> CommandResult
@@ -26,6 +26,9 @@ final class ConnectorsModel: ObservableObject {
     let script: String?
     private let environment: [String: String]
     private let claudeConfig: URL
+    /// DeepSeek Harness's home patch file, and the Node the entry written there starts the MCP server with.
+    private let deepseekPatch: URL
+    private let node: String
     private let isExecutable: (String) -> Bool
     private let run: Runner
 
@@ -42,6 +45,10 @@ final class ConnectorsModel: ObservableObject {
         // When CLAUDE_CONFIG_DIR is set, the claude CLI writes the user-level configuration under that directory.
         self.claudeConfig = claudeConfig ?? URL(fileURLWithPath: inherited["CLAUDE_CONFIG_DIR"] ?? FileManager.default.homeDirectoryForCurrentUser.path)
             .appendingPathComponent(".claude.json")
+        // DeepSeek Harness starts MCP servers with the PATH it was launched with, which from Finder does not include Node: write the absolute path.
+        node = runtime?.node ?? "node"
+        deepseekPatch = URL(fileURLWithPath: inherited["DSH_HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh").path)
+            .appendingPathComponent("cordis.patch.yml")
         self.isExecutable = isExecutable
         self.run = run
     }
@@ -55,10 +62,19 @@ final class ConnectorsModel: ObservableObject {
 
     func connect(_ connector: AgentConnector) async {
         guard let script else { entries[connector]?.error = L("Cannot find the ui-atlas source directory, so it cannot connect"); return }
+        if connector == .deepseek {
+            let node = node
+            await editDeepseekPatch(failure: L("Connection failed")) { AgentConnector.deepseekConnecting(patch: $0, node: node, script: script) }
+            return
+        }
         await perform(connector, connector.addArguments(script: script), failure: L("Connection failed"))
     }
 
     func disconnect(_ connector: AgentConnector) async {
+        if connector == .deepseek {
+            await editDeepseekPatch(failure: L("Disconnect failed")) { $0.flatMap(AgentConnector.deepseekDisconnecting) }
+            return
+        }
         await perform(connector, connector.removeArguments, failure: L("Disconnect failed"))
     }
 
@@ -71,6 +87,35 @@ final class ConnectorsModel: ObservableObject {
             let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
             entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
         }
+        await refresh(connector)
+        entries[connector]?.busy = false
+    }
+
+    /// Rewrites DeepSeek Harness's home patch file with `edit` (nil in: no file; nil out: delete the file), keeping the file's permissions.
+    private func editDeepseekPatch(failure: String, _ edit: @escaping @Sendable (String?) -> String?) async {
+        let connector = AgentConnector.deepseek
+        guard entries[connector]?.busy == false, locate(connector) != nil else { return }
+        entries[connector]?.busy = true
+        entries[connector]?.error = nil
+        // Edit the file a symbolic link points at rather than replacing the link.
+        let file = deepseekPatch.resolvingSymlinksInPath()
+        let error: String? = await Task.detached {
+            let files = FileManager.default
+            do {
+                let old = files.fileExists(atPath: file.path) ? try String(contentsOf: file, encoding: .utf8) : nil
+                let permissions = (try? files.attributesOfItem(atPath: file.path))?[.posixPermissions] ?? 0o600
+                guard let new = edit(old) else {
+                    if old != nil { try files.removeItem(at: file) }
+                    return nil
+                }
+                guard new != old else { return nil }
+                try files.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(new.utf8).write(to: file, options: .atomic)
+                try files.setAttributes([.posixPermissions: permissions], ofItemAtPath: file.path)
+                return nil
+            } catch { return error.localizedDescription }
+        }.value
+        if let error { entries[connector]?.error = L("%1$@: %2$@", failure, error) }
         await refresh(connector)
         entries[connector]?.busy = false
     }
@@ -92,6 +137,10 @@ final class ConnectorsModel: ObservableObject {
                 let failure = L("Could not check the connection status")
                 entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
             }
+        case .deepseek:
+            let file = deepseekPatch
+            let patch = await Task.detached { try? String(contentsOf: file, encoding: .utf8) }.value
+            entries[connector]?.status = AgentConnector.deepseekStatus(patch: patch, script: script)
         }
     }
 

@@ -12,6 +12,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Added
 
+- MCP connector: *MCP Connectors…* now lists DeepSeek Harness too. *Connect* adds the MCP server to its home patch file (`~/.dsh/cordis.patch.yml`) in a marked block and *Disconnect* removes only that block; the app is found in `/Applications` even when `dsh` is not on the `PATH` (#74).
 - Chat panel: replies stream in as they are generated, and stopping a reply keeps the text received so far (#29).
 - Chat panel: assistant replies render Markdown — headings, lists, inline code, links, quotes, and code blocks with a *Copy code* button (#29).
 - Chat panel: conversations are saved on this Mac (`~/Library/Application Support/ui-atlas/chats`) and reopened after a relaunch; the header has *New conversation* and a *Conversation history* menu (#29).
