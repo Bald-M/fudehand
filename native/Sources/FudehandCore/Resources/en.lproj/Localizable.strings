@@ -181,6 +181,8 @@
 "Take a screenshot to check the current frame" = "Take a screenshot to check the current frame";
 "Message" = "Message";
 "Chat input" = "Chat input";
+"Tab" = "Tab";
+"Press Tab to use the predicted message" = "Press Tab to use the predicted message";
 "Stop replying" = "Stop replying";
 "Send (Return)" = "Send (Return)";
 "Send" = "Send";

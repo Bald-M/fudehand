@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- Next-message prediction in the chat panel: after a reply ends, the empty input shows the message you are likely to send next as its placeholder, and Tab puts it in the input to edit or send. The prediction is a separate short model request that is kept out of the conversation.
+
 ### Changed
 
 - Conversations now belong to the design document they were held about. Opening a project file restores its conversation tabs, with their messages and each conversation's model, and no other document's conversations are shown; an untitled document keeps its conversations until it is replaced or the App quits, and takes them along on its first save. Conversations saved by earlier versions are not attached to any document and no longer appear in *Conversation history*.

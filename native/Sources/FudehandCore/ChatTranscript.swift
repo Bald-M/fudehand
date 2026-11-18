@@ -113,6 +113,8 @@ public struct ChatGroup: Equatable, Identifiable, Sendable {
 public struct ChatTranscript: Equatable, Sendable {
     public private(set) var entries: [ChatEntry] = []
     public private(set) var busy = false
+    /// The harness's prediction of the next user message, offered in the empty input once a reply has ended. Not saved with the conversation.
+    public private(set) var suggestion: String?
     private var nextID = 0
     /// Whether the last entry is assistant text that is still streaming in.
     private var streaming = false
@@ -129,6 +131,7 @@ public struct ChatTranscript: Equatable, Sendable {
     public mutating func send(_ text: String, context: [ChatContext] = []) {
         // A new message moves on from a question left unanswered.
         cancelQuestion()
+        suggestion = nil
         append(.user, text)
         entries[entries.count - 1].context = context
         busy = true
@@ -173,6 +176,9 @@ public struct ChatTranscript: Equatable, Sendable {
                 entries[index].usage = ChatUsage(input: input, output: output, cached: cached)
             }
             if event["stopped"] as? Bool == true { stop() } else { busy = false; settle() }
+        case "suggestion":
+            // One that arrives while a reply is running was predicted before that reply's message was sent.
+            if !busy, !text.isEmpty { suggestion = text }
         default:
             return
         }
@@ -212,6 +218,7 @@ public struct ChatTranscript: Equatable, Sendable {
         guard let index = entries.lastIndex(where: { $0.question?.state == .pending }) else { return nil }
         entries[index].question?.state = text.map { .answered($0) } ?? .skipped
         busy = true
+        suggestion = nil
         var message: [String: Any] = ["type": "answer", "id": entries[index].call ?? "", "question": entries[index].text]
         if let text { message["text"] = text } else { message["skipped"] = true }
         return message
@@ -222,6 +229,7 @@ public struct ChatTranscript: Equatable, Sendable {
         guard !busy, let index = entries.lastIndex(where: { $0.kind == .user }) else { return nil }
         let removed = entries[index]
         entries.removeSubrange(index...)
+        suggestion = nil
         return removed
     }
 

@@ -36,6 +36,8 @@ struct ChatPanel: View {
     /// The Agent asked a question and the reply is paused until it is answered.
     private var waiting: Bool { chat.transcript.waiting }
     private var context: [ChatContext] { selection.filter { !dismissed.contains($0.id) } }
+    /// The predicted next message to offer in the empty input. Not while the last message is being edited: sending would replace that message with it.
+    private var suggestion: String? { editing || waiting ? nil : chat.transcript.suggestion }
 
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
@@ -232,12 +234,21 @@ struct ChatPanel: View {
                         .buttonStyle(.plain).help(L("Cancel editing")).accessibilityLabel(L("Cancel editing"))
                 }.font(.caption).foregroundStyle(.secondary)
             }
-            // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
-            TextField(waiting ? L("Answer the question above, or add details here") : L("Message"), text: $draft, axis: .vertical)
-                .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
-                .onSubmit(submit)
-                .modifier(ShiftReturnLineBreak(text: $draft, active: inputFocused))
-                .accessibilityLabel(L("Chat input"))
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
+                // The placeholder is the predicted next message when there is one, and Tab puts it in the input.
+                TextField(L("Message"), text: $draft, prompt: Text(verbatim: waiting ? L("Answer the question above, or add details here") : suggestion ?? L("Message")), axis: .vertical)
+                    .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
+                    .onSubmit(submit)
+                    .modifier(ComposerKeys(text: $draft, suggestion: suggestion, active: inputFocused))
+                    .accessibilityLabel(L("Chat input"))
+                if draft.isEmpty, suggestion != nil {
+                    Text(L("Tab")).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.tertiary))
+                        .help(L("Press Tab to use the predicted message")).accessibilityLabel(L("Press Tab to use the predicted message"))
+                }
+            }
             HStack(spacing: 8) {
                 modelMenu
                 Spacer()
@@ -355,31 +366,43 @@ private final class ScrollTracker {
     var follow = ChatScrollFollow()
 }
 
-/// Makes Shift-Return insert a line break in the focused text field instead of submitting it; the field itself only does that for Option-Return.
-private struct ShiftReturnLineBreak: ViewModifier {
+/// The chat input's keys that the text field does not handle itself. Shift-Return inserts a line break instead of submitting
+/// (the field only does that for Option-Return), and Tab in the empty field fills it with the suggested next message.
+private struct ComposerKeys: ViewModifier {
     @Binding var text: String
+    /// The predicted next message that Tab fills in, if any.
+    let suggestion: String?
     /// Whether the field has keyboard focus; keys are only watched while it does.
     let active: Bool
     @State private var monitor: Any?
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: active, initial: true) { _, active in
-                stop()
-                guard active else { return }
-                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                    // Left alone while an input method is composing, where Return confirms the candidate.
-                    guard event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift,
-                          let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor, editor.string == text,
-                          !editor.hasMarkedText() else { return event }
-                    // Change the bound text rather than the field editor, so SwiftUI does not put the old text back.
-                    let range = editor.selectedRange()
-                    text = (text as NSString).replacingCharacters(in: NSIntersectionRange(range, NSRange(location: 0, length: text.utf16.count)), with: "\n")
-                    DispatchQueue.main.async { editor.setSelectedRange(NSRange(location: range.location + 1, length: 0)) }
-                    return nil
-                }
-            }
+            .onChange(of: active, initial: true) { watch() }
+            // The monitor holds the suggestion it was started with.
+            .onChange(of: suggestion) { watch() }
             .onDisappear(perform: stop)
+    }
+
+    private func watch() {
+        stop()
+        guard active else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Left alone while an input method is composing, where Return confirms the candidate.
+            guard let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor, editor.string == text,
+                  !editor.hasMarkedText() else { return event }
+            if event.keyCode == 48, event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty, text.isEmpty, let suggestion {
+                text = suggestion
+                DispatchQueue.main.async { editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0)) }
+                return nil
+            }
+            guard event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift else { return event }
+            // Change the bound text rather than the field editor, so SwiftUI does not put the old text back.
+            let range = editor.selectedRange()
+            text = (text as NSString).replacingCharacters(in: NSIntersectionRange(range, NSRange(location: 0, length: text.utf16.count)), with: "\n")
+            DispatchQueue.main.async { editor.setSelectedRange(NSRange(location: range.location + 1, length: 0)) }
+            return nil
+        }
     }
 
     private func stop() {
