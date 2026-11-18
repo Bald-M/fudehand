@@ -320,6 +320,8 @@ private struct ChatSettingsSheet: View {
         listing = true
         Task {
             let apiKey = typed.isEmpty ? chat.savedKeyValue(for: settings.provider) : typed
+            // The read clears the saved flag when the Keychain no longer has the key.
+            if provider == settings.provider { hasSavedKey = chat.savedKey(for: provider) }
             let result = await ChatSession.listModels(root: root, runtime: runtime, settings: settings, apiKey: apiKey)
             guard listToken == token else { return }
             listing = false

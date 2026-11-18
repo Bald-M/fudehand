@@ -85,8 +85,20 @@ final class ChatSession: ObservableObject {
 
     /// Reads the key saved in the Keychain (may trigger an authorization prompt), and adds the masked hint for a key saved by an older version without one.
     func savedKeyValue(for provider: String) -> String? {
-        guard savedKey(for: provider), let key = readKey(provider) else { return nil }
+        guard savedKey(for: provider), let key = storedKey(for: provider) else { return nil }
         if keyHint(for: provider) == nil { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
+        return key
+    }
+
+    /// Reads the provider's key from the Keychain. When the flag says a key is saved but the Keychain has none (for example it was deleted
+    /// outside the App), the flag is cleared so the panel asks for a key again instead of only showing the harness error.
+    private func storedKey(for provider: String) -> String? {
+        let key = readKey(provider)
+        if key == nil, savedKey(for: provider) {
+            defaults.set(false, forKey: "agent.\(provider).hasKey")
+            defaults.removeObject(forKey: "agent.\(provider).keyHint")
+            if provider == settings.provider { hasKey = false }
+        }
         return key
     }
 
@@ -187,7 +199,7 @@ final class ChatSession: ObservableObject {
     }
 
     private func start(root: URL, runtime: WorkspaceLocation?) throws {
-        let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: readKey(settings.provider),
+        let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: storedKey(for: settings.provider),
                                  environment: ProcessInfo.processInfo.environment)
         let child = Process()
         child.executableURL = launch.executable
