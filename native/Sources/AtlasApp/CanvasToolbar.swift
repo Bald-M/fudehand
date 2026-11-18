@@ -1,0 +1,50 @@
+import AtlasCore
+import SwiftUI
+
+/// The bar floating over the bottom of the canvas: the canvas tools and Insert Image.
+struct CanvasToolbar: View {
+    @ObservedObject var store: AtlasStore
+
+    /// Tool, name key, shortcut key, symbol.
+    static let tools: [(CanvasTool, String, String, String)] = [
+        (.move, "Move", "V", "cursorarrow"), (.hand, "Hand", "H", "hand.raised"), (.frame, "Frame", "F", "number"),
+        (.rectangle, "Rectangle", "R", "rectangle"), (.ellipse, "Ellipse", "O", "circle"), (.text, "Text", "T", "t.square"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Self.tools, id: \.0) { tool, name, key, symbol in
+                ToolButton(title: "\(L(name)) \(key)", symbol: symbol, selected: store.tool == tool) { store.tool = tool }
+            }
+            Divider().frame(height: 20).padding(.horizontal, 4)
+            ToolButton(title: L("Insert Image"), symbol: "photo.badge.plus", selected: false) { store.insertImage() }
+        }
+        .padding(6)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.separator))
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 3)
+        .accessibilityElement(children: .contain).accessibilityLabel(L("Canvas tools"))
+    }
+}
+
+private struct ToolButton: View {
+    let title: String
+    let symbol: String
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 15))
+                .frame(width: 32, height: 32)
+                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .background(selected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.primary.opacity(hovering ? 0.1 : 0)),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(title).accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}

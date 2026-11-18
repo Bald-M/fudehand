@@ -8,6 +8,8 @@ struct NativeCanvas: NSViewRepresentable {
     let store: AtlasStore
     let viewportRequest: ViewportRequest
     let tool: CanvasTool
+    /// The floating toolbar's frame in the canvas's coordinates.
+    var toolbarFrame = CGRect.zero
 
     func makeNSView(context: Context) -> AtlasCanvasView {
         let view = AtlasCanvasView()
@@ -15,11 +17,13 @@ struct NativeCanvas: NSViewRepresentable {
         view.zoomIndicator = store.zoomIndicator
         store.attach(view)
         view.update(viewportRequest: viewportRequest, tool: tool)
+        view.floatingFrame = toolbarFrame
         return view
     }
 
     func updateNSView(_ view: AtlasCanvasView, context: Context) {
         view.update(viewportRequest: viewportRequest, tool: tool)
+        view.floatingFrame = toolbarFrame
     }
 
     static func dismantleNSView(_ view: AtlasCanvasView, coordinator: ()) {

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import AtlasApp
 @testable import AtlasCore
@@ -374,4 +375,61 @@ final class CanvasHarness {
     h.store.setHover("b")
     h.store.canvasDelete(["b"])
     #expect(h.canvas.hover == nil && h.store.hover.id == nil)
+}
+
+/// The bottom toolbar offers every canvas tool once, labelled with the key the canvas switches to it on.
+@Test @MainActor func canvasToolbarListsEveryToolWithItsShortcutKey() {
+    #expect(CanvasToolbar.tools.map(\.0) == CanvasTool.allCases)
+    for (tool, _, key, _) in CanvasToolbar.tools {
+        #expect(AtlasCanvasView.toolKeys[key.lowercased()] == tool)
+    }
+}
+
+/// The workspace tells the canvas where the bottom toolbar floats: centered, 16pt above the canvas's bottom edge.
+@Test @MainActor func workspaceReportsTheBottomToolbarFrameToTheCanvas() throws {
+    let store = AtlasStore(defaults: UserDefaults(suiteName: "ui-atlas-tests-\(UUID().uuidString)")!)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
+    window.contentView = NSHostingView(rootView: WorkspaceView(store: store))
+    window.layoutIfNeeded()
+    func find(_ view: NSView) -> AtlasCanvasView? { view as? AtlasCanvasView ?? view.subviews.lazy.compactMap(find).first }
+    let root = try #require(window.contentView)
+    let canvas = try #require(find(root))
+    defer { canvas.dispose() }
+    // The frame arrives on the SwiftUI update after layout.
+    for _ in 0..<20 where canvas.floatingFrame.isEmpty { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+    let frame = canvas.floatingFrame
+    #expect(frame.width > 200 && frame.height > 30)
+    #expect(abs(frame.midX - canvas.bounds.midX) <= 1)
+    #expect(abs(frame.maxY - (canvas.bounds.maxY - 16)) <= 1)
+}
+
+/// SwiftUI passes the pointer events the toolbar does not handle to the canvas underneath; the canvas drops them.
+@Test @MainActor func canvasIgnoresPointerInputOverTheFloatingToolbar() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.canvas.floatingFrame = CGRect(x: 360, y: 620, width: 280, height: 44)
+    h.click(NSPoint(x: 50, y: 140))
+    #expect(h.store.selection == ["card"])
+    h.click(NSPoint(x: 380, y: 640))
+    #expect(h.store.selection == ["card"])
+    h.setTool(.rectangle)
+    h.drag(from: NSPoint(x: 380, y: 640), to: NSPoint(x: 600, y: 400))
+    #expect(h.store.editor.document.nodes.count == 2)
+    #expect(h.store.tool == .rectangle)
+    h.setTool(.hand)
+    h.drag(from: NSPoint(x: 380, y: 640), to: NSPoint(x: 600, y: 400))
+    #expect(h.canvas.liveViewport == Viewport(x: 0, y: 100, scale: 1))
+
+    // A windowless scroll event carries its location in screen coordinates; the harness window sits at the screen origin.
+    func scroll(at point: NSPoint) throws {
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: -40, wheel2: 0, wheel3: 0))
+        let target = h.canvas.convert(point, to: nil)
+        cg.location = CGPoint(x: target.x, y: CGDisplayBounds(CGMainDisplayID()).height - target.y)
+        let event = try #require(NSEvent(cgEvent: cg))
+        h.canvas.scrollWheel(with: event)
+    }
+    try scroll(at: NSPoint(x: 380, y: 640))
+    #expect(h.canvas.liveViewport == Viewport(x: 0, y: 100, scale: 1))
+    try scroll(at: NSPoint(x: 380, y: 300))
+    #expect(h.canvas.liveViewport != Viewport(x: 0, y: 100, scale: 1))
 }

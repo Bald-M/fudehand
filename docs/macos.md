@@ -57,14 +57,14 @@ Interaction follows Figma.
 
 **Creating**
 
-- The toolbar switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas (at least 1×1, so a straight-line drag still creates a visible layer), and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move.
-- The toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG/JPEG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport.
+- A toolbar floating at the bottom center of the canvas switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas (at least 1×1, so a straight-line drag still creates a visible layer), and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move. The toolbar stays centered in the canvas area as the side panels open and close and does not move with pan or zoom; clicks, drags, and scrolling on it do not reach the canvas.
+- The bottom toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG/JPEG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport.
 
 **Navigation**
 
 - Scroll wheel or trackpad scrolling, Space + drag, middle-mouse drag, or dragging with the Hand tool pans the canvas. The cursor turns into a hand as soon as Space is pressed, and reverts on release.
 - ⌘ / ⌃ + scroll wheel, or trackpad pinch, zooms anchored at the pointer, within 5%–400%.
-- The toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, and Fit All. Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
+- The window toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, and Fit All. Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
 - When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately.
 
 **Undo**
