@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Changed
+
+- The app icon is now an ink-wash painting: mountains receding in three ink tones under a red sun.
+
 ## [0.0.3] - 2026-11-18
 
 ### Summary
