@@ -46,6 +46,8 @@ _Avoid_: control port (控制端口), API service (API 服务)
 **Conversation (会话 / 對話)**: One exchange with the Agent in the chat panel, from its first message on. Conversations are saved on this Mac and reopened from the panel's *Conversation history* menu; they are not part of the design document.
 _Avoid_: session (the App's `ChatSession` is the object that owns the conversations, not a term in the UI), thread
 
+**Conversation tab (会话标签 / 對話標籤)**: A tab in the chat panel's header for one open conversation. Each has its own messages, model, and Agent harness; closing a tab stops its reply and keeps the conversation in the history.
+
 **Context tag (上下文标签 / 上下文標籤)**: A removable tag above the chat input for a layer selected on the canvas; the layers still tagged when a message is sent are passed to the Agent with it.
 
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.

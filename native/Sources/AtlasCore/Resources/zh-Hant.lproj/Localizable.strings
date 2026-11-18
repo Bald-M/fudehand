@@ -223,6 +223,7 @@
 "Conversation history" = "對話記錄";
 "No saved conversations" = "尚無已儲存的對話";
 "Delete This Conversation" = "刪除目前對話";
+"Close conversation" = "關閉對話";
 "Scroll to bottom" = "回到底部";
 "Context" = "上下文";
 "Remove from context" = "從上下文中移除";

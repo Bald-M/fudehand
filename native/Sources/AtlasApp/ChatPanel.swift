@@ -47,17 +47,23 @@ struct ChatPanel: View {
         .frame(minWidth: 300)
         .sheet(item: $settingsFor) { target in ChatSettingsSheet(chat: chat, root: root, runtime: runtime, provider: target.provider) }
         .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
-        // The message being edited is gone: another conversation was opened, or something was sent.
+        // The message being edited is gone: something was sent, or another conversation is shown.
         .onChange(of: chat.transcript.lastUserID) { editing = false }
+        .onChange(of: chat.conversationID) {
+            editing = false
+            // The conversation shown starts at its newest message.
+            scroll.follow = ChatScrollFollow()
+            following = true
+            atBottom = true
+        }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(chat.transcript.title.isEmpty ? L("New conversation") : chat.transcript.title).font(.headline).lineLimit(1)
-            Spacer()
-            Button { chat.newConversation(); inputFocused = true } label: { Image(systemName: "square.and.pencil") }
+            tabStrip
+            Button { chat.newConversation(); inputFocused = true } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless).help(L("New conversation")).accessibilityLabel(L("New conversation"))
-                .disabled(chat.transcript.entries.isEmpty || busy)
+                .disabled(chat.transcript.entries.isEmpty)
             Menu {
                 ForEach(chat.conversations) { conversation in
                     Button { chat.open(conversation.id) } label: {
@@ -67,15 +73,60 @@ struct ChatPanel: View {
                 if chat.conversations.isEmpty { Text(L("No saved conversations")) }
                 Divider()
                 Button(L("Delete This Conversation"), role: .destructive) { chat.deleteConversation() }
-                    .disabled(chat.transcript.entries.isEmpty)
+                    .disabled(chat.transcript.entries.isEmpty || busy)
             } label: {
                 Label(L("Conversation history"), systemImage: "clock.arrow.circlepath").labelStyle(.iconOnly)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help(L("Conversation history")).disabled(busy)
+            .help(L("Conversation history"))
             Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
-        }.padding(.horizontal, 16).padding(.vertical, 12)
+        }.padding(.leading, 12).padding(.trailing, 16).padding(.vertical, 8)
+    }
+
+    /// The open conversations as tabs. They share the header's width, shortening their names; once even the shortest
+    /// names do not fit, the row scrolls sideways and keeps the selected tab in view.
+    private var tabStrip: some View {
+        // A tab at its narrowest: the shortest name, the progress dot, the close button, and the padding around them.
+        let narrowest = CGFloat(chat.tabs.count) * (Self.shortestTabName + 44) + CGFloat(chat.tabs.count - 1) * 4
+        return GeometryReader { header in
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(chat.tabs) { tab in conversationTab(tab) }
+                    }
+                    .frame(width: max(header.size.width, narrowest), alignment: .leading)
+                }
+                .onChange(of: chat.conversationID, initial: true) { _, id in proxy.scrollTo(id, anchor: .center) }
+            }
+        }
+        .frame(height: 24)
+    }
+
+    private static let shortestTabName: CGFloat = 44
+
+    private func conversationTab(_ tab: ChatSession.Tab) -> some View {
+        let selected = tab.id == chat.conversationID
+        let title = tab.transcript.title.isEmpty ? L("New conversation") : tab.transcript.title
+        return HStack(spacing: 4) {
+            if tab.transcript.busy {
+                Circle().fill(Color.accentColor).frame(width: 6, height: 6).accessibilityLabel(L("Replying…"))
+            }
+            Button { chat.select(tab.id) } label: {
+                Text(title).font(.callout.weight(selected ? .semibold : .regular)).lineLimit(1).truncationMode(.tail)
+                    .frame(minWidth: Self.shortestTabName, maxWidth: 120, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(title).accessibilityAddTraits(selected ? .isSelected : [])
+            Button { chat.close(tab.id) } label: {
+                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).frame(width: 16, height: 16).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(L("Close conversation")).accessibilityLabel(L("Close conversation"))
+        }
+        .foregroundStyle(selected ? .primary : .secondary)
+        .padding(.leading, 10).padding(.trailing, 4).padding(.vertical, 4)
+        .background(selected ? AnyShapeStyle(Color(nsColor: .textBackgroundColor)) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(selected ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)))
+        .id(tab.id)
     }
 
     private var missingKey: some View {
