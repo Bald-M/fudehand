@@ -70,9 +70,15 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 **Next-message prediction (下一条消息预测 / 下一則訊息預測)**: The message the Agent harness predicts the user will send next, shown as the placeholder of the empty chat input after a reply ends; Tab puts it in the input. It is not part of the conversation.
 _Avoid_: autocomplete, completion (nothing is completed while typing), suggestion chips
 
+**Slash command (快捷指令 / 快捷指令)**: A command typed in the chat input, starting with `/` and chosen from the command menu: `/plan`, `/goal`, `/new`, `/clear`, `/compact`, `/model`. It acts on the chat panel and is never sent to the model.
+
+**Plan mode (计划模式 / 計畫模式)**: A conversation mode, entered with `/plan`, in which the Agent can only read the design document and replies with a plan; the plan is carried out after the user confirms it with *Run Plan*.
+
+**Goal mode (目标模式 / 目標模式)**: A conversation mode, entered with `/goal`, in which the next message is a goal the Agent keeps working on until it reports it done or the reply is stopped.
+
 **Context ring (上下文圆环 / 上下文圓環)**: The ring in the chat input showing how much of the model's context window the conversation takes up.
 
-**Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, by sending `/compact`. The conversation's messages stay in the chat panel.
+**Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, with the `/compact` slash command. The conversation's messages stay in the chat panel.
 _Avoid_: compress, summarize (the summary is what compacting produces)
 
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.

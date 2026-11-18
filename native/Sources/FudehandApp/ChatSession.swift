@@ -52,6 +52,12 @@ final class ChatSession: ObservableObject {
         var transcript = ChatTranscript()
         /// The model this conversation uses; a new conversation starts with the current one's.
         var settings: ChatSettings
+        /// The mode chosen with `/plan` or `/goal`; not saved with the conversation.
+        var mode: ChatMode?
+        /// The newest reply is a plan made in plan mode, waiting to be confirmed.
+        var planReady = false
+        /// The mode the running reply was sent in, which may no longer be `mode`: a command can be run while a reply is going.
+        var replyMode: ChatMode?
     }
 
     /// The running harness process of one tab.
@@ -94,6 +100,18 @@ final class ChatSession: ObservableObject {
             restart(conversationID)
         }
     }
+    /// The selected conversation's mode. Plan mode stays on until it is left or the plan is run; goal mode ends with the reply to the goal.
+    var mode: ChatMode? {
+        get { tabs[current].mode }
+        set {
+            guard newValue != mode else { return }
+            tabs[current].mode = newValue
+            tabs[current].planReady = false
+        }
+    }
+    /// Whether the selected conversation's newest reply is a plan that `runPlan` would carry out.
+    var planReady: Bool { tabs[current].planReady }
+
     /// Whether the current provider's key is saved in the Keychain. Only a flag is recorded, so launch does not read the Keychain and trigger an authorization prompt.
     var hasKey: Bool { savedKey(for: settings.provider) }
     /// The current provider's model list as last fetched, for the model menu; kept so opening the panel does not read the Keychain.
@@ -153,7 +171,8 @@ final class ChatSession: ObservableObject {
         if let provider = saved.provider, ChatSettings.providers.contains(where: { $0.id == provider }) {
             settings = ChatSettings(provider: provider, model: saved.model ?? "", baseUrl: stored(provider, defaults).baseUrl)
         }
-        return Tab(id: saved.id, transcript: ChatTranscript(entries: saved.entries), settings: settings)
+        // A reply waiting on a question continues in its mode once answered, so a plan made before a relaunch still cannot edit.
+        return Tab(id: saved.id, transcript: ChatTranscript(entries: saved.entries), settings: settings, mode: saved.replyMode, replyMode: saved.replyMode)
     }
 
     /// Shows the conversations of another design document, restoring the tabs they were last open in; `fresh` discards what
@@ -378,11 +397,16 @@ final class ChatSession: ObservableObject {
         guard !trimmed.isEmpty, !transcript.busy else { return }
         let id = conversationID
         let earlier = transcript.messages
+        let mode = mode
+        tabs[current].planReady = false
+        tabs[current].replyMode = mode
         update(id) { $0.send(trimmed, context: context) }
         // Saved before the reply arrives, so the message is not lost if the App quits unexpectedly.
         save(id)
         guard ready(id, messages: earlier, root: root, runtime: runtime) else { return }
-        write(["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }], to: id)
+        var message: [String: Any] = ["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }]
+        if let mode { message["mode"] = mode.rawValue }
+        write(message, to: id)
     }
 
     /// Compacts the selected conversation: the harness summarizes it and carries on from the summary. The messages stay in the transcript.
@@ -390,6 +414,8 @@ final class ChatSession: ObservableObject {
         guard transcript.canCompact else { return }
         let id = conversationID
         let earlier = transcript.messages
+        tabs[current].planReady = false
+        tabs[current].replyMode = nil
         update(id) { $0.compact() }
         guard ready(id, messages: earlier, root: root, runtime: runtime) else { return }
         write(["type": "compact"], to: id)
@@ -410,6 +436,22 @@ final class ChatSession: ObservableObject {
         return true
     }
 
+    /// Confirms the plan the selected conversation is waiting on: leaves plan mode and asks the Agent to carry the plan out.
+    func runPlan(context: [ChatContext] = [], root: URL?, runtime: WorkspaceLocation?) {
+        guard planReady, !transcript.busy else { return }
+        mode = nil
+        send(L("Carry out the plan."), context: context, root: root, runtime: runtime)
+    }
+
+    /// Empties the selected conversation in place, stopping its reply; its tab stays, and it leaves the history like any empty conversation.
+    func clearConversation() {
+        let id = conversationID
+        terminate(id)
+        tabs[current].transcript = ChatTranscript()
+        mode = nil
+        save(id)
+    }
+
     /// Answers the selected conversation's waiting question; `nil` skips it, leaving the choice to the Agent. When the harness that
     /// asked is gone (the App was quit, the tab closed), a new one is given the conversation so far and continues from the answer.
     func answer(_ text: String?, root: URL?, runtime: WorkspaceLocation?) {
@@ -417,7 +459,9 @@ final class ChatSession: ObservableObject {
         let earlier = transcript.messages
         var message: [String: Any]?
         update(id) { message = $0.answer(text.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }) }
-        guard let message else { return }
+        guard var message else { return }
+        // A harness started anew for this answer continues the reply in the mode it was asked in, so a plan still cannot edit.
+        if let mode = tabs[current].replyMode { message["mode"] = mode.rawValue }
         save(id)
         guard let root else { update(id) { $0.fail(L("Cannot find the Fudehand source directory, so the chat process cannot start")) }; return }
         if harnesses[id] == nil {
@@ -436,7 +480,10 @@ final class ChatSession: ObservableObject {
 
     /// Sends the last user message again, replacing the reply it got.
     func regenerate(root: URL?, runtime: WorkspaceLocation?) {
+        // The reply to a goal ended goal mode; made again, it works on the goal again.
+        let goal = tabs[current].replyMode == .goal
         guard let last = editLast() else { return }
+        if goal { mode = .goal }
         send(last.text, context: last.context, root: root, runtime: runtime)
     }
 
@@ -521,12 +568,18 @@ final class ChatSession: ObservableObject {
         let wasWaiting = tabs[index].transcript.waiting
         change(&tabs[index].transcript)
         if (wasBusy && !tabs[index].transcript.busy) || (!wasWaiting && tabs[index].transcript.waiting) { save(id) }
+        guard wasBusy && !tabs[index].transcript.busy else { return }
+        // The reply to a goal ends goal mode; a reply made in plan mode that ends with text is the plan to confirm.
+        let replyMode = tabs[index].replyMode
+        if replyMode == .goal, tabs[index].mode == .goal { tabs[index].mode = nil }
+        tabs[index].planReady = replyMode == .plan && tabs[index].mode == .plan && tabs[index].transcript.entries.last?.kind == .assistant
     }
 
     private func save(_ id: UUID) {
         guard let history, let tab = tabs.first(where: { $0.id == id }) else { return }
         if tab.transcript.entries.isEmpty { history.delete(id) }
-        else { try? history.save(ChatConversation(id: id, transcript: tab.transcript, updatedAt: Date(), provider: tab.settings.provider, model: tab.settings.model)) }
+        else { try? history.save(ChatConversation(id: id, transcript: tab.transcript, updatedAt: Date(), provider: tab.settings.provider, model: tab.settings.model,
+            replyMode: tab.transcript.waiting ? tab.replyMode : nil)) }
         conversations = history.list()
     }
 
