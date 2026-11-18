@@ -25,7 +25,6 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Chat panel: the input is a bordered box that grows up to 8 lines, with the model menu and the send button below it. Return sends and Shift-Return starts a new line (#29).
 - Chat panel: the transcript follows new text only while you are at the bottom, and shows *Scroll to bottom* once you scroll up (#29).
 - Chat panel: changing the model keeps the conversation; the new model is given the earlier messages (#29).
-
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
 
 ### Fixed
