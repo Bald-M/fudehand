@@ -75,6 +75,8 @@ let history = []
 let current = null
 /** The question waiting for the user's answer: { id, resolve }. */
 let asking = null
+/** The ids of the questions this process asked: a late answer to one of them (after a stop) must not start a new turn. */
+const asked = new Set()
 
 /** The harness's own tool: it never reaches the App's control channel, and the MCP server does not offer it. */
 const askTool = {
@@ -119,6 +121,7 @@ function ask(id, question, signal) {
     const stopped = () => finish(null)
     signal.addEventListener('abort', stopped)
     asking = { id, resolve: finish }
+    asked.add(id)
     emit({ type: 'question', id, ...question })
   })
 }
@@ -174,14 +177,15 @@ async function reply(text, controller) {
       partial = ''
       if (answer.text) emit({ type: 'assistant', text: answer.text })
       if (!answer.toolCalls.length) break
-      let asked = false
+      let questioned = false
       for (const call of answer.toolCalls) {
         // After a stop, no further tool calls are executed; placeholder results are only filled in for the model to keep the history complete.
         if (signal.aborted) { log.push({ role: 'tool', id: call.id, name: call.name, text: 'The user stopped this reply; not executed.' }); continue }
-        if (call.name === askTool.name && !call.error) {
-          const question = asked ? { error: 'ask one question at a time, and wait for its answer before asking another' } : parseQuestion(call.args)
+        if (call.name === askTool.name) {
+          const question = call.error ? { error: call.error }
+            : questioned ? { error: 'ask one question at a time, and wait for its answer before asking another' } : parseQuestion(call.args)
           if (question.error) { log.push({ role: 'tool', id: call.id, name: call.name, isError: true, text: `ask_user: ${question.error}` }); continue }
-          asked = true
+          questioned = true
           const given = await ask(call.id, question, signal)
           log.push({ role: 'tool', id: call.id, name: call.name, text: given ? answerText(given) : 'The user stopped this reply; not executed.' })
           continue
@@ -222,7 +226,7 @@ input.on('line', line => {
     void reply(withContext(message.text, message.context), current)
   } else if (message.type === 'answer') {
     if (asking) { if (asking.id === message.id) asking.resolve(message) }
-    else if (!current && typeof message.question === 'string') {
+    else if (!current && !asked.has(message.id) && typeof message.question === 'string') {
       current = new AbortController()
       void reply(`You asked the user: ${message.question}\n${answerText(message)}`, current)
     }

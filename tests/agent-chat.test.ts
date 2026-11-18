@@ -836,6 +836,9 @@ describe('Agent harness: asking the user a question', () => {
     expect(app.received).toEqual([])
     expect(model.requests).toHaveLength(1)
     // A late answer to the cancelled question does not resume the stopped turn; the history stays valid for the next message.
+    chat.send({ type: 'answer', id: 'call_q', question: QUESTION.question, text: '3 entries' })
+    await new Promise(resolve => setTimeout(resolve, 150))
+    expect(model.requests).toHaveLength(1)
     await chat.ask('Never mind')
     const messages = model.requests[1].body.messages
     expect(messages.filter((message: any) => message.role === 'tool').map((message: any) => message.tool_call_id)).toEqual(['call_q', 'call_s'])

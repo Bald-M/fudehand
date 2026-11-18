@@ -192,7 +192,7 @@ private struct QuestionCard: View {
                 case .pending: pending(question)
                 case .answered(let text): settled(text)
                 case .skipped: settled(L("Skipped, AI decides"))
-                case .cancelled: settled(L("Question cancelled")).foregroundStyle(.secondary)
+                case .cancelled: settled(L("Question canceled")).foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
