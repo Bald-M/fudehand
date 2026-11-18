@@ -76,11 +76,10 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.entries.isEmpty)
 }
 
-@Test @MainActor func chatConversationIsNotReplacedWhileAReplyIsRunning() async throws {
+@Test @MainActor func chatConversationIsNotDeletedWhileAReplyIsRunning() async throws {
     let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
     session.send("Hello", root: repository, runtime: nil)
     session.deleteConversation()
-    session.newConversation()
     #expect(session.transcript.entries.count == 1)
     for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
     session.deleteConversation()
@@ -208,8 +207,9 @@ private func temporaryHistory() -> ChatHistory {
     relaunched.open(first)
     #expect(relaunched.conversationID == first)
     #expect(relaunched.transcript.entries.map(\.text) == ["First chat", "No API key configured"])
+    // Deleting it closes its tab, back to the conversation that was open beside it.
     relaunched.deleteConversation()
-    #expect(relaunched.transcript.entries.isEmpty)
+    #expect(relaunched.transcript.entries.map(\.text) == ["Second chat", "No API key configured"])
     #expect(relaunched.conversations.map(\.title) == ["Second chat"])
 }
 
@@ -363,4 +363,233 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
 @Test func modelProvidersAreNamedAfterTheirProducts() {
     #expect(ChatSettings.providers.map(\.id) == ["deepseek", "anthropic", "openai"])
     #expect(ChatSettings.providers.map(\.title) == ["DeepSeek", "Claude", "ChatGPT"])
+}
+
+/// A stand-in harness that records what the App sends it, with its process id. It answers a user message with "re: <text>" after a
+/// moment, except "hang", which is only ever ended by a stop.
+private func slowHarness() throws -> (root: URL, received: () throws -> [[String: Any]]) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("ui-atlas-harness-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+    let script = """
+    import { createInterface } from 'node:readline'
+    import { appendFileSync } from 'node:fs'
+    const emit = event => process.stdout.write(JSON.stringify(event) + '\\n')
+    let timer = null
+    const input = createInterface({ input: process.stdin })
+    input.on('line', line => {
+      const message = JSON.parse(line)
+      appendFileSync(new URL('../received.jsonl', import.meta.url), JSON.stringify({ pid: process.pid, ...message }) + '\\n')
+      if (message.type === 'user' && message.text !== 'hang') {
+        timer = setTimeout(() => { emit({ type: 'assistant', text: 're: ' + message.text }); emit({ type: 'done', stopped: false }) }, 300)
+      }
+      if (message.type === 'stop') { clearTimeout(timer); emit({ type: 'done', stopped: true }) }
+    })
+    input.on('close', () => process.exit(0))
+    """
+    try script.write(to: root.appendingPathComponent("scripts/agent-chat.mjs"), atomically: true, encoding: .utf8)
+    return (root, {
+        try String(contentsOf: root.appendingPathComponent("received.jsonl"), encoding: .utf8).split(separator: "\n")
+            .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+    })
+}
+
+/// Waits until the harness has recorded `count` messages, so its process ids are known.
+private func received(_ harness: (root: URL, received: () throws -> [[String: Any]]), count: Int) async throws -> [[String: Any]] {
+    for _ in 0..<100 {
+        if let lines = try? harness.received(), lines.count >= count { return lines }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return try harness.received()
+}
+
+private func exited(_ pids: [Int32]) async throws -> Bool {
+    for _ in 0..<50 where pids.contains(where: { kill($0, 0) == 0 }) { try await Task.sleep(nanoseconds: 100_000_000) }
+    return !pids.contains { kill($0, 0) == 0 }
+}
+
+@MainActor private func temporarySession(history: ChatHistory? = nil) -> ChatSession {
+    ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil }, history: history)
+}
+
+@Test @MainActor func chatConversationsReplySideBySideWithoutSharingContext() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = temporarySession(history: history)
+    #expect(session.tabs.count == 1)
+    session.send("First", root: harness.root, runtime: nil)
+    let first = session.conversationID
+
+    // A new conversation opens beside the one that is replying, and can be used at once.
+    session.newConversation()
+    #expect(session.tabs.map(\.id) == [first, session.conversationID])
+    #expect(session.conversationID != first)
+    #expect(session.transcript.entries.isEmpty)
+    session.send("Second", root: harness.root, runtime: nil)
+    #expect(session.tabs.map(\.transcript.busy) == [true, true])
+    for _ in 0..<100 where session.tabs.contains(where: \.transcript.busy) { try await Task.sleep(nanoseconds: 100_000_000) }
+    #expect(session.tabs.map { $0.transcript.entries.map(\.text) } == [["First", "re: First"], ["Second", "re: Second"]])
+    #expect(session.conversations.map(\.title).sorted() == ["First", "Second"])
+
+    // Switching back continues the first conversation in its own harness.
+    session.select(first)
+    #expect(session.transcript.entries.map(\.text) == ["First", "re: First"])
+    session.send("More", root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let lines = try harness.received()
+    #expect(Set(lines.compactMap { $0["pid"] as? Int }).count == 2)
+    // Each harness was given an empty history: neither conversation starts with the other's messages.
+    #expect(lines.filter { $0["type"] as? String == "load" }.map { ($0["messages"] as? [Any])?.count } == [0, 0])
+    let firstPid = lines.first { $0["text"] as? String == "First" }?["pid"] as? Int
+    #expect(lines.first { $0["text"] as? String == "More" }?["pid"] as? Int == firstPid)
+    #expect(lines.first { $0["text"] as? String == "Second" }?["pid"] as? Int != firstPid)
+}
+
+@Test @MainActor func stoppingAReplyOnlyStopsTheCurrentConversationAndQuittingEndsEveryHarness() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.send("hang", root: harness.root, runtime: nil)
+    session.newConversation()
+    session.send("hang", root: harness.root, runtime: nil)
+    let pids = Set(try await received(harness, count: 4).compactMap { ($0["pid"] as? Int).map { Int32($0) } })
+    #expect(pids.count == 2)
+
+    session.stopReply()
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["hang", "Reply stopped"])
+    #expect(session.tabs[0].transcript.busy)
+
+    await session.shutdown()
+    #expect(session.tabs.map(\.transcript.busy) == [false, false])
+    #expect(try await exited(Array(pids)))
+}
+
+@Test @MainActor func closingAConversationStopsItsReplyAndKeepsItInTheHistory() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = temporarySession(history: history)
+    session.send("hang", root: harness.root, runtime: nil)
+    let first = session.conversationID
+    session.newConversation()
+    session.send("Keep going", root: harness.root, runtime: nil)
+    let second = session.conversationID
+    let lines = try await received(harness, count: 4)
+    let pid = Int32(try #require(lines.first { $0["text"] as? String == "hang" }?["pid"] as? Int))
+
+    // Closing a tab in the background ends its harness and leaves the selected conversation alone.
+    session.close(first)
+    #expect(session.tabs.map(\.id) == [second])
+    #expect(session.conversationID == second)
+    #expect(history.load(first)?.entries.map(\.text) == ["hang", "Reply stopped"])
+    #expect(try await exited([pid]))
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Keep going", "re: Keep going"])
+
+    // Closing the last conversation leaves an empty one; the closed one can be reopened from the history.
+    session.close(second)
+    #expect(session.tabs.count == 1)
+    #expect(session.conversationID != second)
+    #expect(session.transcript.entries.isEmpty)
+    #expect(session.conversations.map(\.title).sorted() == ["Keep going", "hang"])
+    session.open(first)
+    #expect(session.tabs.map(\.id) == [first])
+    await session.shutdown()
+}
+
+@Test @MainActor func eachConversationKeepsItsOwnModel() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    session.keyUpdated(provider: "anthropic", saved: true)
+    let openai = ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "")
+    let claude = ChatSettings(provider: "anthropic", model: "claude-x", baseUrl: "")
+    session.settings = openai
+    session.send("hang", root: harness.root, runtime: nil)
+    let first = session.conversationID
+
+    // A new conversation starts with the current one's model; changing it leaves the other conversation and its reply alone.
+    session.newConversation()
+    #expect(session.settings == openai)
+    session.settings = claude
+    #expect(session.hasKey)
+    #expect(session.tabs.map(\.settings) == [openai, claude])
+    #expect(session.tabs[0].transcript.busy)
+    session.select(first)
+    #expect(session.settings == openai)
+    #expect(!session.hasKey)
+
+    // An empty conversation that is reused takes the current model, like a new one.
+    session.newConversation()
+    #expect(session.tabs.count == 2 && session.settings == openai)
+
+    // The settings sheet starts from the selected conversation's model, so saving another field does not replace it
+    // with the model chosen last in another conversation; that conversation keeps its own model too.
+    session.settings = ChatSettings(provider: "openai", model: "gpt-y", baseUrl: "")
+    session.select(first)
+    session.keyUpdated(provider: "openai", saved: true) // Without a key the sheet would move the chat to another provider.
+    var draft = session.draft()
+    #expect(draft.providers["openai"]?.model == "gpt-x")
+    draft.setBaseUrl("https://example.test/v1", for: "openai")
+    try session.apply(draft.changes())
+    #expect(session.tabs.map(\.settings.model) == ["gpt-x", "gpt-y"])
+    #expect(session.tabs.map(\.settings.baseUrl) == ["https://example.test/v1", "https://example.test/v1"])
+    draft = session.draft()
+    draft.setBaseUrl("", for: "openai")
+    try session.apply(draft.changes())
+    session.keyUpdated(provider: "openai", saved: false)
+    session.select(session.tabs[1].id)
+    session.settings = claude
+    session.select(first)
+    session.send("hang", root: harness.root, runtime: nil)
+
+    // Only the conversations using a provider are restarted when its key changes.
+    session.keyUpdated(provider: "anthropic", saved: false)
+    #expect(session.transcript.busy)
+    session.keyUpdated(provider: "openai", saved: true)
+    #expect(!session.transcript.busy)
+    // The model chosen last is the one the next launch starts with.
+    #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).settings == claude)
+    await session.shutdown()
+}
+
+@Test @MainActor func openingASavedConversationSelectsItsTabOrAddsOne() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = temporarySession(history: history)
+    session.send("First", root: harness.root, runtime: nil)
+    try await settle(session)
+    let first = session.conversationID
+    session.newConversation()
+    // An empty conversation is reused rather than joined by another empty one.
+    session.newConversation()
+    #expect(session.tabs.count == 2)
+    session.send("Second", root: harness.root, runtime: nil)
+    try await settle(session)
+    let second = session.conversationID
+    session.close(first)
+
+    // Reopened beside the current conversation, since that one has messages.
+    session.open(first)
+    #expect(session.tabs.map(\.id) == [second, first])
+    #expect(session.conversationID == first)
+    #expect(session.transcript.entries.map(\.text) == ["First", "re: First"])
+    // Opening a conversation that is already open only selects its tab.
+    session.open(second)
+    #expect(session.tabs.map(\.id) == [second, first])
+    #expect(session.conversationID == second)
+
+    // Deleting closes the tab and removes the conversation from the history.
+    session.deleteConversation()
+    #expect(session.tabs.map(\.id) == [first])
+    #expect(session.conversations.map(\.title) == ["First"])
+    await session.shutdown()
 }
