@@ -123,7 +123,7 @@ private func specifiers(_ text: String) -> [String] {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Sources/FudehandApp")
     let files = ["FudehandApp", "FudehandStore", "WorkspaceView", "LaunchView", "LayersPanel", "InspectorPanel", "ChatPanel", "ChatMessages", "ChatSession",
-                 "Connectors", "Keychain", "CanvasView", "CanvasToolbar"]
+                 "Connectors", "Keychain", "CanvasView", "CanvasToolbar", "FontLibrary"]
     let literal = try NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*""#)
     for name in files {
         let text = try String(contentsOf: app.appendingPathComponent("\(name).swift"), encoding: .utf8)
