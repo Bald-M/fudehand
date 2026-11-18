@@ -435,8 +435,7 @@ extension AtlasStore: CanvasHost {
         changed()
     }
 
-    func canvasCreate(_ type: NodeType, in rect: Rect) {
-        let clicked = rect.width == CanvasInteraction.defaultSize && rect.height == CanvasInteraction.defaultSize
+    func canvasCreate(_ type: NodeType, in rect: Rect, clicked: Bool) {
         create(type, in: rect, clicked: clicked)
     }
 

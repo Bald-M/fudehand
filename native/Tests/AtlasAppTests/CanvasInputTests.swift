@@ -15,7 +15,7 @@ final class RecordingHost: CanvasHost {
     func canvasMove(_ origins: [String: Point]) { store.canvasMove(origins) }
     func canvasResize(_ id: String, to rect: Rect) { store.canvasResize(id, to: rect) }
     func canvasEndGesture() { store.canvasEndGesture() }
-    func canvasCreate(_ type: NodeType, in rect: Rect) { store.canvasCreate(type, in: rect) }
+    func canvasCreate(_ type: NodeType, in rect: Rect, clicked: Bool) { store.canvasCreate(type, in: rect, clicked: clicked) }
     func canvasNudge(_ ids: Set<String>, by delta: Point) { store.canvasNudge(ids, by: delta) }
     func canvasDelete(_ ids: Set<String>) { store.canvasDelete(ids) }
     func canvasToolChanged(_ tool: CanvasTool) { store.canvasToolChanged(tool) }
@@ -177,6 +177,15 @@ final class CanvasHarness {
     let text = try #require(h.store.selection.first.flatMap(h.node))
     #expect(text.type == .text && text.text?.content == "Text" && text.width > 0)
     #expect(h.store.editor.document.parentID(of: text.id) == .some(nil))
+}
+
+@Test @MainActor func textDraggedToTheDefaultSizeKeepsItsDraggedWidth() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.setTool(.text)
+    h.drag(from: NSPoint(x: 700, y: 500), to: NSPoint(x: 800, y: 600))
+    let text = try #require(h.store.selection.first.flatMap(h.node))
+    #expect(text.text?.autoResize == .height && text.width == 100)
 }
 
 @Test @MainActor func keyboardNudgesDeletesAndNavigatesLevels() throws {

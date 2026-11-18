@@ -153,9 +153,25 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     let ctx = context(tool: .rectangle)
     #expect(down(&machine, 100, 100, hit: .node("a"), context: ctx) == [])
     #expect(machine.pointerDragged(to: Point(x: 50, y: 160), modifiers: [], context: ctx) == [.marquee(Rect(x: 50, y: 100, width: 50, height: 60))])
-    #expect(machine.pointerUp(at: Point(x: 50, y: 160), context: ctx) == [.marquee(nil), .create(.rectangle, Rect(x: 100, y: 200, width: 100, height: 120))])
+    #expect(machine.pointerUp(at: Point(x: 50, y: 160), context: ctx) == [.marquee(nil), .create(.rectangle, Rect(x: 100, y: 200, width: 100, height: 120), clicked: false)])
     _ = down(&machine, 10, 10, hit: .empty, context: context(tool: .text))
-    #expect(machine.pointerUp(at: Point(x: 11, y: 10), context: context(tool: .text)) == [.marquee(nil), .create(.text, Rect(x: 20, y: 20, width: 100, height: 100))])
+    #expect(machine.pointerUp(at: Point(x: 11, y: 10), context: context(tool: .text)) == [.marquee(nil), .create(.text, Rect(x: 20, y: 20, width: 100, height: 100), clicked: true)])
+}
+
+@Test func creationToolStraightLineDragKeepsMinimumSize() {
+    var machine = CanvasInteraction()
+    let ctx = context(tool: .rectangle)
+    _ = down(&machine, 0, 0, hit: .empty, context: ctx)
+    #expect(machine.pointerUp(at: Point(x: 50, y: 0), context: ctx) == [.marquee(nil), .create(.rectangle, Rect(x: 0, y: 0, width: 100, height: 1), clicked: false)])
+    _ = down(&machine, 0, 0, hit: .empty, context: ctx)
+    #expect(machine.pointerUp(at: Point(x: 0, y: 50), context: ctx) == [.marquee(nil), .create(.rectangle, Rect(x: 0, y: 0, width: 1, height: 100), clicked: false)])
+}
+
+@Test func creationToolDragOfDefaultSizeIsNotAClick() {
+    var machine = CanvasInteraction()
+    let ctx = context(tool: .text)
+    _ = down(&machine, 0, 0, hit: .empty, context: ctx)
+    #expect(machine.pointerUp(at: Point(x: 50, y: 50), context: ctx) == [.marquee(nil), .create(.text, Rect(x: 0, y: 0, width: 100, height: 100), clicked: false)])
 }
 
 @Test func cancelEndsGestureOnce() {
