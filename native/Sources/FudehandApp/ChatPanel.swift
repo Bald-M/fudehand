@@ -589,7 +589,7 @@ struct ChatPanel: View {
         editing = false
         scroll.follow = ChatScrollFollow()
         following = true
-        chat.runPlan(root: root, runtime: runtime)
+        chat.runPlan(context: context, root: root, runtime: runtime)
     }
 
     /// Copies the last user message into the input to be changed; the conversation is only rewound once the new text is sent.

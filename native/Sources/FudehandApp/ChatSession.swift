@@ -437,10 +437,10 @@ final class ChatSession: ObservableObject {
     }
 
     /// Confirms the plan the selected conversation is waiting on: leaves plan mode and asks the Agent to carry the plan out.
-    func runPlan(root: URL?, runtime: WorkspaceLocation?) {
+    func runPlan(context: [ChatContext] = [], root: URL?, runtime: WorkspaceLocation?) {
         guard planReady, !transcript.busy else { return }
         mode = nil
-        send(L("Carry out the plan."), root: root, runtime: runtime)
+        send(L("Carry out the plan."), context: context, root: root, runtime: runtime)
     }
 
     /// Empties the selected conversation in place, stopping its reply; its tab stays, and it leaves the history like any empty conversation.
@@ -480,7 +480,10 @@ final class ChatSession: ObservableObject {
 
     /// Sends the last user message again, replacing the reply it got.
     func regenerate(root: URL?, runtime: WorkspaceLocation?) {
+        // The reply to a goal ended goal mode; made again, it works on the goal again.
+        let goal = tabs[current].replyMode == .goal
         guard let last = editLast() else { return }
+        if goal { mode = .goal }
         send(last.text, context: last.context, root: root, runtime: runtime)
     }
 

@@ -1172,3 +1172,42 @@ private func compactingHarness() throws -> (root: URL, received: () throws -> [[
     #expect((received[3]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."]])
     #expect((received[5]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."], ["role": "user", "text": "Which color?"], ["role": "assistant", "text": "ok"]])
 }
+
+@Test @MainActor func chatRegeneratingTheReplyToAGoalWorksOnTheGoalAgain() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .goal
+    session.send("Finish the page", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.mode == nil)
+    session.regenerate(root: harness.root, runtime: nil)
+    #expect(session.mode == .goal)
+    try await settle(session)
+    #expect(session.mode == nil)
+    // An ordinary reply is regenerated as one.
+    session.send("Thanks", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.regenerate(root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let sent = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect(sent.map { $0["mode"] as? String } == ["goal", "goal", nil, nil])
+}
+
+@Test @MainActor func chatRunningAPlanSendsTheSelectedLayers() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .plan
+    session.send("Make it blue", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.runPlan(context: [ChatContext(id: "n1", name: "Hero", type: "frame")], root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let sent = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect((sent.last?["context"] as? [[String: String]]) == [["id": "n1", "name": "Hero", "type": "frame"]])
+    #expect(session.transcript.entries.last { $0.kind == .user }?.context.map(\.name) == ["Hero"])
+}

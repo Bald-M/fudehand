@@ -22,14 +22,14 @@ The chat panel could only send plain messages, and the Agent always edited the d
 
 **Command parsing** (`FudehandCore/ChatCommands.swift`): `ChatCommandInput(draft)` classifies the input as a message, a command name being typed (with the commands it starts), a complete command with its argument, or an unknown command. Only a `/` at index 0 makes a command. `ModelMenu.choices` flattens the model menu's sections for `/model`.
 
-**Conversation state** (`ChatSession`): each tab has `mode: ChatMode?` and `planReady`. `send` adds `mode` to the harness message. `send` also records the mode the reply was sent in, since a command can be run while a reply is going. When a reply sent as a goal ends, goal mode is cleared; `planReady` is set when the reply was sent in plan mode, the mode is still plan, and the reply ended with assistant text. `runPlan()` leaves plan mode and sends *Carry out the plan.*; `clearConversation()` empties the selected conversation in place.
+**Conversation state** (`ChatSession`): each tab has `mode: ChatMode?` and `planReady`. `send` adds `mode` to the harness message. `send` also records the mode the reply was sent in, since a command can be run while a reply is going. When a reply sent as a goal ends, goal mode is cleared; `planReady` is set when the reply was sent in plan mode, the mode is still plan, and the reply ended with assistant text. `runPlan()` leaves plan mode and sends *Carry out the plan.* with the selected layers as context; `regenerate()` puts goal mode back on when the reply it replaces was the reply to a goal; `clearConversation()` empties the selected conversation in place.
 
 **Harness** (`scripts/agent-chat.mjs`): `{type:'user', …, mode?: 'plan' | 'goal'}`; the mode applies to that message only.
 
 | Mode | Tools offered | System prompt | Loop |
 |---|---|---|---|
 | plan | `design_get_state`, `design_get_document`, `design_get_node`, `design_snapshot`, `ask_user` | plus the plan note | unchanged; a call to any other tool gets an error result and is not run |
-| goal | all tools, `ask_user`, and `goal_done {summary}` | plus the goal note | up to 64 rounds; `goal_done` ends the reply and its summary is emitted as an `assistant` event and kept in the history as the reply's last text; a round without tool calls gets one reminder, a second in a row ends the reply. The reminder is marked internal, so the next-message prediction does not read it as the user's words, and is reduced to *Continue.* once the reply ends |
+| goal | all tools, `ask_user`, and `goal_done {summary}` | plus the goal note | up to 64 rounds; `goal_done` ends the reply and its summary is emitted as an `assistant` event and kept in the history as the reply's last text; a `goal_done` without a summary gets an error result instead, and calls after `goal_done` in the same round are not run; a round without tool calls gets one reminder, a second in a row ends the reply. The reminder is marked internal, so the next-message prediction does not read it as the user's words, and is reduced to *Continue.* once the reply ends |
 
 The reading tools are an allow-list, so a tool added later is unavailable in plan mode until it is listed. An answer to a question that reaches a harness started anew carries the reply's `mode`, so the continued reply is still a plan.
 

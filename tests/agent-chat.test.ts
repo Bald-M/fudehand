@@ -1231,6 +1231,30 @@ describe('Agent harness: plan and goal modes', () => {
     expect(app.received).toHaveLength(20)
   })
 
+  it('runs no tool the model called after reporting the goal done', async () => {
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const calls = [['call_1', 'design_get_state', {}], ['call_2', 'goal_done', { summary: 'Checked.' }], ['call_3', 'design_delete_nodes', { ids: ['home'] }]]
+      .map(([id, name, args]) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }))
+    const model = await fakeModel([{ body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: calls } }] } }, openaiText('Hello.')])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Check the page', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
+    expect(app.received.map(request => request.command)).toEqual(['get_state'])
+    // The skipped call still has a result in the history, as the APIs require.
+    await chat.ask('Hi')
+    expect(model.requests[1].body.messages.find((message: any) => message.tool_call_id === 'call_3').content).toMatch(/not executed/)
+  })
+
+  it('asks for the summary when the model reports a goal done without one', async () => {
+    const app = await startApp()
+    const model = await fakeModel([openaiTool('call_1', 'goal_done', { summary: '  ' }), openaiTool('call_2', 'goal_done', { summary: 'The page is ready.' })])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Get the page ready', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['assistant', 'done'])
+    expect(events[0].text).toBe('The page is ready.')
+    expect(model.requests[1].body.messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_1', content: expect.stringMatching(/summary/) })
+  })
+
   it('runs nothing further once a goal is stopped', async () => {
     const app = await startApp()
     const model = await fakeModel([

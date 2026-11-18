@@ -267,10 +267,14 @@ async function reply(text, controller, mode) {
           log.push({ role: 'tool', id: call.id, name: call.name, text: given ? answerText(given) : 'The user stopped this reply; not executed.' })
           continue
         }
+        // The goal is over with goal_done: what the model called after it in the same round is not run.
+        if (finished) { log.push({ role: 'tool', id: call.id, name: call.name, text: 'The goal was already reported done; not executed.' }); continue }
         if (goal && call.name === goalDone.name && !call.error) {
+          summary = typeof call.args?.summary === 'string' ? call.args.summary.trim() : ''
+          // Without a summary the user would see the goal end with no result, so the model is asked for one.
+          if (!summary) { log.push({ role: 'tool', id: call.id, name: call.name, isError: true, text: 'goal_done: a summary of the result is required' }); continue }
           finished = true
           log.push({ role: 'tool', id: call.id, name: call.name, text: 'Goal mode ended.' })
-          if (typeof call.args?.summary === 'string') summary = call.args.summary
           continue
         }
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
@@ -290,7 +294,7 @@ async function reply(text, controller, mode) {
       }
       if (finished) {
         // The summary is the reply's last text, in the history as well as in the panel.
-        if (summary && !signal.aborted) { log.push({ role: 'assistant', text: summary, toolCalls: [] }); emit({ type: 'assistant', text: summary }) }
+        if (!signal.aborted) { log.push({ role: 'assistant', text: summary, toolCalls: [] }); emit({ type: 'assistant', text: summary }) }
         break
       }
       if (signal.aborted) break
