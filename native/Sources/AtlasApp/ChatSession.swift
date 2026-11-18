@@ -68,6 +68,8 @@ final class ChatSession: ObservableObject {
 
     private let defaults: UserDefaults
     private let readKey: (String) -> String?
+    private let writeKey: (String, String) throws -> Void
+    private let deleteKey: (String) -> Void
     /// Where conversations are saved; nil keeps them in memory only.
     private let history: ChatHistory?
     /// Whether the running harness holds this conversation's history. False for a new process and after the conversation is switched or rewound.
@@ -84,9 +86,13 @@ final class ChatSession: ObservableObject {
         ChatHistory(directory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ui-atlas/chats"))
     }
 
-    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read, history: ChatHistory? = nil) {
+    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read,
+         writeKey: @escaping (String, String) throws -> Void = { try Keychain.save($0, account: $1) },
+         deleteKey: @escaping (String) -> Void = Keychain.delete, history: ChatHistory? = nil) {
         self.defaults = defaults
         self.readKey = readKey
+        self.writeKey = writeKey
+        self.deleteKey = deleteKey
         self.history = history
         let provider = defaults.string(forKey: "agent.provider").flatMap { id in ChatSettings.providers.contains { $0.id == id } ? id : nil } ?? "deepseek"
         settings = Self.stored(provider, defaults)
@@ -153,6 +159,34 @@ final class ChatSession: ObservableObject {
         guard provider == settings.provider else { objectWillChange.send(); return }
         hasKey = saved
         restart()
+    }
+
+    /// The settings sheet's starting state, from the stored settings and key flags; reads no Keychain.
+    func draft() -> ModelSettingsDraft {
+        let providers = Dictionary(uniqueKeysWithValues: ChatSettings.providers.map { provider in
+            let stored = stored(provider.id)
+            return (provider.id, ProviderDraft(model: stored.model, baseUrl: stored.baseUrl, hasSavedKey: savedKey(for: provider.id)))
+        })
+        return ModelSettingsDraft(order: ChatSettings.providers.map(\.id), providers: providers, inUse: settings.provider)
+    }
+
+    /// Writes what the settings sheet's Save produced. A failed Keychain write stops before anything later is written,
+    /// so the provider in use stays as it was; the harness restarts only when the provider in use, or its key or settings, changed.
+    func apply(_ changes: ModelSettingsChanges) throws {
+        for id in ChatSettings.providers.map(\.id) {
+            guard let key = changes.saveKeys[id] else { continue }
+            try writeKey(key, id)
+            keyUpdated(provider: id, saved: true, key: key)
+        }
+        for id in changes.deleteKeys {
+            deleteKey(id)
+            keyUpdated(provider: id, saved: false)
+        }
+        for id in ChatSettings.providers.map(\.id) {
+            guard let change = changes.settings[id] else { continue }
+            store(ChatSettings(provider: id, model: change.model, baseUrl: change.baseUrl))
+        }
+        if changes.inUse != settings.provider { settings = stored(changes.inUse) }
     }
 
     /// Remembers a model list fetched for `provider`.

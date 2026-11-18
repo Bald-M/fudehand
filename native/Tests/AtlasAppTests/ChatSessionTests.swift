@@ -312,6 +312,54 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).defaultModel(for: "openai") == "gpt-x")
 }
 
+@Test @MainActor func applyingSettingsWritesKeysAndLeavesOtherProvidersAlone() async throws {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    var keychain = ["deepseek": "sk-deepseek-0000-1111"]
+    let session = ChatSession(defaults: defaults, readKey: { keychain[$0] }, writeKey: { keychain[$1] = $0 }, deleteKey: { keychain[$0] = nil })
+    session.settings = ChatSettings(provider: "deepseek", model: "", baseUrl: "http://127.0.0.1:9")
+    session.keyUpdated(provider: "deepseek", saved: true, key: "sk-deepseek-0000-1111")
+    session.send("Hello", root: repository, runtime: nil)
+
+    var draft = session.draft()
+    #expect(draft.inUse == "deepseek" && draft.hasKey("deepseek") && !draft.hasKey("openai"))
+    draft.setKey("sk-openai-2222-3333", for: "openai")
+    draft.setModel("gpt-x", for: "openai")
+    try session.apply(draft.changes())
+    #expect(keychain == ["deepseek": "sk-deepseek-0000-1111", "openai": "sk-openai-2222-3333"])
+    #expect(session.savedKey(for: "openai") && session.keyHint(for: "openai") == "sk-o••••••••3333")
+    #expect(session.stored("openai").model == "gpt-x")
+    #expect(session.settings.provider == "deepseek")
+    #expect(session.transcript.busy) // Nothing about the provider in use changed.
+    #expect(defaults.dictionaryRepresentation().values.compactMap { $0 as? String }.allSatisfy { !$0.contains("2222") })
+
+    draft = session.draft()
+    draft.removeKey("deepseek")
+    try session.apply(draft.changes())
+    #expect(keychain == ["openai": "sk-openai-2222-3333"])
+    #expect(session.settings == ChatSettings(provider: "openai", model: "gpt-x", baseUrl: ""))
+    #expect(session.hasKey && !session.transcript.busy)
+    await session.shutdown()
+}
+
+@Test @MainActor func aKeychainFailureLeavesTheProviderInUseUnchanged() {
+    struct Refused: Error {}
+    let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in nil },
+                              writeKey: { _, _ in throw Refused() }, deleteKey: { _ in })
+    var draft = session.draft()
+    draft.setKey("sk-openai-2222-3333", for: "openai")
+    #expect(draft.inUse == "openai")
+    #expect(throws: Refused.self) { try session.apply(draft.changes()) }
+    #expect(session.settings.provider == "deepseek" && !session.savedKey(for: "openai"))
+}
+
+@Test @MainActor func openingTheSettingsDraftDoesNotReadTheKeychain() {
+    var reads = 0
+    let session = ChatSession(defaults: UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!, readKey: { _ in reads += 1; return nil })
+    session.keyUpdated(provider: "openai", saved: true, key: "sk-0123456789abcdef")
+    _ = session.draft()
+    #expect(reads == 0)
+}
+
 @Test func modelProvidersAreNamedAfterTheirProducts() {
     #expect(ChatSettings.providers.map(\.id) == ["deepseek", "anthropic", "openai"])
     #expect(ChatSettings.providers.map(\.title) == ["DeepSeek", "Claude", "ChatGPT"])
