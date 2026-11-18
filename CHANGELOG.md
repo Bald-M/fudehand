@@ -10,6 +10,12 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-18
+
+### Summary
+
+This release rounds out the in-app chat panel: replies stream in and render Markdown, conversations open in tabs and are saved, several model providers can be set up side by side, and each reply shows its token usage. Agents get shared design guidance, and DeepSeek Harness joins the MCP connectors. The canvas tools moved to a toolbar at the bottom of the canvas, dragging stays fast in large documents, and a batch of properties panel, layout, canvas, file, and validation defects found after v0.0.2 is fixed.
+
 ### Added
 
 - MCP connector: *MCP Connectors…* now lists DeepSeek Harness too. *Connect* adds the MCP server to its home patch file (`~/.dsh/cordis.patch.yml`) in a marked block and *Disconnect* removes only that block; the app is found in `/Applications` even when `dsh` is not on the `PATH` (#74).
@@ -20,6 +26,8 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Chat panel: *Copy message* and *Regenerate* on assistant replies, and *Edit and resend* on the last user message (#29).
 - Chat panel: *Model settings* lists every model provider with its own API key, base URL, and model, and *Test* checks a key; the model menu lists every provider that has a key and switches provider and model in one step (#133).
 - Agent: the chat panel's Agent and Agents connected through the MCP server now get the same design guidance. For a new or redone screen the Agent states what it assumes about the product, plans the colors, fonts, and layout, checks that plan against the request, builds, and then reviews the result; real copy, at most two font families, readable contrast, and consistent spacing apply however short the request is. A visual direction given in the request always takes precedence. The guidance is adapted from the `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) (Apache-2.0) (#108).
+- Chat panel: conversations open in tabs at the top of the panel, with *New conversation* (+), switching, and *Close conversation*. Each open conversation has its own messages, context, and model, and a new one starts without the others' context. One conversation can keep replying while you work in another, its tab showing a dot; stopping, regenerating, and editing act only on the current conversation. Closing a tab stops its reply but keeps the conversation in *Conversation history* (#100).
+- Chat panel: each reply shows its total tokens (input plus output across all of that reply's model requests) at the end of its action row, with input, cached, and output on hover. The numbers are the usage the model API reports; a reply shows none when a request did not report usage. Usage is saved with the conversation (#139).
 
 ### Changed
 
@@ -32,11 +40,20 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Chat panel: changing the model keeps the conversation; the new model is given the earlier messages (#29).
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
 - Canvas: the canvas tools (Move, Hand, Frame, Rectangle, Ellipse, Text) and *Insert Image* moved from the window toolbar to a toolbar floating at the bottom center of the canvas; zoom, *Appearance*, and *Inspector* stay in the window toolbar (#138).
+- Groups in an auto layout frame ignore fill and stretch sizing: a group's size always equals the union of its children, and it takes no share of the remaining space. The properties panel no longer shows the width and height sizing selectors for a group (#60).
+- Layers panel: holding ⌘ or Shift while double-clicking a row adds to or removes from the selection instead of starting a rename (#140).
 
 ### Fixed
 
 - Properties panel number fields no longer rewrite a value when they only gain and lose focus. Previously, focusing and leaving X, Y, W, H, or any other number field rounded the value to the one decimal place shown, added an undo step, and marked the document as edited; passing through W or H also turned off a text layer's auto sizing (#57).
 - In the chat panel, the model now receives the image that `design_snapshot` returns when the model provider is Anthropic Claude or OpenAI; before, only the accompanying text was sent, so the model never saw the snapshot. With DeepSeek (the OpenAI-compatible API, which cannot carry an image in a tool result) the model is told that the image was left out, and its instructions now say to check changes by reading the layers back (#59).
+- Auto layout: a group set to fill or stretch was resized while its children stayed the same, so its selection box, click area, and size no longer matched what was visible (#60).
+- Creation tools: dragging in a straight horizontal or vertical line no longer creates a zero-size layer that cannot be clicked; a dragged layer is at least 1×1. Dragging out exactly 100×100 is treated as a drag instead of a single click (#62).
+- A document no longer shows as edited, or asks to be saved, when its content is back to what was last saved, such as after dragging a layer back to where it was or undoing back to the save point; redoing past the save point shows it as edited again (#63, #75).
+- Validation: a color with a sign, such as `#+12345`, is rejected instead of being read as another color, and a fractional `text.fontWeight`, such as 450.9, is rejected instead of being cut down to 450. This applies both to opening a project file and to Agent edits (#64).
+- Chat panel: the assistant now names the model it actually runs on when asked; with DeepSeek it used to say it was based on Claude (#131).
+- Chat panel: when the saved API key is no longer in the Keychain, for example after being deleted outside the App, the panel shows *Set API Key…* again instead of failing on send while *Model settings* still showed the key as saved.
+- Layers panel: a row is selected as soon as the mouse button goes down instead of after the double-click interval, and rows highlight on hover. Hovering a row outlines its layer on the canvas, and hovering a layer on the canvas highlights its row (#140).
 
 ## [0.0.2] - 2026-11-17
 
@@ -122,6 +139,7 @@ The first release of ui-atlas: a native macOS AI design tool that runs locally. 
 - After the rename, the app bundle is `dist/ui-atlas.app`, the control channel lives at `~/Library/Application Support/ui-atlas/control.sock`, and the Keychain service name is `ui-atlas.agent`. A chat panel API key saved in the Keychain before the rename must be entered again (#45).
 - See the [README](README.md) for Codex approval settings for MCP tool calls (#33); see [ADR 0003](docs/adr/0003-agent-mcp.md) for the design of MCP, the control channel, and the chat panel (#27).
 
-[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/Bald-M/ui-atlas/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Bald-M/ui-atlas/releases/tag/v0.0.1
