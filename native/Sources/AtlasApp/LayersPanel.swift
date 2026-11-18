@@ -130,6 +130,7 @@ struct LayersPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(node.type.title) \(node.name)")
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAction { store.setSelection([node.id]) }
     }
 
     private func toggleCollapsed(_ id: String) {
