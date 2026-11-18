@@ -150,3 +150,25 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(session.transcript.entries.isEmpty)
     await session.shutdown()
 }
+
+@Test @MainActor func chatKeyFlagIsClearedWhenTheKeychainNoLongerHasTheKey() async throws {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    // The key was deleted outside the App: the flags still say a key is saved.
+    session.keyUpdated(provider: "deepseek", saved: true, key: "sk-0123456789abcdef")
+    session.keyUpdated(provider: "openai", saved: true, key: "sk-0123456789abcdef")
+    #expect(session.hasKey)
+
+    session.send("Hello", root: repository, runtime: nil)
+    #expect(!session.hasKey)
+    #expect(session.keyHint(for: "deepseek") == nil)
+    #expect(!ChatSession(defaults: defaults, readKey: { _ in nil }).hasKey)
+    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
+    #expect(session.transcript.entries.map(\.text) == ["Hello", "No API key configured"])
+
+    // The settings sheet reads another provider's key the same way.
+    #expect(session.savedKeyValue(for: "openai") == nil)
+    #expect(!session.savedKey(for: "openai"))
+    #expect(session.keyHint(for: "openai") == nil)
+    await session.shutdown()
+}
