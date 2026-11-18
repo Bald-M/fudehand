@@ -83,3 +83,28 @@ private func draft(inUse: String = "a", saved: Set<String> = ["a"]) -> ModelSett
     #expect(!d.hasKey("a") && !d.canTest("a") && d.beginTest("a") == nil)
     #expect(draft().canTest("a")) // A saved key can be tested without typing it.
 }
+
+@Test func clearingATypedKeyKeepsTheRemoval() {
+    var d = draft()
+    d.removeKey("a")
+    d.setKey("x", for: "a")
+    d.setKey("", for: "a")
+    #expect(!d.hasKey("a"))
+    #expect(d.changes().deleteKeys == ["a"] && d.changes().saveKeys.isEmpty)
+}
+
+@Test func aBlankKeyOnASavedKeyKeepsTheSavedKey() {
+    var d = draft()
+    d.setKey("   ", for: "a")
+    #expect(d.hasKey("a"))
+    #expect(d.changes().saveKeys.isEmpty && d.changes().deleteKeys.isEmpty)
+}
+
+@Test func losingTheChosenProvidersKeyFallsBackToTheOriginalProvider() {
+    var d = draft(inUse: "c", saved: ["a", "c"])
+    d.setKey("sk-b", for: "b")
+    d.use("b")
+    #expect(d.inUse == "b")
+    d.setKey("", for: "b")
+    #expect(d.inUse == "c")
+}

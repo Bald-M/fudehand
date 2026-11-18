@@ -24,7 +24,10 @@ private let many = (1...12).map { "m\($0)" }
     let providers = [provider("a", models: many, default: "m1")]
     let idle = ModelMenu.sections(providers: providers, provider: "a", model: "")[0]
     #expect(idle.entries.map(\.model) == [""])
-    #expect(idle.all.map(\.model) == Array(many.dropFirst()))
+    #expect(idle.all.map(\.model) == many)
+    let stored = ModelMenu.sections(providers: providers, provider: "a", model: "m1")[0]
+    #expect(stored.entries.first?.selected == true)
+    #expect(stored.all.first { $0.selected }?.model == "m1")
     let picked = ModelMenu.sections(providers: providers, provider: "a", model: "m7")[0]
     #expect(picked.entries.map(\.model) == ["", "m7"])
     #expect(picked.all.first { $0.selected }?.model == "m7")

@@ -71,7 +71,8 @@ public enum ModelMenu {
             if item.models.count <= foldThreshold {
                 return ModelMenuSection(provider: item.id, title: item.title, needsKey: false, entries: head + others, all: [])
             }
-            return ModelMenuSection(provider: item.id, title: item.title, needsKey: false, entries: head + others.filter(\.selected), all: others)
+            let all = item.models.map { ModelMenuEntry(model: $0, title: $0, isDefault: false, selected: inUse && $0 == model) }
+            return ModelMenuSection(provider: item.id, title: item.title, needsKey: false, entries: head + others.filter(\.selected), all: all)
         }
     }
 

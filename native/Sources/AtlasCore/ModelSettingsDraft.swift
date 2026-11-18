@@ -80,9 +80,10 @@ public struct ModelSettingsDraft: Equatable, Sendable {
         return (p.hasSavedKey && !p.removesKey) || !Self.trimmed(p.newKey).isEmpty
     }
 
-    /// What the chat will use after Save, including the automatic switch to a provider with a key.
+    /// What the chat will use after Save: the chosen provider, else the original one, else the first with a key, when the chosen one has no key.
     public var inUse: String {
         if hasKey(chosen) { return chosen }
+        if hasKey(initialInUse) { return initialInUse }
         return order.first(where: hasKey) ?? chosen
     }
 
@@ -99,7 +100,7 @@ public struct ModelSettingsDraft: Equatable, Sendable {
     public mutating func setKey(_ key: String, for id: String) {
         guard providers[id] != nil else { return }
         providers[id]?.newKey = key
-        providers[id]?.removesKey = false
+        // `removesKey` is left alone: a typed key overrides it, and clearing the field restores the removal instead of the saved key.
         invalidateTest(id)
     }
 

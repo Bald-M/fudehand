@@ -477,7 +477,7 @@ private struct ChatSettingsSheet: View {
                 Text(L("The key works. %d models available.", count))
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
-                Text(L("The test failed: %@. You can still save.", message))
+                Text(L("The test failed: %@. You can still save.", message.hasSuffix(".") ? String(message.dropLast()) : message))
             case .untested:
                 let cached = chat.models(for: id).count
                 Text(!draft.hasKey(id) ? L("Add an API key, then test it.")
