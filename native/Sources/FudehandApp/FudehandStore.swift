@@ -19,7 +19,10 @@ final class FudehandStore: ObservableObject {
     private(set) var editor = DesignEditor(measure: TextMetrics.measure)
     /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
     @Published private(set) var document = DesignDocument()
-    @Published private(set) var selection: Set<String> = []
+    /// The selected layers, kept out of the store's published state: selecting in a large document then recomputes only the views
+    /// that show the selection, not every view that observes the store (#142).
+    let layerSelection = LayerSelection()
+    var selection: Set<String> { layerSelection.ids }
     /// The layer under the pointer, shared by the canvas and the layers panel.
     let hover = LayerHover()
     @Published var tool: CanvasTool = .move
@@ -153,7 +156,7 @@ final class FudehandStore: ObservableObject {
 
     func setSelection(_ ids: Set<String>) {
         guard ids != selection else { return }
-        selection = ids
+        layerSelection.ids = ids
         canvas?.setSelection(ids)
     }
 
@@ -472,10 +475,15 @@ final class LayerHover: ObservableObject {
     @Published var id: String?
 }
 
+/// Kept out of the store's published state so a selection change redraws only the layer rows and the inspector that observe it.
+final class LayerSelection: ObservableObject {
+    @Published fileprivate(set) var ids: Set<String> = []
+}
+
 // MARK: Canvas
 
 extension FudehandStore: CanvasHost {
-    func canvasSelect(_ ids: Set<String>) { selection = ids }
+    func canvasSelect(_ ids: Set<String>) { if layerSelection.ids != ids { layerSelection.ids = ids } }
 
     func canvasHover(_ id: String?) { if hover.id != id { hover.id = id } }
 

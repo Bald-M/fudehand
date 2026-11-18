@@ -392,3 +392,20 @@ private func temporaryFile() -> URL {
     store.setSelection(["c"])
     #expect(store.prototypeStart == "a")
 }
+
+/// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
+/// are not recomputed (#142).
+@Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {
+    let store = makeStore()
+    store.replace(DesignDocument(nodes: [DesignNode(id: "a", type: .rectangle), DesignNode(id: "b", type: .rectangle)]), url: nil)
+    var storeChanges = 0, selectionChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 },
+                     store.layerSelection.objectWillChange.sink { selectionChanges += 1 }]
+    store.setSelection(["a"])
+    store.canvasSelect(["a", "b"])
+    store.setSelection(["a", "b"])
+    #expect(store.selection == ["a", "b"] && store.layerSelection.ids == ["a", "b"])
+    #expect(selectionChanges == 2)
+    #expect(storeChanges == 0)
+    _ = observers
+}

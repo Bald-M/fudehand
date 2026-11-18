@@ -169,7 +169,7 @@ Fudehand does not import or export Figma files.
 pnpm dev               # debug build, then open the App
 pnpm build:native      # release build with ad-hoc signing → dist/Fudehand.app
 pnpm test:native       # Swift tests: FudehandCoreTests and FudehandAppTests
-pnpm bench:native      # canvas drag and hover benchmark on large documents (release build)
+pnpm bench:native      # canvas drag, hover, and layer selection benchmarks on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness
 pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
 ```
