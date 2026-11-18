@@ -285,3 +285,34 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     #expect(session.models == ["gpt-x"])
     #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).models == ["gpt-x"])
 }
+
+@Test @MainActor func chatSettingsOfAnotherProviderAreStoredWithoutSwitching() async throws {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    session.send("Hello", root: repository, runtime: nil)
+    session.store(ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://example.test/v1"))
+    #expect(session.transcript.busy) // The running reply is left alone.
+    #expect(session.settings.provider == "deepseek")
+    #expect(session.stored("openai") == ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://example.test/v1"))
+    session.store(ChatSettings(provider: "deepseek", model: "deepseek-reasoner", baseUrl: ""))
+    #expect(session.settings.model == "deepseek-reasoner")
+    #expect(!session.transcript.busy) // Changing the provider in use restarts the harness.
+    await session.shutdown()
+}
+
+@Test @MainActor func chatModelCachesAreReadPerProvider() {
+    let defaults = UserDefaults(suiteName: "ui-atlas-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    session.cacheModels(["gpt-x", "gpt-y"], defaultModel: "gpt-x", provider: "openai")
+    session.cacheModels(["deepseek-chat"], provider: "deepseek")
+    #expect(session.models(for: "openai") == ["gpt-x", "gpt-y"])
+    #expect(session.defaultModel(for: "openai") == "gpt-x")
+    #expect(session.defaultModel(for: "deepseek") == nil)
+    #expect(session.models(for: "anthropic") == [])
+    #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).defaultModel(for: "openai") == "gpt-x")
+}
+
+@Test func modelProvidersAreNamedAfterTheirProducts() {
+    #expect(ChatSettings.providers.map(\.id) == ["deepseek", "anthropic", "openai"])
+    #expect(ChatSettings.providers.map(\.title) == ["DeepSeek", "Claude", "ChatGPT"])
+}

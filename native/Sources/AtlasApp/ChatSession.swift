@@ -4,7 +4,7 @@ import Foundation
 
 /// The chat panel's model settings; excludes the API key (the key is in the Keychain).
 struct ChatSettings: Equatable {
-    static let providers: [(id: String, title: String)] = [("deepseek", "DeepSeek"), ("anthropic", "Anthropic Claude"), ("openai", "OpenAI")]
+    static let providers: [(id: String, title: String)] = [("deepseek", "DeepSeek"), ("anthropic", "Claude"), ("openai", "ChatGPT")]
 
     var provider: String
     /// When left empty, the harness uses the provider's default model and official address.
@@ -105,6 +105,22 @@ final class ChatSession: ObservableObject {
                      baseUrl: defaults.string(forKey: "agent.\(provider).baseUrl") ?? "")
     }
 
+    func stored(_ provider: String) -> ChatSettings { Self.stored(provider, defaults) }
+
+    /// Saves `settings.provider`'s model and address. The provider in use restarts the harness; another provider only has its defaults written.
+    func store(_ settings: ChatSettings) {
+        if settings.provider == self.settings.provider { self.settings = settings; return }
+        defaults.set(settings.model, forKey: "agent.\(settings.provider).model")
+        defaults.set(settings.baseUrl, forKey: "agent.\(settings.provider).baseUrl")
+        objectWillChange.send()
+    }
+
+    func models(for provider: String) -> [String] { defaults.stringArray(forKey: "agent.\(provider).models") ?? [] }
+
+    func defaultModel(for provider: String) -> String? {
+        defaults.string(forKey: "agent.\(provider).defaultModel").flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     func savedKey(for provider: String) -> Bool { defaults.bool(forKey: "agent.\(provider).hasKey") }
 
     /// The masked form of the saved key; the full key is only in the Keychain.
@@ -134,15 +150,16 @@ final class ChatSession: ObservableObject {
         defaults.set(saved, forKey: "agent.\(provider).hasKey")
         if !saved { defaults.removeObject(forKey: "agent.\(provider).keyHint") }
         else if let key { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
-        guard provider == settings.provider else { return }
+        guard provider == settings.provider else { objectWillChange.send(); return }
         hasKey = saved
         restart()
     }
 
     /// Remembers a model list fetched for `provider`.
-    func cacheModels(_ list: [String], provider: String) {
+    func cacheModels(_ list: [String], defaultModel: String? = nil, provider: String) {
         defaults.set(list, forKey: "agent.\(provider).models")
-        if provider == settings.provider { models = list }
+        if let defaultModel, !defaultModel.isEmpty { defaults.set(defaultModel, forKey: "agent.\(provider).defaultModel") }
+        if provider == settings.provider { models = list } else { objectWillChange.send() }
     }
 
     /// Fetches the current provider's model list with the saved key (may trigger a Keychain authorization prompt).
@@ -150,7 +167,7 @@ final class ChatSession: ObservableObject {
         let settings = settings
         guard let root, let key = savedKeyValue(for: settings.provider) else { return }
         if case .success(let listing) = await Self.listModels(root: root, runtime: runtime, settings: settings, apiKey: key) {
-            cacheModels(listing.models, provider: settings.provider)
+            cacheModels(listing.models, defaultModel: listing.defaultModel, provider: settings.provider)
         }
     }
 
