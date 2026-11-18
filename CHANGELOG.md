@@ -14,6 +14,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
 
+### Fixed
+
+- Properties panel number fields no longer rewrite a value when they only gain and lose focus. Previously, focusing and leaving X, Y, W, H, or any other number field rounded the value to the one decimal place shown, added an undo step, and marked the document as edited; passing through W or H also turned off a text layer's auto sizing (#57).
+
 ## [0.0.2] - 2026-11-17
 
 ### Summary
