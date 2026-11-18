@@ -114,7 +114,7 @@
 - Modify: `native/Sources/AtlasApp/ChatMessages.swift` (`AssistantMessage`)
 - Modify: the four `native/Sources/AtlasCore/Resources/*/Localizable.strings`
 - Modify: `docs/macos.md` ("Chat panel" section)
-- Create: `docs/evidence/chat-token-usage-light.png`, `docs/evidence/chat-token-usage-dark.png`
+- Create: `docs/evidence/chat-token-usage-light.jpg`, `docs/evidence/chat-token-usage-dark.jpg`
 
 **Interfaces:**
 - Consumes: `entry.usage`, `ChatUsage.compact` from Task 3.
