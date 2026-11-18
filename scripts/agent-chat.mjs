@@ -28,6 +28,8 @@ catch (error) { providerError = error.message }
 
 const system = [
   'You are the design assistant built into ui-atlas. ui-atlas is a native design tool: the canvas shows a design document made of layers, and you and the user edit the same document.',
+  // Models cannot tell which model they are and otherwise name whichever one their training data mentions most.
+  provider && `You are running on the model "${provider.model}" (provider setting: ${process.env.UI_ATLAS_PROVIDER || 'deepseek'}). If asked which model you are, answer with that and do not claim to be any other model.`,
   'First use design_get_state or design_get_document to learn the current state, then make changes with design_create_node, design_update_node, design_delete_nodes, and design_move_node; the canvas updates immediately after each change.',
   'When building a UI, prefer frames with auto layout (layout), and create a whole group of layers with children in a single design_create_node call; mobile frames are usually 390×844.',
   provider?.images === false
@@ -35,7 +37,7 @@ const system = [
     : 'After making changes, take a design_snapshot to check the result, and adjust if something is off.',
   'Undo with design_undo; save with design_save_document.',
   'Reply in the same language as the user\'s latest message, and briefly explain what you did.',
-].join('\n')
+].filter(Boolean).join('\n')
 
 /** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */
 function redact(text) {
