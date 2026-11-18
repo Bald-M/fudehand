@@ -32,7 +32,9 @@ final class AtlasCanvasView: NSView {
     let gridLayer = CanvasGrid()
     let overlay = CanvasOverlay()
     let renderer = DesignRenderer()
-    private(set) var document = DesignDocument()
+    /// The document on screen with its lookup index; the store builds it once per document change.
+    private(set) var index = DesignIndex()
+    var document: DesignDocument { index.document }
     private(set) var selection: Set<String> = []
     private var requestToken: Int?
     private(set) var tool = CanvasTool.move {
@@ -149,12 +151,11 @@ final class AtlasCanvasView: NSView {
     // MARK: Updates from the store
 
     /// Shows the document; called on every document change, including during drags.
-    func show(_ next: DesignDocument) {
-        document = next
-        renderer.sync(next.nodes)
-        let ids = next.allIDs()
-        if !selection.isSubset(of: ids) { selection = selection.intersection(ids) }
-        if let hover, !ids.contains(hover) { self.hover = nil }
+    func show(_ next: DesignIndex) {
+        index = next
+        renderer.sync(next.document.nodes)
+        if !selection.allSatisfy(next.contains) { selection = selection.filter(next.contains) }
+        if let hover, !next.contains(hover) { self.hover = nil }
         refreshOverlay()
     }
 
@@ -185,7 +186,7 @@ final class AtlasCanvasView: NSView {
     }
 
     func refreshOverlay() {
-        overlay.render(viewport: liveViewport, document: document, selection: selection, hover: hover,
+        overlay.render(viewport: liveViewport, index: index, selection: selection, hover: hover,
                        marquee: marquee, guides: guides, handlesFor: handleTarget)
     }
 
@@ -215,7 +216,7 @@ final class AtlasCanvasView: NSView {
 
     /// The single selected layer that shows resize handles; groups resize with their children and have none.
     var handleTarget: String? {
-        guard selection.count == 1, let id = selection.first, let node = document.node(id), node.type != .group, !node.locked else { return nil }
+        guard selection.count == 1, let id = selection.first, let node = index.node(id), node.type != .group, !node.locked else { return nil }
         return id
     }
 
@@ -225,7 +226,7 @@ final class AtlasCanvasView: NSView {
 
     /// What a press at a canvas (screen-space) point targets: a handle, a top-level frame label, or a layer.
     func hitTarget(at screen: NSPoint, deep: Bool = false) -> HitTarget {
-        if let id = handleTarget, let rect = document.worldRect(id) {
+        if let id = handleTarget, let rect = index.worldRect(id) {
             for handle in ResizeHandle.allCases {
                 let anchor = CanvasOverlay.screenPoint(handle, of: rect, viewport: liveViewport)
                 if abs(anchor.x - screen.x) <= CanvasOverlay.handleHitRadius, abs(anchor.y - screen.y) <= CanvasOverlay.handleHitRadius {
@@ -237,7 +238,7 @@ final class AtlasCanvasView: NSView {
             if CanvasOverlay.labelRect(for: node, viewport: liveViewport).contains(screen) { return .label(node.id) }
         }
         let path = DesignHitTest.path(at: worldPoint(screen), in: document)
-        return DesignHitTest.selectable(path: path, selection: selection, document: document, deep: deep).map(HitTarget.node) ?? .empty
+        return DesignHitTest.selectable(path: path, selection: selection, index: index, deep: deep).map(HitTarget.node) ?? .empty
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -246,23 +247,23 @@ final class AtlasCanvasView: NSView {
 
     private func interactionContext() -> InteractionContext {
         var rects: [String: Rect] = [:]
-        for node in document.nodes { rects[node.id] = document.worldRect(node.id) }
+        for node in document.nodes { rects[node.id] = node.frame }
         var movable = Set<String>()
         var snapTargets: [Rect] = []
         var parents = Set<String?>()
         for id in selection {
-            guard let rect = document.worldRect(id), let node = document.node(id), let parent = document.parentID(of: id) else { continue }
+            guard let rect = index.worldRect(id), let node = index.node(id), let parent = index.parentID(of: id) else { continue }
             rects[id] = rect
             parents.insert(parent)
-            let parentHasLayout = parent.flatMap { document.node($0)?.layout } != nil
+            let parentHasLayout = parent.flatMap { index.node($0)?.layout } != nil
             if !node.locked, !parentHasLayout { movable.insert(id) }
         }
         for parent in parents {
-            let siblings = parent.flatMap { document.node($0)?.children } ?? document.nodes
+            let siblings = parent.flatMap { index.node($0)?.children } ?? document.nodes
             for sibling in siblings where !selection.contains(sibling.id) && sibling.visible {
-                if let rect = document.worldRect(sibling.id) { snapTargets.append(rect) }
+                if let rect = index.worldRect(sibling.id) { snapTargets.append(rect) }
             }
-            if let parent, let rect = document.worldRect(parent) { snapTargets.append(rect) }
+            if let parent, let rect = index.worldRect(parent) { snapTargets.append(rect) }
         }
         let candidates = Set(document.nodes.filter { $0.visible && !$0.locked }.map(\.id))
         return InteractionContext(viewport: liveViewport, rects: rects, marqueeCandidates: candidates, snapTargets: snapTargets,

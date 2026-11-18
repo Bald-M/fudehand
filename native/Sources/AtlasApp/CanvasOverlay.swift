@@ -85,23 +85,34 @@ final class CanvasOverlay: NSView {
     /// The screen rectangle of a top-level frame's name label: above the frame's top-left corner, no wider than the frame.
     static func labelRect(for node: DesignNode, viewport: Viewport) -> NSRect {
         let frame = screenRect(node.frame, viewport: viewport)
-        let textWidth = (node.name as NSString).size(withAttributes: [.font: labelFont]).width + 2
+        let textWidth = labelWidth(node.name) + 2
         return NSRect(x: frame.minX, y: frame.minY - labelHeight - 4, width: max(16, min(textWidth, frame.width)), height: labelHeight)
     }
 
-    func render(viewport: Viewport, document: DesignDocument, selection: Set<String>, hover: String?,
+    /// Name widths are measured once per name: hit testing and rendering ask for every top-level frame's label on each pointer event.
+    private static var labelWidths: [String: CGFloat] = [:]
+
+    private static func labelWidth(_ name: String) -> CGFloat {
+        if let width = labelWidths[name] { return width }
+        let width = (name as NSString).size(withAttributes: [.font: labelFont]).width
+        if labelWidths.count >= 5000 { labelWidths.removeAll(keepingCapacity: true) }
+        labelWidths[name] = width
+        return width
+    }
+
+    func render(viewport: Viewport, index: DesignIndex, selection: Set<String>, hover: String?,
                 marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         func outline(_ ids: [String]) -> CGPath {
             let path = CGMutablePath()
-            for id in ids { if let rect = document.worldRect(id) { path.addRect(Self.screenRect(rect, viewport: viewport)) } }
+            for id in ids { if let rect = index.worldRect(id) { path.addRect(Self.screenRect(rect, viewport: viewport)) } }
             return path
         }
         hoverLayer.path = outline(hover.flatMap { selection.contains($0) ? nil : [$0] } ?? [])
         selectionLayer.path = outline(Array(selection))
         let handles = CGMutablePath()
-        if let id = handleTarget, let rect = document.worldRect(id) {
+        if let id = handleTarget, let rect = index.worldRect(id) {
             let size = Self.handleSize
             for handle in ResizeHandle.allCases {
                 let point = Self.screenPoint(handle, of: rect, viewport: viewport)
@@ -125,7 +136,7 @@ final class CanvasOverlay: NSView {
             }
         }
         guideLayer.path = guidePath
-        renderLabels(document: document, viewport: viewport, selection: selection)
+        renderLabels(document: index.document, viewport: viewport, selection: selection)
         CATransaction.commit()
     }
 

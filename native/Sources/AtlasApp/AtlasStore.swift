@@ -56,6 +56,14 @@ final class AtlasStore: ObservableObject {
     /// The most recent stable or requested viewport; the canvas owns the live viewport.
     private(set) var viewport = Viewport()
     weak var canvas: AtlasCanvasView?
+    private var indexed: (revision: Int, index: DesignIndex)?
+    /// The lookup index of the editor's current document, built once per document change and shared with the canvas.
+    var index: DesignIndex {
+        if let indexed, indexed.revision == editor.revision { return indexed.index }
+        let index = DesignIndex(editor.document)
+        indexed = (editor.revision, index)
+        return index
+    }
     private var inGesture = false
     /// The document was replaced while the editor window was not open: once the canvas appears, fit all at its actual size. The size changes a few times while the window opens,
     /// so this ends only after the size has been stable for a short while.
@@ -96,11 +104,10 @@ final class AtlasStore: ObservableObject {
 
     /// Syncs the canvas and the panels after the document changes.
     private func changed() {
-        let current = editor.document
-        canvas?.show(current)
-        let ids = current.allIDs()
-        if !selection.isSubset(of: ids) { setSelection(selection.intersection(ids)) }
-        if !inGesture { document = current }
+        let index = self.index
+        canvas?.show(index)
+        if !selection.allSatisfy(index.contains) { setSelection(selection.filter(index.contains)) }
+        if !inGesture { document = index.document }
     }
 
     /// One undoable edit.
@@ -132,7 +139,7 @@ final class AtlasStore: ObservableObject {
 
     func attach(_ canvas: AtlasCanvasView) {
         self.canvas = canvas
-        canvas.show(editor.document)
+        canvas.show(index)
         canvas.setSelection(selection)
     }
 
@@ -398,25 +405,28 @@ extension AtlasStore: CanvasHost {
     }
 
     /// When the selection contains both a parent layer and its children, only the outermost layers are moved; the children move with their parent.
-    private func outermost(_ ids: Set<String>, in document: DesignDocument) -> Set<String> {
-        ids.filter { id in !document.ancestry(of: id).dropLast().contains(where: ids.contains) }
+    private func outermost(_ ids: Set<String>, in index: DesignIndex) -> Set<String> {
+        ids.filter { id in !index.ancestry(of: id).dropLast().contains(where: ids.contains) }
     }
 
     func canvasMove(_ origins: [String: Point]) {
-        let roots = outermost(Set(origins.keys), in: editor.document)
+        let index = self.index
+        let roots = outermost(Set(origins.keys), in: index)
         editor.applyLive { document in
+            // The roots are not nested in each other, so moving one leaves the others' indexed rectangles and paths valid.
             for (id, target) in origins where roots.contains(id) {
-                guard let current = document.worldRect(id) else { continue }
-                try? document.update(id) { $0.x += target.x - current.x; $0.y += target.y - current.y }
+                guard let current = index.worldRect(id), let path = index.indexPath(of: id) else { continue }
+                document.update(at: path) { $0.x += target.x - current.x; $0.y += target.y - current.y }
             }
         }
         changed()
     }
 
     func canvasResize(_ id: String, to rect: Rect) {
+        let index = self.index
         editor.applyLive { document in
-            guard let current = document.worldRect(id) else { return }
-            try? document.update(id) { node in
+            guard let current = index.worldRect(id), let path = index.indexPath(of: id) else { return }
+            document.update(at: path) { node in
                 let widthChanged = rect.width != current.width, heightChanged = rect.height != current.height
                 node.x += rect.x - current.x
                 node.y += rect.y - current.y
@@ -444,10 +454,10 @@ extension AtlasStore: CanvasHost {
     }
 
     func canvasNudge(_ ids: Set<String>, by delta: Point) {
-        let document = editor.document
-        let movable = outermost(ids, in: document).filter { id in
-            guard let node = document.node(id), !node.locked, let parent = document.parentID(of: id) else { return false }
-            return parent.flatMap { document.node($0)?.layout } == nil
+        let index = self.index
+        let movable = outermost(ids, in: index).filter { id in
+            guard let node = index.node(id), !node.locked, let parent = index.parentID(of: id) else { return false }
+            return parent.flatMap { index.node($0)?.layout } == nil
         }
         guard !movable.isEmpty else { return }
         edit("Move Layers") { document in

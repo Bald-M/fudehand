@@ -90,6 +90,11 @@ extension DesignDocument {
 
     public mutating func update(_ id: String, _ change: (inout DesignNode) throws -> Void) throws {
         guard let path = indexPath(of: id) else { throw DesignError("Layer not found: \(id)") }
+        try update(at: path, change)
+    }
+
+    /// Changes the node at an index path of this document (see `DesignIndex.indexPath`) without searching the tree.
+    public mutating func update(at path: [Int], _ change: (inout DesignNode) throws -> Void) rethrows {
         var node = self[path]
         try change(&node)
         self[path] = node

@@ -12,6 +12,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Changed
 
+- Dragging and hovering on the canvas stay fast in large documents: layers are looked up in an index built once per document change instead of by searching the whole tree for each one. On a 5,100-layer document a drag event drops from about 39 ms to under 4 ms and a hover hit test from 0.65 ms to 0.01 ms; `pnpm bench:native` reruns the measurement (#52).
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
 
 ### Fixed
