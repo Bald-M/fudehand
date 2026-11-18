@@ -5,6 +5,12 @@ import SwiftUI
 /// The inspector on the right: the "Design" tab edits the properties of the selected layers, and the "Chat" tab is the Agent chat panel.
 struct InspectorPanel: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+
+    init(store: FudehandStore) {
+        self.store = store
+        selection = store.layerSelection
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,9 +21,9 @@ struct InspectorPanel: View {
             .pickerStyle(.segmented).labelsHidden().padding(10)
             Divider()
             switch store.inspectorTab {
-            case .design: DesignInspector(store: store)
+            case .design: DesignInspector(store: store, selection: selection)
             case .chat:
-                let selected = store.selection.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                let selected = selection.ids.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
                 ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
                           selection: selected.map { ChatContext(id: $0.id, name: $0.name, type: $0.type.rawValue) },
                           layerName: { store.document.node($0)?.name })
@@ -28,13 +34,16 @@ struct InspectorPanel: View {
 
 private struct DesignInspector: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var selection: LayerSelection
 
     var body: some View {
-        let selected = store.selection.compactMap { store.document.node($0) }
+        let selected = selection.ids.compactMap { store.document.node($0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if selected.count == 1, let node = selected.first {
-                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).id(node.id)
+                    // Kept when the selection moves to another layer, instead of rebuilt: rebuilding every control took most of the
+                    // time of a selection change (#142). Fields reset their drafts on `inspectedLayer` instead.
+                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).environment(\.inspectedLayer, node.id)
                 } else if selected.count > 1 {
                     Section(title: L("%d layers selected", selected.count)) {
                         SliderRow(label: L("Opacity"), value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
@@ -86,6 +95,10 @@ private struct NumberField: View {
     let commit: (Double) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
+    @Environment(\.inspectedLayer) private var layer
+    /// The layer the text was typed for. A draft typed for the previous layer is dropped, never committed to the newly
+    /// selected one, whichever order SwiftUI reports the focus loss and the layer change in.
+    @State private var draftLayer: String?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -97,11 +110,13 @@ private struct NumberField: View {
                 .accessibilityLabel(label)
         }
         .disabled(disabled)
-        .onAppear { text = NumberInput.format(value) }
+        .onAppear { text = NumberInput.format(value); draftLayer = layer }
         .onChange(of: value) { _, next in if !focused { text = NumberInput.format(next) } }
+        .onChange(of: layer) { text = NumberInput.format(value); draftLayer = layer }
     }
 
     private func submit() {
+        guard draftLayer == layer else { text = NumberInput.format(value); draftLayer = layer; return }
         let next = NumberInput.committedValue(text: text, current: value, minimum: minimum)
         if let next { commit(next) }
         text = NumberInput.format(next ?? value)
@@ -122,6 +137,18 @@ private struct SliderRow: View {
     }
 }
 
+/// The layer the inspector shows; fields that hold a draft reset it when this changes.
+private struct InspectedLayerKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    fileprivate var inspectedLayer: String? {
+        get { self[InspectedLayerKey.self] }
+        set { self[InspectedLayerKey.self] = newValue }
+    }
+}
+
 extension DesignColor {
     var swiftUI: Color { Color(.sRGB, red: r, green: g, blue: b, opacity: a) }
 
@@ -136,6 +163,7 @@ private struct ColorRow: View {
     let color: DesignColor
     let commit: (DesignColor) -> Void
     @State private var hex = ""
+    @Environment(\.inspectedLayer) private var layer
 
     var body: some View {
         HStack(spacing: 6) {
@@ -147,6 +175,7 @@ private struct ColorRow: View {
         }
         .onAppear { hex = color.hex }
         .onChange(of: color) { _, next in hex = next.hex }
+        .onChange(of: layer) { hex = color.hex }
     }
 }
 
@@ -167,6 +196,7 @@ private struct NodeInspector: View {
                 .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
                 .onAppear { name = node.name }
                 .onChange(of: node.name) { _, next in name = next }
+                .onChange(of: node.id) { name = node.name; content = node.text?.content ?? "" }
                 .accessibilityLabel(L("Layer name"))
         }
         Section(title: L("Position and Size")) {
@@ -235,6 +265,7 @@ private struct NodeInspector: View {
                 Button(L("Replace Image…")) { replaceImage() }
             }
         }
+        interactionSection(node.interaction)
     }
 
     private func sizingPicker(_ label: String, _ mode: SizingMode, _ commit: @escaping (SizingMode) -> Void) -> some View {
@@ -256,6 +287,15 @@ private struct NodeInspector: View {
                     if next != node.text?.content { update("Change Text", "text.content") { $0.text?.content = next } }
                 }
                 .accessibilityLabel(L("Text content"))
+            Picker(L("Font"), selection: Binding(get: { text.fontFamily ?? "" }, set: { v in update("Change Font") { $0.text?.fontFamily = v.isEmpty ? nil : v } })) {
+                Text(L("System Default")).tag("")
+                // A family this Mac does not have stays selectable, so the layer's setting is shown as it is.
+                if let family = text.fontFamily, !store.fontFamilies.contains(where: { $0.name == family }) {
+                    Text(L("%@ (missing)", family)).tag(family)
+                }
+                Divider()
+                ForEach(store.fontFamilies, id: \.name) { Text($0.name).tag($0.name) }
+            }
             HStack {
                 NumberField(label: L("Font size"), value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
                 Picker(L("Weight|font"), selection: Binding(get: { text.fontWeight }, set: { v in update("Change Font Weight") { $0.text?.fontWeight = v } })) {
@@ -273,6 +313,7 @@ private struct NodeInspector: View {
                 Text(L("Auto height")).tag(TextAutoResize.height)
                 Text(L("Fixed")).tag(TextAutoResize.none)
             }
+            Button(L("Import Font…")) { store.importFontFiles() }
         }
     }
 
@@ -316,10 +357,86 @@ private struct NodeInspector: View {
         }
     }
 
+    /// The top-level frames an interaction can go to; the frame holding this layer comes last, since going to it is rarely meant.
+    private var destinations: [DesignNode] {
+        let own = store.document.ancestry(of: node.id).first
+        let frames = store.document.nodes.filter { $0.type == .frame }
+        return frames.filter { $0.id != own } + frames.filter { $0.id == own }
+    }
+
+    /// The default destination: the first top-level frame other than the one holding this layer.
+    private var otherFrame: String? {
+        let own = store.document.ancestry(of: node.id).first
+        return store.document.nodes.first { $0.type == .frame && $0.id != own }?.id
+    }
+
+    private func interactionSection(_ interaction: DesignInteraction?) -> some View {
+        Section(title: L("Prototype")) {
+            if let interaction {
+                Text(L("On click")).foregroundStyle(.secondary)
+                Picker(L("Action"), selection: Binding(get: { if case .back = interaction { return "back" } else { return "navigate" } }, set: { action in
+                    guard action == "back" || destinations.first != nil else { return }
+                    update("Change Interaction") { $0.interaction = action == "back" ? .back : .navigate(destination: destinations[0].id, transition: PrototypeTransition()) }
+                })) {
+                    Text(L("Navigate to|prototype")).tag("navigate")
+                    Text(L("Back|prototype")).tag("back")
+                }
+                if case .navigate(let destination, let transition) = interaction {
+                    Picker(L("Destination"), selection: Binding(get: { destination }, set: { id in
+                        update("Change Interaction") { $0.interaction = .navigate(destination: id, transition: transition) }
+                    })) {
+                        ForEach(destinations) { Text($0.name).tag($0.id) }
+                        if !destinations.contains(where: { $0.id == destination }) { Text(L("Missing frame")).tag(destination) }
+                    }
+                    Picker(L("Transition"), selection: Binding(get: { transition.type }, set: { type in
+                        update("Change Interaction") { $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(type: type, duration: transition.duration, easing: transition.easing)) }
+                    })) {
+                        ForEach(TransitionType.allCases, id: \.self) { Text(Self.transitionName($0)).tag($0) }
+                    }
+                    if transition.type != .none {
+                        NumberField(label: L("Duration (s)"), value: transition.duration, minimum: 0) { seconds in
+                            update("Change Interaction") {
+                                $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(
+                                    type: transition.type, duration: min(seconds, PrototypeTransition.maximumDuration), easing: transition.easing))
+                            }
+                        }
+                        Picker(L("Easing"), selection: Binding(get: { transition.easing }, set: { easing in
+                            update("Change Interaction") { $0.interaction = .navigate(destination: destination, transition: PrototypeTransition(type: transition.type, duration: transition.duration, easing: easing)) }
+                        })) {
+                            Text(L("Linear")).tag(TransitionEasing.linear)
+                            Text(L("Ease In")).tag(TransitionEasing.easeIn)
+                            Text(L("Ease Out")).tag(TransitionEasing.easeOut)
+                            Text(L("Ease In and Out")).tag(TransitionEasing.easeInOut)
+                        }
+                    }
+                }
+                Button(L("Remove Interaction")) { update("Remove Interaction") { $0.interaction = nil } }
+            } else {
+                Button(L("Add Interaction")) {
+                    update("Add Interaction") { $0.interaction = otherFrame.map { .navigate(destination: $0, transition: PrototypeTransition()) } ?? .back }
+                }
+                Text(L("Clicking this layer during playback goes to another frame or back."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    static func transitionName(_ type: TransitionType) -> String {
+        switch type {
+        case .none: return L("None|transition")
+        case .dissolve: return L("Dissolve")
+        case .pushLeft: return L("Push Left")
+        case .pushRight: return L("Push Right")
+        case .pushUp: return L("Push Up")
+        case .pushDown: return L("Push Down")
+        case .sheet: return L("Bottom Sheet")
+        }
+    }
+
     private func replaceImage() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg]
-        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.cgImage(data) != nil else { return }
+        panel.allowedContentTypes = [.png, .jpeg, .svg]
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.imageSize(data) != nil else { return }
         update("Replace Image") { $0.image?.data = data }
     }
 }

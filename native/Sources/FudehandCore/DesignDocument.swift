@@ -62,7 +62,7 @@ public struct DesignText: Hashable, Sendable {
 public enum ImageFit: String, Sendable, CaseIterable { case fill, fit, stretch }
 
 public struct DesignImage: Equatable, Sendable {
-    /// Raw PNG or JPEG bytes; saved in files as base64.
+    /// Raw PNG, JPEG, or SVG bytes; saved in files as base64. SVG keeps its source and is rasterized when drawn.
     public var data: Data
     public var fit: ImageFit
     public init(data: Data, fit: ImageFit = .fill) { self.data = data; self.fit = fit }
@@ -99,6 +99,32 @@ public struct Sizing: Equatable, Sendable {
     public var vertical: SizingMode
     public init(horizontal: SizingMode = .fixed, vertical: SizingMode = .fixed) { self.horizontal = horizontal; self.vertical = vertical }
     public static let fixed = Sizing()
+}
+
+/// How a prototype transition moves between frames. A push names the direction the content travels: `push-left` brings the
+/// destination in from the right edge. `sheet` slides the destination up from the bottom over the current frame.
+public enum TransitionType: String, Sendable, CaseIterable {
+    case none, dissolve, pushLeft = "push-left", pushRight = "push-right", pushUp = "push-up", pushDown = "push-down", sheet
+}
+
+public enum TransitionEasing: String, Sendable, CaseIterable { case linear, easeIn = "ease-in", easeOut = "ease-out", easeInOut = "ease-in-out" }
+
+public struct PrototypeTransition: Equatable, Sendable {
+    public var type: TransitionType
+    /// Seconds.
+    public var duration: Double
+    public var easing: TransitionEasing
+    public init(type: TransitionType = .none, duration: Double = 0.3, easing: TransitionEasing = .easeOut) {
+        self.type = type; self.duration = duration; self.easing = easing
+    }
+    public static let maximumDuration = 10.0
+}
+
+/// A layer's click interaction in a prototype: go to a top-level frame, or back to the frame shown before it.
+/// Going back replays, in reverse, the transition that arrived at the current frame.
+public enum DesignInteraction: Equatable, Sendable {
+    case navigate(destination: String, transition: PrototypeTransition)
+    case back
 }
 
 public enum NodeType: String, Sendable, CaseIterable {
@@ -140,6 +166,7 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var text: DesignText?
     public var image: DesignImage?
     public var layout: AutoLayout?
+    public var interaction: DesignInteraction?
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -159,7 +186,8 @@ public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
-    public static let formatVersion = 1
+    /// 2 added layer interactions; version 1 files open unchanged and are written as version 2.
+    public static let formatVersion = 2
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]

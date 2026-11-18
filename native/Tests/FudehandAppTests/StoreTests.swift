@@ -85,7 +85,7 @@ private func temporaryFile() -> URL {
     #expect(saved["dirty"] as? Bool == false && saved["file"] as? String == url.path)
     let expected = store.editor.document
     let text = try String(contentsOf: url, encoding: .utf8)
-    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 1"))
+    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 2"))
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "ellipse"])))
     #expect(await failure(store, .newDocument(discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
@@ -357,4 +357,55 @@ private func temporaryFile() -> URL {
     try relaunched.open(a)
     #expect(relaunched.chat.tabs.map(\.id) == [inA])
     #expect(relaunched.chat.transcript.entries.first?.text == "About A")
+}
+
+@Test @MainActor func agentSetsInteractionsOnlyToTopLevelFrames() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "home", "type": "frame", "children": [["id": "button", "type": "rectangle"], ["id": "inner", "type": "frame"]],
+    ])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "detail", "type": "frame"])))
+    let updated = try await control(store, .updateNode("button", changes: JSONObject([
+        "interaction": ["action": "navigate", "destination": "detail", "transition": ["type": "dissolve"]],
+    ])))
+    let interaction = try #require(updated["interaction"] as? [String: Any])
+    #expect(interaction["destination"] as? String == "detail")
+    #expect(store.editor.document.node("button")?.interaction == .navigate(destination: "detail", transition: PrototypeTransition(type: .dissolve)))
+    #expect(await failure(store, .updateNode("button", changes: JSONObject(["interaction": ["action": "navigate", "destination": "inner"]])))
+            == "Layer button: interaction.destination inner is not a top-level frame")
+    #expect(await failure(store, .createNode(parent: "home", index: nil, node: JSONObject([
+        "type": "rectangle", "interaction": ["action": "navigate", "destination": "missing"],
+    ])))?.hasSuffix("interaction.destination missing is not a top-level frame") == true)
+    // Undo takes the interaction away like any other edit.
+    store.undo()
+    #expect(store.editor.document.node("button")?.interaction == nil)
+}
+
+@Test @MainActor func playbackStartsFromTheSelectedFrame() async throws {
+    let store = makeStore()
+    #expect(store.prototypeStart == nil)
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame"])))
+    #expect(store.prototypeStart == "a")
+    store.setSelection(["b"])
+    #expect(store.prototypeStart == "b")
+    store.setSelection(["c"])
+    #expect(store.prototypeStart == "a")
+}
+
+/// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
+/// are not recomputed (#142).
+@Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {
+    let store = makeStore()
+    store.replace(DesignDocument(nodes: [DesignNode(id: "a", type: .rectangle), DesignNode(id: "b", type: .rectangle)]), url: nil)
+    var storeChanges = 0, selectionChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 },
+                     store.layerSelection.objectWillChange.sink { selectionChanges += 1 }]
+    store.setSelection(["a"])
+    store.canvasSelect(["a", "b"])
+    store.setSelection(["a", "b"])
+    #expect(store.selection == ["a", "b"] && store.layerSelection.ids == ["a", "b"])
+    #expect(selectionChanges == 2)
+    #expect(storeChanges == 0)
+    _ = observers
 }
