@@ -7,7 +7,7 @@ import { styleTools } from './style-library.mjs'
 /**
  * The only tool implementation, shared by the MCP server and the in-App Agent harness. Every tool is forwarded through the local control channel to the running App;
  * the App is the sole owner of the design document, and field validation happens in one place only, the App (Swift).
- * The style library tools are the exception: they read reference files and never touch the document (ADR 0007).
+ * The style library tools are the exception: they read reference files and never touch the document (ADR 0008).
  */
 
 const json = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] })
@@ -21,7 +21,7 @@ const absolute = (path, root) => {
   return isAbsolute(path) ? path : resolve(root, path)
 }
 
-/** Reads the PNG/JPEG that `image.path` points to in a node (and its children) into a base64 `image.data`. */
+/** Reads the PNG, JPEG, or SVG that `image.path` points to in a node (and its children) into a base64 `image.data`. */
 async function inlineImages(value, root) {
   if (Array.isArray(value)) return Promise.all(value.map(item => inlineImages(item, root)))
   if (!value || typeof value !== 'object') return value
@@ -41,9 +41,10 @@ const NODE_GUIDE = [
   'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/group), name, x, y, width, height, ',
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent; a group ignores fill and stretch and keeps the size of its children), ',
-  'text {content, fontSize, fontWeight integer 100–900, fontFamily, color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
-  'image {path (~ expands to the home directory) or data (base64), fit fill/fit/stretch} (required for image), ',
+  'text {content, fontSize, fontWeight integer 100–900, fontFamily (a family from design_list_fonts; any other falls back to the system font), color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
+  'image {path to a PNG, JPEG, or SVG file (~ expands to the home directory) or data (base64 of one), fit fill/fit/stretch} (required for image; an SVG stays vector and is drawn sharp at any zoom), ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
+  'interaction (prototype click interaction, any layer): {action: "navigate", destination: <top-level frame id>, transition {type none/dissolve/push-left/push-right/push-up/push-down/sheet, duration seconds 0–10 (default 0.3), easing linear/ease-in/ease-out/ease-in-out (default ease-out)}} or {action: "back"}, which returns to the previous frame playing its transition in reverse; a push names the direction the content travels (push-left brings the destination in from the right), and sheet slides it up from the bottom. ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
 
@@ -77,7 +78,7 @@ export const tools = [
     }, ['node'],
     async (args, root) => ({ ...args, node: await inlineImages(args.node, root) })),
   controlTool('design_update_node', 'update_node',
-    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, and a null value clears that field. id, type, and children cannot be changed.',
+    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, interaction is replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction to make a layer clickable in prototype playback (see design_create_node for its fields).',
     { ...id, changes: { type: 'object', description: 'Fields to change' } }, ['id', 'changes'],
     async (args, root) => ({ ...args, changes: await inlineImages(args.changes, root) })),
   controlTool('design_delete_nodes', 'delete_nodes', 'Delete layers and their child layers, as a single undo step.', ids),
@@ -94,6 +95,10 @@ export const tools = [
   controlTool('canvas_focus_node', 'focus_node', 'Move and zoom the viewport to the given layer.', id),
   controlTool('canvas_fit_all', 'fit_all', 'Zoom the viewport to show all layers.'),
   controlTool('canvas_zoom', 'zoom', 'Zoom to the given scale around the center of the canvas (1 is actual size, range 0.05–4).', { scale: { type: 'number' } }),
+  controlTool('design_list_fonts', 'list_fonts', 'List the font families that text.fontFamily can use: those installed on this Mac (source system) and those imported into the Fudehand font library (source imported).'),
+  controlTool('design_import_font', 'import_font', 'Import a font file (.ttf, .otf, or .ttc) into the Fudehand font library, which makes it available to Fudehand only, and return its font families.',
+    path('Font file path; ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), ['path'],
+    async (args, root) => ({ ...args, path: absolute(args.path, root) })),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',

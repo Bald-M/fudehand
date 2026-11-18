@@ -5,7 +5,7 @@ import { join } from 'node:path'
 /**
  * The style library: reference files the Agent reads when the user names a style (see styles/README.md).
  * Unlike the design tools these never touch the design document, so they run in Node and do not go through the
- * App's control channel (ADR 0007).
+ * App's control channel (ADR 0008).
  */
 const STYLES = fileURLToPath(new URL('../styles/', import.meta.url))
 const SLUG = /^[a-z0-9-]+$/

@@ -4,8 +4,8 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "children"]
-    /// The nested objects that are merged field by field on update.
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "children"]
+    /// The nested objects that are merged field by field on update. `interaction` is not one of them: an update replaces it whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -158,7 +158,7 @@ public enum DesignJSON {
             try image.checkKeys(["data", "fit"])
             let encoded = try image.string("data")
             guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), isImage(data) else {
-                throw reader.fail("image.data must be a base64-encoded PNG or JPEG")
+                throw reader.fail("image.data must be a base64-encoded PNG, JPEG, or SVG")
             }
             node.image = DesignImage(data: data, fit: try image.choice("fit", default: .fill))
         }
@@ -176,6 +176,9 @@ public enum DesignJSON {
                                      align: try layout.choice("align", default: .start),
                                      crossAlign: try layout.choice("crossAlign", default: .start))
         }
+        if let interaction = try reader.child("interaction") {
+            node.interaction = try self.interaction(interaction)
+        }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
@@ -183,9 +186,51 @@ public enum DesignJSON {
         return node
     }
 
+    static func interaction(_ reader: Reader) throws -> DesignInteraction {
+        let action = try reader.string("action")
+        switch action {
+        case "back":
+            try reader.checkKeys(["action"])
+            return .back
+        case "navigate":
+            try reader.checkKeys(["action", "destination", "transition"])
+            let destination = try reader.string("destination")
+            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
+            var transition = PrototypeTransition()
+            if let value = try reader.child("transition") {
+                try value.checkKeys(["type", "duration", "easing"])
+                transition = PrototypeTransition(type: try value.choice("type", default: .none),
+                                                 duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
+                                                 easing: try value.choice("easing", default: .easeOut))
+            }
+            return .navigate(destination: destination, transition: transition)
+        default:
+            throw reader.fail("\(reader.name("action")) must be one of navigate, back; got \(action)")
+        }
+    }
+
     static func isImage(_ data: Data) -> Bool {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
-        return CGImageSourceGetCount(source) > 0
+        if let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 { return true }
+        return isSVG(data)
+    }
+
+    /// Whether the data is well-formed XML whose root element is `svg`. ImageIO does not read SVG, and drawing it needs AppKit, so this
+    /// only checks the structure: an SVG the system cannot draw passes and shows up blank.
+    public static func isSVG(_ data: Data) -> Bool {
+        let parser = XMLParser(data: data)
+        // Reports the local name, so a root written as `<svg:svg xmlns:svg="…">` is recognized too.
+        parser.shouldProcessNamespaces = true
+        let root = RootElement()
+        parser.delegate = root
+        return parser.parse() && root.name == "svg"
+    }
+
+    private final class RootElement: NSObject, XMLParserDelegate {
+        var name: String?
+        func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName: String?,
+                    attributes: [String: String] = [:]) {
+            if name == nil { name = elementName }
+        }
     }
 
     // MARK: Writing
@@ -218,6 +263,13 @@ public enum DesignJSON {
                                 "padding": ["top": layout.padding.top, "right": layout.padding.right,
                                             "bottom": layout.padding.bottom, "left": layout.padding.left],
                                 "align": layout.align.rawValue, "crossAlign": layout.crossAlign.rawValue]
+        }
+        switch node.interaction {
+        case .navigate(let destination, let transition):
+            object["interaction"] = ["action": "navigate", "destination": destination,
+                                     "transition": ["type": transition.type.rawValue, "duration": transition.duration, "easing": transition.easing.rawValue]]
+        case .back: object["interaction"] = ["action": "back"]
+        case nil: break
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

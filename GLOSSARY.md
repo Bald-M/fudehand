@@ -11,7 +11,7 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 
 **Project file (工程文件 / 專案檔)**: The file a design document is saved as, with the extension `.fudehand`; its content is public JSON with a format name (`fudehand.design`) and a format version.
 
-**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer.
+**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer. An image layer holds PNG, JPEG, or SVG data; SVG is kept as source and drawn sharp at any zoom.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
@@ -21,13 +21,28 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
 
+**Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
+
+**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, or *Back* (返回 / 返回) to the frame shown before. Saved on the layer in the project file.
+_Avoid_: link, hotspot, action (an interaction's *Action* is only its navigate-or-back choice)
+
+**Transition (转场 / 轉場)**: How the prototype window moves from one frame to the next: None, Dissolve (淡入淡出), Push Left/Right/Up/Down (向左/右/上/下推入), or Bottom Sheet (底部弹出 / 底部彈出), with a duration and an easing. Back plays it in reverse.
+_Avoid_: animation (reserved for a layer's own animation, #151)
+
+**Prototype window (原型窗口 / 原型視窗)**: The separate window opened by *Play Prototype (播放原型)* that plays the prototype at the frames' actual size; clicks there trigger interactions instead of selecting layers.
+_Avoid_: preview mode, present mode
+
 **Canvas (画布 / 畫布)**: The pannable, zoomable workspace that displays the design document.
 
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
 **Properties panel (属性面板 / 屬性面板)**: The Design (设计) tab of the right inspector, which edits the selected layer's position, size, fill, stroke, text, and auto layout.
 
+**Font library (字体库 / 字體庫)**: The directory `~/Library/Application Support/fudehand/Fonts` holding font files imported with *Import Font…* or `design_import_font`. Its fonts are registered for the App only, not installed on the system, and not stored in project files: a project file opened on a Mac without the font falls back to the system font.
+
 **MCP server**: A local tool process (`scripts/mcp-server.mjs`) that external AI agents (Claude Code, Codex, DeepSeek Harness, and others) start on demand; it forwards design tools to the running App.
+
+**Agent parity**: The rule that every App feature a person can use, settings included, is also an Agent tool ([ADR 0007](docs/adr/0007-agent-parity.md), `docs/agent-tools.md`).
 
 **Launch window (启动窗口 / 啟動視窗)**: The window shown when the App starts, with three areas: New, Recent, and Templates. It closes once editing begins and can be reopened from *Window → Launch Window (窗口 › 启动窗口)*.
 _Avoid_: welcome page (欢迎页), home page (首页)

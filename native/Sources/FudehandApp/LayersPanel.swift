@@ -72,8 +72,11 @@ struct LayersPanel: View {
     }
 
     private func rowView(_ row: Row) -> some View {
+        SelectionReader(selection: store.layerSelection, id: row.id) { selected in rowView(row, selected: selected) }
+    }
+
+    private func rowView(_ row: Row, selected: Bool) -> some View {
         let node = row.node
-        let selected = store.selection.contains(node.id)
         return HStack(spacing: 4) {
             Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
             Button { toggleCollapsed(node.id) } label: {
@@ -178,6 +181,15 @@ struct LayersPanel: View {
         let count = (parent.flatMap { document.node($0)?.children } ?? document.nodes).count
         store.edit(toTop ? "Bring to Front" : "Send to Back") { try $0.move(id, parent: parent, index: toTop ? count - 1 : 0) }
     }
+}
+
+/// Observes the selection on its own, so selecting redraws only the rows on screen, not the whole panel (#142).
+private struct SelectionReader<Content: View>: View {
+    @ObservedObject var selection: LayerSelection
+    let id: String
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View { content(selection.ids.contains(id)) }
 }
 
 /// Observes the hover on its own, so moving the pointer redraws only row backgrounds, not the whole panel.

@@ -13,8 +13,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Added
 
 - A style library for the Agent: when you name a style or ask for a design like a known product (for example Linear, Stripe, or Notion), the Agent reads that style's colors, fonts, type scale, spacing, and corner radius before building, and says so when the library has none. Ten styles are included, adapted from VoltAgent/awesome-design-md with macOS fonts; they are third-party analyses, not official brand systems. Both the chat panel and the MCP server get the new `style_list` and `style_read` tools.
+- A *Font* menu in the text section of the properties panel, listing *System Default*, the installed font families, and those in the font library; a family the Mac does not have is shown as missing. *Import Font…* adds `.ttf`, `.otf`, and `.ttc` files to the font library, which only Fudehand uses. Agents get `design_list_fonts` and `design_import_font`.
 - Next-message prediction in the chat panel: after a reply ends, the empty input shows the message you are likely to send next as its placeholder, and Tab puts it in the input to edit or send. The prediction is a separate short model request that is kept out of the conversation.
 - Chat panel: a context ring in the input shows how much of the model's context window the conversation takes up, with the numbers on hover; it turns orange and then red near the limit and follows the selected model. The window comes from the provider's model list, so use *Reload Model List* once to fill it in (#104).
+- Image layers accept SVG as well as PNG and JPEG, for brand icons and other vector art. *Canvas → Insert Image…*, the inspector's replace-image button, and the Agent's `image.path` / `image.data` take `.svg`; the SVG source is saved in the project file unchanged and redrawn sharp as you zoom in. A new SVG layer starts at the size the SVG declares (#148).
 - Chat panel: sending `/compact` replaces the earlier messages the model sees with a summary, so a long conversation can continue; the messages stay in the panel, under a *Context compacted* row that shows the summary (#104).
 
 ### Changed
@@ -22,6 +24,11 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Conversations now belong to the design document they were held about. Opening a project file restores its conversation tabs, with their messages and each conversation's model, and no other document's conversations are shown; an untitled document keeps its conversations until it is replaced or the App quits, and takes them along on its first save. Conversations saved by earlier versions are not attached to any document and no longer appear in *Conversation history*.
 - **Breaking:** the product is renamed from ui-atlas to Fudehand. The App is now `Fudehand.app` (bundle identifier `local.fudehand.native`), project files use the `.fudehand` extension, the MCP server is registered as `fudehand`, the control channel and saved conversations live under `~/Library/Application Support/fudehand`, and the `UI_ATLAS_*` environment variables are now `FUDEHAND_*`. Nothing is migrated: rename existing `.uiatlas` files to `.fudehand` to open them, reconnect Agents in *MCP Connectors…*, and enter API keys again in *Model settings*. Earlier entries below keep the old name.
 - The app icon is now an ink-wash painting: mountains receding in three ink tones under a red sun.
+- Selecting a layer is faster, most noticeably in large documents: the properties panel keeps its controls when the selection moves to another layer instead of rebuilding them, and only the layer rows on screen and the inspector redraw. On a 5,100-layer document a selection now settles in about 10 ms instead of about 40 ms. `pnpm bench:native` also measures it.
+
+### Fixed
+
+- `design_snapshot` drew image layers upside down; images now appear upright in snapshots.
 
 ## [0.0.3] - 2026-11-18
 

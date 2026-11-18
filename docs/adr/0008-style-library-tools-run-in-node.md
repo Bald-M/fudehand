@@ -4,6 +4,8 @@
 
 Unlike every other tool, they do not go through the control channel: they read files in this checkout from the Node process and never touch the design document. ADR 0006 makes the App the only owner of the design document; reference material that is not part of the document does not need the App, and the tools work when it is not running. `style_read` accepts only a name from the list (lowercase letters, digits, hyphens), so it cannot read anything outside `styles/`.
 
+This is the one exception to rule 2.2 in [Agent tools](../agent-tools.md) ([ADR 0007](0007-agent-parity.md)) that a tool forwards to the App: the style library is not an App feature a person uses, only reference material for the Agent, so there is no store method for the tool to share with the UI. The tools use their own `style_*` namespace and are listed in that document's coverage table.
+
 ## Rejected Alternatives
 
 - **Bundle the styles in the App and serve them over the control channel**: adds a protocol command and Swift code for read-only text that the App never uses itself, and ties the tools to the App running.
