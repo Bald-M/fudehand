@@ -103,3 +103,43 @@ private func laidOut(_ node: DesignNode) -> DesignNode {
     #expect(result.frame == Rect(x: 120, y: 130, width: 40, height: 20))
     #expect(result.children.map { Point(x: $0.x, y: $0.y) } == [Point(x: 0, y: 0), Point(x: 30, y: 10)])
 }
+
+private func group(_ id: String, sizing: Sizing = .fixed, children: [DesignNode]) -> DesignNode {
+    var group = DesignNode(id: id, type: .group, width: 0, height: 0)
+    group.sizing = sizing
+    group.children = children
+    return group
+}
+
+@Test func fillGroupKeepsItsChildUnion() {
+    let filling = group("g", sizing: Sizing(horizontal: .fill, vertical: .fill), children: [box("a", 40, 40)])
+    let frame = laidOut(autoFrame(AutoLayout(direction: .horizontal, spacing: 10), width: 300, height: 100,
+                                  children: [filling, box("b", 50, 50)]))
+    #expect(frame.children[0].frame == Rect(x: 0, y: 0, width: 40, height: 40))
+    #expect(frame.children[0].children[0].frame == Rect(x: 0, y: 0, width: 40, height: 40))
+    #expect(frame.children[1].x == 50)
+}
+
+@Test func fillGroupWithOffsetChildrenKeepsItsChildUnion() {
+    var a = box("a", 40, 20), b = box("b", 10, 10)
+    a.x = 20; a.y = 30; b.x = 70; b.y = 40
+    let filling = group("g", sizing: Sizing(horizontal: .fill, vertical: .fill), children: [a, b])
+    let frame = laidOut(autoFrame(AutoLayout(direction: .horizontal, padding: EdgeInsets(top: 5, left: 5)), width: 300, children: [filling]))
+    #expect(frame.children[0].frame == Rect(x: 5, y: 5, width: 60, height: 20))
+    #expect(frame.children[0].children.map(\.frame) == [Rect(x: 0, y: 0, width: 40, height: 20), Rect(x: 50, y: 10, width: 10, height: 10)])
+}
+
+@Test func fillGroupDoesNotTakeSpaceFromFillSiblings() {
+    var sibling = box("b", 10, 10)
+    sibling.sizing.horizontal = .fill
+    let filling = group("g", sizing: Sizing(horizontal: .fill, vertical: .fixed), children: [box("a", 40, 40)])
+    let frame = laidOut(autoFrame(AutoLayout(direction: .horizontal), width: 300, children: [filling, sibling]))
+    #expect(frame.children.map(\.width) == [40, 260])
+}
+
+@Test func stretchedGroupKeepsItsChildUnion() {
+    let frame = laidOut(autoFrame(AutoLayout(direction: .vertical, crossAlign: .stretch), width: 300,
+                                  children: [group("g", children: [box("a", 40, 40)]), box("b", 50, 50)]))
+    #expect(frame.children[0].frame == Rect(x: 0, y: 0, width: 40, height: 40))
+    #expect(frame.children[1].width == 300)
+}

@@ -78,9 +78,12 @@ public enum DesignLayout {
             let innerPrimary = horizontal ? node.width - padding.left - padding.right : node.height - padding.top - padding.bottom
             let innerCross = horizontal ? node.height - padding.top - padding.bottom : node.width - padding.left - padding.right
             let indices = node.children.indices.filter { node.children[$0].visible }
-            func fillsPrimary(_ child: DesignNode) -> Bool { (horizontal ? child.sizing.horizontal : child.sizing.vertical) == .fill }
+            // A group's size always equals the union of its child layers, so it ignores fill and stretch (#60).
+            func fillsPrimary(_ child: DesignNode) -> Bool {
+                child.type != .group && (horizontal ? child.sizing.horizontal : child.sizing.vertical) == .fill
+            }
             func fillsCross(_ child: DesignNode) -> Bool {
-                layout.crossAlign == .stretch || (horizontal ? child.sizing.vertical : child.sizing.horizontal) == .fill
+                child.type != .group && (layout.crossAlign == .stretch || (horizontal ? child.sizing.vertical : child.sizing.horizontal) == .fill)
             }
             let gaps = layout.spacing * Double(max(indices.count - 1, 0))
             let fixedTotal = indices.filter { !fillsPrimary(node.children[$0]) }
