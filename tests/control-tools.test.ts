@@ -31,6 +31,20 @@ describe('design tools', () => {
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
 
+  it('describes interactions and forwards them to the App unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['interaction', 'navigate', 'back', 'destination', 'push-left', 'sheet', 'ease-in-out'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('interaction is replaced whole')
+    const fake = await app(echo)
+    const interaction = { action: 'navigate', destination: 'detail', transition: { type: 'push-left', duration: 0.3 } }
+    await callTool('design_update_node', { id: 'a', changes: { interaction } }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'update_node', args: { id: 'a', changes: { interaction } } },
+    ])
+    await fake.close()
+  })
+
   it('forwards the command and the defined arguments to the App', async () => {
     const fake = await app(echo)
     const ctx = { root: '/repo', socketPath: fake.socketPath }

@@ -42,6 +42,7 @@ const NODE_GUIDE = [
   'text {content, fontSize, fontWeight integer 100–900, fontFamily (a family from design_list_fonts; any other falls back to the system font), color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
   'image {path to a PNG, JPEG, or SVG file (~ expands to the home directory) or data (base64 of one), fit fill/fit/stretch} (required for image; an SVG stays vector and is drawn sharp at any zoom), ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
+  'interaction (prototype click interaction, any layer): {action: "navigate", destination: <top-level frame id>, transition {type none/dissolve/push-left/push-right/push-up/push-down/sheet, duration seconds 0–10 (default 0.3), easing linear/ease-in/ease-out/ease-in-out (default ease-out)}} or {action: "back"}, which returns to the previous frame playing its transition in reverse; a push names the direction the content travels (push-left brings the destination in from the right), and sheet slides it up from the bottom. ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
 
@@ -75,7 +76,7 @@ export const tools = [
     }, ['node'],
     async (args, root) => ({ ...args, node: await inlineImages(args.node, root) })),
   controlTool('design_update_node', 'update_node',
-    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, and a null value clears that field. id, type, and children cannot be changed.',
+    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, interaction is replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction to make a layer clickable in prototype playback (see design_create_node for its fields).',
     { ...id, changes: { type: 'object', description: 'Fields to change' } }, ['id', 'changes'],
     async (args, root) => ({ ...args, changes: await inlineImages(args.changes, root) })),
   controlTool('design_delete_nodes', 'delete_nodes', 'Delete layers and their child layers, as a single undo step.', ids),

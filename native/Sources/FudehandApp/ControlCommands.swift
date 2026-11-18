@@ -15,12 +15,22 @@ extension FudehandStore {
         case .createNode(let parent, let index, let object):
             var existing = editor.document.allIDs()
             let node = try DesignJSON.node(from: DesignDocument.assigningIDs(object.value, existing: &existing))
-            try perform("Agent: Create Layers") { try $0.insert(node, parent: parent, index: index) }
+            try perform("Agent: Create Layers") { document in
+                try document.insert(node, parent: parent, index: index)
+                try Prototype.checkDestinations(of: node, in: document)
+            }
             var ids: [String] = []
             DesignDocument(nodes: [node]).forEach { ids.append($0.id) }
             return ["id": node.id, "ids": ids, "node": DesignJSON.object(try requireNode(node.id), includeImageData: false)]
         case .updateNode(let id, let changes):
-            try perform("Agent: Update Layer") { try $0.update(id) { try DesignJSON.apply(changes.value, to: &$0) } }
+            try perform("Agent: Update Layer") { document in
+                try document.update(id) { try DesignJSON.apply(changes.value, to: &$0) }
+                if changes.value["interaction"] != nil, let node = document.node(id) {
+                    var shallow = node
+                    shallow.children = []
+                    try Prototype.checkDestinations(of: shallow, in: document)
+                }
+            }
             return DesignJSON.object(try requireNode(id), includeImageData: false)
         case .deleteNodes(let ids):
             try perform("Agent: Delete Layers") { try $0.delete(Set(ids)) }

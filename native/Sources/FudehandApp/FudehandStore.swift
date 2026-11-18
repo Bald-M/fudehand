@@ -79,6 +79,10 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var recents: RecentDocuments
     /// Shows the editor window and closes the launch window; registered by a view in a window after it gets the actions from the environment.
     var presentEditor: () -> Void = {}
+    /// What the prototype window plays; set by Play Prototype.
+    @Published private(set) var prototypeRequest: PrototypeRequest?
+    /// Shows the prototype window; registered the same way as `presentEditor`.
+    var presentPrototype: () -> Void = {}
 
     /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
     private let chatRoot: URL?
@@ -214,6 +218,17 @@ final class FudehandStore: ObservableObject {
         } catch {
             alert = error.localizedDescription
         }
+    }
+
+    // MARK: Prototype
+
+    /// The frame Play Prototype starts from: the top-level frame holding the selection, otherwise the first top-level frame.
+    var prototypeStart: String? { Prototype.startFrame(in: editor.document, selection: selection) }
+
+    func playPrototype() {
+        guard let start = prototypeStart else { alert = L("Add a frame to play the prototype."); return }
+        prototypeRequest = PrototypeRequest(start: start, token: (prototypeRequest?.token ?? 0) + 1)
+        presentPrototype()
     }
 
     // MARK: Fonts

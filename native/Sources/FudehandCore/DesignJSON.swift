@@ -4,8 +4,8 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "children"]
-    /// The nested objects that are merged field by field on update.
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "children"]
+    /// The nested objects that are merged field by field on update. `interaction` is not one of them: an update replaces it whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -176,11 +176,37 @@ public enum DesignJSON {
                                      align: try layout.choice("align", default: .start),
                                      crossAlign: try layout.choice("crossAlign", default: .start))
         }
+        if let interaction = try reader.child("interaction") {
+            node.interaction = try self.interaction(interaction)
+        }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
         }
         return node
+    }
+
+    static func interaction(_ reader: Reader) throws -> DesignInteraction {
+        let action = try reader.string("action")
+        switch action {
+        case "back":
+            try reader.checkKeys(["action"])
+            return .back
+        case "navigate":
+            try reader.checkKeys(["action", "destination", "transition"])
+            let destination = try reader.string("destination")
+            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
+            var transition = PrototypeTransition()
+            if let value = try reader.child("transition") {
+                try value.checkKeys(["type", "duration", "easing"])
+                transition = PrototypeTransition(type: try value.choice("type", default: .none),
+                                                 duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
+                                                 easing: try value.choice("easing", default: .easeOut))
+            }
+            return .navigate(destination: destination, transition: transition)
+        default:
+            throw reader.fail("\(reader.name("action")) must be one of navigate, back; got \(action)")
+        }
     }
 
     static func isImage(_ data: Data) -> Bool {
@@ -237,6 +263,13 @@ public enum DesignJSON {
                                 "padding": ["top": layout.padding.top, "right": layout.padding.right,
                                             "bottom": layout.padding.bottom, "left": layout.padding.left],
                                 "align": layout.align.rawValue, "crossAlign": layout.crossAlign.rawValue]
+        }
+        switch node.interaction {
+        case .navigate(let destination, let transition):
+            object["interaction"] = ["action": "navigate", "destination": destination,
+                                     "transition": ["type": transition.type.rawValue, "duration": transition.duration, "easing": transition.easing.rawValue]]
+        case .back: object["interaction"] = ["action": "back"]
+        case nil: break
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

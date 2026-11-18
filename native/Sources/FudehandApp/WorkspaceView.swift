@@ -38,6 +38,8 @@ struct WorkspaceView: View {
                 .help(L("Zoom In (⌘+)")).accessibilityLabel(L("Zoom In"))
             Button { store.fitAll() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .help(L("Fit All (⌘0)")).accessibilityLabel(L("Fit All"))
+            Button { store.playPrototype() } label: { Image(systemName: "play.fill") }
+                .help(L("Play Prototype (⌥⌘↩)")).accessibilityLabel(L("Play Prototype"))
             Menu {
                 Picker(L("Appearance"), selection: $store.theme) {
                     Text(L("System")).tag("system")
