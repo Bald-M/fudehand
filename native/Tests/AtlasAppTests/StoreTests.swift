@@ -235,3 +235,28 @@ private func temporaryFile() -> URL {
     // Read the suite's own domain; `stringArray(forKey:)` would fall through to the system languages.
     #expect((defaults.persistentDomain(forName: suite)?["AppleLanguages"] as? [String])?.first == "en-US")
 }
+
+@Test @MainActor func returningToTheSavedContentClearsTheEditedState() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "box", "type": "rectangle", "x": 10, "y": 20])))
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    _ = try await control(store, .saveDocument(url.path))
+    #expect(!store.isDirty)
+
+    // Dragging a layer away and back to where it started leaves the content as saved.
+    store.canvasBeginGesture("Move")
+    store.canvasMove(["box": Point(x: 50, y: 60)])
+    #expect(store.isDirty)
+    store.canvasMove(["box": Point(x: 10, y: 20)])
+    store.canvasEndGesture()
+    #expect(!store.isDirty)
+
+    // Undoing an edit back to the saved content.
+    _ = try await control(store, .updateNode("box", changes: JSONObject(["x": 99])))
+    #expect(store.isDirty)
+    _ = try await control(store, .undo)
+    #expect(!store.isDirty)
+    _ = try await control(store, .redo)
+    #expect(store.isDirty)
+}
