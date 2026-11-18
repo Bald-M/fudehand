@@ -17,12 +17,15 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Chat panel: conversations are saved on this Mac (`~/Library/Application Support/ui-atlas/chats`) and reopened after a relaunch; the header has *New conversation* and a *Conversation history* menu (#29).
 - Chat panel: the selected layers appear above the input as removable context tags and are passed to the Agent with the message (#29).
 - Chat panel: *Copy message* and *Regenerate* on assistant replies, and *Edit and resend* on the last user message (#29).
+- Chat panel: *Model settings* lists every model provider with its own API key, base URL, and model, and *Test* checks a key; the model menu lists every provider that has a key and switches provider and model in one step (#133).
 
 ### Changed
 
 - Dragging and hovering on the canvas stay fast in large documents: layers are looked up in an index built once per document change instead of by searching the whole tree for each one. On a 5,100-layer document a drag event drops from about 39 ms to under 4 ms and a hover hit test from 0.65 ms to 0.01 ms; `pnpm bench:native` reruns the measurement (#52).
 - Chat panel: a tool call and its result are one card with a running, succeeded, or failed state, opening to show the arguments and the result; consecutive calls fold into "Ran N steps" (#29).
 - Chat panel: the input is a bordered box that grows up to 8 lines, with the model menu and the send button below it. Return sends and Shift-Return starts a new line (#29).
+- Chat panel: model providers are shown as DeepSeek, Claude, and ChatGPT (#133).
+- Chat panel: changes in *Model settings*, including removing a key, apply only on *Save* (#133).
 - Chat panel: the transcript follows new text only while you are at the bottom, and shows *Scroll to bottom* once you scroll up (#29).
 - Chat panel: changing the model keeps the conversation; the new model is given the earlier messages (#29).
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.

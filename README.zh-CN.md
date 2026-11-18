@@ -23,7 +23,7 @@ ui-atlas 完全运行在你自己的 Mac 上。设计稿是一份由图层组成
 - **原生画布。** SwiftUI + AppKit 应用，用 Core Animation 直接渲染图层，没有 web view，也不依赖网页服务。
 - **人和 Agent 共用一份文档。** App 是设计文档的唯一持有者。你的修改和 Agent 的修改走同一个编辑器，共用一条撤销历史。
 - **给 Agent 用的设计工具。** Claude Code、Codex 或任何 MCP 客户端都能通过 MCP server 读取、创建和修改图层，再截图核对结果。
-- **内置对话面板。** 在 App 里直接让模型搭建或修改界面，支持 DeepSeek、Anthropic Claude 和 OpenAI，使用你自己的 API key。
+- **内置对话面板。** 在 App 里直接让模型搭建或修改界面，支持 DeepSeek、Claude 和 ChatGPT，使用你自己的 API key（ChatGPT 需要 OpenAI API key）。
 - **公开的文件格式。** `.uiatlas` 是带版本号的 JSON，可以直接阅读、对比，也可以放进 Git。
 - **四种界面语言。** 美式英语（默认）、英式英语、简体中文和繁体中文。
 
@@ -110,17 +110,17 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 
 打开右侧检查器的“对话”标签（⇧⌘A），就可以直接让模型搭建或修改界面。每次工具调用及其结果都显示在面板里，可以展开查看。回复进行中可以随时停止，停止后不会再执行工具调用。
 
-在“模型设置”里选择模型提供方并填入 API key：
+在“模型设置”里，每个模型提供方都单独列出，各有自己的 key、接口地址和模型；为某个提供方填入 API key，用“测试”检查它，再按“用于对话”让对话使用它（输入框下方的模型菜单也能在已有 key 的提供方之间切换）。修改在按下“保存”后生效。ChatGPT 需要 OpenAI API key；ChatGPT 订阅不包含 API key。
 
 | 模型提供方 | 接口 | 默认接口地址 | 默认模型 |
 | --- | --- | --- | --- |
 | DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-chat` |
-| Anthropic Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
-| OpenAI | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
+| Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
+| ChatGPT | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
 “模型”和“接口地址”留空时使用上表的默认值。其他兼容 OpenAI Chat Completions 的服务，请选择 DeepSeek，再填入自己的接口地址和模型名。
 
-Anthropic Claude 和 OpenAI 能收到 `design_snapshot` 返回的图片，模型可以看到自己做出来的效果。OpenAI 兼容接口的工具结果无法携带图片，所以使用 DeepSeek 时，模型会被告知图片已省略，改为读回图层数据来检查修改。
+Claude 和 ChatGPT 能收到 `design_snapshot` 返回的图片，模型可以看到自己做出来的效果。OpenAI 兼容接口的工具结果无法携带图片，所以使用 DeepSeek 时，模型会被告知图片已省略，改为读回图层数据来检查修改。
 
 API key 只保存在本机钥匙串里（服务名 `ui-atlas.agent`）。App 通过环境变量把它传给对话程序，不会写入仓库、工程文件、偏好设置或日志。
 
