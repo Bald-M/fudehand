@@ -11,7 +11,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "AtlasCore", resources: [.process("Resources")]),
-        .executableTarget(name: "AtlasApp", dependencies: ["AtlasCore"]),
+        .executableTarget(
+            name: "AtlasApp",
+            dependencies: ["AtlasCore"],
+            swiftSettings: [.enableUpcomingFeature("InferSendableFromCaptures")]
+        ),
         .testTarget(name: "AtlasCoreTests", dependencies: ["AtlasCore"]),
         .testTarget(name: "AtlasAppTests", dependencies: ["AtlasApp", "AtlasCore"]),
     ],
