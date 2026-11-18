@@ -171,6 +171,7 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
 /**
  * Returns { model, images, turn(system, history, tools, signal, onText) → { text, toolCalls, usage? } }; images says whether tool results
  * can carry images, onText receives the reply text as it streams in, and usage is the request's token counts (see tokenUsage).
+ * With no tools the request leaves `tools` out, since the Chat Completions API rejects an empty list.
  */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
@@ -187,7 +188,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: name, messages: openaiMessages(system, history), stream: true, stream_options: { include_usage: true },
-            tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })),
+            ...(tools.length ? { tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) } : {}),
           }),
         }, signal, async stream => {
           const message = { content: '', tool_calls: [] }
@@ -235,7 +236,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model: name, instructions: system, input: responsesInput(history), store: false, stream: true,
-            tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
+            ...(tools.length ? { tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })) } : {}),
           }),
         }, signal, async stream => {
           // The closing event carries the whole response, so only the text deltas are read on the way.
@@ -270,7 +271,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
         headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: name, max_tokens: 16000, system, messages: anthropicMessages(history), stream: true,
-          tools: tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })),
+          ...(tools.length ? { tools: tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })) } : {}),
         }),
       }, signal, async stream => {
         const content = []

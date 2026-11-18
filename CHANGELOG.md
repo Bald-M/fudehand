@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- Next-message prediction in the chat panel: after a reply ends, the empty input shows the message you are likely to send next as its placeholder, and Tab puts it in the input to edit or send. The prediction is a separate short model request that is kept out of the conversation.
+
 ### Changed
 
 - **Breaking:** the product is renamed from ui-atlas to Fudehand. The App is now `Fudehand.app` (bundle identifier `local.fudehand.native`), project files use the `.fudehand` extension, the MCP server is registered as `fudehand`, the control channel and saved conversations live under `~/Library/Application Support/fudehand`, and the `UI_ATLAS_*` environment variables are now `FUDEHAND_*`. Nothing is migrated: rename existing `.uiatlas` files to `.fudehand` to open them, reconnect Agents in *MCP Connectors…*, and enter API keys again in *Model settings*. Earlier entries below keep the old name.
