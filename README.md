@@ -22,7 +22,7 @@ The current version is v0.0.2; see the [CHANGELOG](CHANGELOG.md) for changes.
 
 - **Native canvas.** A SwiftUI + AppKit app that renders layers directly with Core Animation. There is no web view and no web server.
 - **One document for people and agents.** The App is the sole owner of the design document. Your edits and an agent's edits go through the same editor and share one undo history.
-- **Design tools for agents.** An MCP server lets Claude Code, Codex, or any MCP client read, create, and change layers, then take a snapshot to check the result.
+- **Design tools for agents.** An MCP server lets Claude Code, Codex, DeepSeek Harness, or any MCP client read, create, and change layers, then take a snapshot to check the result.
 - **Built-in chat panel.** Ask a model to build or change the UI from inside the App, using DeepSeek, Anthropic Claude, or OpenAI with your own API key.
 - **Open file format.** `.uiatlas` files are versioned JSON that you can read, diff, and keep in Git.
 - **Four UI languages.** US English (the default), British English, Simplified Chinese, and Traditional Chinese.
@@ -69,7 +69,7 @@ Agents work through a set of design tools that the MCP server and the in-app cha
 
 ### Connect an agent
 
-The quickest way is *ui-atlas → MCP Connector…*. It shows whether Claude Code and Codex are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`). *Disconnect* removes the registration. An agent whose CLI is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
+The quickest way is *ui-atlas → MCP Connector…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. An agent that is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
 
 You can also set it up by hand:
 
@@ -83,6 +83,19 @@ You can also set it up by hand:
   ```
 
   Codex asks for approval before every MCP tool call, and rejects the call outright in unattended modes such as `codex exec`. To skip approval, add `default_tools_approval_mode = "approve"` to the block above. Write tools change the design document directly, so enable this only when you need it.
+
+- **DeepSeek Harness.** Add this entry to `~/.dsh/cordis.patch.yml` (the patch list every profile applies; create the file if it does not exist), using absolute paths — the desktop app does not inherit your shell's `PATH`, so `node` alone may not be found. The MCP Connectors window only recognizes the block it wrote itself, so do not also use *Connect* after adding the entry by hand:
+
+  ```yaml
+  - insert:
+      - id: mcp-ui-atlas
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: ui-atlas
+          transport: stdio
+          command: "/path/to/node"
+          args: ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+  ```
 
 The MCP server uses the repository that contains the script. Append `--root <directory>` to point it at another checkout.
 
