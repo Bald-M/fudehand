@@ -112,13 +112,13 @@ Open the *Chat* tab of the inspector (⇧⌘A) to have a model build or change t
 
 In *Model Settings*, every model provider is listed with its own key, base URL, and model; enter an API key for a provider, test it with *Test*, and press *Use for Chat* to make it the one the chat uses (the model menu under the input also switches between providers that have a key). Changes apply when you press *Save*. ChatGPT needs an OpenAI API key; a ChatGPT subscription does not include one.
 
-| Model provider | API | Default API URL | Default model |
+| Model provider | API | Default base URL | Default model |
 | --- | --- | --- | --- |
 | DeepSeek | OpenAI-compatible | `https://api.deepseek.com` | `deepseek-chat` |
 | Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | ChatGPT | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
-Leave *Model* and *API URL* empty to use the defaults above. For another service that is compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name.
+Leave *Model* and *Base URL* empty to use the defaults above. For another service that is compatible with OpenAI Chat Completions, choose DeepSeek and enter your own base URL and model name.
 
 Claude and ChatGPT receive the image that `design_snapshot` returns, so the model can look at its own work. The OpenAI-compatible API cannot carry an image in a tool result, so with DeepSeek the model is told the image was left out and checks its changes by reading the layers back instead.
 
