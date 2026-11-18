@@ -58,7 +58,7 @@ Interaction follows Figma.
 **Creating**
 
 - A toolbar floating at the bottom center of the canvas switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas (at least 1×1, so a straight-line drag still creates a visible layer), and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move. The toolbar stays centered in the canvas area as the side panels open and close and does not move with pan or zoom; clicks, drags, and scrolling on it do not reach the canvas.
-- The bottom toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG/JPEG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport.
+- The bottom toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG, JPEG, or SVG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport. A bitmap starts at half its pixel size, an SVG at its declared width and height (its `viewBox` size when it declares neither). An SVG keeps its source in the document and is rasterized again when the zoom settles or the layer grows, so it stays sharp; like other bitmaps on the canvas, its longest side is capped at 8192 pixels. The inspector's replace-image button accepts the same formats.
 
 **Navigation**
 
