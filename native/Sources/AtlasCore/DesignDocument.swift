@@ -14,7 +14,7 @@ public struct DesignColor: Hashable, Sendable {
 
     public init(hex: String) throws {
         let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : ""
-        guard digits.count == 6 || digits.count == 8, let value = UInt64(digits, radix: 16) else {
+        guard digits.count == 6 || digits.count == 8, digits.allSatisfy(\.isHexDigit), let value = UInt64(digits, radix: 16) else {
             throw DesignError("Color must be #RRGGBB or #RRGGBBAA: \(hex)")
         }
         let rgba = digits.count == 6 ? value << 8 | 0xFF : value
