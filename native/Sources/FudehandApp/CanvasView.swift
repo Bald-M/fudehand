@@ -169,6 +169,9 @@ final class FudehandCanvasView: NSView {
         refreshOverlay()
     }
 
+    /// The available fonts changed; the store follows with `show`.
+    func fontsChanged() { renderer.fontsChanged() }
+
     func setSelection(_ next: Set<String>) {
         guard next != selection else { return }
         selection = next

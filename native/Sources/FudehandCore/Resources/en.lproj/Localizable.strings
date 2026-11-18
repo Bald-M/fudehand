@@ -133,6 +133,13 @@
 "Hug contents" = "Hug contents";
 "Fill container" = "Fill container";
 "Text content" = "Text content";
+"Font" = "Font";
+"System Default" = "System Default";
+"%@ (missing)" = "%@ (missing)";
+"Import Font…" = "Import Font…";
+"Import Font" = "Import Font";
+"Not a font file: %@" = "Not a font file: %@";
+"Could not import font: %@" = "Could not import font: %@";
 "Font size" = "Font size";
 "Weight|font" = "Weight";
 "Text color" = "Text color";

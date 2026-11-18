@@ -44,6 +44,9 @@ final class FudehandStore: ObservableObject {
             defaults.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
         }
     }
+    let fontLibrary: FontLibrary
+    /// The font families text layers can use: installed on the system or imported into the font library.
+    @Published private(set) var fontFamilies: [FontFamily]
     let zoomIndicator = ZoomIndicator()
     let chat: ChatSession
     /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
@@ -80,8 +83,11 @@ final class FudehandStore: ObservableObject {
     /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
     private let chatRoot: URL?
 
-    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil) {
+    /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
+    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
         self.defaults = defaults
+        fontLibrary = FontLibrary(directory: fontDirectory)
+        fontFamilies = fontLibrary.families()
         self.chatRoot = chatRoot
         // The App starts on an untitled document. What an earlier one left behind was never saved with a file: drop it.
         let unsaved = chatRoot.map { ChatHistory.unsaved(root: $0) }
@@ -208,6 +214,31 @@ final class FudehandStore: ObservableObject {
         } catch {
             alert = error.localizedDescription
         }
+    }
+
+    // MARK: Fonts
+
+    /// Imports font files into the font library and returns their font families. Text layers already set to one of them are measured and drawn with it at once.
+    @discardableResult
+    func importFonts(_ urls: [URL]) throws -> [String] {
+        // Files imported before one fails stay imported.
+        defer {
+            fontFamilies = fontLibrary.families()
+            TextMetrics.resetCache()
+            canvas?.fontsChanged()
+            editor.applyLive { _ in }
+            changed()
+        }
+        return try urls.flatMap(fontLibrary.importFont)
+    }
+
+    func importFontFiles() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = FontLibrary.fileExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = true
+        panel.title = L("Import Font")
+        guard panel.runModal() == .OK else { return }
+        do { try importFonts(panel.urls) } catch { alert = error.localizedDescription }
     }
 
     // MARK: Viewport
