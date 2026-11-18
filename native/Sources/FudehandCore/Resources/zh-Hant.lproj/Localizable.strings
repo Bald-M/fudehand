@@ -133,6 +133,13 @@
 "Hug contents" = "包覆內容";
 "Fill container" = "填滿容器";
 "Text content" = "文字內容";
+"Font" = "字體";
+"System Default" = "系統預設";
+"%@ (missing)" = "%@（缺少）";
+"Import Font…" = "匯入字體…";
+"Import Font" = "匯入字體";
+"Not a font file: %@" = "不是字體檔案：%@";
+"Could not import font: %@" = "無法匯入字體：%@";
 "Font size" = "字級";
 "Weight|font" = "字重";
 "Text color" = "文字顏色";

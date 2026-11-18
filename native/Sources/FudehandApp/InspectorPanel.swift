@@ -257,6 +257,15 @@ private struct NodeInspector: View {
                     if next != node.text?.content { update("Change Text", "text.content") { $0.text?.content = next } }
                 }
                 .accessibilityLabel(L("Text content"))
+            Picker(L("Font"), selection: Binding(get: { text.fontFamily ?? "" }, set: { v in update("Change Font") { $0.text?.fontFamily = v.isEmpty ? nil : v } })) {
+                Text(L("System Default")).tag("")
+                // A family this Mac does not have stays selectable, so the layer's setting is shown as it is.
+                if let family = text.fontFamily, !store.fontFamilies.contains(where: { $0.name == family }) {
+                    Text(L("%@ (missing)", family)).tag(family)
+                }
+                Divider()
+                ForEach(store.fontFamilies, id: \.name) { Text($0.name).tag($0.name) }
+            }
             HStack {
                 NumberField(label: L("Font size"), value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
                 Picker(L("Weight|font"), selection: Binding(get: { text.fontWeight }, set: { v in update("Change Font Weight") { $0.text?.fontWeight = v } })) {
@@ -274,6 +283,7 @@ private struct NodeInspector: View {
                 Text(L("Auto height")).tag(TextAutoResize.height)
                 Text(L("Fixed")).tag(TextAutoResize.none)
             }
+            Button(L("Import Font…")) { store.importFontFiles() }
         }
     }
 

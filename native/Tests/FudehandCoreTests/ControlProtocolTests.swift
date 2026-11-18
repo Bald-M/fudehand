@@ -38,6 +38,8 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":20,"command":"zoom","args":{"scale":0.5}}"#, .zoom(0.5)),
         (#"{"id":21,"command":"node_snapshot","args":{"id":"f"}}"#, .nodeSnapshot("f", scale: 2)),
         (#"{"id":22,"command":"node_snapshot","args":{"id":"f","scale":1}}"#, .nodeSnapshot("f", scale: 1)),
+        (#"{"id":23,"command":"list_fonts"}"#, .listFonts),
+        (#"{"id":24,"command":"import_font","args":{"path":"/tmp/a.ttf"}}"#, .importFont("/tmp/a.ttf")),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -65,6 +67,7 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "Invalid argument type: ids"),
         (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "Invalid argument type: discard"),
         (#"{"id":1,"command":"open_document","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"import_font","args":{}}"#, "Missing argument: path"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),

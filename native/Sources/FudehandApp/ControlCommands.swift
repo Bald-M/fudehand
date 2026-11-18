@@ -78,6 +78,11 @@ extension FudehandStore {
             let node = try requireNode(id)
             let png = try DesignRenderer.snapshotPNG(node, scale: scale)
             return ["id": id, "mimeType": "image/png", "data": png.base64EncodedString(), "width": node.width, "height": node.height]
+        case .listFonts:
+            return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
+        case .importFont(let path):
+            do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
+            catch let error as FontImportError { throw ControlCommandError(error.english) }
         }
     }
 
