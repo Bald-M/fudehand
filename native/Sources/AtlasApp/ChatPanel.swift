@@ -250,13 +250,10 @@ struct ChatPanel: View {
     private func modelButton(_ entry: ModelMenuEntry, section: ModelMenuSection) -> some View {
         let title: String
         if let id = entry.title { title = entry.isDefault ? "\(id) — \(L("Default"))" : id } else { title = L("Default model") }
-        return Button {
+        // A Toggle is drawn as a native checkable menu item; a Label's checkmark image is not shown in this menu.
+        return Toggle(title, isOn: Binding(get: { entry.selected }, set: { _ in
             chat.settings = ChatSettings(provider: section.provider, model: entry.model, baseUrl: chat.stored(section.provider).baseUrl)
-        } label: { menuLabel(title, selected: entry.selected) }
-    }
-
-    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
-        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }))
     }
 
     private func submit() {
@@ -445,14 +442,13 @@ private struct ChatSettingsSheet: View {
 
     private func modelMenu(_ id: String, model: String) -> some View {
         Menu {
-            Button { draft.setModel("", for: id) } label: {
-                menuLabel(chat.defaultModel(for: id).map { L("Default model (%@)", $0) } ?? L("Default model"), selected: trimmed(model).isEmpty)
-            }
+            Toggle(chat.defaultModel(for: id).map { L("Default model (%@)", $0) } ?? L("Default model"),
+                   isOn: Binding(get: { trimmed(model).isEmpty }, set: { _ in draft.setModel("", for: id) }))
             let models = chat.models(for: id)
             if !models.isEmpty {
                 Divider()
                 ForEach(models, id: \.self) { item in
-                    Button { draft.setModel(item, for: id) } label: { menuLabel(item, selected: trimmed(model) == item) }
+                    Toggle(item, isOn: Binding(get: { trimmed(model) == item }, set: { _ in draft.setModel(item, for: id) }))
                 }
             }
         } label: {
@@ -460,10 +456,6 @@ private struct ChatSettingsSheet: View {
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .help(L("Choose model")).accessibilityLabel(L("Choose model"))
-    }
-
-    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
-        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     @ViewBuilder private func status(_ id: String, _ test: KeyTest) -> some View {
