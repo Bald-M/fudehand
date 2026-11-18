@@ -387,3 +387,154 @@ private func asking() -> ChatTranscript {
     #expect(transcript.rewind()?.text == "First")
     #expect(transcript.suggestion == nil)
 }
+
+@Test func chatTranscriptTracksTheContextTheLastReplyReported() {
+    var transcript = ChatTranscript()
+    #expect(transcript.contextTokens == nil)
+    transcript.send("Look")
+    transcript.apply(line(#"{"type":"assistant","text":"One frame."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":250,"output":30,"cached":0},"context":170}"#))
+    #expect(transcript.contextTokens == 170)
+    transcript.send("Again")
+    transcript.apply(line(#"{"type":"assistant","text":"Still one."}"#))
+    // A reply that reports no context leaves the last known one.
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    #expect(transcript.contextTokens == 170)
+    transcript.send("More")
+    transcript.apply(line(#"{"type":"assistant","text":"Two now."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":420}"#))
+    #expect(transcript.contextTokens == 420)
+    // Taking the last message back returns to what the conversation held before it.
+    _ = transcript.rewind()
+    #expect(transcript.contextTokens == 170)
+    // It is saved with the conversation; one saved before this was recorded has none.
+    let restored = try! JSONDecoder().decode([ChatEntry].self, from: JSONEncoder().encode(transcript.entries))
+    #expect(ChatTranscript(entries: restored).contextTokens == 170)
+    let older = try! JSONDecoder().decode([ChatEntry].self, from: Data(#"[{"id":0,"kind":"assistant","text":"Hi","context":[]}]"#.utf8))
+    #expect(ChatTranscript(entries: older).contextTokens == nil)
+}
+
+@Test func chatTranscriptCompactsIntoASummaryAndKeepsTheMessages() {
+    var transcript = ChatTranscript()
+    #expect(!transcript.canCompact)
+    transcript.send("Make the header blue")
+    #expect(!transcript.canCompact)
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":900,"output":20,"cached":0},"context":920}"#))
+    #expect(transcript.canCompact)
+
+    transcript.compact()
+    #expect(transcript.busy)
+    #expect(transcript.compacting)
+    transcript.apply(line(#"{"type":"compacted","summary":"The header is blue."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":950,"output":12,"cached":900},"context":12}"#))
+    #expect(!transcript.busy)
+    #expect(!transcript.compacting)
+    // Every earlier message is still shown, followed by the summary.
+    #expect(transcript.entries.map(\.kind) == [.user, .assistant, .summary])
+    #expect(transcript.entries.map(\.text) == ["Make the header blue", "Done.", "The header is blue."])
+    #expect(transcript.contextTokens == 12)
+    // The summary request's usage is not shown as the earlier reply's.
+    #expect(transcript.entries[1].usage == ChatUsage(input: 900, output: 20, cached: 0))
+    #expect(transcript.entries[2].usage == nil)
+    // The harness is restored from the summary on, not from the messages it replaced.
+    #expect(transcript.messages == [["role": "summary", "text": "The header is blue."]])
+    // Nothing new to compact until the conversation goes on.
+    #expect(!transcript.canCompact)
+
+    transcript.send("Which color?")
+    transcript.apply(line(#"{"type":"assistant","text":"Blue."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":300}"#))
+    #expect(transcript.messages == [["role": "summary", "text": "The header is blue."], ["role": "user", "text": "Which color?"], ["role": "assistant", "text": "Blue."]])
+    #expect(transcript.contextTokens == 300)
+    #expect(transcript.canCompact)
+    #expect(transcript.title == "Make the header blue")
+    #expect(transcript.groups.map(\.entries.count) == [1, 1, 1, 1, 1])
+}
+
+@Test func chatTranscriptKeepsEverythingWhenCompactingFailsOrIsStopped() {
+    var transcript = ChatTranscript()
+    transcript.send("Make the header blue")
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":920}"#))
+    let before = transcript.messages
+
+    transcript.compact()
+    transcript.apply(line(#"{"type":"error","message":"Model API error (HTTP 500): overloaded"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    #expect(!transcript.busy && !transcript.compacting)
+    #expect(transcript.entries.map(\.kind) == [.user, .assistant, .error])
+    #expect(transcript.entries.last?.text == "Could not compact the context: Model API error (HTTP 500): overloaded")
+    #expect(transcript.messages == before)
+    #expect(transcript.contextTokens == 920)
+
+    transcript.compact()
+    transcript.apply(line(#"{"type":"done","stopped":true}"#))
+    #expect(!transcript.busy && !transcript.compacting)
+    #expect(transcript.entries.last?.kind == .notice)
+    #expect(transcript.entries.last?.text == "Compacting stopped")
+    #expect(transcript.messages == before)
+
+    // A harness that exits while compacting fails the same way.
+    transcript.compact()
+    transcript.fail("The chat process exited unexpectedly")
+    #expect(!transcript.busy && !transcript.compacting)
+    #expect(transcript.messages == before)
+
+    // Not while a reply is running.
+    transcript.send("Hi")
+    transcript.compact()
+    #expect(!transcript.compacting)
+    // An error of an ordinary reply is shown as it is.
+    transcript.apply(line(#"{"type":"error","message":"Quota exceeded or too many requests"}"#))
+    #expect(transcript.entries.last?.text == "Quota exceeded or too many requests")
+}
+
+@Test func aCompactionThatReportsNoUsageDoesNotKeepTheOldContext() {
+    var transcript = ChatTranscript()
+    transcript.send("Make the header blue")
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":7900}"#))
+    transcript.compact()
+    transcript.apply(line(#"{"type":"compacted","summary":"The header is blue."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    // What the earlier reply reported no longer describes the conversation.
+    #expect(transcript.contextTokens == nil)
+}
+
+@Test func rewindingAMessageSentBeforeACompactionTakesTheCompactionBack() {
+    var transcript = ChatTranscript()
+    transcript.send("Make the header blue")
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":920}"#))
+    transcript.send("And the footer")
+    transcript.apply(line(#"{"type":"assistant","text":"Done too."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":1800}"#))
+    transcript.compact()
+    transcript.apply(line(#"{"type":"compacted","summary":"Header and footer are blue."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"context":12}"#))
+    #expect(transcript.rewind()?.text == "And the footer")
+    // The summary went with it: the harness is given the messages up to that point again.
+    #expect(transcript.messages == [["role": "user", "text": "Make the header blue"], ["role": "assistant", "text": "Done."]])
+    #expect(transcript.contextTokens == 920)
+}
+
+@Test func contextUsageGivesTheShareOfTheWindowAndWarnsNearTheLimit() {
+    #expect(ContextUsage(used: 0, window: 128_000).fraction == 0)
+    #expect(ContextUsage(used: 32_000, window: 128_000).fraction == 0.25)
+    #expect(ContextUsage(used: 32_000, window: 128_000).level == .normal)
+    #expect(ContextUsage(used: 96_000, window: 128_000).level == .high)
+    #expect(ContextUsage(used: 115_200, window: 128_000).level == .critical)
+    // Never more than full, whatever the API counted.
+    #expect(ContextUsage(used: 200_000, window: 128_000).fraction == 1)
+    #expect(ContextUsage(used: 200_000, window: 128_000).level == .critical)
+    // The same usage against another model's window.
+    #expect(ContextUsage(used: 96_000, window: 1_048_576).level == .normal)
+    // Without a known window there is no share and nothing to warn about.
+    #expect(ContextUsage(used: 96_000, window: nil).fraction == nil)
+    #expect(ContextUsage(used: 96_000, window: nil).level == .normal)
+    #expect(ContextUsage(used: 96_000, window: 0).fraction == nil)
+    #expect(ContextUsage(used: 96_000, window: 128_000).percent == 75)
+    #expect(ContextUsage(used: 100, window: 128_000).percent == 1)
+    #expect(ContextUsage(used: 0, window: 128_000).percent == 0)
+}

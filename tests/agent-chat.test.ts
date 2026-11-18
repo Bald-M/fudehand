@@ -645,21 +645,21 @@ describe('Agent harness: token usage', () => {
       withUsage(openaiText('Again.'), { prompt_tokens: 50, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 7 } }),
     ])
     const chat = await deepseek(model.baseUrl)
-    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 100 } })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 100 }, context: 150 })
     expect(model.requests[0].body.stream_options).toEqual({ include_usage: true })
-    expect((await chat.ask('Again')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 50, output: 5, cached: 7 } })
+    expect((await chat.ask('Again')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 50, output: 5, cached: 7 }, context: 55 })
   })
 
   it('reports Responses API usage', async () => {
     const model = await fakeModel([withUsage(responsesText('Hi.'), { input_tokens: 200, output_tokens: 40, input_tokens_details: { cached_tokens: 150 } })])
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
-    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 200, output: 40, cached: 150 } })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 200, output: 40, cached: 150 }, context: 240 })
   })
 
   it('counts Anthropic cache tokens as input', async () => {
     const model = await fakeModel([withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 300, output_tokens: 50 })])
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
-    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 330, output: 50, cached: 300 } })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 330, output: 50, cached: 300 }, context: 380 })
   })
 
   it('reads usage from a plain JSON body', async () => {
@@ -667,9 +667,9 @@ describe('Agent harness: token usage', () => {
       { ...withUsage(openaiText('Hi.'), { prompt_tokens: 120, completion_tokens: 30 }), json: true },
       { ...withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_read_input_tokens: 300, output_tokens: 50 }), json: true },
     ])
-    expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 0 } })
+    expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 0 }, context: 150 })
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
-    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 310, output: 50, cached: 300 } })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 310, output: 50, cached: 300 }, context: 360 })
   })
 
   it('reports no usage when the API sends none or sends it malformed', async () => {
@@ -686,7 +686,7 @@ describe('Agent harness: token usage', () => {
       withUsage(openaiText('Done.'), { prompt_tokens: 150, completion_tokens: 20, prompt_cache_hit_tokens: 90 }),
     ])
     const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
-    expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 250, output: 30, cached: 90 } })
+    expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 250, output: 30, cached: 90 }, context: 170 })
   })
 
   it('reports no usage when one round did not report any', async () => {
@@ -706,7 +706,7 @@ describe('Agent harness: token usage', () => {
     chat.send({ type: 'user', text: 'Look' })
     await chat.until(event => event.type === 'tool_result')
     chat.send({ type: 'stop' })
-    expect(await chat.until(event => event.type === 'done')).toEqual({ type: 'done', stopped: true, usage: { input: 100, output: 10, cached: 0 } })
+    expect(await chat.until(event => event.type === 'done')).toEqual({ type: 'done', stopped: true, usage: { input: 100, output: 10, cached: 0 }, context: 110 })
   })
 
   it('counts a round whose reply was cut off or declined', async () => {
@@ -720,7 +720,7 @@ describe('Agent harness: token usage', () => {
     const events = await chat.ask('Look')
     expect(events.slice(-2)).toEqual([
       { type: 'error', message: 'The model reply was cut off by the length limit; stopped this reply' },
-      { type: 'done', stopped: false, usage: { input: 250, output: 16010, cached: 0 } },
+      { type: 'done', stopped: false, usage: { input: 250, output: 16010, cached: 0 }, context: 110 },
     ])
     expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 40, output: 8, cached: 0 } })
   })
@@ -731,7 +731,132 @@ describe('Agent harness: token usage', () => {
     const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Look')
     expect(events.slice(-2).map(event => event.type)).toEqual(['error', 'done'])
-    expect(events.at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 100, output: 10, cached: 0 } })
+    expect(events.at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 100, output: 10, cached: 0 }, context: 110 })
+  })
+})
+
+describe('Agent harness: context usage and /compact', () => {
+  const deepseek = (baseUrl: string, extra: Record<string, string> = {}) =>
+    startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: baseUrl, FUDEHAND_API_KEY: KEY, ...extra })
+  /** Sends compact and waits for the turn to end. */
+  async function compact(chat: Awaited<ReturnType<typeof startHarness>>) {
+    const from = chat.events.length
+    chat.send({ type: 'compact' })
+    await chat.until(event => event.type === 'done', from)
+    return chat.events.slice(from)
+  }
+
+  it('reports the context as the tokens of the last request of the reply', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }),
+      withUsage(openaiText('Done.'), { prompt_tokens: 150, completion_tokens: 20 }),
+      openaiText('No usage.'),
+    ])
+    const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
+    expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 250, output: 30, cached: 0 }, context: 170 })
+    // A reply whose request reported no usage says nothing about the context.
+    expect((await chat.ask('Again')).at(-1)).toEqual({ type: 'done', stopped: false })
+  })
+
+  it('replaces the history with a summary and keeps the conversation going from it', async () => {
+    const model = await fakeModel([
+      openaiText('The header is blue.'),
+      withUsage(openaiText('The user asked for a blue header; it is done.'), { prompt_tokens: 900, completion_tokens: 40 }),
+      openaiText('Blue.'),
+    ])
+    const chat = await deepseek(model.baseUrl)
+    await chat.ask('Make the header blue')
+    expect(await compact(chat)).toEqual([
+      { type: 'compacted', summary: 'The user asked for a blue header; it is done.' },
+      { type: 'done', stopped: false, usage: { input: 900, output: 40, cached: 0 }, context: 40 },
+    ])
+    // The summary request carries the whole history, the same system prompt and tools, and the instruction last.
+    const request = model.requests[1].body
+    expect(request.messages.slice(0, 3).map((message: any) => message.role)).toEqual(['system', 'user', 'assistant'])
+    expect(request.messages[0]).toEqual(model.requests[0].body.messages[0])
+    expect(request.tools).toEqual(model.requests[0].body.tools)
+    expect(request.messages.at(-1).role).toBe('user')
+    expect(request.messages.at(-1).content).toContain('Summarize')
+    await chat.ask('Which color?')
+    const after = model.requests[2].body.messages
+    expect(after.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
+    expect(after[1].content).toContain('The user asked for a blue header; it is done.')
+    expect(after[1].content).not.toContain('Make the header blue')
+    expect(after[2].content).toBe('Which color?')
+  })
+
+  it('compacts through the Responses and Anthropic APIs', async () => {
+    const model = await fakeModel([
+      responsesText('Hi.'), withUsage(responsesText('Summary A.'), { input_tokens: 500, output_tokens: 12 }), responsesText('Yes.'),
+      anthropicText('Hi.'), withUsage(anthropicText('Summary B.'), { input_tokens: 10, cache_read_input_tokens: 600, output_tokens: 15 }), anthropicText('Yes.'),
+    ])
+    const openai = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
+    await openai.ask('Hi')
+    expect(await compact(openai)).toEqual([
+      { type: 'compacted', summary: 'Summary A.' },
+      { type: 'done', stopped: false, usage: { input: 500, output: 12, cached: 0 }, context: 12 },
+    ])
+    await openai.ask('Still there?')
+    expect(model.requests[2].body.input).toHaveLength(2)
+    expect(model.requests[2].body.input[0].content).toContain('Summary A.')
+    const claude = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
+    await claude.ask('Hi')
+    expect(await compact(claude)).toEqual([
+      { type: 'compacted', summary: 'Summary B.' },
+      { type: 'done', stopped: false, usage: { input: 610, output: 15, cached: 600 }, context: 15 },
+    ])
+    await claude.ask('Still there?')
+    // The summary and the next message are both user turns, merged into one message.
+    expect(model.requests[5].body.messages).toHaveLength(1)
+    expect(model.requests[5].body.messages[0].content.map((block: any) => block.text).join('\n')).toContain('Summary B.')
+  })
+
+  it('keeps the history when the summary request fails, returns no text, or is stopped', async () => {
+    const model = await fakeModel([
+      openaiText('The header is blue.'),
+      { status: 500, body: { error: { message: 'overloaded' } } },
+      openaiTool('call_1', 'design_get_state', {}),
+      { ...openaiText('Too late.'), delayMs: 1500 },
+      openaiText('Blue.'),
+    ])
+    const chat = await deepseek(model.baseUrl)
+    await chat.ask('Make the header blue')
+    expect(await compact(chat)).toEqual([{ type: 'error', message: 'Model API error (HTTP 500): overloaded' }, { type: 'done', stopped: false }])
+    // A tool call instead of a summary is not executed.
+    expect(await compact(chat)).toEqual([{ type: 'error', message: 'The model returned no summary; the context was not compacted' }, { type: 'done', stopped: false }])
+    chat.send({ type: 'compact' })
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const from = chat.events.length
+    chat.send({ type: 'stop' })
+    expect(await chat.until(event => event.type === 'done', from)).toEqual({ type: 'done', stopped: true })
+    await chat.ask('Which color?')
+    expect(model.requests[4].body.messages.map((message: any) => message.content)).toEqual([
+      model.requests[0].body.messages[0].content, 'Make the header blue', 'The header is blue.', 'Which color?',
+    ])
+  })
+
+  it('reports that there is nothing to compact, and refuses while a reply is running', async () => {
+    const model = await fakeModel([{ ...openaiText('Hi.'), delayMs: 600 }])
+    const chat = await deepseek(model.baseUrl)
+    expect(await compact(chat)).toEqual([{ type: 'error', message: 'There is nothing to compact yet' }, { type: 'done', stopped: false }])
+    const from = chat.events.length
+    chat.send({ type: 'user', text: 'Hi' })
+    chat.send({ type: 'compact' })
+    expect(await chat.until(event => event.type === 'error', from)).toEqual({ type: 'error', message: 'The previous reply has not finished yet' })
+    await chat.until(event => event.type === 'done', from)
+    expect(model.requests).toHaveLength(1)
+  })
+
+  it('loads a compacted conversation starting from its summary', async () => {
+    const model = await fakeModel([openaiText('Blue.')])
+    const chat = await deepseek(model.baseUrl)
+    chat.send({ type: 'load', messages: [{ role: 'summary', text: 'The header is blue.' }, { role: 'user', text: 'Thanks' }, { role: 'assistant', text: 'Welcome.' }] })
+    await chat.ask('Which color?')
+    const messages = model.requests[0].body.messages
+    expect(messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user', 'assistant', 'user'])
+    expect(messages[1].content).toContain('The header is blue.')
+    expect(messages[1].content).not.toBe('The header is blue.')
   })
 })
 
@@ -747,25 +872,30 @@ async function listModels(env: Record<string, string>) {
 
 describe('Agent harness: listing available models', () => {
   it('reads /models from an OpenAI-compatible API and includes the default model', async () => {
-    const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] } }])
+    const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-chat', context_window: 1048576 }, { id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] } }])
     const result = await listModels({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: `${model.baseUrl}/`, FUDEHAND_API_KEY: KEY })
     expect(result.code).toBe(0)
-    expect(result.event).toEqual({ type: 'models', models: ['deepseek-chat', 'deepseek-reasoner'], default: 'deepseek-chat' })
+    // A model's context window is passed on when the list reports one.
+    expect(result.event).toEqual({ type: 'models', models: ['deepseek-chat', 'deepseek-reasoner'], default: 'deepseek-chat', windows: { 'deepseek-chat': 1048576 } })
     expect(model.requests[0].url).toBe('/models')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
   })
 
   it('reads /models for the OpenAI Responses provider too', async () => {
-    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5.3-codex' }] } }])
+    const model = await fakeModel([{ body: { data: [{ id: 'gpt-5.3-codex' }, { id: 'gpt-6.1-terra' }, { id: 'text-embedding-3-small' }] } }])
     const result = await listModels({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
-    expect(result.event).toEqual({ type: 'models', models: ['gpt-5.3-codex'], default: 'gpt-5.3-codex' })
+    // OpenAI's list reports no context window; the documented ones of its current families are filled in.
+    expect(result.event).toEqual({
+      type: 'models', models: ['gpt-5.3-codex', 'gpt-6.1-terra', 'text-embedding-3-small'], default: 'gpt-5.3-codex',
+      windows: { 'gpt-5.3-codex': 400000, 'gpt-6.1-terra': 1050000 },
+    })
     expect(model.requests[0].url).toBe('/models')
   })
 
   it('reads /v1/models from Anthropic with its own auth headers', async () => {
-    const model = await fakeModel([{ body: { data: [{ id: 'claude-opus-5-5', type: 'model' }, { id: 'claude-sonnet-5-5', type: 'model' }], has_more: false } }])
+    const model = await fakeModel([{ body: { data: [{ id: 'claude-opus-5-5', type: 'model', max_input_tokens: 1000000 }, { id: 'claude-sonnet-5-5', type: 'model', max_input_tokens: null }], has_more: false } }])
     const result = await listModels({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
-    expect(result.event).toEqual({ type: 'models', models: ['claude-opus-5-5', 'claude-sonnet-5-5'], default: 'claude-sonnet-5-5' })
+    expect(result.event).toEqual({ type: 'models', models: ['claude-opus-5-5', 'claude-sonnet-5-5'], default: 'claude-sonnet-5-5', windows: { 'claude-opus-5-5': 1000000 } })
     expect(model.requests[0].url).toBe('/v1/models?limit=1000')
     expect(model.requests[0].headers['x-api-key']).toBe(KEY)
     expect(model.requests[0].headers['anthropic-version']).toBe('2023-06-01')

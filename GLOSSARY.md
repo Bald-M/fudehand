@@ -55,6 +55,11 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 **Next-message prediction (下一条消息预测 / 下一則訊息預測)**: The message the Agent harness predicts the user will send next, shown as the placeholder of the empty chat input after a reply ends; Tab puts it in the input. It is not part of the conversation.
 _Avoid_: autocomplete, completion (nothing is completed while typing), suggestion chips
 
+**Context ring (上下文圆环 / 上下文圓環)**: The ring in the chat input showing how much of the model's context window the conversation takes up.
+
+**Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, by sending `/compact`. The conversation's messages stay in the chat panel.
+_Avoid_: compress, summarize (the summary is what compacting produces)
+
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
 
 **Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Claude, and ChatGPT. DeepSeek uses an OpenAI-compatible API, Claude uses the Anthropic Messages API, and ChatGPT uses OpenAI's Responses API and needs an OpenAI API key.

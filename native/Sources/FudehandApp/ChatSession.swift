@@ -26,6 +26,8 @@ struct ChatSettings: Equatable {
 struct ModelListing: Equatable {
     var models: [String]
     var defaultModel: String
+    /// The context window, in tokens, of the models for which the harness knows one.
+    var windows: [String: Int] = [:]
 }
 
 struct ModelListError: Error, Equatable {
@@ -96,6 +98,10 @@ final class ChatSession: ObservableObject {
     var hasKey: Bool { savedKey(for: settings.provider) }
     /// The current provider's model list as last fetched, for the model menu; kept so opening the panel does not read the Keychain.
     var models: [String] { models(for: settings.provider) }
+    /// How much of the selected model's context window the selected conversation takes up, for the context ring.
+    var contextUsage: ContextUsage {
+        ContextUsage(used: transcript.contextTokens ?? 0, window: contextWindow(provider: settings.provider, model: settings.model))
+    }
 
     private let defaults: UserDefaults
     private let readKey: (String) -> String?
@@ -228,6 +234,12 @@ final class ChatSession: ObservableObject {
         defaults.string(forKey: "agent.\(provider).defaultModel").flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// The context window of `model` as the provider's model list reported it; an empty model means the provider's default.
+    func contextWindow(provider: String, model: String) -> Int? {
+        guard let id = model.isEmpty ? defaultModel(for: provider) : model else { return nil }
+        return (defaults.dictionary(forKey: "agent.\(provider).contextWindows") as? [String: Int])?[id]
+    }
+
     func savedKey(for provider: String) -> Bool { defaults.bool(forKey: "agent.\(provider).hasKey") }
 
     /// The masked form of the saved key; the full key is only in the Keychain.
@@ -290,9 +302,10 @@ final class ChatSession: ObservableObject {
         if changes.inUse != settings.provider { settings = stored(changes.inUse) }
     }
 
-    /// Remembers a model list fetched for `provider`.
-    func cacheModels(_ list: [String], defaultModel: String? = nil, provider: String) {
+    /// Remembers a model list fetched for `provider`, with the context windows it reported.
+    func cacheModels(_ list: [String], defaultModel: String? = nil, windows: [String: Int] = [:], provider: String) {
         defaults.set(list, forKey: "agent.\(provider).models")
+        defaults.set(windows, forKey: "agent.\(provider).contextWindows")
         if let defaultModel, !defaultModel.isEmpty { defaults.set(defaultModel, forKey: "agent.\(provider).defaultModel") }
         objectWillChange.send()
     }
@@ -302,7 +315,7 @@ final class ChatSession: ObservableObject {
         let settings = settings
         guard let root, let key = savedKeyValue(for: settings.provider) else { return }
         if case .success(let listing) = await Self.listModels(root: root, runtime: runtime, settings: settings, apiKey: key) {
-            cacheModels(listing.models, defaultModel: listing.defaultModel, provider: settings.provider)
+            cacheModels(listing.models, defaultModel: listing.defaultModel, windows: listing.windows, provider: settings.provider)
         }
     }
 
@@ -351,7 +364,8 @@ final class ChatSession: ObservableObject {
         let line = data.split(separator: UInt8(ascii: "\n")).first.map { Data($0) } ?? Data()
         let event = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
         if event?["type"] as? String == "models", let models = event?["models"] as? [String] {
-            return .success(ModelListing(models: models, defaultModel: event?["default"] as? String ?? ""))
+            let windows = (event?["windows"] as? [String: Any] ?? [:]).compactMapValues { $0 as? Int }
+            return .success(ModelListing(models: models, defaultModel: event?["default"] as? String ?? "", windows: windows))
         }
         if event?["type"] as? String == "error", let message = event?["message"] as? String {
             return .failure(ModelListError(message: message))
@@ -367,16 +381,33 @@ final class ChatSession: ObservableObject {
         update(id) { $0.send(trimmed, context: context) }
         // Saved before the reply arrives, so the message is not lost if the App quits unexpectedly.
         save(id)
-        guard let root else { update(id) { $0.fail(L("Cannot find the Fudehand source directory, so the chat process cannot start")) }; return }
+        guard ready(id, messages: earlier, root: root, runtime: runtime) else { return }
+        write(["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }], to: id)
+    }
+
+    /// Compacts the selected conversation: the harness summarizes it and carries on from the summary. The messages stay in the transcript.
+    func compact(root: URL?, runtime: WorkspaceLocation?) {
+        guard transcript.canCompact else { return }
+        let id = conversationID
+        let earlier = transcript.messages
+        update(id) { $0.compact() }
+        guard ready(id, messages: earlier, root: root, runtime: runtime) else { return }
+        write(["type": "compact"], to: id)
+    }
+
+    /// Makes sure the tab's harness is running and holds `messages`, the conversation before the turn being started.
+    /// On failure the turn is ended with the error and false is returned.
+    private func ready(_ id: UUID, messages: [[String: String]], root: URL?, runtime: WorkspaceLocation?) -> Bool {
+        guard let root else { update(id) { $0.fail(L("Cannot find the Fudehand source directory, so the chat process cannot start")) }; return false }
         if harnesses[id] == nil {
             do { try start(id, root: root, runtime: runtime) }
-            catch { update(id) { $0.fail(L("Cannot start the chat process: %@", error.localizedDescription)) }; return }
+            catch { update(id) { $0.fail(L("Cannot start the chat process: %@", error.localizedDescription)) }; return false }
         }
         if let harness = harnesses[id], !harness.synced {
-            write(["type": "load", "messages": earlier], to: id)
+            write(["type": "load", "messages": messages], to: id)
             harness.synced = true
         }
-        write(["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }], to: id)
+        return true
     }
 
     /// Answers the selected conversation's waiting question; `nil` skips it, leaving the choice to the Agent. When the harness that
