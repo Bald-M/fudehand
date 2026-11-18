@@ -343,6 +343,18 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
       'The user has these layers selected: "Hero \\"card\\"" (frame, id n1), "Title" (text, id n2)\n\nMake it blue')
   })
 
+  it('tells the model which provider and model it runs on', async () => {
+    const model = await fakeModel([openaiText('Done.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_MODEL: 'deepseek-v4-pro', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await chat.ask('Which model are you?')
+    expect(model.requests[0].body.messages[0].content).toContain('You are running on the model "deepseek-v4-pro" (provider setting: deepseek).')
+
+    const claude = await fakeModel([anthropicText('Done.')])
+    const other = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: claude.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await other.ask('Which model are you?')
+    expect(claude.requests[0].body.system).toContain('You are running on the model "claude-sonnet-5-5" (provider setting: anthropic).')
+  })
+
   it('sends a validly formatted history in the next request after a stop', async () => {
     const app = await startApp()
     const model = await fakeModel([{ ...openaiTool('call_1', 'design_get_state', {}), delayMs: 600 }, openaiText('OK')])
