@@ -182,7 +182,8 @@ private struct NodeInspector: View {
                     update("Change Size") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
                 }
             }
-            if inLayout || node.layout != nil || node.type == .text {
+            // A group's size always equals the union of its child layers, so sizing modes have no effect on it (#60).
+            if node.type != .group && (inLayout || node.layout != nil || node.type == .text) {
                 sizingPicker(L("Width"), node.sizing.horizontal) { mode in update("Change Sizing") { $0.sizing.horizontal = mode } }
                 sizingPicker(L("Height"), node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }
             }
