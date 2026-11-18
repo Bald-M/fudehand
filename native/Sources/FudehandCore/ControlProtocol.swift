@@ -19,6 +19,8 @@ public enum ControlCommand: Equatable, Sendable {
     case fitAll
     case zoom(Double)
     case nodeSnapshot(String, scale: Double)
+    case listFonts
+    case importFont(String)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -172,6 +174,8 @@ public enum ControlProtocol {
             let scale = try positive("scale", default: 2)
             guard scale <= 4 else { throw Message(text: "Invalid argument type: scale") }
             return .nodeSnapshot(try string("id"), scale: scale)
+        case "list_fonts": return .listFonts
+        case "import_font": return .importFont(try string("path"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

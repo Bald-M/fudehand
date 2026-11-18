@@ -26,9 +26,23 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_snapshot',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
+  })
+
+  it('describes interactions and forwards them to the App unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['interaction', 'navigate', 'back', 'destination', 'push-left', 'sheet', 'ease-in-out'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('interaction is replaced whole')
+    const fake = await app(echo)
+    const interaction = { action: 'navigate', destination: 'detail', transition: { type: 'push-left', duration: 0.3 } }
+    await callTool('design_update_node', { id: 'a', changes: { interaction } }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'update_node', args: { id: 'a', changes: { interaction } } },
+    ])
+    await fake.close()
   })
 
   it('forwards the command and the defined arguments to the App', async () => {
@@ -47,6 +61,8 @@ describe('design tools', () => {
     await callTool('design_save_document', {}, ctx)
     await callTool('design_save_document', { path: '/tmp/a.fudehand' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
+    await callTool('design_list_fonts', {}, ctx)
+    await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
@@ -59,6 +75,8 @@ describe('design tools', () => {
       { command: 'save_document', args: {} },
       { command: 'save_document', args: { path: '/tmp/a.fudehand' } },
       { command: 'zoom', args: { scale: 0.5 } },
+      { command: 'list_fonts', args: {} },
+      { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
     ])
   })
 
@@ -96,6 +114,16 @@ describe('design tools', () => {
     expect(missing.isError).toBe(true)
     expect(text(missing)).toBe('Could not read image: nope.png')
     expect(fake.received).toHaveLength(2)
+  })
+
+  it('reads an SVG image.path byte for byte', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'uia-image-'))
+    cleanup.push(() => rm(dir, { recursive: true, force: true }))
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>\n'
+    await writeFile(join(dir, 'icon.svg'), svg)
+    const fake = await app(echo)
+    await callTool('design_create_node', { node: { type: 'image', image: { path: 'icon.svg' } } }, { root: dir, socketPath: fake.socketPath })
+    expect(fake.received[0].args.node).toEqual({ type: 'image', image: { data: Buffer.from(svg).toString('base64') } })
   })
 
   it('passes through error messages returned by the App', async () => {

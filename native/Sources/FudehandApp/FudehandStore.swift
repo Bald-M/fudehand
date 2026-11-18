@@ -19,7 +19,10 @@ final class FudehandStore: ObservableObject {
     private(set) var editor = DesignEditor(measure: TextMetrics.measure)
     /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
     @Published private(set) var document = DesignDocument()
-    @Published private(set) var selection: Set<String> = []
+    /// The selected layers, kept out of the store's published state: selecting in a large document then recomputes only the views
+    /// that show the selection, not every view that observes the store (#142).
+    let layerSelection = LayerSelection()
+    var selection: Set<String> { layerSelection.ids }
     /// The layer under the pointer, shared by the canvas and the layers panel.
     let hover = LayerHover()
     @Published var tool: CanvasTool = .move
@@ -44,6 +47,9 @@ final class FudehandStore: ObservableObject {
             defaults.set(language.preferredLanguages(system: AppLanguage.systemLanguages), forKey: "AppleLanguages")
         }
     }
+    let fontLibrary: FontLibrary
+    /// The font families text layers can use: installed on the system or imported into the font library.
+    @Published private(set) var fontFamilies: [FontFamily]
     let zoomIndicator = ZoomIndicator()
     let chat: ChatSession
     /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
@@ -76,12 +82,19 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var recents: RecentDocuments
     /// Shows the editor window and closes the launch window; registered by a view in a window after it gets the actions from the environment.
     var presentEditor: () -> Void = {}
+    /// What the prototype window plays; set by Play Prototype.
+    @Published private(set) var prototypeRequest: PrototypeRequest?
+    /// Shows the prototype window; registered the same way as `presentEditor`.
+    var presentPrototype: () -> Void = {}
 
     /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
     private let chatRoot: URL?
 
-    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil) {
+    /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
+    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
         self.defaults = defaults
+        fontLibrary = FontLibrary(directory: fontDirectory)
+        fontFamilies = fontLibrary.families()
         self.chatRoot = chatRoot
         // The App starts on an untitled document. What an earlier one left behind was never saved with a file: drop it.
         let unsaved = chatRoot.map { ChatHistory.unsaved(root: $0) }
@@ -143,7 +156,7 @@ final class FudehandStore: ObservableObject {
 
     func setSelection(_ ids: Set<String>) {
         guard ids != selection else { return }
-        selection = ids
+        layerSelection.ids = ids
         canvas?.setSelection(ids)
     }
 
@@ -189,14 +202,14 @@ final class FudehandStore: ObservableObject {
     /// Inserts an image file: into the selected frame, otherwise at the center of the viewport.
     func insertImage() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg]
+        panel.allowedContentTypes = [.png, .jpeg, .svg]
         panel.title = L("Insert Image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
-            guard let image = DesignRenderer.cgImage(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
+            guard let size = DesignRenderer.imageSize(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
             let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
-            let width = Double(image.width) / 2, height = Double(image.height) / 2
+            let width = Double(size.width), height = Double(size.height)
             let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
             let id = DesignDocument.newID(existing: editor.document.allIDs())
             var node = DesignNode(id: id, type: .image, name: url.deletingPathExtension().lastPathComponent,
@@ -208,6 +221,42 @@ final class FudehandStore: ObservableObject {
         } catch {
             alert = error.localizedDescription
         }
+    }
+
+    // MARK: Prototype
+
+    /// The frame Play Prototype starts from: the top-level frame holding the selection, otherwise the first top-level frame.
+    var prototypeStart: String? { Prototype.startFrame(in: editor.document, selection: selection) }
+
+    func playPrototype() {
+        guard let start = prototypeStart else { alert = L("Add a frame to play the prototype."); return }
+        prototypeRequest = PrototypeRequest(start: start, token: (prototypeRequest?.token ?? 0) + 1)
+        presentPrototype()
+    }
+
+    // MARK: Fonts
+
+    /// Imports font files into the font library and returns their font families. Text layers already set to one of them are measured and drawn with it at once.
+    @discardableResult
+    func importFonts(_ urls: [URL]) throws -> [String] {
+        // Files imported before one fails stay imported.
+        defer {
+            fontFamilies = fontLibrary.families()
+            TextMetrics.resetCache()
+            canvas?.fontsChanged()
+            editor.applyLive { _ in }
+            changed()
+        }
+        return try urls.flatMap(fontLibrary.importFont)
+    }
+
+    func importFontFiles() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = FontLibrary.fileExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = true
+        panel.title = L("Import Font")
+        guard panel.runModal() == .OK else { return }
+        do { try importFonts(panel.urls) } catch { alert = error.localizedDescription }
     }
 
     // MARK: Viewport
@@ -426,10 +475,15 @@ final class LayerHover: ObservableObject {
     @Published var id: String?
 }
 
+/// Kept out of the store's published state so a selection change redraws only the layer rows and the inspector that observe it.
+final class LayerSelection: ObservableObject {
+    @Published fileprivate(set) var ids: Set<String> = []
+}
+
 // MARK: Canvas
 
 extension FudehandStore: CanvasHost {
-    func canvasSelect(_ ids: Set<String>) { selection = ids }
+    func canvasSelect(_ ids: Set<String>) { if layerSelection.ids != ids { layerSelection.ids = ids } }
 
     func canvasHover(_ id: String?) { if hover.id != id { hover.id = id } }
 

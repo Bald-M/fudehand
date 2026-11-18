@@ -114,7 +114,7 @@ A few details worth knowing:
 - `design_create_node` can create a whole subtree at once through `children`.
 - `design_update_node` is a partial patch: nested objects are merged field by field.
 - A field error explains what is wrong and leaves the document unchanged.
-- For an image, pass `image.path` (a local PNG or JPEG) and the tool reads the file for you. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
+- For an image, pass `image.path` (a local PNG, JPEG, or SVG) and the tool reads the file for you. An SVG is kept as vector source, so icons stay sharp at any zoom. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
 - In file and image paths, `~` expands to your home directory.
 
 The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/fudehand/control.sock` (override it with `FUDEHAND_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
@@ -146,7 +146,7 @@ A design document is a tree of layers: frames, rectangles, ellipses, text, image
 ```json
 {
   "format": "fudehand.design",
-  "version": 1,
+  "version": 2,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
@@ -169,7 +169,7 @@ Fudehand does not import or export Figma files.
 pnpm dev               # debug build, then open the App
 pnpm build:native      # release build with ad-hoc signing → dist/Fudehand.app
 pnpm test:native       # Swift tests: FudehandCoreTests and FudehandAppTests
-pnpm bench:native      # canvas drag and hover benchmark on large documents (release build)
+pnpm bench:native      # canvas drag, hover, and layer selection benchmarks on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness
 pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
 ```
@@ -207,6 +207,7 @@ pnpm version:check       # check that every location agrees; otherwise list the 
 - [GLOSSARY](GLOSSARY.md): the project's terms
 - [ADR 0003](docs/adr/0003-agent-mcp.md): MCP, the control channel, and the chat panel
 - [ADR 0006](docs/adr/0006-native-design-document.md): the native design document
+- [Agent tools](docs/agent-tools.md) and [ADR 0007](docs/adr/0007-agent-parity.md): every App feature is an Agent tool
 - [CHANGELOG](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
 
 ## License

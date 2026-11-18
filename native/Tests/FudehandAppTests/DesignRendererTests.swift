@@ -124,3 +124,86 @@ import Testing
     #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 4096, height: 100)) == 2)
     #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 100_000, height: 100)) == 1)
 }
+
+private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="24" fill="#FF0000"/></svg>"##.utf8)
+
+@MainActor private func svgImage(width: Double = 48, height: Double = 24) -> DesignNode {
+    var node = DesignNode(id: "s", type: .image, width: width, height: height)
+    node.image = DesignImage(data: redSVG)
+    return node
+}
+
+@Test @MainActor func imageSizeIsHalfThePixelsForBitmapsAndTheDeclaredSizeForSVG() throws {
+    let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+    #expect(DesignRenderer.imageSize(png) == CGSize(width: 0.5, height: 0.5))
+    #expect(DesignRenderer.imageSize(redSVG) == CGSize(width: 48, height: 24))
+    let viewBoxOnly = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>"#.utf8)
+    #expect(DesignRenderer.imageSize(viewBoxOnly) == CGSize(width: 24, height: 24))
+    #expect(DesignRenderer.imageSize(Data("<html></html>".utf8)) == nil)
+}
+
+@Test @MainActor func svgIsRasterizedAgainWhenZoomSettlesOrTheLayerGrows() throws {
+    let renderer = DesignRenderer()
+    renderer.contentsScale = 1
+    var node = svgImage()
+    renderer.sync([node])
+    let layer = try #require(renderer.layer(for: "s"))
+    #expect((layer.contents as! CGImage).width == 48)
+    renderer.contentsScale = 8
+    #expect((layer.contents as! CGImage).width == 384)
+    // Growing redraws with 1.5× headroom (768 needed → 1152), so a little more growth reuses that raster.
+    node.width = 96
+    node.height = 48
+    renderer.sync([node])
+    let grown = layer.contents as! CGImage
+    #expect(grown.width == 1152)
+    node.width = 120
+    node.height = 60
+    renderer.sync([node])
+    #expect(layer.contents as! CGImage === grown)
+    // Shrinking keeps the sharper raster.
+    node.width = 48
+    node.height = 24
+    renderer.sync([node])
+    #expect(layer.contents as! CGImage === grown)
+}
+
+@Test @MainActor func svgFollowsImageFitAndCornerRadius() throws {
+    let renderer = DesignRenderer()
+    var node = svgImage(width: 100, height: 100)
+    node.cornerRadius = 10
+    node.image?.fit = .fit
+    renderer.sync([node])
+    let layer = try #require(renderer.layer(for: "s"))
+    #expect(layer.contentsGravity == .resizeAspect && layer.cornerRadius == 10 && layer.masksToBounds)
+    // Fill covers the bounds, so the raster is as tall as the layer: 100 × scale 2.
+    node.image?.fit = .fill
+    renderer.sync([node])
+    #expect(layer.contentsGravity == .resizeAspectFill && (layer.contents as! CGImage).height == 200)
+}
+
+@Test @MainActor func snapshotIncludesSVGContentUpright() throws {
+    // Red on top, blue below, so an upside-down raster fails.
+    var node = svgImage()
+    node.image?.data = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="12" fill="#FF0000"/><rect y="12" width="48" height="12" fill="#0000FF"/></svg>"##.utf8)
+    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(node, scale: 4)))
+    #expect(image.pixelsWide == 192 && image.pixelsHigh == 96)
+    // Compare the stored bytes: colorAt reports sRGB data as calibrated RGB, so converting it would shift saturated colors.
+    let bytes = try #require(image.bitmapData)
+    func pixel(_ x: Int, _ y: Int) -> [UInt8] { (0..<4).map { bytes[y * image.bytesPerRow + x * image.samplesPerPixel + $0] } }
+    #expect(pixel(96, 20) == [255, 0, 0, 255])
+    #expect(pixel(96, 76) == [0, 0, 255, 255])
+}
+
+@Test @MainActor func snapshotDrawsBitmapImagesUpright() throws {
+    // A PNG with red on top and blue below, made from the same drawing as the SVG test.
+    let svg = try #require(NSImage(data: Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="12" fill="#FF0000"/><rect y="12" width="48" height="12" fill="#0000FF"/></svg>"##.utf8)))
+    let tiff = try #require(svg.tiffRepresentation)
+    let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+    var node = DesignNode(id: "p", type: .image, width: 48, height: 24)
+    node.image = DesignImage(data: png)
+    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(node, scale: 4)))
+    let bytes = try #require(image.bitmapData)
+    #expect(bytes[20 * image.bytesPerRow + 96 * image.samplesPerPixel] == 255)
+    #expect(bytes[76 * image.bytesPerRow + 96 * image.samplesPerPixel + 2] == 255)
+}

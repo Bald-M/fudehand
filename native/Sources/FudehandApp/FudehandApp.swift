@@ -65,10 +65,11 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct FudehandApp: App {
     @NSApplicationDelegateAdaptor(FudehandAppDelegate.self) private var delegate
-    @StateObject private var store = FudehandStore(chatRoot: ChatSession.savedRoot)
+    @StateObject private var store = FudehandStore(chatRoot: ChatSession.savedRoot, fontDirectory: FontLibrary.savedDirectory)
 
     static let launchWindowID = "launch"
     static let editorWindowID = "main"
+    static let prototypeWindowID = "prototype"
 
     init() {
         // Before AppKit builds the menus: the App uses its own language setting, not the system's, and
@@ -129,6 +130,7 @@ struct FudehandApp: App {
                 Button(L("Fit All")) { store.fitAll() }.keyboardShortcut("0")
                 Divider()
                 Button(L("Insert Image…")) { store.insertImage() }.keyboardShortcut("i", modifiers: [.command, .shift])
+                Button(L("Play Prototype")) { store.playPrototype() }.keyboardShortcut(.return, modifiers: [.command, .option])
                 Button(L("Chat")) { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
             }
         }
@@ -142,6 +144,13 @@ struct FudehandApp: App {
                 .modifier(WindowActions(store: store, start: start))
         }
         .defaultSize(width: 1440, height: 940)
+
+        Window(L("Prototype"), id: Self.prototypeWindowID) {
+            PrototypeWindow(store: store)
+                .preferredColorScheme(store.colorScheme)
+                .environment(\.locale, store.language.locale)
+        }
+        .windowResizability(.contentSize)
 
         Window(L("MCP Connectors"), id: ConnectorsMenuItem.windowID) {
             ConnectorsView(model: store.connectors)
@@ -195,6 +204,7 @@ private struct WindowActions: ViewModifier {
                 // Close the launch window only after the editor window appears, so the App does not quit during a moment with no windows.
                 DispatchQueue.main.async { dismissWindow(id: FudehandApp.launchWindowID) }
             }
+            store.presentPrototype = { [openWindow] in openWindow(id: FudehandApp.prototypeWindowID) }
             start()
         }
     }
