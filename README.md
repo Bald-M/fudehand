@@ -16,7 +16,7 @@
 
 ui-atlas runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.uiatlas` project files, which are plain JSON.
 
-The current version is v0.0.2; see the [CHANGELOG](CHANGELOG.md) for changes.
+The current version is v0.0.3; see the [CHANGELOG](CHANGELOG.md) for changes.
 
 ## Highlights
 

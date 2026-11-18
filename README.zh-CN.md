@@ -16,7 +16,7 @@
 
 ui-atlas 完全运行在你自己的 Mac 上。设计稿是一份由图层组成的文档，显示在可平移、可缩放的画布上，交互参照 Figma。AI Agent 通过 MCP 或 App 内的对话面板编辑同一份文档，每次修改都立即显示在画布上。设计稿保存为 `.uiatlas` 工程文件，内容是普通 JSON。
 
-当前版本 v0.0.2，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
+当前版本 v0.0.3，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
 
 ## 特点
 
