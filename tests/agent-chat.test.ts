@@ -1189,13 +1189,31 @@ describe('Agent harness: plan and goal modes', () => {
     expect(later.at(-2)).toMatchObject({ role: 'assistant', content: 'The page is ready.' })
   })
 
+  it('keeps a goal going through progress notes without tool calls', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      openaiText('Next I will add the header.'),
+      openaiText('Now the footer.'),
+      openaiTool('call_1', 'design_get_state', {}),
+      openaiTool('call_2', 'goal_done', { summary: 'Done.' }),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Build the page', { mode: 'goal' })
+    expect(events.at(-2)).toEqual({ type: 'assistant', text: 'Done.' })
+    expect(model.requests).toHaveLength(4)
+    expect(model.requests[0].body.messages[0].content).toMatch(/progress note/)
+  })
+
   it('ends a goal the model stops working on without reporting it done', async () => {
     const app = await startApp()
-    const model = await fakeModel([openaiText('What colour should it be?'), openaiText('I need the colour to go on.'), openaiText('Unused')])
+    const model = await fakeModel([
+      openaiText('What colour should it be?'), openaiText('I need the colour.'), openaiText('Still need it.'), openaiText('Cannot go on.'),
+      openaiText('Unused'),
+    ])
     const chat = await deepseek(model.baseUrl, app.socketPath)
     const events = await chat.ask('Make it nicer', { mode: 'goal' })
-    expect(events.map(event => event.type)).toEqual(['assistant', 'assistant', 'done'])
-    expect(model.requests).toHaveLength(2)
+    expect(events.map(event => event.type)).toEqual(['assistant', 'assistant', 'assistant', 'assistant', 'done'])
+    expect(model.requests).toHaveLength(4)
   })
 
   it('lets a goal run past the tool-call rounds of an ordinary reply', async () => {

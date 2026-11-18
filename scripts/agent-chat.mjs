@@ -40,6 +40,8 @@ const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('
 const apiKey = process.env.FUDEHAND_API_KEY ?? ''
 const maximumRounds = 16
 const maximumGoalRounds = 64
+/** Goal mode: how many rounds in a row without tool calls get a reminder to go on; the next one ends the goal as it stands. */
+const maximumGoalReminders = 3
 
 /** The tools plan mode offers: the ones that only read the design document. A tool not listed here cannot run before the plan is confirmed. */
 const readingTools = ['design_get_state', 'design_get_document', 'design_get_node', 'design_snapshot']
@@ -47,7 +49,7 @@ const readingTools = ['design_get_state', 'design_get_document', 'design_get_nod
 const planNote = 'Plan mode is on. Do not change the design document: only the tools that read it are available. Read what you need, then reply with a short numbered plan of the steps you would take, and ask the user to confirm it. You carry the plan out only after the user confirms.'
 const planRefusal = 'Plan mode: the design document cannot be changed until the user confirms the plan.'
 
-const goalNote = 'Goal mode is on. The user\'s message is a goal. Keep working with the tools until it is achieved, checking the result as you go, without asking the user to confirm each step. When the goal is achieved, or you are certain it cannot be, call goal_done with a summary of the result for the user.'
+const goalNote = 'Goal mode is on. The user\'s message is a goal. Keep working with the tools until it is achieved, checking the result as you go, without asking the user to confirm each step. Do not end a round with only a progress note: each round should call a tool until the goal is done. When the goal is achieved, or you are certain it cannot be, call goal_done with a summary of the result for the user.'
 const goalReminder = 'Goal mode: the goal has not been marked as done. Continue working on it, or call goal_done with a summary if it is achieved or cannot be.'
 const goalDone = {
   name: 'goal_done',
@@ -207,8 +209,8 @@ async function reply(text, controller, mode) {
   // A question changes nothing in the design document, so the model may ask one in every mode.
   const offered = [...(plan ? tools.filter(tool => readingTools.includes(tool.name)) : goal ? [...tools, goalDone] : tools), askTool]
   const prompt = plan ? `${system}\n\n${planNote}` : goal ? `${system}\n\n${goalNote}` : system
-  // Goal mode: whether the model was already told to go on after a round without tool calls, and whether it reported the goal done.
-  let reminded = false
+  // Goal mode: how many rounds in a row without tool calls the model was told to go on after, and whether it reported the goal done.
+  let reminded = 0
   let finished = false
   let summary = ''
   const reminders = []
@@ -244,14 +246,14 @@ async function reply(text, controller, mode) {
       partial = ''
       if (answer.text) emit({ type: 'assistant', text: answer.text })
       if (!answer.toolCalls.length) {
-        // A goal ends with goal_done; a reply without it gets one reminder, and a second one in a row ends the goal as it stands.
-        if (!goal || reminded) break
-        reminded = true
+        // A goal ends with goal_done; a round without tool calls gets a reminder, and only too many in a row end the goal as it stands.
+        if (!goal || reminded === maximumGoalReminders) break
+        reminded++
         reminders.push({ role: 'user', text: goalReminder, internal: true })
         log.push(reminders.at(-1))
         continue
       }
-      reminded = false
+      reminded = 0
       let questioned = false
       for (const call of answer.toolCalls) {
         // After a stop, no further tool calls are executed; placeholder results are only filled in for the model to keep the history complete.
