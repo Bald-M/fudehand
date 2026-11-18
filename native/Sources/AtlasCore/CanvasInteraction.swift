@@ -66,8 +66,8 @@ public enum InteractionEffect: Equatable {
     case focus(String)
     /// Double-clicking a selected layer: the App selects the layer one level deeper under the pointer (canvas coordinates).
     case enter(String, Point)
-    /// Creation tool: creates a layer at a rectangle in canvas coordinates.
-    case create(NodeType, Rect)
+    /// Creation tool: creates a layer at a rectangle in canvas coordinates. `clicked` is true for a single click (default size) and false for a dragged-out size.
+    case create(NodeType, Rect, clicked: Bool)
 }
 
 public struct InteractionContext {
@@ -256,13 +256,15 @@ public struct CanvasInteraction {
         case .creating(let type, let origin):
             let start = CanvasGeometry.screenToWorld(origin, viewport: context.viewport)
             let dx = point.x - origin.x, dy = point.y - origin.y
-            let rect: Rect
-            if (dx * dx + dy * dy).squareRoot() > Self.dragThreshold {
-                rect = Rect.spanning(start, CanvasGeometry.screenToWorld(point, viewport: context.viewport))
-            } else {
-                rect = Rect(x: start.x, y: start.y, width: Self.defaultSize, height: Self.defaultSize)
+            guard (dx * dx + dy * dy).squareRoot() > Self.dragThreshold else {
+                let rect = Rect(x: start.x, y: start.y, width: Self.defaultSize, height: Self.defaultSize)
+                return [.marquee(nil), .create(type, rect, clicked: true)]
             }
-            return [.marquee(nil), .create(type, rect)]
+            // A straight-line drag still yields a visible layer, matching the resize handles' minimum of 1.
+            var rect = Rect.spanning(start, CanvasGeometry.screenToWorld(point, viewport: context.viewport))
+            rect.width = max(rect.width, 1)
+            rect.height = max(rect.height, 1)
+            return [.marquee(nil), .create(type, rect, clicked: false)]
         }
     }
 
