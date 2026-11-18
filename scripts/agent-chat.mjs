@@ -19,11 +19,19 @@ const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('
 const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
 const maximumRounds = 16
 
+let provider = null
+let providerError = null
+try { provider = createProvider({ provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', model: process.env.UI_ATLAS_MODEL, baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }) }
+catch (error) { providerError = error.message }
+
 const system = [
   'You are the design assistant built into ui-atlas. ui-atlas is a native design tool: the canvas shows a design document made of layers, and you and the user edit the same document.',
   'First use design_get_state or design_get_document to learn the current state, then make changes with design_create_node, design_update_node, design_delete_nodes, and design_move_node; the canvas updates immediately after each change.',
   'When building a UI, prefer frames with auto layout (layout), and create a whole group of layers with children in a single design_create_node call; mobile frames are usually 390×844.',
-  'After making changes, take a design_snapshot to check the result, and adjust if something is off. Undo with design_undo; save with design_save_document.',
+  provider?.images === false
+    ? 'You cannot see images, so design_snapshot gives you no picture: after making changes, read them back with design_get_node or design_get_document to check the result, adjust if something is off, and do not claim to have looked at the design.'
+    : 'After making changes, take a design_snapshot to check the result, and adjust if something is off.',
+  'Undo with design_undo; save with design_save_document.',
   'Reply in the same language as the user\'s latest message, and briefly explain what you did.',
 ].join('\n')
 
@@ -49,13 +57,10 @@ if (values['list-models']) {
   process.exit(0)
 }
 
-let provider = null
-let providerError = null
-try { provider = createProvider({ provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', model: process.env.UI_ATLAS_MODEL, baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }) }
-catch (error) { providerError = error.message }
-
 let history = []
 let current = null
+
+const imagesOmitted = 'The image was left out because the current model provider cannot receive images. Check the result with design_get_node or design_get_document instead.'
 
 function toolText(result) {
   return result.content.filter(item => item.type === 'text').map(item => item.text).join('\n')
@@ -84,7 +89,11 @@ async function reply(text, controller) {
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] } : await callTool(call.name, call.args, ctx)
         const output = toolText(result)
-        log.push({ role: 'tool', id: call.id, name: call.name, text: output, isError: Boolean(result.isError) })
+        const images = result.content.filter(item => item.type === 'image').map(item => ({ data: item.data, mimeType: item.mimeType }))
+        log.push({
+          role: 'tool', id: call.id, name: call.name, isError: Boolean(result.isError),
+          ...(!images.length ? { text: output } : provider.images ? { text: output, images } : { text: `${output}\n${imagesOmitted}` }),
+        })
         emit({ type: 'tool_result', id: call.id, name: call.name, ok: !result.isError, text: output.slice(0, 4000) })
       }
       if (signal.aborted) break

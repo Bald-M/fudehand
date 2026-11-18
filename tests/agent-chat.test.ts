@@ -385,3 +385,60 @@ describe('Agent harness: listing available models', () => {
     expect((await listModels({ UI_ATLAS_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: 'No API key configured' })
   })
 })
+
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
+/** A fake App whose node_snapshot returns a 1×1 PNG. */
+const startSnapshotApp = () => startApp(request => request.command === 'node_snapshot'
+  ? { ok: true, result: { id: request.args.id, width: 780, height: 1688, mimeType: 'image/png', data: PNG } }
+  : { ok: false, error: `Unhandled command: ${request.command}` })
+
+describe('Agent harness: design_snapshot images', () => {
+  it('sends the snapshot image to Anthropic inside the tool result', async () => {
+    const app = await startSnapshotApp()
+    const model = await fakeModel([anthropicTool('toolu_1', 'design_snapshot', { id: 'home' }), anthropicText('Looks right.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('Check the home page')
+    expect(model.requests[1].body.messages[2].content[0]).toEqual({
+      type: 'tool_result', tool_use_id: 'toolu_1',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } },
+        { type: 'text', text: 'Snapshot of layer home (780×1688)' },
+      ],
+    })
+    expect(model.requests[0].body.system).toMatch(/design_snapshot to check the result/)
+    // The chat panel only shows the text; the image data is not sent to the App.
+    expect(events.find(event => event.type === 'tool_result')).toMatchObject({ ok: true, text: 'Snapshot of layer home (780×1688)' })
+  })
+
+  it('sends the snapshot image to the OpenAI Responses API inside the function call output', async () => {
+    const app = await startSnapshotApp()
+    const model = await fakeModel([responsesTool('call_1', 'design_snapshot', { id: 'home' }), responsesText('Looks right.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('Check the home page')
+    expect(model.requests[1].body.input.at(-1)).toEqual({
+      type: 'function_call_output', call_id: 'call_1',
+      output: [
+        { type: 'input_image', image_url: `data:image/png;base64,${PNG}` },
+        { type: 'input_text', text: 'Snapshot of layer home (780×1688)' },
+      ],
+    })
+    expect(model.requests[0].body.instructions).toMatch(/design_snapshot to check the result/)
+  })
+
+  it('tells a provider that cannot receive images that the snapshot image was left out', async () => {
+    const app = await startSnapshotApp()
+    const model = await fakeModel([openaiTool('call_1', 'design_snapshot', { id: 'home' }), openaiText('I cannot see it.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('Check the home page')
+    const result = model.requests[1].body.messages.at(-1)
+    expect(result).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })
+    expect(result.content).toContain('Snapshot of layer home (780×1688)')
+    expect(result.content).toMatch(/image was left out.*cannot receive images/)
+    expect(JSON.stringify(model.requests[1].body)).not.toContain(PNG)
+    const system = model.requests[0].body.messages[0].content
+    expect(system).not.toMatch(/design_snapshot to check the result/)
+    expect(system).toMatch(/cannot see images/)
+    expect(system).toMatch(/design_get_node/)
+  })
+})
