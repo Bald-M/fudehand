@@ -34,6 +34,7 @@ struct ModelListError: Error, Equatable {
 
 /// Manages the child process of the in-App Agent harness (scripts/agent-chat.mjs): started on demand, exchanging JSON lines over stdin/stdout.
 /// After the settings or the key change, the current process is ended and the next message restarts it with the new configuration.
+/// Also owns the conversations: the current transcript, and the saved ones that the history menu reopens.
 @MainActor
 final class ChatSession: ObservableObject {
     struct Launch {
@@ -42,7 +43,15 @@ final class ChatSession: ObservableObject {
         let environment: [String: String]
     }
 
-    @Published private(set) var transcript = ChatTranscript()
+    @Published private(set) var transcript = ChatTranscript() {
+        // A finished reply is saved at once, so the conversation survives a crash or a quit.
+        didSet { if oldValue.busy && !transcript.busy { save() } }
+    }
+    /// The saved conversations, newest first, for the history menu.
+    @Published private(set) var conversations: [ChatHistory.Summary] = []
+    private(set) var conversationID = UUID()
+    /// The current provider's model list as last fetched, for the model menu; kept so opening the panel does not read the Keychain.
+    @Published private(set) var models: [String] = []
     @Published var settings: ChatSettings {
         didSet {
             guard settings != oldValue else { return }
@@ -50,6 +59,7 @@ final class ChatSession: ObservableObject {
             defaults.set(settings.model, forKey: "agent.\(settings.provider).model")
             defaults.set(settings.baseUrl, forKey: "agent.\(settings.provider).baseUrl")
             hasKey = defaults.bool(forKey: "agent.\(settings.provider).hasKey")
+            models = defaults.stringArray(forKey: "agent.\(settings.provider).models") ?? []
             restart()
         }
     }
@@ -58,6 +68,10 @@ final class ChatSession: ObservableObject {
 
     private let defaults: UserDefaults
     private let readKey: (String) -> String?
+    /// Where conversations are saved; nil keeps them in memory only.
+    private let history: ChatHistory?
+    /// Whether the running harness holds this conversation's history. False for a new process and after the conversation is switched or rewound.
+    private var synced = false
     private var process: Process?
     private var input: FileHandle?
     private var buffer = Data()
@@ -65,12 +79,25 @@ final class ChatSession: ObservableObject {
     private var errorOutput = ""
     private var generation = UUID()
 
-    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read) {
+    /// The conversations saved for the current user, next to the control socket.
+    nonisolated static var savedHistory: ChatHistory {
+        ChatHistory(directory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ui-atlas/chats"))
+    }
+
+    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read, history: ChatHistory? = nil) {
         self.defaults = defaults
         self.readKey = readKey
+        self.history = history
         let provider = defaults.string(forKey: "agent.provider").flatMap { id in ChatSettings.providers.contains { $0.id == id } ? id : nil } ?? "deepseek"
         settings = Self.stored(provider, defaults)
         hasKey = defaults.bool(forKey: "agent.\(provider).hasKey")
+        models = defaults.stringArray(forKey: "agent.\(provider).models") ?? []
+        // Reopen the most recent conversation.
+        conversations = history?.list() ?? []
+        if let saved = conversations.first.flatMap({ history?.load($0.id) }) {
+            conversationID = saved.id
+            transcript = ChatTranscript(entries: saved.entries)
+        }
     }
 
     nonisolated static func stored(_ provider: String, _ defaults: UserDefaults) -> ChatSettings {
@@ -110,6 +137,21 @@ final class ChatSession: ObservableObject {
         guard provider == settings.provider else { return }
         hasKey = saved
         restart()
+    }
+
+    /// Remembers a model list fetched for `provider`.
+    func cacheModels(_ list: [String], provider: String) {
+        defaults.set(list, forKey: "agent.\(provider).models")
+        if provider == settings.provider { models = list }
+    }
+
+    /// Fetches the current provider's model list with the saved key (may trigger a Keychain authorization prompt).
+    func reloadModels(root: URL?, runtime: WorkspaceLocation?) async {
+        let settings = settings
+        guard let root, let key = savedKeyValue(for: settings.provider) else { return }
+        if case .success(let listing) = await Self.listModels(root: root, runtime: runtime, settings: settings, apiKey: key) {
+            cacheModels(listing.models, provider: settings.provider)
+        }
     }
 
     nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String], listModels: Bool = false) -> Launch {
@@ -165,37 +207,82 @@ final class ChatSession: ObservableObject {
         return .failure(ModelListError(message: L("The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
     }
 
-    func send(_ text: String, root: URL?, runtime: WorkspaceLocation?) {
+    func send(_ text: String, context: [ChatContext] = [], root: URL?, runtime: WorkspaceLocation?) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !transcript.busy else { return }
-        transcript.send(trimmed)
+        let earlier = transcript.messages
+        transcript.send(trimmed, context: context)
+        // Saved before the reply arrives, so the message is not lost if the App quits unexpectedly.
+        save()
         guard let root else { transcript.fail(L("Cannot find the ui-atlas source directory, so the chat process cannot start")); return }
         if process == nil {
             do { try start(root: root, runtime: runtime) }
             catch { transcript.fail(L("Cannot start the chat process: %@", error.localizedDescription)); return }
         }
-        write(["type": "user", "text": trimmed])
+        if !synced {
+            write(["type": "load", "messages": earlier])
+            synced = true
+        }
+        write(["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }])
     }
 
     func stopReply() { write(["type": "stop"]) }
 
-    /// Not cleared while a reply is in progress, so the end event that arrives afterwards is not written into the new conversation.
-    func clear() {
+    /// Sends the last user message again, replacing the reply it got.
+    func regenerate(root: URL?, runtime: WorkspaceLocation?) {
+        guard let last = editLast() else { return }
+        send(last.text, context: last.context, root: root, runtime: runtime)
+    }
+
+    /// Takes the last user message, and the reply to it, out of the conversation so the message can be edited and sent again.
+    func editLast() -> ChatEntry? {
+        guard let last = transcript.rewind() else { return nil }
+        synced = false
+        save()
+        return last
+    }
+
+    /// Conversations are not switched while a reply is in progress, so the events that arrive afterwards are not written into another conversation.
+    func newConversation() {
         guard !transcript.busy else { return }
-        write(["type": "clear"])
-        transcript.clear()
+        conversationID = UUID()
+        transcript = ChatTranscript()
+        synced = false
+    }
+
+    func open(_ id: UUID) {
+        guard !transcript.busy, id != conversationID, let saved = history?.load(id) else { return }
+        conversationID = saved.id
+        transcript = ChatTranscript(entries: saved.entries)
+        synced = false
+    }
+
+    func deleteConversation() {
+        guard !transcript.busy else { return }
+        history?.delete(conversationID)
+        conversations = history?.list() ?? []
+        newConversation()
     }
 
     func shutdown() async {
         terminate()
+        // Keep what a reply cut short by quitting had already produced.
+        transcript.stop()
+    }
+
+    private func save() {
+        guard let history else { return }
+        if transcript.entries.isEmpty { history.delete(conversationID) }
+        else { try? history.save(ChatConversation(id: conversationID, transcript: transcript, updatedAt: Date())) }
+        conversations = history.list()
     }
 
     private func restart() {
         guard process != nil else { return }
         terminate()
         // terminate() discards the old harness's `done` and exit callbacks, so end the running reply here.
+        // The next message starts a new harness, which is given the conversation so far.
         transcript.stop()
-        transcript.note(L("Model settings changed; new replies do not include the earlier context."))
     }
 
     private func start(root: URL, runtime: WorkspaceLocation?) throws {
@@ -216,6 +303,7 @@ final class ChatSession: ObservableObject {
         _ = fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         let token = UUID()
         generation = token
+        synced = false
         buffer = Data()
         errorOutput = ""
         stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
@@ -240,7 +328,7 @@ final class ChatSession: ObservableObject {
         input = stdinPipe.fileHandleForWriting
     }
 
-    private func write(_ message: [String: String]) {
+    private func write(_ message: [String: Any]) {
         guard let input, var data = try? JSONSerialization.data(withJSONObject: message) else { return }
         data.append(UInt8(ascii: "\n"))
         // The write fails when the process has exited; the App already ignores SIGPIPE, and the failure is reported by the termination handler.

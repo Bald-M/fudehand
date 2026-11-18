@@ -43,7 +43,7 @@ final class AtlasStore: ObservableObject {
         }
     }
     let zoomIndicator = ZoomIndicator()
-    let chat = ChatSession()
+    let chat: ChatSession
     /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
     private(set) var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
@@ -75,8 +75,10 @@ final class AtlasStore: ObservableObject {
     /// Shows the editor window and closes the launch window; registered by a view in a window after it gets the actions from the environment.
     var presentEditor: () -> Void = {}
 
-    init(defaults: UserDefaults = .standard) {
+    /// `chatHistory` is where chat conversations are saved; nil keeps them in memory only.
+    init(defaults: UserDefaults = .standard, chatHistory: ChatHistory? = nil) {
         self.defaults = defaults
+        chat = ChatSession(history: chatHistory)
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
         language = AppLanguage.saved(in: defaults)

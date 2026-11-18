@@ -17,9 +17,10 @@ struct InspectorPanel: View {
             switch store.inspectorTab {
             case .design: DesignInspector(store: store)
             case .chat:
-                ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime) {
-                    store.chat.send($0, root: store.toolsRoot, runtime: store.runtime)
-                }
+                let selected = store.selection.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
+                          selection: selected.map { ChatContext(id: $0.id, name: $0.name, type: $0.type.rawValue) },
+                          layerName: { store.document.node($0)?.name })
             }
         }
     }

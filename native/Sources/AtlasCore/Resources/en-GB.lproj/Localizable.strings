@@ -168,7 +168,6 @@
 "Add Auto Layout" = "Add Auto Layout";
 
 /* Chat panel */
-"Clear conversation" = "Clear conversation";
 "Model settings" = "Model settings";
 "Default model" = "Default model";
 "No API key set for %@" = "No API key set for %@";
@@ -183,9 +182,6 @@
 "Stop replying" = "Stop replying";
 "Send (Return)" = "Send (Return)";
 "Send" = "Send";
-"Result · %@" = "Result · %@";
-"Failed · %@" = "Failed · %@";
-"Call · %@" = "Call · %@";
 "Model provider" = "Model provider";
 "Model" = "Model";
 "Default: %@" = "Default: %@";
@@ -212,10 +208,47 @@
 "Cannot start the chat process: %@" = "Cannot start the chat process: %@";
 "The chat process returned no model list. Make sure you have run pnpm install in the project directory." = "The chat process returned no model list. Make sure you have run pnpm install in the project directory.";
 "Cannot find the ui-atlas source directory, so the chat process cannot start" = "Cannot find the ui-atlas source directory, so the chat process cannot start";
-"Model settings changed; new replies do not include the earlier context." = "Model settings changed; new replies do not include the earlier context.";
 "The chat process exited unexpectedly (%d). Make sure you have run pnpm install in the project directory." = "The chat process exited unexpectedly (%d). Make sure you have run pnpm install in the project directory.";
 "Unknown error" = "Unknown error";
 "Reply stopped" = "Reply stopped";
+"New conversation" = "New conversation";
+"Conversation history" = "Conversation history";
+"No saved conversations" = "No saved conversations";
+"Delete This Conversation" = "Delete This Conversation";
+"Scroll to bottom" = "Scroll to bottom";
+"Context" = "Context";
+"Remove from context" = "Remove from context";
+"Remove %@ from context" = "Remove %@ from context";
+"+%d more" = "+%d more";
+"Selected layers: %@" = "Selected layers: %@";
+"Model Settings…" = "Model Settings…";
+"Edit and resend" = "Edit and resend";
+"Copy message" = "Copy message";
+"Regenerate" = "Regenerate";
+"Copied" = "Copied";
+"Code" = "Code";
+"Copy code" = "Copy code";
+"Ran %d steps" = "Ran %d steps";
+"Ran %d steps, %d failed" = "Ran %d steps, %d failed";
+"Arguments" = "Arguments";
+"Result" = "Result";
+"Succeeded" = "Succeeded";
+"Failed" = "Failed";
+"Running" = "Running";
+"Read document overview" = "Read document overview";
+"Read layer tree" = "Read layer tree";
+"Read layer" = "Read layer";
+"Create layer" = "Create layer";
+"Update layer" = "Update layer";
+"Delete layers" = "Delete layers";
+"Move layer" = "Move layer";
+"Select layers" = "Select layers";
+"Create document" = "Create document";
+"Open document" = "Open document";
+"Save document" = "Save document";
+"Take snapshot" = "Take snapshot";
+"Focus layer" = "Focus layer";
+"Zoom canvas" = "Zoom canvas";
 
 /* MCP connectors */
 "Cannot find the ui-atlas source directory, so it cannot connect" = "Cannot find the ui-atlas source directory, so it cannot connect";

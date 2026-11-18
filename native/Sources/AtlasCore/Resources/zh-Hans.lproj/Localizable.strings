@@ -168,7 +168,6 @@
 "Add Auto Layout" = "添加自动布局";
 
 /* Chat panel */
-"Clear conversation" = "清空会话";
 "Model settings" = "模型设置";
 "Default model" = "默认模型";
 "No API key set for %@" = "尚未配置 %@ 的 API key";
@@ -183,9 +182,6 @@
 "Stop replying" = "停止回复";
 "Send (Return)" = "发送（Return）";
 "Send" = "发送";
-"Result · %@" = "结果 · %@";
-"Failed · %@" = "失败 · %@";
-"Call · %@" = "调用 · %@";
 "Model provider" = "模型提供方";
 "Model" = "模型";
 "Default: %@" = "默认：%@";
@@ -212,10 +208,47 @@
 "Cannot start the chat process: %@" = "无法启动对话程序：%@";
 "The chat process returned no model list. Make sure you have run pnpm install in the project directory." = "对话程序没有返回模型列表，请确认已在项目目录执行 pnpm install。";
 "Cannot find the ui-atlas source directory, so the chat process cannot start" = "找不到 ui-atlas 源码目录，无法启动对话程序";
-"Model settings changed; new replies do not include the earlier context." = "已切换模型设置，新的回复不包含之前的上下文。";
 "The chat process exited unexpectedly (%d). Make sure you have run pnpm install in the project directory." = "对话程序意外退出（%d）。请确认已在项目目录执行 pnpm install。";
 "Unknown error" = "未知错误";
 "Reply stopped" = "已停止回复";
+"New conversation" = "新建会话";
+"Conversation history" = "历史会话";
+"No saved conversations" = "暂无已保存的会话";
+"Delete This Conversation" = "删除当前会话";
+"Scroll to bottom" = "回到底部";
+"Context" = "上下文";
+"Remove from context" = "从上下文中移除";
+"Remove %@ from context" = "从上下文中移除 %@";
+"+%d more" = "另外 %d 个";
+"Selected layers: %@" = "选中的图层：%@";
+"Model Settings…" = "模型设置…";
+"Edit and resend" = "编辑后重新发送";
+"Copy message" = "复制消息";
+"Regenerate" = "重新生成";
+"Copied" = "已复制";
+"Code" = "代码";
+"Copy code" = "复制代码";
+"Ran %d steps" = "已执行 %d 个步骤";
+"Ran %d steps, %d failed" = "已执行 %d 个步骤，%d 个失败";
+"Arguments" = "参数";
+"Result" = "结果";
+"Succeeded" = "成功";
+"Failed" = "失败";
+"Running" = "进行中";
+"Read document overview" = "读取文档概览";
+"Read layer tree" = "读取图层树";
+"Read layer" = "读取图层";
+"Create layer" = "创建图层";
+"Update layer" = "修改图层";
+"Delete layers" = "删除图层";
+"Move layer" = "移动图层";
+"Select layers" = "选中图层";
+"Create document" = "新建文档";
+"Open document" = "打开文档";
+"Save document" = "保存文档";
+"Take snapshot" = "截图";
+"Focus layer" = "聚焦图层";
+"Zoom canvas" = "缩放画布";
 
 /* MCP connectors */
 "Cannot find the ui-atlas source directory, so it cannot connect" = "找不到 ui-atlas 源码目录，无法连接";
