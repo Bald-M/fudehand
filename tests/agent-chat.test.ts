@@ -1068,17 +1068,17 @@ describe('Agent harness: plan and goal modes', () => {
     expect(model.requests).toHaveLength(2)
   })
 
-  it('lets a goal run past the tool-call rounds of an ordinary reply', async () => {
+  it('lets a goal keep calling tools for as many rounds as it needs', async () => {
     const app = await startApp()
     const model = await fakeModel([
-      ...Array.from({ length: 20 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})),
+      ...Array.from({ length: 80 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})),
       openaiTool('call_done', 'goal_done', { summary: 'Checked.' }),
     ])
     const chat = await deepseek(model.baseUrl, app.socketPath)
     const events = await chat.ask('Keep checking', { mode: 'goal' })
     expect(events.some(event => event.type === 'error')).toBe(false)
     expect(events.at(-2)).toEqual({ type: 'assistant', text: 'Checked.' })
-    expect(app.received).toHaveLength(20)
+    expect(app.received).toHaveLength(80)
   })
 
   it('runs nothing further once a goal is stopped', async () => {

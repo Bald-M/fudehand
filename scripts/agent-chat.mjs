@@ -23,8 +23,8 @@ import { designGuidance } from './design-guidance.mjs'
  * model request that is kept out of the history and of `usage`, and is simply not sent when that request fails.
  * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
  * `mode` applies to that one message. In plan mode the model gets only the tools that read the design document and replies with a plan;
- * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, over more rounds than an
- * ordinary reply gets, until it calls goal_done, whose summary is sent as the reply's last assistant text.
+ * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, with no limit on
+ * tool-call rounds, until it calls goal_done, whose summary is sent as the reply's last assistant text, or the user stops it.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
  */
@@ -32,8 +32,8 @@ import { designGuidance } from './design-guidance.mjs'
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
 const apiKey = process.env.FUDEHAND_API_KEY ?? ''
+// An ordinary reply's limit; a goal has none and runs until it is done or the user stops it.
 const maximumRounds = 16
-const maximumGoalRounds = 64
 
 /** The tools plan mode offers: the ones that only read the design document. A tool not listed here cannot run before the plan is confirmed. */
 const readingTools = ['design_get_state', 'design_get_document', 'design_get_node', 'design_snapshot']
@@ -225,7 +225,7 @@ async function reply(text, controller, mode) {
     if (providerError) throw new Error(providerError)
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
-      if (round === (goal ? maximumGoalRounds : maximumRounds)) throw new Error('Too many tool-call rounds; stopped this reply')
+      if (!goal && round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(prompt, log, offered, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
       count(answer)
       if (signal.aborted) break

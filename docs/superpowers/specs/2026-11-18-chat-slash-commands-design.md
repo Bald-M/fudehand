@@ -29,7 +29,7 @@ The chat panel could only send plain messages, and the Agent always edited the d
 | Mode | Tools offered | System prompt | Loop |
 |---|---|---|---|
 | plan | `design_get_state`, `design_get_document`, `design_get_node`, `design_snapshot`, `ask_user` | plus the plan note | unchanged; a call to any other tool gets an error result and is not run |
-| goal | all tools, `ask_user`, and `goal_done {summary}` | plus the goal note | up to 64 rounds; `goal_done` ends the reply and its summary is emitted as an `assistant` event and kept in the history as the reply's last text; a round without tool calls gets one reminder, a second in a row ends the reply. The reminder is marked internal, so the next-message prediction does not read it as the user's words, and is reduced to *Continue.* once the reply ends |
+| goal | all tools, `ask_user`, and `goal_done {summary}` | plus the goal note | no round limit (an ordinary reply has 16): it runs until `goal_done`, the user stops it, or the model stops calling tools; `goal_done` ends the reply and its summary is emitted as an `assistant` event and kept in the history as the reply's last text; a round without tool calls gets one reminder, a second in a row ends the reply. The reminder is marked internal, so the next-message prediction does not read it as the user's words, and is reduced to *Continue.* once the reply ends |
 
 The reading tools are an allow-list, so a tool added later is unavailable in plan mode until it is listed. An answer to a question that reaches a harness started anew carries the reply's `mode`, so the continued reply is still a plan.
 
