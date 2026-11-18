@@ -114,7 +114,7 @@ A few details worth knowing:
 - `design_create_node` can create a whole subtree at once through `children`.
 - `design_update_node` is a partial patch: nested objects are merged field by field.
 - A field error explains what is wrong and leaves the document unchanged.
-- For an image, pass `image.path` (a local PNG or JPEG) and the tool reads the file for you. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
+- For an image, pass `image.path` (a local PNG, JPEG, or SVG) and the tool reads the file for you. An SVG is kept as vector source, so icons stay sharp at any zoom. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
 - In file and image paths, `~` expands to your home directory.
 
 The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/fudehand/control.sock` (override it with `FUDEHAND_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.

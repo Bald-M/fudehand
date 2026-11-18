@@ -27,6 +27,7 @@ final class DesignRenderer {
             for layer in records.values.map(\.layer) where layer is TextLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
                 if layer is TextLayer { layer.setNeedsDisplay() }
+                (layer as? ImageLayer)?.rasterize(force: true)
             }
             CATransaction.commit()
         }
@@ -98,6 +99,7 @@ final class DesignRenderer {
         switch type {
         case .ellipse: layer = CAShapeLayer()
         case .text: layer = TextLayer()
+        case .image: layer = ImageLayer()
         default: layer = CALayer()
         }
         layer.anchorPoint = .zero
@@ -144,7 +146,9 @@ final class DesignRenderer {
             textLayer.attributed = TextMetrics.attributed(text)
         }
         if let image = node.image {
-            if image.data != previous?.image?.data { layer.contents = cgImage(image.data) }
+            if let imageLayer = layer as? ImageLayer {
+                if image.data != previous?.image?.data { imageLayer.load(image.data) } else { imageLayer.rasterize(force: false) }
+            }
             switch image.fit {
             case .fill: layer.contentsGravity = .resizeAspectFill
             case .fit: layer.contentsGravity = .resizeAspect
@@ -156,6 +160,19 @@ final class DesignRenderer {
     static func cgImage(_ data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// Decodes SVG data with the system renderer; nil for anything else, or an SVG without a usable size.
+    static func svgImage(_ data: Data) -> NSImage? {
+        guard cgImage(data) == nil, DesignJSON.isSVG(data), let image = NSImage(data: data), image.size.width > 0, image.size.height > 0 else { return nil }
+        return image
+    }
+
+    /// The size a newly inserted image gets: half the pixel size for bitmaps (they are usually @2x), the declared size for SVG
+    /// (the `viewBox` size when it declares no width and height). Nil when the data cannot be drawn.
+    static func imageSize(_ data: Data) -> CGSize? {
+        if let bitmap = cgImage(data) { return CGSize(width: Double(bitmap.width) / 2, height: Double(bitmap.height) / 2) }
+        return svgImage(data)?.size
     }
 
     /// Renders a node (with its children) offscreen and returns a PNG; the node itself sits at the top-left corner of the image.
@@ -193,5 +210,43 @@ final class DesignRenderer {
         CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else { throw ControlCommandError("Could not encode the snapshot") }
         return data as Data
+    }
+}
+
+/// The layer of an image node. A bitmap is decoded once into `contents`; an SVG keeps its source and is rasterized for the size it
+/// is shown at, so it stays sharp when zoomed in: again when the zoom settles (a new `contentsScale`) or the layer grows.
+final class ImageLayer: CALayer {
+    private var svg: NSImage?
+    /// The pixel size of the current SVG raster.
+    private var raster: CGSize = .zero
+
+    @MainActor func load(_ data: Data) {
+        svg = DesignRenderer.svgImage(data)
+        if svg == nil {
+            contents = DesignRenderer.cgImage(data)
+        } else {
+            rasterize(force: true)
+        }
+    }
+
+    /// Rasterizes the SVG at the size that covers the bounds (what fill shows) × `contentsScale`. Unless forced, only when that is
+    /// larger than the current raster: shrinking keeps the sharper raster, and a resize drag does not redraw on every frame.
+    @MainActor func rasterize(force: Bool) {
+        guard let svg else { return }
+        let size = svg.size
+        let cover = max(bounds.width / size.width, bounds.height / size.height) * contentsScale
+        let limit = DesignRenderer.maximumRasterSide / max(size.width, size.height)
+        let factor = min(cover, limit)
+        let pixels = CGSize(width: max(1, (size.width * factor).rounded(.up)), height: max(1, (size.height * factor).rounded(.up)))
+        guard force || pixels.width > raster.width || pixels.height > raster.height else { return }
+        guard let context = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        svg.draw(in: CGRect(origin: .zero, size: pixels))
+        NSGraphicsContext.restoreGraphicsState()
+        contents = context.makeImage()
+        raster = pixels
     }
 }

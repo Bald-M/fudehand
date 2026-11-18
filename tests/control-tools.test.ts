@@ -98,6 +98,16 @@ describe('design tools', () => {
     expect(fake.received).toHaveLength(2)
   })
 
+  it('reads an SVG image.path byte for byte', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'uia-image-'))
+    cleanup.push(() => rm(dir, { recursive: true, force: true }))
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>\n'
+    await writeFile(join(dir, 'icon.svg'), svg)
+    const fake = await app(echo)
+    await callTool('design_create_node', { node: { type: 'image', image: { path: 'icon.svg' } } }, { root: dir, socketPath: fake.socketPath })
+    expect(fake.received[0].args.node).toEqual({ type: 'image', image: { data: Buffer.from(svg).toString('base64') } })
+  })
+
   it('passes through error messages returned by the App', async () => {
     const fake = await app(() => ({ ok: false, error: 'Layer e: ellipse does not support layout' }))
     const result = await callTool('design_update_node', { id: 'e', changes: { layout: {} } }, { root: '/repo', socketPath: fake.socketPath })

@@ -189,14 +189,14 @@ final class FudehandStore: ObservableObject {
     /// Inserts an image file: into the selected frame, otherwise at the center of the viewport.
     func insertImage() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg]
+        panel.allowedContentTypes = [.png, .jpeg, .svg]
         panel.title = L("Insert Image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
-            guard let image = DesignRenderer.cgImage(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
+            guard let size = DesignRenderer.imageSize(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
             let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
-            let width = Double(image.width) / 2, height = Double(image.height) / 2
+            let width = Double(size.width), height = Double(size.height)
             let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
             let id = DesignDocument.newID(existing: editor.document.allIDs())
             var node = DesignNode(id: id, type: .image, name: url.deletingPathExtension().lastPathComponent,

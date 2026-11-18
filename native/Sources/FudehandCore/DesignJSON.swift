@@ -158,7 +158,7 @@ public enum DesignJSON {
             try image.checkKeys(["data", "fit"])
             let encoded = try image.string("data")
             guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), isImage(data) else {
-                throw reader.fail("image.data must be a base64-encoded PNG or JPEG")
+                throw reader.fail("image.data must be a base64-encoded PNG, JPEG, or SVG")
             }
             node.image = DesignImage(data: data, fit: try image.choice("fit", default: .fill))
         }
@@ -184,8 +184,25 @@ public enum DesignJSON {
     }
 
     static func isImage(_ data: Data) -> Bool {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
-        return CGImageSourceGetCount(source) > 0
+        if let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 { return true }
+        return isSVG(data)
+    }
+
+    /// Whether the data is well-formed XML whose root element is `svg`. ImageIO does not read SVG, and drawing it needs AppKit, so this
+    /// only checks the structure: an SVG the system cannot draw passes and shows up blank.
+    public static func isSVG(_ data: Data) -> Bool {
+        let parser = XMLParser(data: data)
+        let root = RootElement()
+        parser.delegate = root
+        return parser.parse() && root.name == "svg"
+    }
+
+    private final class RootElement: NSObject, XMLParserDelegate {
+        var name: String?
+        func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName: String?,
+                    attributes: [String: String] = [:]) {
+            if name == nil { name = elementName }
+        }
     }
 
     // MARK: Writing

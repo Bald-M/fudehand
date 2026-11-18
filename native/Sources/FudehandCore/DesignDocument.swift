@@ -62,7 +62,7 @@ public struct DesignText: Hashable, Sendable {
 public enum ImageFit: String, Sendable, CaseIterable { case fill, fit, stretch }
 
 public struct DesignImage: Equatable, Sendable {
-    /// Raw PNG or JPEG bytes; saved in files as base64.
+    /// Raw PNG, JPEG, or SVG bytes; saved in files as base64. SVG keeps its source and is rasterized when drawn.
     public var data: Data
     public var fit: ImageFit
     public init(data: Data, fit: ImageFit = .fill) { self.data = data; self.fit = fit }

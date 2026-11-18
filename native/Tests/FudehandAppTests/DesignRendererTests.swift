@@ -124,3 +124,62 @@ import Testing
     #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 4096, height: 100)) == 2)
     #expect(DesignRenderer.rasterScale(8, for: CGSize(width: 100_000, height: 100)) == 1)
 }
+
+private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="24" fill="#FF0000"/></svg>"##.utf8)
+
+@MainActor private func svgImage(width: Double = 48, height: Double = 24) -> DesignNode {
+    var node = DesignNode(id: "s", type: .image, width: width, height: height)
+    node.image = DesignImage(data: redSVG)
+    return node
+}
+
+@Test @MainActor func imageSizeIsHalfThePixelsForBitmapsAndTheDeclaredSizeForSVG() throws {
+    let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+    #expect(DesignRenderer.imageSize(png) == CGSize(width: 0.5, height: 0.5))
+    #expect(DesignRenderer.imageSize(redSVG) == CGSize(width: 48, height: 24))
+    let viewBoxOnly = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>"#.utf8)
+    #expect(DesignRenderer.imageSize(viewBoxOnly) == CGSize(width: 24, height: 24))
+    #expect(DesignRenderer.imageSize(Data("<html></html>".utf8)) == nil)
+}
+
+@Test @MainActor func svgIsRasterizedAgainWhenZoomSettlesOrTheLayerGrows() throws {
+    let renderer = DesignRenderer()
+    renderer.contentsScale = 1
+    var node = svgImage()
+    renderer.sync([node])
+    let layer = try #require(renderer.layer(for: "s"))
+    #expect((layer.contents as! CGImage).width == 48)
+    renderer.contentsScale = 8
+    #expect((layer.contents as! CGImage).width == 384)
+    node.width = 96
+    node.height = 48
+    renderer.sync([node])
+    #expect((layer.contents as! CGImage).width == 768)
+    // Shrinking keeps the sharper raster.
+    node.width = 48
+    node.height = 24
+    renderer.sync([node])
+    #expect((layer.contents as! CGImage).width == 768)
+}
+
+@Test @MainActor func svgFollowsImageFitAndCornerRadius() throws {
+    let renderer = DesignRenderer()
+    var node = svgImage(width: 100, height: 100)
+    node.cornerRadius = 10
+    node.image?.fit = .fit
+    renderer.sync([node])
+    let layer = try #require(renderer.layer(for: "s"))
+    #expect(layer.contentsGravity == .resizeAspect && layer.cornerRadius == 10 && layer.masksToBounds)
+    // Fill covers the bounds, so the raster is as tall as the layer: 100 × scale 2.
+    node.image?.fit = .fill
+    renderer.sync([node])
+    #expect(layer.contentsGravity == .resizeAspectFill && (layer.contents as! CGImage).height == 200)
+}
+
+@Test @MainActor func snapshotIncludesSVGContent() throws {
+    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(svgImage(), scale: 4)))
+    #expect(image.pixelsWide == 192 && image.pixelsHigh == 96)
+    // Compare the stored bytes: colorAt reports sRGB data as calibrated RGB, so converting it would shift saturated colors.
+    let pixel = try #require(image.bitmapData).advanced(by: 48 * image.bytesPerRow + 96 * image.samplesPerPixel)
+    #expect((0..<4).map { pixel[$0] } == [255, 0, 0, 255])
+}
