@@ -387,10 +387,12 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
     chat.send({ type: 'user', text: 'Look at the document' })
-    await new Promise(resolve => setTimeout(resolve, 150))
+    // Stop only once the request is with the model, which is still holding its tool call; a stop before then sends no request at all.
+    while (!model.requests.length) await new Promise(resolve => setTimeout(resolve, 10))
     chat.send({ type: 'stop' })
     await chat.until(event => event.type === 'done', from)
     await chat.ask('Continue')
+    expect(model.requests).toHaveLength(2)
     expect(model.requests.at(-1)!.body.messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
   })
 
