@@ -26,7 +26,7 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_snapshot',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
@@ -47,6 +47,8 @@ describe('design tools', () => {
     await callTool('design_save_document', {}, ctx)
     await callTool('design_save_document', { path: '/tmp/a.fudehand' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
+    await callTool('design_list_fonts', {}, ctx)
+    await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
@@ -59,6 +61,8 @@ describe('design tools', () => {
       { command: 'save_document', args: {} },
       { command: 'save_document', args: { path: '/tmp/a.fudehand' } },
       { command: 'zoom', args: { scale: 0.5 } },
+      { command: 'list_fonts', args: {} },
+      { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
     ])
   })
 

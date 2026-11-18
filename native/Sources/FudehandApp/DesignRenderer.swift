@@ -47,6 +47,12 @@ final class DesignRenderer {
     var layerCount: Int { records.count }
     func layer(for id: String) -> CALayer? { records[id]?.layer }
 
+    /// The available fonts changed: the next sync typesets every text layer again, even when its node is unchanged.
+    func fontsChanged() {
+        // Forgetting only the text keeps the layer (a nil `applied` would read as a type change and replace it).
+        for record in records.values where record.layer is TextLayer { record.applied?.text = nil }
+    }
+
     func sync(_ nodes: [DesignNode]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)

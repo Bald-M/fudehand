@@ -43,6 +43,9 @@ enum TextMetrics {
     /// Layout measures all text again after every edit; the same text and width reuse the result directly. Used on the main thread only.
     nonisolated(unsafe) private static var cache: [MeasureKey: Size] = [:]
 
+    /// Forgets the measurements, which no longer hold once the available fonts change.
+    static func resetCache() { cache.removeAll(keepingCapacity: true) }
+
     static let measure: TextMeasure = { text, maxWidth in
         let key = MeasureKey(text: text, maxWidth: maxWidth)
         if let hit = cache[key] { return hit }

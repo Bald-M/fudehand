@@ -133,6 +133,13 @@
 "Hug contents" = "包裹内容";
 "Fill container" = "填满容器";
 "Text content" = "文字内容";
+"Font" = "字体";
+"System Default" = "系统默认";
+"%@ (missing)" = "%@（缺失）";
+"Import Font…" = "导入字体…";
+"Import Font" = "导入字体";
+"Not a font file: %@" = "不是字体文件：%@";
+"Could not import font: %@" = "无法导入字体：%@";
 "Font size" = "字号";
 "Weight|font" = "字重";
 "Text color" = "文字颜色";
