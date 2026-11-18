@@ -120,6 +120,15 @@ private func group(_ id: String, sizing: Sizing = .fixed, children: [DesignNode]
     #expect(frame.children[1].x == 50)
 }
 
+@Test func fillGroupWithOffsetChildrenKeepsItsChildUnion() {
+    var a = box("a", 40, 20), b = box("b", 10, 10)
+    a.x = 20; a.y = 30; b.x = 70; b.y = 40
+    let filling = group("g", sizing: Sizing(horizontal: .fill, vertical: .fill), children: [a, b])
+    let frame = laidOut(autoFrame(AutoLayout(direction: .horizontal, padding: EdgeInsets(top: 5, left: 5)), width: 300, children: [filling]))
+    #expect(frame.children[0].frame == Rect(x: 5, y: 5, width: 60, height: 20))
+    #expect(frame.children[0].children.map(\.frame) == [Rect(x: 0, y: 0, width: 40, height: 20), Rect(x: 50, y: 10, width: 10, height: 10)])
+}
+
 @Test func fillGroupDoesNotTakeSpaceFromFillSiblings() {
     var sibling = box("b", 10, 10)
     sibling.sizing.horizontal = .fill
