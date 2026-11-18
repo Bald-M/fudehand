@@ -32,6 +32,8 @@ function streamEvents(url: string, body: any): string[] {
         ...pieces(call.function.arguments).map(part => ({ choices: [{ delta: { tool_calls: [{ index, function: { arguments: part } }] } }] })),
       ]),
       { choices: [{ delta: {}, finish_reason: choice.finish_reason ?? (message.tool_calls ? 'tool_calls' : 'stop') }] },
+      // With stream_options.include_usage, the usage arrives in a last chunk that has no choices.
+      ...(body.usage ? [{ choices: [], usage: body.usage }] : []),
     ]
     return [...events.map(event => `data: ${JSON.stringify(event)}\n\n`), 'data: [DONE]\n\n']
   }
@@ -42,8 +44,9 @@ function streamEvents(url: string, body: any): string[] {
       { type: body.status === 'incomplete' ? 'response.incomplete' : 'response.completed', response: body },
     ]
   } else {
+    const { output_tokens, ...inputUsage } = body.usage ?? {}
     events = [
-      { type: 'message_start', message: { role: 'assistant', content: [] } },
+      { type: 'message_start', message: { role: 'assistant', content: [], ...(body.usage ? { usage: inputUsage } : {}) } },
       ...body.content.flatMap((block: any, index: number) => {
         const deltas = block.type === 'text' ? pieces(block.text).map(text => ({ type: 'text_delta', text }))
           : block.type === 'tool_use' ? pieces(JSON.stringify(block.input)).map(partial_json => ({ type: 'input_json_delta', partial_json }))
@@ -56,7 +59,7 @@ function streamEvents(url: string, body: any): string[] {
           { type: 'content_block_stop', index },
         ]
       }),
-      { type: 'message_delta', delta: { stop_reason: body.stop_reason } },
+      { type: 'message_delta', delta: { stop_reason: body.stop_reason }, ...(body.usage ? { usage: { output_tokens } } : {}) },
       { type: 'message_stop' },
     ]
   }
@@ -527,6 +530,93 @@ describe('Agent harness: Anthropic Messages API', () => {
 })
 
 /** Runs the harness with --list-models, returning its single line of output and the exit code. */
+/** Adds the provider's usage report to a preset reply. */
+const withUsage = (reply: { body: object }, usage: object) => ({ body: { ...reply.body, usage } })
+
+describe('Agent harness: token usage', () => {
+  const deepseek = (baseUrl: string, extra: Record<string, string> = {}) =>
+    startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: baseUrl, UI_ATLAS_API_KEY: KEY, ...extra })
+
+  it('reports the usage a Chat Completions stream ends with', async () => {
+    const model = await fakeModel([
+      withUsage(openaiText('Hi.'), { prompt_tokens: 120, completion_tokens: 30, prompt_cache_hit_tokens: 100 }),
+      withUsage(openaiText('Again.'), { prompt_tokens: 50, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 7 } }),
+    ])
+    const chat = await deepseek(model.baseUrl)
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 100 } })
+    expect(model.requests[0].body.stream_options).toEqual({ include_usage: true })
+    expect((await chat.ask('Again')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 50, output: 5, cached: 7 } })
+  })
+
+  it('reports Responses API usage', async () => {
+    const model = await fakeModel([withUsage(responsesText('Hi.'), { input_tokens: 200, output_tokens: 40, input_tokens_details: { cached_tokens: 150 } })])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 200, output: 40, cached: 150 } })
+  })
+
+  it('counts Anthropic cache tokens as input', async () => {
+    const model = await fakeModel([withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 300, output_tokens: 50 })])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 330, output: 50, cached: 300 } })
+  })
+
+  it('reads usage from a plain JSON body', async () => {
+    const model = await fakeModel([
+      { ...withUsage(openaiText('Hi.'), { prompt_tokens: 120, completion_tokens: 30 }), json: true },
+      { ...withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_read_input_tokens: 300, output_tokens: 50 }), json: true },
+    ])
+    expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 0 } })
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 310, output: 50, cached: 300 } })
+  })
+
+  it('reports no usage when the API sends none or sends it malformed', async () => {
+    const model = await fakeModel([openaiText('Hi.'), withUsage(openaiText('Again.'), { prompt_tokens: 'many' })])
+    const chat = await deepseek(model.baseUrl)
+    expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false })
+    expect((await chat.ask('Again')).at(-1)).toEqual({ type: 'done', stopped: false })
+  })
+
+  it('adds up the usage of every round of a reply', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }),
+      withUsage(openaiText('Done.'), { prompt_tokens: 150, completion_tokens: 20, prompt_cache_hit_tokens: 90 }),
+    ])
+    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 250, output: 30, cached: 90 } })
+  })
+
+  it('reports no usage when one round did not report any', async () => {
+    const app = await startApp()
+    const model = await fakeModel([withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }), openaiText('Done.')])
+    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false })
+  })
+
+  it('reports the completed rounds when the reply is stopped', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }),
+      { ...openaiText('Too late.'), delayMs: 1500 },
+    ])
+    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    chat.send({ type: 'user', text: 'Look' })
+    await chat.until(event => event.type === 'tool_result')
+    chat.send({ type: 'stop' })
+    expect(await chat.until(event => event.type === 'done')).toEqual({ type: 'done', stopped: true, usage: { input: 100, output: 10, cached: 0 } })
+  })
+
+  it('still reports usage when a later round fails', async () => {
+    const app = await startApp()
+    const model = await fakeModel([withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }), { status: 500, body: {} }])
+    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('Look')
+    expect(events.slice(-2).map(event => event.type)).toEqual(['error', 'done'])
+    expect(events.at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 100, output: 10, cached: 0 } })
+  })
+})
+
 async function listModels(env: Record<string, string>) {
   const child = spawn(process.execPath, [harness, '--list-models'], { env: { PATH: process.env.PATH ?? '', ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
   let output = ''
