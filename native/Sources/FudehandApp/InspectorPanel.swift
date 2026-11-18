@@ -324,6 +324,12 @@ private struct NodeInspector: View {
         return frames.filter { $0.id != own } + frames.filter { $0.id == own }
     }
 
+    /// The default destination: the first top-level frame other than the one holding this layer.
+    private var otherFrame: String? {
+        let own = store.document.ancestry(of: node.id).first
+        return store.document.nodes.first { $0.type == .frame && $0.id != own }?.id
+    }
+
     private func interactionSection(_ interaction: DesignInteraction?) -> some View {
         Section(title: L("Prototype")) {
             if let interaction {
@@ -367,7 +373,7 @@ private struct NodeInspector: View {
                 Button(L("Remove Interaction")) { update("Remove Interaction") { $0.interaction = nil } }
             } else {
                 Button(L("Add Interaction")) {
-                    update("Add Interaction") { $0.interaction = destinations.first.map { .navigate(destination: $0.id, transition: PrototypeTransition()) } ?? .back }
+                    update("Add Interaction") { $0.interaction = otherFrame.map { .navigate(destination: $0, transition: PrototypeTransition()) } ?? .back }
                 }
                 Text(L("Clicking this layer during playback goes to another frame or back."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

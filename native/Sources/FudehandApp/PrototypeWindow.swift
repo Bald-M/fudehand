@@ -13,17 +13,17 @@ struct PrototypeRequest: Equatable {
 /// the document as it is edited, by people or the Agent.
 struct PrototypeWindow: View {
     @ObservedObject var store: FudehandStore
-    /// The frame on show, as reported by the stage; nil until the first move after a request.
-    @State private var current: String?
+    /// The frame on show, as reported by the stage, with the token of the playback it belongs to.
+    @State private var current: (token: Int, id: String)?
 
     var body: some View {
-        let shown = store.prototypeRequest.map { current ?? $0.start }
+        let shown = store.prototypeRequest.map { request in current.flatMap { $0.token == request.token ? $0.id : nil } ?? request.start }
         let frame = shown.flatMap { Prototype.frame($0, in: store.document) }
         let scale = frame.map { Self.fitScale(Size(width: $0.width, height: $0.height)) } ?? 1
         // The stage stays in place while its frame is missing, so undoing the deletion resumes playback where it was.
         ZStack {
             if let request = store.prototypeRequest {
-                PrototypeStage(document: store.document, request: request, scale: scale) { current = $0 }
+                PrototypeStage(document: store.document, request: request, scale: scale) { current = (request.token, $0) }
             }
             if frame == nil {
                 VStack(spacing: 12) {
@@ -36,7 +36,6 @@ struct PrototypeWindow: View {
         }
         .frame(width: frame.map { $0.width * scale } ?? 360, height: frame.map { $0.height * scale } ?? 220)
         .navigationTitle(frame?.name ?? L("Prototype"))
-        .onChange(of: store.prototypeRequest) { _, _ in current = nil }
     }
 
     /// Frames larger than the screen are scaled down to fit it; smaller ones are shown at their actual size.
@@ -79,6 +78,8 @@ final class PrototypeStageView: NSView {
     private var player: PrototypePlayer?
     private var token: Int?
     private var document = DesignDocument()
+    /// The layer under the pointer when the button went down; a click fires only when it comes up over the same layer.
+    private var pressed: String?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -139,13 +140,18 @@ final class PrototypeStageView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        let frame = player.flatMap { Prototype.frame($0.current, in: document) }
-        let target = frame.flatMap { Prototype.responder(in: $0, at: framePoint(event)) }
-        (target == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
+        (responder(event) == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
     }
 
+    private func responder(_ event: NSEvent) -> String? {
+        player.flatMap { Prototype.frame($0.current, in: document) }.flatMap { Prototype.responder(in: $0, at: framePoint(event)) }?.id
+    }
+
+    override func mouseDown(with event: NSEvent) { pressed = responder(event) }
+
     override func mouseUp(with event: NSEvent) {
-        guard var player, let step = player.click(at: framePoint(event), in: document) else { return }
+        defer { pressed = nil }
+        guard pressed != nil, pressed == responder(event), var player, let step = player.click(at: framePoint(event), in: document) else { return }
         self.player = player
         play(step)
     }
@@ -170,11 +176,14 @@ final class PrototypeStageView: NSView {
         let size = [step.from, step.to].compactMap { Prototype.frame($0, in: document) }
             .reduce(CGSize.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
         CATransaction.begin()
+        // A restart during the transition starts a new playback; this one's completion must then leave it alone.
+        let session = token
         CATransaction.setCompletionBlock { [weak self] in
+            guard let self, self.token == session else { return }
             leaving.root.removeAllAnimations()
             arriving.root.removeAllAnimations()
-            if self?.shown !== leaving { leaving.root.removeFromSuperlayer() }
-            self?.player?.finishTransition()
+            if self.shown !== leaving { leaving.root.removeFromSuperlayer() }
+            self.player?.finishTransition()
         }
         let timing = CAMediaTimingFunction(name: Self.timing(transition.easing))
         func animate(_ layer: CALayer, _ key: String, from: Any, to: Any) {

@@ -10,7 +10,8 @@ private func message(_ body: () throws -> Void) -> String? {
 
 private func node(_ json: String) throws -> DesignNode { try DesignJSON.node(from: try JSONSerialization.jsonObject(with: Data(json.utf8))) }
 
-/// Home has a card (with a nested label) that goes to Detail, a hidden button, and a group; Detail has a back button.
+/// Home has a card that pushes to Detail, a panel (with a label inside, and no interaction of its own) that opens Detail as a
+/// sheet, a hidden layer, and a layer pointing at a deleted frame; Detail has a back button and a layer pointing at a nested frame.
 private let prototype = """
 {"format":"fudehand.design","version":2,"nodes":[
   {"id":"home","type":"frame","x":0,"y":0,"width":390,"height":844,"children":[
@@ -106,6 +107,27 @@ private let prototype = """
     #expect(Prototype.responder(in: home, at: Point(x: 400, y: 110)) == nil)
 }
 
+@Test func clippedContentAndGroupsFollowTheCanvasRules() throws {
+    let frame = try node(#"""
+    {"id":"f","type":"frame","width":100,"height":100,"children":[
+      {"id":"clip","type":"frame","x":0,"y":0,"width":50,"height":50,"interaction":{"action":"back"},"children":[
+        {"id":"spill","type":"rectangle","x":40,"y":0,"width":40,"height":20,"interaction":{"action":"navigate","destination":"x"}}]},
+      {"id":"open","type":"frame","x":0,"y":60,"width":20,"height":20,"clipsContent":false,"children":[
+        {"id":"outside","type":"rectangle","x":30,"y":0,"width":20,"height":20,"interaction":{"action":"back"}}]},
+      {"id":"group","type":"group","x":60,"y":60,"width":40,"height":40,"interaction":{"action":"back"},"children":[
+        {"id":"piece","type":"rectangle","x":0,"y":0,"width":10,"height":10}]}
+    ]}
+    """#)
+    // The part of "spill" clipped away by its frame cannot be clicked; the visible part can.
+    #expect(Prototype.responder(in: frame, at: Point(x: 60, y: 10)) == nil)
+    #expect(Prototype.responder(in: frame, at: Point(x: 45, y: 10))?.id == "spill")
+    // A frame that does not clip lets its overflowing content be clicked.
+    #expect(Prototype.responder(in: frame, at: Point(x: 35, y: 65))?.id == "outside")
+    // A group answers only through its children.
+    #expect(Prototype.responder(in: frame, at: Point(x: 65, y: 65))?.id == "group")
+    #expect(Prototype.responder(in: frame, at: Point(x: 90, y: 90)) == nil)
+}
+
 @Test func goesToAFrameAndBackInReverse() throws {
     let document = try decode(prototype)
     var player = PrototypePlayer(start: "home")
@@ -117,7 +139,7 @@ private let prototype = """
     player.finishTransition()
     #expect(player.click(at: Point(x: 10, y: 10), in: document) == .init(from: "detail", to: "home", transition: push, reversed: true))
     player.finishTransition()
-    #expect(player.current == "home" && !player.canGoBack)
+    #expect(player.current == "home")
     // Back with nowhere to go does nothing.
     #expect(player.perform(.back, in: document) == nil)
 }

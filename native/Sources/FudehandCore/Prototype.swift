@@ -69,8 +69,6 @@ public struct PrototypePlayer: Equatable {
 
     public init(start: String) { current = start }
 
-    public var canGoBack: Bool { !history.isEmpty }
-
     /// A click at `point` in the current frame's coordinates; returns the step to play, or nil when the click does nothing.
     public mutating func click(at point: Point, in document: DesignDocument) -> Step? {
         guard !isTransitioning, let frame = Prototype.frame(current, in: document),
