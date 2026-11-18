@@ -70,9 +70,9 @@ final class ChatSession: ObservableObject {
     }
 
     /// The open conversations, in tab order; never empty.
-    @Published private(set) var tabs: [Tab]
+    @Published private(set) var tabs: [Tab] { didSet { saveOpenTabs() } }
     /// The selected tab's conversation.
-    @Published private(set) var conversationID: UUID
+    @Published private(set) var conversationID: UUID { didSet { saveOpenTabs() } }
     /// The saved conversations, newest first, for the history menu.
     @Published private(set) var conversations: [ChatHistory.Summary] = []
 
@@ -88,6 +88,7 @@ final class ChatSession: ObservableObject {
             defaults.set(newValue.model, forKey: "agent.\(newValue.provider).model")
             defaults.set(newValue.baseUrl, forKey: "agent.\(newValue.provider).baseUrl")
             tabs[current].settings = newValue
+            save(conversationID)
             restart(conversationID)
         }
     }
@@ -100,14 +101,16 @@ final class ChatSession: ObservableObject {
     private let readKey: (String) -> String?
     private let writeKey: (String, String) throws -> Void
     private let deleteKey: (String) -> Void
-    /// Where conversations are saved; nil keeps them in memory only.
-    private let history: ChatHistory?
+    /// Where the conversations of the design document being shown are saved; nil keeps them in memory only.
+    private var history: ChatHistory?
+    /// The tab list as last saved, so it is written only when the open conversations or the selection change.
+    private var openTabs: ChatHistory.OpenTabs?
     /// The running harnesses, by tab id; a tab has none until its first message.
     private var harnesses: [UUID: Harness] = [:]
 
-    /// The conversations saved for the current user, next to the control socket.
-    nonisolated static var savedHistory: ChatHistory {
-        ChatHistory(directory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/fudehand/chats"))
+    /// Where the current user's conversations are saved, next to the control socket: one directory per design document.
+    nonisolated static var savedRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/fudehand/chats")
     }
 
     init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read,
@@ -119,16 +122,79 @@ final class ChatSession: ObservableObject {
         self.deleteKey = deleteKey
         self.history = history
         let provider = defaults.string(forKey: "agent.provider").flatMap { id in ChatSettings.providers.contains { $0.id == id } ? id : nil } ?? "deepseek"
-        var tab = Tab(settings: Self.stored(provider, defaults))
-        // Reopen the most recent conversation.
-        let saved = history?.list() ?? []
-        if let recent = saved.first.flatMap({ history?.load($0.id) }) {
-            tab.id = recent.id
-            tab.transcript = ChatTranscript(entries: recent.entries)
+        let settings = Self.stored(provider, defaults)
+        let restored = Self.restore(history, settings: settings, defaults: defaults)
+        let tabs = restored.tabs.isEmpty ? [Tab(settings: settings)] : restored.tabs
+        self.tabs = tabs
+        conversationID = tabs.first { $0.id == restored.selected }?.id ?? tabs[0].id
+        conversations = history?.list() ?? []
+        openTabs = history?.openTabs()
+    }
+
+    /// The tabs a design document's conversations were last open in. Conversations that cannot be read are skipped; without a
+    /// saved tab list, the most recent conversation is reopened.
+    private nonisolated static func restore(_ history: ChatHistory?, settings: ChatSettings, defaults: UserDefaults) -> (tabs: [Tab], selected: UUID?) {
+        guard let history else { return ([], nil) }
+        let tab: (UUID) -> Tab? = { id in history.load(id).map { restored($0, settings: settings, defaults: defaults) } }
+        if let open = history.openTabs() { return (open.ids.compactMap(tab), open.selected) }
+        return (history.list().first.flatMap { tab($0.id) }.map { [$0] } ?? [], nil)
+    }
+
+    /// A saved conversation as a tab, with the model it was saved with; `settings` when none was saved or its provider is unknown.
+    /// The base URL is the provider's stored one.
+    private nonisolated static func restored(_ saved: ChatConversation, settings: ChatSettings, defaults: UserDefaults) -> Tab {
+        var settings = settings
+        if let provider = saved.provider, ChatSettings.providers.contains(where: { $0.id == provider }) {
+            settings = ChatSettings(provider: provider, model: saved.model ?? "", baseUrl: stored(provider, defaults).baseUrl)
         }
-        tabs = [tab]
-        conversationID = tab.id
-        conversations = saved
+        return Tab(id: saved.id, transcript: ChatTranscript(entries: saved.entries), settings: settings)
+    }
+
+    /// Shows the conversations of another design document, restoring the tabs they were last open in; `fresh` discards what
+    /// `next` holds first, for a document that has no file yet. A conversation whose reply is running stays open and is saved with
+    /// the new document from then on, since the reply acts on the document now shown; the old document keeps it as it was.
+    func show(_ next: ChatHistory?, fresh: Bool = false) {
+        let settings = settings
+        let selected = conversationID
+        let carried = tabs.filter { $0.transcript.busy }
+        for tab in tabs where !tab.transcript.busy { terminate(tab.id) }
+        // What the running replies have produced so far, for the document being left.
+        for tab in carried { save(tab.id) }
+        if fresh { next?.remove() }
+        history = next
+        openTabs = next?.openTabs()
+        conversations = next?.list() ?? []
+        let restored = Self.restore(next, settings: settings, defaults: defaults)
+        // A carried conversation the new document already has open keeps its place, with the running reply.
+        let shown = carried.filter { tab in !restored.tabs.contains { $0.id == tab.id } }
+            + restored.tabs.map { tab in carried.first { $0.id == tab.id } ?? tab }
+        tabs = shown.isEmpty ? [Tab(settings: settings)] : shown
+        let selection = carried.contains { $0.id == selected } ? selected : restored.selected
+        conversationID = tabs.first { $0.id == selection }?.id ?? tabs[0].id
+        for tab in carried { save(tab.id) }
+    }
+
+    /// The design document was saved to another file: its conversations go along, replies keep running. `moving` (the first save
+    /// of a document that had no file) leaves nothing behind; otherwise the previous file keeps its own copy.
+    func rebind(to next: ChatHistory, moving: Bool) {
+        guard let history, history.directory != next.directory else { return }
+        next.adopt(history)
+        if moving { history.remove() }
+        self.history = next
+        openTabs = nil
+        // What is open is what the file gets, also over an older copy of the same conversation already there.
+        for tab in tabs { save(tab.id) }
+        saveOpenTabs()
+    }
+
+    private func saveOpenTabs() {
+        guard let history else { return }
+        let ids = tabs.filter { !$0.transcript.entries.isEmpty }.map(\.id)
+        let open = ChatHistory.OpenTabs(ids: ids, selected: ids.contains(conversationID) ? conversationID : nil)
+        // Nothing saved and nothing open: no file is written for a document that was only looked at.
+        guard open != openTabs, !(ids.isEmpty && openTabs == nil && conversations.isEmpty) else { return }
+        // A failed write is tried again at the next change.
+        if (try? history.saveOpenTabs(open)) != nil { openTabs = open }
     }
 
     nonisolated static func stored(_ provider: String, _ defaults: UserDefaults) -> ChatSettings {
@@ -149,7 +215,9 @@ final class ChatSession: ObservableObject {
             changed.baseUrl = settings.baseUrl
             if tabs[index].id == conversationID { changed.model = settings.model }
             guard changed != tabs[index].settings else { continue }
+            let model = tabs[index].settings.model
             tabs[index].settings = changed
+            if changed.model != model { save(tabs[index].id) }
             restart(tabs[index].id)
         }
     }
@@ -354,7 +422,7 @@ final class ChatSession: ObservableObject {
     func open(_ id: UUID) {
         if tabs.contains(where: { $0.id == id }) { conversationID = id; return }
         guard let saved = history?.load(id) else { return }
-        let tab = Tab(id: saved.id, transcript: ChatTranscript(entries: saved.entries), settings: settings)
+        let tab = Self.restored(saved, settings: settings, defaults: defaults)
         let index = current
         if tabs[index].transcript.entries.isEmpty {
             terminate(tabs[index].id)
@@ -405,7 +473,7 @@ final class ChatSession: ObservableObject {
     private func save(_ id: UUID) {
         guard let history, let tab = tabs.first(where: { $0.id == id }) else { return }
         if tab.transcript.entries.isEmpty { history.delete(id) }
-        else { try? history.save(ChatConversation(id: id, transcript: tab.transcript, updatedAt: Date())) }
+        else { try? history.save(ChatConversation(id: id, transcript: tab.transcript, updatedAt: Date(), provider: tab.settings.provider, model: tab.settings.model)) }
         conversations = history.list()
     }
 

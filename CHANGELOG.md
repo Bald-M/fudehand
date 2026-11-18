@@ -12,6 +12,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Changed
 
+- Conversations now belong to the design document they were held about. Opening a project file restores its conversation tabs, with their messages and each conversation's model, and no other document's conversations are shown; an untitled document keeps its conversations until it is replaced or the App quits, and takes them along on its first save. Conversations saved by earlier versions are not attached to any document and no longer appear in *Conversation history*.
 - **Breaking:** the product is renamed from ui-atlas to Fudehand. The App is now `Fudehand.app` (bundle identifier `local.fudehand.native`), project files use the `.fudehand` extension, the MCP server is registered as `fudehand`, the control channel and saved conversations live under `~/Library/Application Support/fudehand`, and the `UI_ATLAS_*` environment variables are now `FUDEHAND_*`. Nothing is migrated: rename existing `.uiatlas` files to `.fudehand` to open them, reconnect Agents in *MCP Connectors…*, and enter API keys again in *Model settings*. Earlier entries below keep the old name.
 - The app icon is now an ink-wash painting: mountains receding in three ink tones under a red sun.
 

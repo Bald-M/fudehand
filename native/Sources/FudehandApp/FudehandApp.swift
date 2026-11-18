@@ -65,7 +65,7 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct FudehandApp: App {
     @NSApplicationDelegateAdaptor(FudehandAppDelegate.self) private var delegate
-    @StateObject private var store = FudehandStore(chatHistory: ChatSession.savedHistory)
+    @StateObject private var store = FudehandStore(chatRoot: ChatSession.savedRoot)
 
     static let launchWindowID = "launch"
     static let editorWindowID = "main"

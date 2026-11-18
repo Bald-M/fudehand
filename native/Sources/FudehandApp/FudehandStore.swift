@@ -77,10 +77,16 @@ final class FudehandStore: ObservableObject {
     /// Shows the editor window and closes the launch window; registered by a view in a window after it gets the actions from the environment.
     var presentEditor: () -> Void = {}
 
-    /// `chatHistory` is where chat conversations are saved; nil keeps them in memory only.
-    init(defaults: UserDefaults = .standard, chatHistory: ChatHistory? = nil) {
+    /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
+    private let chatRoot: URL?
+
+    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil) {
         self.defaults = defaults
-        chat = ChatSession(history: chatHistory)
+        self.chatRoot = chatRoot
+        // The App starts on an untitled document. What an earlier one left behind was never saved with a file: drop it.
+        let unsaved = chatRoot.map { ChatHistory.unsaved(root: $0) }
+        unsaved?.remove()
+        chat = ChatSession(history: unsaved)
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
         language = AppLanguage.saved(in: defaults)
@@ -277,11 +283,21 @@ final class FudehandStore: ObservableObject {
         replace(try DesignDocument.decode(data), url: url)
     }
 
+    /// The conversations of the project file at `url`, or of the document without a file. The file is identified by its canonical
+    /// path, so a symlink to it or another spelling of its name on a case-insensitive volume finds the same conversations.
+    private func chatHistory(for url: URL?) -> ChatHistory? {
+        guard let chatRoot else { return nil }
+        guard let url else { return .unsaved(root: chatRoot) }
+        let path = (try? url.resourceValues(forKeys: [.canonicalPathKey]))?.canonicalPath ?? url.resolvingSymlinksInPath().path
+        return .document(path: path, root: chatRoot)
+    }
+
     /// Replaces the current document and enters the editor window; New, Open, templates, and Agent commands all go through here.
     func replace(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         editor.replace(next)
         inGesture = false
+        chat.show(chatHistory(for: url), fresh: url == nil)
         fileURL = url
         savedRevision = editor.revision
         savedDocument = editor.document
@@ -379,6 +395,7 @@ final class FudehandStore: ObservableObject {
 
     func write(to url: URL) throws {
         try editor.document.encoded().write(to: url, options: .atomic)
+        if let history = chatHistory(for: url) { chat.rebind(to: history, moving: fileURL == nil) }
         fileURL = url
         savedRevision = editor.revision
         savedDocument = editor.document

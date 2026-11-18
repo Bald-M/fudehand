@@ -307,3 +307,54 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .redo)
     #expect(store.editor.document.node("box")?.frame.x == 50 && store.isDirty)
 }
+
+@Test @MainActor func conversationsBelongToTheDocumentTheyWereHeldAbout() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-chats-\(UUID().uuidString)")
+    let a = temporaryFile(), b = temporaryFile()
+    defer { for url in [root, a, b] { try? FileManager.default.removeItem(at: url) } }
+    let defaults = UserDefaults(suiteName: "fudehand-tests-\(UUID().uuidString)")!
+    let store = FudehandStore(defaults: defaults, chatRoot: root)
+    // Without a source directory the message fails at once; the conversation is saved all the same.
+    store.chat.send("About A", root: nil, runtime: nil)
+    let inA = store.chat.conversationID
+
+    // The first save takes the untitled document's conversations to the file.
+    try store.write(to: a)
+    #expect(store.chat.tabs.map(\.id) == [inA])
+    #expect(!(try String(contentsOf: a, encoding: .utf8)).contains("About A"))
+
+    // Another document shows none of them, and what is said in a document that is never saved is dropped.
+    store.replace(DesignDocument(), url: nil)
+    #expect(store.chat.transcript.entries.isEmpty)
+    #expect(store.chat.conversations.isEmpty)
+    store.chat.send("Never saved", root: nil, runtime: nil)
+    try store.open(a)
+    #expect(store.chat.tabs.map(\.id) == [inA])
+    #expect(store.chat.conversations.map(\.title) == ["About A"])
+    store.replace(DesignDocument(), url: nil)
+    #expect(store.chat.conversations.isEmpty)
+
+    // Save As copies the conversations; the original file keeps its own.
+    try store.open(a)
+    try store.write(to: b)
+    #expect(store.chat.conversations.map(\.title) == ["About A"])
+    try store.open(a)
+    #expect(store.chat.tabs.map(\.id) == [inA])
+
+    // On a case-insensitive volume the same file under another spelling of its name has the same conversations.
+    let respelled = a.deletingLastPathComponent().appendingPathComponent(a.lastPathComponent.uppercased())
+    if FileManager.default.fileExists(atPath: respelled.path) {
+        try store.open(respelled)
+        #expect(store.chat.tabs.map(\.id) == [inA])
+    }
+
+    // After a relaunch the untitled document starts empty, and opening the file restores its conversation.
+    store.replace(DesignDocument(), url: nil)
+    store.chat.send("Lost at quit", root: nil, runtime: nil)
+    let relaunched = FudehandStore(defaults: defaults, chatRoot: root)
+    #expect(relaunched.chat.transcript.entries.isEmpty)
+    #expect(relaunched.chat.conversations.isEmpty)
+    try relaunched.open(a)
+    #expect(relaunched.chat.tabs.map(\.id) == [inA])
+    #expect(relaunched.chat.transcript.entries.first?.text == "About A")
+}
