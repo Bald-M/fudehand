@@ -23,6 +23,7 @@ final class RecordingHost: CanvasHost {
     func canvasFocus(_ id: String) { store.canvasFocus(id) }
     func canvasViewportSettled(_ viewport: Viewport) { settled.append(viewport); store.canvasViewportSettled(viewport) }
     func canvasSizeChanged(_ size: CGSize) { store.canvasSizeChanged(size) }
+    func canvasHover(_ id: String?) { store.canvasHover(id) }
 }
 
 /// Top-level frame a (0,0 400×300, containing card 20,20 100×50) and rectangle b (600,0 300×300); viewport (0, 100) at 100%, with the frame's name label visible on screen.
@@ -73,6 +74,7 @@ final class CanvasHarness {
         case .leftMouseDown: canvas.mouseDown(with: event)
         case .leftMouseDragged: canvas.mouseDragged(with: event)
         case .leftMouseUp: canvas.mouseUp(with: event)
+        case .mouseMoved: canvas.mouseMoved(with: event)
         default: Issue.record("Unhandled event type \(type)")
         }
     }
@@ -346,4 +348,30 @@ final class CanvasHarness {
     #expect(h.canvas.gridLayer.isHidden)
     h.request(Viewport(x: 0, y: 0, scale: 1))
     #expect(!h.canvas.gridLayer.isHidden)
+}
+
+@Test @MainActor func hoveringALayerRowOutlinesTheLayerOnTheCanvas() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.store.setHover("card")
+    #expect(h.canvas.hover == "card" && h.store.hover.id == "card")
+    h.store.setHover(nil)
+    #expect(h.canvas.hover == nil && h.store.hover.id == nil)
+}
+
+@Test @MainActor func hoveringALayerOnTheCanvasHighlightsItsLayerRow() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.send(.mouseMoved, at: NSPoint(x: 50, y: 140))
+    #expect(h.store.hover.id == "card")
+    h.send(.mouseMoved, at: NSPoint(x: 500, y: 600))
+    #expect(h.store.hover.id == nil)
+}
+
+@Test @MainActor func deletingTheHoveredLayerClearsTheHover() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.store.setHover("b")
+    h.store.canvasDelete(["b"])
+    #expect(h.canvas.hover == nil && h.store.hover.id == nil)
 }

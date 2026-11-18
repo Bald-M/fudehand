@@ -19,6 +19,8 @@ protocol CanvasHost: AnyObject {
     func canvasFocus(_ id: String)
     func canvasViewportSettled(_ viewport: Viewport)
     func canvasSizeChanged(_ size: CGSize)
+    /// The layer under the pointer changed (nil when none).
+    func canvasHover(_ id: String?)
 }
 
 final class AtlasCanvasView: NSView {
@@ -47,7 +49,7 @@ final class AtlasCanvasView: NSView {
     var animation: ViewportAnimationRun?
     var lastIndicatorUpdate: CFTimeInterval = 0
     private var interaction = CanvasInteraction()
-    private var hover: String?
+    private(set) var hover: String?
     private var marquee: Rect?
     private var guides: [Guide] = []
     /// Set when the current gesture panned, so its end reports the settled viewport.
@@ -155,7 +157,7 @@ final class AtlasCanvasView: NSView {
         index = next
         renderer.sync(next.document.nodes)
         if !selection.allSatisfy(next.contains) { selection = selection.filter(next.contains) }
-        if let hover, !next.contains(hover) { self.hover = nil }
+        if let hover, !next.contains(hover) { self.hover = nil; host?.canvasHover(nil) }
         refreshOverlay()
     }
 
@@ -348,6 +350,13 @@ final class AtlasCanvasView: NSView {
     override func mouseExited(with event: NSEvent) { setHover(nil) }
 
     private func setHover(_ id: String?) {
+        guard hover != id else { return }
+        showHover(id)
+        host?.canvasHover(id)
+    }
+
+    /// Outlines the layer hovered in the layers panel.
+    func showHover(_ id: String?) {
         guard hover != id else { return }
         hover = id
         refreshOverlay()

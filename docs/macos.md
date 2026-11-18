@@ -73,7 +73,7 @@ Interaction follows Figma.
 
 ## Panels
 
-- **Layers panel** (left sidebar): a hierarchy tree with upper layers first. Click to select, ⌘-click to add or remove, Shift-click to add; double-click to rename; the eye and lock buttons toggle visibility and locking; the context menu can move a layer up or down one level, bring it to the front or send it to the back, zoom to the layer, or delete it.
+- **Layers panel** (left sidebar): a hierarchy tree with upper layers first. Pressing a row selects it at once, without waiting for the mouse button to come up; ⌘-click adds or removes, Shift-click adds; double-click to rename. Hovering a row tints it and outlines its layer on the canvas, and hovering a layer on the canvas tints its row; the eye and lock buttons toggle visibility and locking; the context menu can move a layer up or down one level, bring it to the front or send it to the back, zoom to the layer, or delete it.
 - **Inspector** (right side, ⌥⌘I shows or hides it): the Design (设计) tab edits the selected layer's name, position and size, sizing mode, opacity, corner radius, clip content, fill, stroke, text, auto layout, and image fit; with multiple layers selected, opacity can be changed for all of them at once. The Chat (对话) tab is the Agent chat panel (⇧⌘A); see "Chat panel" below.
 - The appearance menu in the top right chooses Follow System, Light, or Dark.
 

@@ -110,9 +110,12 @@ struct LayersPanel: View {
         .font(.system(size: 12))
         .padding(.horizontal, 10).frame(height: 26)
         .background(selected ? Color.accentColor.opacity(0.16) : Color.clear)
+        .background(HoverBackground(hover: store.hover, id: node.id))
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { beginRename(node) }
-        .onTapGesture { select(node.id) }
+        .onHover { inside in
+            if inside { store.setHover(node.id) } else if store.hover.id == node.id { store.setHover(nil) }
+        }
+        .gesture(renaming == node.id ? nil : DragGesture(minimumDistance: 0).onChanged { _ in press(node) })
         .contextMenu {
             Button(L("Rename")) { beginRename(node) }
             Button(L("Bring Forward")) { step(node.id, by: 1) }
@@ -133,12 +136,15 @@ struct LayersPanel: View {
         if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
     }
 
-    /// ⌘-click adds to or removes from the selection, Shift-click adds to the selection, a plain click selects one.
-    private func select(_ id: String) {
-        let flags = NSEvent.modifierFlags
-        if flags.contains(.command) { store.setSelection(store.selection.symmetricDifference([id])) }
-        else if flags.contains(.shift) { store.setSelection(store.selection.union([id])) }
-        else { store.setSelection([id]) }
+    /// Acts when the button goes down; the drag updates that follow the press are ignored.
+    private func press(_ node: DesignNode) {
+        guard let event = NSApp.currentEvent, event.type == .leftMouseDown else { return }
+        let flags = event.modifierFlags
+        switch LayerRowPress.resolve(id: node.id, selection: store.selection, clickCount: event.clickCount,
+                                     command: flags.contains(.command), shift: flags.contains(.shift)) {
+        case .select(let ids): store.setSelection(ids)
+        case .rename: beginRename(node)
+        }
     }
 
     private func beginRename(_ node: DesignNode) {
@@ -170,5 +176,15 @@ struct LayersPanel: View {
         guard let parent = document.parentID(of: id) else { return }
         let count = (parent.flatMap { document.node($0)?.children } ?? document.nodes).count
         store.edit(toTop ? "Bring to Front" : "Send to Back") { try $0.move(id, parent: parent, index: toTop ? count - 1 : 0) }
+    }
+}
+
+/// Observes the hover on its own, so moving the pointer redraws only row backgrounds, not the whole panel.
+private struct HoverBackground: View {
+    @ObservedObject var hover: LayerHover
+    let id: String
+
+    var body: some View {
+        hover.id == id ? Color.primary.opacity(0.06) : Color.clear
     }
 }

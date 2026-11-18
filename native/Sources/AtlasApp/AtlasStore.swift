@@ -20,6 +20,8 @@ final class AtlasStore: ObservableObject {
     /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
     @Published private(set) var document = DesignDocument()
     @Published private(set) var selection: Set<String> = []
+    /// The layer under the pointer, shared by the canvas and the layers panel.
+    let hover = LayerHover()
     @Published var tool: CanvasTool = .move
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
@@ -137,6 +139,12 @@ final class AtlasStore: ObservableObject {
         guard ids != selection else { return }
         selection = ids
         canvas?.setSelection(ids)
+    }
+
+    /// Hovering a layer row outlines the layer on the canvas.
+    func setHover(_ id: String?) {
+        canvasHover(id)
+        canvas?.showHover(id)
     }
 
     func attach(_ canvas: AtlasCanvasView) {
@@ -396,10 +404,17 @@ final class AtlasStore: ObservableObject {
     func shutdown() async { await chat.shutdown() }
 }
 
+/// Kept out of the store's published state so pointer movement redraws only the layer rows that observe it.
+final class LayerHover: ObservableObject {
+    @Published var id: String?
+}
+
 // MARK: Canvas
 
 extension AtlasStore: CanvasHost {
     func canvasSelect(_ ids: Set<String>) { selection = ids }
+
+    func canvasHover(_ id: String?) { if hover.id != id { hover.id = id } }
 
     func canvasBeginGesture(_ name: String) {
         editor.beginGesture(name)
