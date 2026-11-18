@@ -11,7 +11,7 @@ protocol CanvasHost: AnyObject {
     /// The new rectangle of the layer being resized (absolute canvas coordinates).
     func canvasResize(_ id: String, to rect: Rect)
     func canvasEndGesture()
-    func canvasCreate(_ type: NodeType, in rect: Rect)
+    func canvasCreate(_ type: NodeType, in rect: Rect, clicked: Bool)
     func canvasNudge(_ ids: Set<String>, by delta: Point)
     func canvasDelete(_ ids: Set<String>)
     func canvasToolChanged(_ tool: CanvasTool)
@@ -378,8 +378,8 @@ final class AtlasCanvasView: NSView {
                 host?.canvasFocus(id)
             case .enter(let id, let point):
                 if let child = DesignHitTest.enter(id, at: point, in: document) { report([child]) }
-            case .create(let type, let rect):
-                host?.canvasCreate(type, in: rect)
+            case .create(let type, let rect, let clicked):
+                host?.canvasCreate(type, in: rect, clicked: clicked)
             }
         }
     }
