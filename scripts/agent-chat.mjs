@@ -11,9 +11,12 @@ import { designGuidance } from './design-guidance.mjs'
  *   Input:  {type:'user',text,context?:[{id,name,type}]} | {type:'stop'} | {type:'load',messages:[{role:'user'|'assistant',text}]}
  *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
  *        | {type:'tool_result',id,name,ok,text} | {type:'error',message} | {type:'done',stopped,usage?:{input,output,cached}}
+ *        | {type:'suggestion',text}
  * The reply text streams in as assistant_delta events; the assistant event that follows carries the complete text of that round.
  * `usage` is the tokens the model API reported for the reply, added up over its rounds: `input` includes the `cached` tokens.
  * It is left out when a round reported none, since the sum would understate the reply.
+ * `suggestion` is the predicted next user message. It may follow the `done` of a reply that ended normally, comes from a separate
+ * model request that is kept out of the history and of `usage`, and is simply not sent when that request fails.
  * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
@@ -67,6 +70,32 @@ if (values['list-models']) {
 
 let history = []
 let current = null
+// The next-message prediction in progress, if any.
+let predicting = null
+
+const predictionSystem = [
+  'Predict the next message the user of a design tool will send to its AI design assistant, given the end of their conversation.',
+  'Reply with that one message only, written as the user would type it, in the language of the user\'s messages: one short line, no quotes, no explanation.',
+].join('\n')
+
+/**
+ * Asks the model what the user is likely to say next and emits it as a suggestion. The request holds only the last few texts of
+ * the conversation and is not added to the history; any failure leaves the App without a suggestion.
+ */
+async function predict(log) {
+  const controller = predicting = new AbortController()
+  const texts = log.filter(entry => (entry.role === 'user' || entry.role === 'assistant') && entry.text).slice(-8)
+    .map(entry => `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.text.slice(0, 1500)}`)
+  try {
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])
+    const answer = await provider.turn(predictionSystem, [{ role: 'user', text: texts.join('\n\n') }], [], signal, () => {})
+    const line = answer.text.split('\n').map(part => part.trim()).find(Boolean) ?? ''
+    const text = line.replace(/^["'“‘「『]+|["'”’」』]+$/g, '').trim().slice(0, 200)
+    if (text && !controller.signal.aborted) emit({ type: 'suggestion', text })
+  } catch {} finally {
+    if (predicting === controller) predicting = null
+  }
+}
 
 const imagesOmitted = 'The image was left out because the current model provider cannot receive images. Check the result with design_get_node or design_get_document instead.'
 
@@ -100,6 +129,7 @@ async function reply(text, controller) {
   const usage = { input: 0, output: 0, cached: 0 }
   let rounds = 0
   let reported = true
+  let failed = false
   const count = round => {
     rounds++
     if (round.usage) for (const key in usage) usage[key] += round.usage[key]
@@ -140,11 +170,13 @@ async function reply(text, controller) {
   } catch (error) {
     // A request that completed with a reply that cannot be used (cut off, declined) was consumed like any other.
     if (error instanceof Error && 'usage' in error) count(error)
+    failed = true
     if (!signal.aborted) emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
     if (signal.aborted && partial) log.push({ role: 'assistant', text: partial, toolCalls: [] })
     current = null
     emit({ type: 'done', stopped: signal.aborted, ...(rounds && reported ? { usage } : {}) })
+    if (!signal.aborted && !failed) void predict(log)
   }
 }
 
@@ -152,6 +184,8 @@ const input = createInterface({ input: process.stdin })
 input.on('line', line => {
   let message
   try { message = JSON.parse(line) } catch { return emit({ type: 'error', message: 'Received an unparseable message' }) }
+  // A prediction still in progress is for a conversation state that this message is about to change.
+  if (['user', 'stop', 'load'].includes(message.type)) predicting?.abort()
   if (message.type === 'user' && typeof message.text === 'string') {
     if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
     current = new AbortController()

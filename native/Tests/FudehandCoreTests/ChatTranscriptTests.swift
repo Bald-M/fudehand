@@ -253,3 +253,40 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     #expect(subject("{}") == nil)
     #expect(subject("not json") == nil)
 }
+
+@Test func chatTranscriptKeepsTheSuggestedNextMessageUntilTheNextMessageIsSent() throws {
+    var transcript = ChatTranscript()
+    transcript.send("Make the title bigger")
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    #expect(transcript.suggestion == nil)
+    transcript.apply(line(#"{"type":"suggestion","text":"Make the subtitle bigger too"}"#))
+    #expect(transcript.suggestion == "Make the subtitle bigger too")
+    // The suggestion is not a message: it is neither shown in the transcript nor saved with the conversation.
+    #expect(transcript.entries.map(\.kind) == [.user, .assistant])
+    let saved = try JSONEncoder().encode(ChatConversation(id: UUID(), transcript: transcript, updatedAt: Date()))
+    #expect(!String(decoding: saved, as: UTF8.self).contains("subtitle"))
+    transcript.send("Something else")
+    #expect(transcript.suggestion == nil)
+}
+
+@Test func chatTranscriptIgnoresASuggestionThatArrivesDuringAReplyOrIsEmpty() {
+    var transcript = ChatTranscript()
+    transcript.send("First")
+    // Predicted for the conversation before this message was sent.
+    transcript.apply(line(#"{"type":"suggestion","text":"Stale"}"#))
+    #expect(transcript.suggestion == nil)
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    transcript.apply(line(#"{"type":"suggestion","text":""}"#))
+    #expect(transcript.suggestion == nil)
+}
+
+@Test func chatTranscriptDropsTheSuggestionWhenTheLastMessageIsTakenBack() {
+    var transcript = ChatTranscript()
+    transcript.send("First")
+    transcript.apply(line(#"{"type":"assistant","text":"Done."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    transcript.apply(line(#"{"type":"suggestion","text":"Next"}"#))
+    #expect(transcript.rewind()?.text == "First")
+    #expect(transcript.suggestion == nil)
+}

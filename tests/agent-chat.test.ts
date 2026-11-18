@@ -70,15 +70,19 @@ function streamEvents(url: string, body: any): string[] {
 /**
  * A local fake model service: returns the preset responses in order and records the requests it receives.
  * A request with `stream: true` gets the response as an event stream, as the real APIs send it.
+ * Next-message prediction requests are recorded in `predictions` and answered from `predictionReplies`, with an error when none is left.
  */
-async function fakeModel(replies: Reply[]) {
+async function fakeModel(replies: Reply[], predictionReplies: Reply[] = []) {
   const requests: Captured[] = []
+  const predictions: Captured[] = []
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     let raw = ''
     for await (const chunk of request) raw += chunk
     const received = JSON.parse(raw || '{}')
-    requests.push({ url: request.url ?? '', headers: request.headers, body: received })
-    const reply = replies.shift() ?? { status: 500, body: { error: { message: 'No more preset responses' } } }
+    // The request the harness makes after a reply to predict the next message is answered from its own list.
+    const prediction = raw.includes('Predict the next message')
+    ;(prediction ? predictions : requests).push({ url: request.url ?? '', headers: request.headers, body: received })
+    const reply = (prediction ? predictionReplies : replies).shift() ?? { status: 500, body: { error: { message: 'No more preset responses' } } }
     if (reply.delayMs) await new Promise(resolve => setTimeout(resolve, reply.delayMs))
     if (response.destroyed) return
     if (received.stream && !reply.json && (reply.status ?? 200) === 200) {
@@ -98,7 +102,7 @@ async function fakeModel(replies: Reply[]) {
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Could not get a test port')
   cleanup.push(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) })
-  return { requests, baseUrl: `http://127.0.0.1:${address.port}` }
+  return { requests, predictions, baseUrl: `http://127.0.0.1:${address.port}` }
 }
 
 type Event = { type: string, [key: string]: any }
@@ -545,6 +549,86 @@ describe('Agent harness: Anthropic Messages API', () => {
     const model = await fakeModel([{ status: 529, body: { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } } }])
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect((await chat.ask('Hello')).find(event => event.type === 'error')?.message).toBe('Model API error (HTTP 529): Overloaded')
+  })
+})
+
+const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+describe('Agent harness: next-message prediction', () => {
+  const env = (model: { baseUrl: string }, provider = 'deepseek') => ({ FUDEHAND_PROVIDER: provider, FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
+
+  it('suggests the next message after a reply, asking without tools and outside the history', async () => {
+    const model = await fakeModel([openaiText('Done, the title is 32 pt.'), openaiText('OK')], [openaiText('  "Make the subtitle bigger too"\nSecond line')])
+    const chat = await startHarness(env(model))
+    await chat.ask('Make the title bigger')
+    const suggestion = await chat.until(event => event.type === 'suggestion')
+    expect(suggestion).toEqual({ type: 'suggestion', text: 'Make the subtitle bigger too' })
+    expect(chat.events.indexOf(suggestion)).toBeGreaterThan(chat.events.findIndex(event => event.type === 'done'))
+    const { body } = model.predictions[0]
+    expect(body.tools).toBeUndefined()
+    expect(body.messages.map((message: any) => message.role)).toEqual(['system', 'user'])
+    expect(body.messages[1].content).toContain('User: Make the title bigger')
+    expect(body.messages[1].content).toContain('Assistant: Done, the title is 32 pt.')
+    await chat.ask('Thanks')
+    expect(model.requests[1].body.messages.slice(1).map((message: any) => message.content)).toEqual(['Make the title bigger', 'Done, the title is 32 pt.', 'Thanks'])
+  })
+
+  it('asks the Responses and Anthropic APIs without tools', async () => {
+    const responses = await fakeModel([responsesText('Done')], [responsesText('Add a footer')])
+    const first = await startHarness(env(responses, 'openai'))
+    await first.ask('Add a header')
+    expect(await first.until(event => event.type === 'suggestion')).toMatchObject({ text: 'Add a footer' })
+    expect(responses.predictions[0].body.tools).toBeUndefined()
+    expect(responses.predictions[0].body.input).toEqual([{ role: 'user', content: expect.stringContaining('User: Add a header') }])
+    const anthropic = await fakeModel([anthropicText('Done')], [anthropicText('Add a footer')])
+    const second = await startHarness(env(anthropic, 'anthropic'))
+    await second.ask('Add a header')
+    expect(await second.until(event => event.type === 'suggestion')).toMatchObject({ text: 'Add a footer' })
+    expect(anthropic.predictions[0].body.tools).toBeUndefined()
+    expect(anthropic.predictions[0].body.messages).toHaveLength(1)
+  })
+
+  it('suggests nothing after a failed or stopped reply', async () => {
+    const failing = await fakeModel([{ status: 500, body: { error: { message: 'boom' } } }], [openaiText('Try again')])
+    const first = await startHarness(env(failing))
+    await first.ask('Hi')
+    const stopping = await fakeModel([{ ...openaiText('Slow'), delayMs: 600 }], [openaiText('Try again')])
+    const second = await startHarness(env(stopping))
+    second.send({ type: 'user', text: 'Hi' })
+    await pause(150)
+    second.send({ type: 'stop' })
+    await second.until(event => event.type === 'done')
+    await pause(500)
+    expect(failing.predictions).toEqual([])
+    expect(stopping.predictions).toEqual([])
+    expect([...first.events, ...second.events].some(event => event.type === 'suggestion')).toBe(false)
+  })
+
+  it('stays silent when the prediction fails or is empty, and the next message still works', async () => {
+    const model = await fakeModel([openaiText('One'), openaiText('Two'), openaiText('Three')], [{ status: 401, body: {} }, openaiText(' \n')])
+    const chat = await startHarness(env(model))
+    await chat.ask('first')
+    while (model.predictions.length < 1) await pause(20)
+    await pause(100)
+    await chat.ask('second')
+    while (model.predictions.length < 2) await pause(20)
+    await pause(100)
+    const events = await chat.ask('third')
+    expect(events.map(event => event.type)).toEqual(['assistant', 'done'])
+    expect(model.predictions).toHaveLength(2)
+    expect(chat.events.some(event => event.type === 'suggestion' || event.type === 'error')).toBe(false)
+  })
+
+  it('drops a prediction still in flight when the next message is sent', async () => {
+    const model = await fakeModel([openaiText('One'), openaiText('Two')], [{ ...openaiText('Too late'), delayMs: 500 }])
+    const chat = await startHarness(env(model))
+    await chat.ask('first')
+    // The slow prediction request has reached the model before the next message is sent.
+    while (!model.predictions.length) await pause(20)
+    await chat.ask('second')
+    await pause(800)
+    expect(model.predictions).toHaveLength(2)
+    expect(chat.events.some(event => event.type === 'suggestion')).toBe(false)
   })
 })
 

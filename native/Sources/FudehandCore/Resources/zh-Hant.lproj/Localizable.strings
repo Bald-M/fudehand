@@ -181,6 +181,8 @@
 "Take a screenshot to check the current frame" = "截圖核對目前畫框";
 "Message" = "輸入訊息";
 "Chat input" = "對話輸入";
+"Tab" = "Tab";
+"Press Tab to use the predicted message" = "按 Tab 使用預測的訊息";
 "Stop replying" = "停止回覆";
 "Send (Return)" = "傳送（Return）";
 "Send" = "傳送";
