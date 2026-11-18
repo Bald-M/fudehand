@@ -29,7 +29,7 @@ describe('MCP server', () => {
   it('lists the design tools with their input schemas', async () => {
     const client = await connect('/tmp/unused.sock')
     const { tools } = await client.listTools()
-    expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['design_create_node', 'design_update_node', 'design_snapshot']))
+    expect(tools.map(tool => tool.name)).toEqual(expect.arrayContaining(['design_create_node', 'design_update_node', 'design_snapshot', 'style_list', 'style_read']))
     expect(tools.find(tool => tool.name === 'design_create_node')?.inputSchema.required).toEqual(['node'])
   })
 
