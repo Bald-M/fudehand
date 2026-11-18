@@ -13,19 +13,80 @@ afterEach(async () => { for (const action of cleanup.splice(0).reverse()) await 
 
 const KEY = 'sk-test-secret-0123456789'
 
-type Reply = { status?: number, body: unknown, delayMs?: number }
+/** `json` answers a streaming request with a plain JSON body; `sse` sends that raw event stream instead of one built from `body`. */
+type Reply = { status?: number, body: unknown, delayMs?: number, chunkDelayMs?: number, json?: boolean, sse?: string }
 type Captured = { url: string, headers: IncomingMessage['headers'], body: any }
 
-/** A local fake model service: returns the preset responses in order and records the requests it receives. */
+const pieces = (text: string) => text ? [text.slice(0, Math.ceil(text.length / 2)), text.slice(Math.ceil(text.length / 2))].filter(Boolean) : []
+
+/** Splits a complete response body into the event stream the provider's API would send for it. */
+function streamEvents(url: string, body: any): string[] {
+  let events: any[]
+  if (url === '/chat/completions') {
+    const choice = body.choices[0]
+    const message = choice.message
+    events = [
+      ...pieces(message.content ?? '').map(content => ({ choices: [{ delta: { content } }] })),
+      ...(message.tool_calls ?? []).flatMap((call: any, index: number) => [
+        { choices: [{ delta: { tool_calls: [{ index, id: call.id, type: 'function', function: { name: call.function.name, arguments: '' } }] } }] },
+        ...pieces(call.function.arguments).map(part => ({ choices: [{ delta: { tool_calls: [{ index, function: { arguments: part } }] } }] })),
+      ]),
+      { choices: [{ delta: {}, finish_reason: choice.finish_reason ?? (message.tool_calls ? 'tool_calls' : 'stop') }] },
+    ]
+    return [...events.map(event => `data: ${JSON.stringify(event)}\n\n`), 'data: [DONE]\n\n']
+  }
+  if (url === '/responses') {
+    events = [
+      ...body.output.filter((item: any) => item.type === 'message').flatMap((item: any) => item.content)
+        .flatMap((part: any) => pieces(part.text)).map((delta: string) => ({ type: 'response.output_text.delta', delta })),
+      { type: body.status === 'incomplete' ? 'response.incomplete' : 'response.completed', response: body },
+    ]
+  } else {
+    events = [
+      { type: 'message_start', message: { role: 'assistant', content: [] } },
+      ...body.content.flatMap((block: any, index: number) => {
+        const deltas = block.type === 'text' ? pieces(block.text).map(text => ({ type: 'text_delta', text }))
+          : block.type === 'tool_use' ? pieces(JSON.stringify(block.input)).map(partial_json => ({ type: 'input_json_delta', partial_json }))
+          : [...pieces(block.thinking).map(thinking => ({ type: 'thinking_delta', thinking })), { type: 'signature_delta', signature: block.signature }]
+        const start = block.type === 'text' ? { type: 'text', text: '' }
+          : block.type === 'tool_use' ? { ...block, input: {} } : { type: 'thinking', thinking: '', signature: '' }
+        return [
+          { type: 'content_block_start', index, content_block: start },
+          ...deltas.map(delta => ({ type: 'content_block_delta', index, delta })),
+          { type: 'content_block_stop', index },
+        ]
+      }),
+      { type: 'message_delta', delta: { stop_reason: body.stop_reason } },
+      { type: 'message_stop' },
+    ]
+  }
+  return events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+}
+
+/**
+ * A local fake model service: returns the preset responses in order and records the requests it receives.
+ * A request with `stream: true` gets the response as an event stream, as the real APIs send it.
+ */
 async function fakeModel(replies: Reply[]) {
   const requests: Captured[] = []
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     let raw = ''
     for await (const chunk of request) raw += chunk
-    requests.push({ url: request.url ?? '', headers: request.headers, body: JSON.parse(raw || '{}') })
+    const received = JSON.parse(raw || '{}')
+    requests.push({ url: request.url ?? '', headers: request.headers, body: received })
     const reply = replies.shift() ?? { status: 500, body: { error: { message: 'No more preset responses' } } }
     if (reply.delayMs) await new Promise(resolve => setTimeout(resolve, reply.delayMs))
     if (response.destroyed) return
+    if (received.stream && !reply.json && (reply.status ?? 200) === 200) {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      for (const chunk of reply.sse ? [reply.sse] : streamEvents(request.url ?? '', reply.body)) {
+        if (reply.chunkDelayMs) await new Promise(resolve => setTimeout(resolve, reply.chunkDelayMs))
+        if (response.destroyed) return
+        response.write(chunk)
+      }
+      response.end()
+      return
+    }
     response.writeHead(reply.status ?? 200, { 'content-type': 'application/json' })
     response.end(JSON.stringify(reply.body))
   })
@@ -86,12 +147,12 @@ async function startHarness(env: Record<string, string>) {
     root, events, exited, child,
     stderr: () => errors,
     send: (message: object) => child.stdin!.write(JSON.stringify(message) + '\n'),
-    /** Sends one user message and waits for the turn to end, returning the turn's events. */
-    async ask(text: string) {
+    /** Sends one user message and waits for the turn to end, returning the turn's events without the streamed text deltas. */
+    async ask(text: string, extra: object = {}) {
       const from = events.length
-      child.stdin!.write(JSON.stringify({ type: 'user', text }) + '\n')
+      child.stdin!.write(JSON.stringify({ type: 'user', text, ...extra }) + '\n')
       await until(event => event.type === 'done', from)
-      return events.slice(from)
+      return events.slice(from).filter(event => event.type !== 'assistant_delta')
     },
     until,
   }
@@ -195,15 +256,68 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(app.received).toEqual([])
   })
 
-  it('keeps an empty reply out of the history and starts a new conversation after clearing', async () => {
+  it('keeps an empty reply out of the history and replaces the history when a conversation is loaded', async () => {
     const model = await fakeModel([{ body: { choices: [{ message: { role: 'assistant', content: null } }] } }, openaiText('Second'), openaiText('After clearing')])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
     await chat.ask('one')
     await chat.ask('two')
     expect(model.requests[1].body.messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
-    chat.send({ type: 'clear' })
+    chat.send({ type: 'load', messages: [] })
     await chat.ask('three')
     expect(model.requests[2].body.messages.map((message: any) => message.content)).toEqual([expect.any(String), 'three'])
+    chat.send({ type: 'load', messages: [{ role: 'user', text: 'earlier question' }, { role: 'assistant', text: 'earlier answer' }, { role: 'tool', text: 'ignored' }] })
+    await chat.ask('four')
+    expect(model.requests[3].body.messages.slice(1)).toEqual([
+      { role: 'user', content: 'earlier question' }, { role: 'assistant', content: 'earlier answer' }, { role: 'user', content: 'four' },
+    ])
+  })
+
+  it('streams the reply as text deltas before the complete text', async () => {
+    const model = await fakeModel([openaiText('Hello there, world.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await chat.ask('Hi')
+    expect(model.requests[0].body.stream).toBe(true)
+    expect(chat.events.map(event => event.type)).toEqual(['assistant_delta', 'assistant_delta', 'assistant', 'done'])
+    expect(chat.events.slice(0, 2).map(event => event.text).join('')).toBe('Hello there, world.')
+    expect(chat.events[2].text).toBe('Hello there, world.')
+  })
+
+  it('reads a plain JSON body when the endpoint ignores streaming', async () => {
+    const model = await fakeModel([{ ...openaiText('Not streamed.'), json: true }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await chat.ask('Hi')
+    expect(chat.events).toEqual([{ type: 'assistant', text: 'Not streamed.' }, { type: 'done', stopped: false }])
+  })
+
+  it('keeps the text received before a stop in the history', async () => {
+    const model = await fakeModel([{ ...openaiText('Hello world'), chunkDelayMs: 400 }, openaiText('OK')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    chat.send({ type: 'user', text: 'Say hello' })
+    await chat.until(event => event.type === 'assistant_delta')
+    chat.send({ type: 'stop' })
+    const done = await chat.until(event => event.type === 'done')
+    expect(done.stopped).toBe(true)
+    expect(chat.events.map(event => event.type)).toEqual(['assistant_delta', 'done'])
+    await chat.ask('Continue')
+    expect(model.requests[1].body.messages.slice(1)).toEqual([
+      { role: 'user', content: 'Say hello' }, { role: 'assistant', content: 'Hello ' }, { role: 'user', content: 'Continue' },
+    ])
+  })
+
+  it('reports an error sent in the middle of a stream', async () => {
+    const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Half' } }] })}\n\ndata: ${JSON.stringify({ error: { message: 'upstream overloaded' } })}\n\n`
+    const model = await fakeModel([{ body: null, sse }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const events = await chat.ask('Hi')
+    expect(events).toEqual([{ type: 'error', message: 'Model API error: upstream overloaded' }, { type: 'done', stopped: false }])
+  })
+
+  it('tells the model which layers the user has selected', async () => {
+    const model = await fakeModel([openaiText('Done.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await chat.ask('Make it blue', { context: [{ id: 'n1', name: 'Hero "card"', type: 'frame' }, { id: 'n2', name: 'Title', type: 'text' }] })
+    expect(model.requests[0].body.messages[1].content).toBe(
+      'The user has these layers selected: "Hero \\"card\\"" (frame, id n1), "Title" (text, id n2)\n\nMake it blue')
   })
 
   it('sends a validly formatted history in the next request after a stop', async () => {
@@ -261,6 +375,30 @@ describe('Agent harness: OpenAI Responses API (Codex series)', () => {
       { role: 'assistant', content: 'There is 1 frame.' },
       { role: 'user', content: 'Thanks' },
     ])
+  })
+})
+
+describe('Agent harness: streaming from the Responses and Anthropic APIs', () => {
+  it('streams Responses API text and reports a reply cut off by the length limit', async () => {
+    const model = await fakeModel([responsesText('Two frames here.'), { body: { status: 'incomplete', output: [] } }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    await chat.ask('Hi')
+    expect(model.requests[0].body.stream).toBe(true)
+    expect(chat.events.map(event => event.type)).toEqual(['assistant_delta', 'assistant_delta', 'assistant', 'done'])
+    expect(chat.events[2].text).toBe('Two frames here.')
+    expect((await chat.ask('More'))[0]).toEqual({ type: 'error', message: 'The model reply was cut off by the length limit; stopped this reply' })
+  })
+
+  it('streams Anthropic text and assembles tool arguments from partial JSON', async () => {
+    const app = await startApp(() => ({ ok: false, error: 'Layer not found: nope' }))
+    const model = await fakeModel([anthropicTool('toolu_1', 'design_get_node', { id: 'nope' }), anthropicText('No such layer.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('Look at nope')
+    expect(model.requests[0].body.stream).toBe(true)
+    expect(chat.events.map(event => event.type)).toEqual(
+      ['assistant_delta', 'assistant_delta', 'assistant', 'tool_call', 'tool_result', 'assistant_delta', 'assistant_delta', 'assistant', 'done'])
+    expect(chat.events[3]).toMatchObject({ name: 'design_get_node', args: { id: 'nope' } })
+    expect(app.received).toEqual([{ id: expect.anything(), command: 'get_node', args: { id: 'nope' } }])
   })
 })
 

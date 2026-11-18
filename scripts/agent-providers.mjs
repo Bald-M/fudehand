@@ -15,8 +15,8 @@ export const providerDefaults = {
   anthropic: { kind: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
 }
 
-/** Turns HTTP statuses and network errors into the messages shown in the chat panel. */
-async function request(url, init, signal) {
+/** Sends the request and turns HTTP statuses and network errors into the messages shown in the chat panel. */
+async function open(url, init, signal) {
   let response
   try {
     response = await fetch(url, { ...init, signal })
@@ -24,15 +24,56 @@ async function request(url, init, signal) {
     if (signal.aborted) throw error
     throw new Error(`Could not connect to the model API: ${error.cause?.message ?? error.message}`)
   }
+  if (response.ok) return response
   const body = await response.json().catch(() => null)
-  if (response.ok) {
-    if (!body || typeof body !== 'object') throw new Error('The model API returned an unparseable response')
-    return body
-  }
   if (response.status === 401 || response.status === 403) throw new Error('Invalid API key or insufficient permissions')
   if (response.status === 402 || response.status === 429) throw new Error('Quota exceeded or too many requests')
   const detail = body?.error?.message ?? body?.message ?? response.statusText
   throw new Error(`Model API error (HTTP ${response.status}): ${String(detail).slice(0, 300)}`)
+}
+
+async function json(response) {
+  const body = await response.json().catch(() => null)
+  if (!body || typeof body !== 'object') throw new Error('The model API returned an unparseable response')
+  return body
+}
+
+async function request(url, init, signal) {
+  return json(await open(url, init, signal))
+}
+
+/** Yields the JSON payload of each server-sent event; an error event ends the reply with the provider's message. */
+async function* events(response, signal) {
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    for await (const chunk of response.body) {
+      buffer += decoder.decode(chunk, { stream: true })
+      for (let end; (end = buffer.search(/\r?\n\r?\n/)) >= 0;) {
+        const data = buffer.slice(0, end).split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n')
+        buffer = buffer.slice(end).replace(/^\r?\n\r?\n/, '')
+        if (!data || data === '[DONE]') continue
+        let event
+        try { event = JSON.parse(data) } catch { continue }
+        const failure = event.error ?? event.response?.error ?? (event.type === 'error' ? event : null)
+        if (failure) throw new Error(`Model API error: ${String(failure.message ?? JSON.stringify(failure)).slice(0, 300)}`)
+        yield event
+      }
+    }
+  } catch (error) {
+    if (signal.aborted || error.message.startsWith('Model API error')) throw error
+    throw new Error(`The connection to the model API was interrupted: ${error.cause?.message ?? error.message}`)
+  }
+}
+
+/**
+ * Requests a streamed turn. `assemble` consumes the events, reporting text through onText as it arrives, and returns the same body
+ * the non-streaming API would; an endpoint that ignores `stream` and answers with plain JSON is read as that body directly.
+ */
+async function streamed(url, init, signal, assemble) {
+  const response = await open(url, init, signal)
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) return json(response)
+  return assemble(events(response, signal))
 }
 
 function openaiMessages(system, history) {
@@ -112,7 +153,7 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
   return { models: [...new Set(ids)], default: defaults.model }
 }
 
-/** Returns { model, images, turn(system, history, tools, signal) → { text, toolCalls } }; images says whether tool results can carry images. */
+/** Returns { model, images, turn(system, history, tools, signal, onText) → { text, toolCalls } }; images says whether tool results can carry images, and onText receives the reply text as it streams in. */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
@@ -122,15 +163,30 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
     return {
       model: name,
       images: false,
-      async turn(system, history, tools, signal) {
-        const body = await request(`${base}/chat/completions`, {
+      async turn(system, history, tools, signal, onText) {
+        const body = await streamed(`${base}/chat/completions`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: name, messages: openaiMessages(system, history),
+            model: name, messages: openaiMessages(system, history), stream: true,
             tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })),
           }),
-        }, signal)
+        }, signal, async stream => {
+          const message = { content: '', tool_calls: [] }
+          let finish_reason
+          for await (const event of stream) {
+            const choice = event.choices?.[0] ?? {}
+            if (choice.finish_reason) finish_reason = choice.finish_reason
+            if (choice.delta?.content) { message.content += choice.delta.content; onText(choice.delta.content) }
+            for (const part of choice.delta?.tool_calls ?? []) {
+              const call = message.tool_calls[part.index ?? 0] ??= { id: '', function: { name: '', arguments: '' } }
+              if (part.id) call.id = part.id
+              if (part.function?.name) call.function.name = part.function.name
+              call.function.arguments += part.function?.arguments ?? ''
+            }
+          }
+          return { choices: [{ finish_reason, message }] }
+        })
         const choice = body.choices?.[0] ?? {}
         if (choice.finish_reason === 'length') throw new Error(truncated)
         const message = choice.message ?? {}
@@ -145,15 +201,24 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
     return {
       model: name,
       images: true,
-      async turn(system, history, tools, signal) {
-        const body = await request(`${base}/responses`, {
+      async turn(system, history, tools, signal, onText) {
+        const body = await streamed(`${base}/responses`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: name, instructions: system, input: responsesInput(history), store: false,
+            model: name, instructions: system, input: responsesInput(history), store: false, stream: true,
             tools: tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
           }),
-        }, signal)
+        }, signal, async stream => {
+          // The closing event carries the whole response, so only the text deltas are read on the way.
+          let response
+          for await (const event of stream) {
+            if (event.type === 'response.output_text.delta' && event.delta) onText(event.delta)
+            else if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response
+          }
+          if (!response) throw new Error('The model API returned an unparseable response')
+          return response
+        })
         if (body.status === 'incomplete') throw new Error(truncated)
         const output = body.output ?? []
         return {
@@ -167,15 +232,35 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
   return {
     model: name,
     images: true,
-    async turn(system, history, tools, signal) {
-      const body = await request(`${base}/v1/messages`, {
+    async turn(system, history, tools, signal, onText) {
+      // Tool calls whose streamed arguments did not form valid JSON; they are reported to the model instead of executed.
+      const malformed = new Set()
+      const body = await streamed(`${base}/v1/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
-          model: name, max_tokens: 16000, system, messages: anthropicMessages(history),
+          model: name, max_tokens: 16000, system, messages: anthropicMessages(history), stream: true,
           tools: tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })),
         }),
-      }, signal)
+      }, signal, async stream => {
+        const content = []
+        const partial = []
+        let stop_reason
+        for await (const event of stream) {
+          const block = content[event.index]
+          const delta = event.delta ?? {}
+          if (event.type === 'content_block_start') { content[event.index] = { ...event.content_block }; partial[event.index] = '' }
+          else if (event.type === 'message_delta') stop_reason = delta.stop_reason ?? stop_reason
+          else if (event.type === 'content_block_stop' && block?.type === 'tool_use') {
+            try { block.input = partial[event.index] ? JSON.parse(partial[event.index]) : {} } catch { malformed.add(block.id) }
+          } else if (event.type !== 'content_block_delta' || !block) continue
+          else if (delta.type === 'text_delta') { block.text += delta.text; onText(delta.text) }
+          else if (delta.type === 'input_json_delta') partial[event.index] += delta.partial_json
+          else if (delta.type === 'thinking_delta') block.thinking += delta.thinking
+          else if (delta.type === 'signature_delta') block.signature = delta.signature
+        }
+        return { content: content.filter(Boolean), stop_reason }
+      })
       if (body.stop_reason === 'max_tokens') throw new Error(truncated)
       if (body.stop_reason === 'refusal') throw new Error('The model declined this request; stopped this reply')
       if (body.stop_reason === 'pause_turn') throw new Error('The model paused before finishing; stopped this reply')
@@ -183,7 +268,9 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
       return {
         blocks,
         text: blocks.filter(block => block.type === 'text').map(block => block.text).join(''),
-        toolCalls: blocks.filter(block => block.type === 'tool_use').map(block => ({ id: block.id, name: block.name, args: block.input ?? {} })),
+        toolCalls: blocks.filter(block => block.type === 'tool_use').map(block => ({
+          id: block.id, name: block.name, args: block.input ?? {}, ...(malformed.has(block.id) ? { error: 'Tool arguments are not valid JSON' } : {}),
+        })),
       }
     },
   }

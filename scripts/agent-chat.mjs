@@ -7,9 +7,11 @@ import { createProvider, listModels } from './agent-providers.mjs'
 
 /**
  * The Agent harness of the in-App chat panel. Started on demand by ui-atlas, exchanging JSON lines over stdin/stdout:
- *   Input:  {type:'user',text} | {type:'stop'} | {type:'clear'}
- *   Output: {type:'assistant',text} | {type:'tool_call',id,name,args} | {type:'tool_result',id,name,ok,text}
- *        | {type:'error',message} | {type:'done',stopped}
+ *   Input:  {type:'user',text,context?:[{id,name,type}]} | {type:'stop'} | {type:'load',messages:[{role:'user'|'assistant',text}]}
+ *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
+ *        | {type:'tool_result',id,name,ok,text} | {type:'error',message} | {type:'done',stopped}
+ * The reply text streams in as assistant_delta events; the assistant event that follows carries the complete text of that round.
+ * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
  */
@@ -74,21 +76,31 @@ function toolText(result) {
   return result.content.filter(item => item.type === 'text').map(item => item.text).join('\n')
 }
 
+/** Puts the layers the user had selected in front of the message, so the model knows what "this" refers to. */
+function withContext(text, context) {
+  const layers = (Array.isArray(context) ? context : []).filter(layer => layer && typeof layer.id === 'string')
+    .map(layer => `${JSON.stringify(String(layer.name ?? ''))} (${layer.type}, id ${layer.id})`)
+  return layers.length ? `The user has these layers selected: ${layers.join(', ')}\n\n${text}` : text
+}
+
 async function reply(text, controller) {
   const { signal } = controller
-  // Clearing the conversation replaces history; this turn's reply always goes into the history it started with.
+  // Loading a conversation replaces history; this turn's reply always goes into the history it started with.
   const log = history
   log.push({ role: 'user', text })
+  // The text of the round in progress: kept in the history when the user stops the reply halfway.
+  let partial = ''
   try {
     if (providerError) throw new Error(providerError)
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
       if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
-      const answer = await provider.turn(system, log, tools, signal)
+      const answer = await provider.turn(system, log, tools, signal, delta => { partial += delta; emit({ type: 'assistant_delta', text: delta }) })
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
       log.push({ role: 'assistant', text: answer.text, toolCalls: answer.toolCalls, blocks: answer.blocks })
+      partial = ''
       if (answer.text) emit({ type: 'assistant', text: answer.text })
       if (!answer.toolCalls.length) break
       for (const call of answer.toolCalls) {
@@ -112,6 +124,7 @@ async function reply(text, controller) {
   } catch (error) {
     if (!signal.aborted) emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
+    if (signal.aborted && partial) log.push({ role: 'assistant', text: partial, toolCalls: [] })
     current = null
     emit({ type: 'done', stopped: signal.aborted })
   }
@@ -124,12 +137,13 @@ input.on('line', line => {
   if (message.type === 'user' && typeof message.text === 'string') {
     if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
     current = new AbortController()
-    void reply(message.text, current)
+    void reply(withContext(message.text, message.context), current)
   } else if (message.type === 'stop') {
     current?.abort()
-  } else if (message.type === 'clear') {
+  } else if (message.type === 'load' && Array.isArray(message.messages)) {
     current?.abort()
-    history = []
+    history = message.messages.filter(entry => typeof entry?.text === 'string' && entry.text && (entry.role === 'user' || entry.role === 'assistant'))
+      .map(entry => entry.role === 'user' ? { role: 'user', text: entry.text } : { role: 'assistant', text: entry.text, toolCalls: [] })
   }
 })
 input.on('close', () => {
