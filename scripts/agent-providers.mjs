@@ -137,12 +137,23 @@ const truncated = 'The model reply was cut off by the length limit; stopped this
 // The stream closed without the event that ends a reply; what arrived may be half a sentence or half a tool call.
 const incomplete = 'The model reply ended before it was complete; stopped this reply'
 
+/** The error for a request that completed but whose reply cannot be used; it carries the request's usage, which was consumed all the same. */
+function unusable(message, usage) {
+  return Object.assign(new Error(message), { usage })
+}
+
 function functionCall(id, name, raw) {
   try {
     const args = raw ? JSON.parse(raw) : {}
     if (args && typeof args === 'object' && !Array.isArray(args)) return { id, name, args }
   } catch {}
   return { id, name, args: {}, error: 'Tool arguments are not valid JSON' }
+}
+
+/** The token counts of one request as { input, output, cached }: input includes the cached tokens. Undefined when the API reported none or they are not counts. */
+function tokenUsage(input, output, cached) {
+  const usage = { input, output, cached: cached ?? 0 }
+  return Object.values(usage).every(count => Number.isInteger(count) && count >= 0) ? usage : undefined
 }
 
 /** Reads the provider's model list, returning { models: [id], default }; used for the dropdown menu in the settings panel. */
@@ -157,7 +168,10 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
   return { models: [...new Set(ids)], default: defaults.model }
 }
 
-/** Returns { model, images, turn(system, history, tools, signal, onText) → { text, toolCalls } }; images says whether tool results can carry images, and onText receives the reply text as it streams in. */
+/**
+ * Returns { model, images, turn(system, history, tools, signal, onText) → { text, toolCalls, usage? } }; images says whether tool results
+ * can carry images, onText receives the reply text as it streams in, and usage is the request's token counts (see tokenUsage).
+ */
 export function createProvider({ provider, model, baseUrl, apiKey }) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
@@ -172,13 +186,16 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: name, messages: openaiMessages(system, history), stream: true,
+            model: name, messages: openaiMessages(system, history), stream: true, stream_options: { include_usage: true },
             tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })),
           }),
         }, signal, async stream => {
           const message = { content: '', tool_calls: [] }
           let finish_reason
+          let usage
           for await (const event of stream) {
+            // The usage arrives in a last chunk that has no choices.
+            if (event.usage) usage = event.usage
             const choice = event.choices?.[0] ?? {}
             if (choice.finish_reason) finish_reason = choice.finish_reason
             if (choice.delta?.content) { message.content += choice.delta.content; onText(choice.delta.content) }
@@ -193,14 +210,17 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
             }
           }
           if (!finish_reason) throw new Error(incomplete)
-          return { choices: [{ finish_reason, message: { ...message, tool_calls: message.tool_calls.filter(Boolean) } }] }
+          return { choices: [{ finish_reason, message: { ...message, tool_calls: message.tool_calls.filter(Boolean) } }], usage }
         })
         const choice = body.choices?.[0] ?? {}
-        if (choice.finish_reason === 'length') throw new Error(truncated)
+        // DeepSeek reports cache hits at the top level, OpenAI under prompt_tokens_details.
+        const usage = tokenUsage(body.usage?.prompt_tokens, body.usage?.completion_tokens, body.usage?.prompt_cache_hit_tokens ?? body.usage?.prompt_tokens_details?.cached_tokens)
+        if (choice.finish_reason === 'length') throw unusable(truncated, usage)
         const message = choice.message ?? {}
         return {
           text: message.content ?? '',
           toolCalls: (message.tool_calls ?? []).map(call => functionCall(call.id, call.function?.name, call.function?.arguments)),
+          usage,
         }
       },
     }
@@ -227,12 +247,14 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           if (!response) throw new Error(incomplete)
           return response
         })
-        if (body.status === 'incomplete') throw new Error(truncated)
+        const usage = tokenUsage(body.usage?.input_tokens, body.usage?.output_tokens, body.usage?.input_tokens_details?.cached_tokens)
+        if (body.status === 'incomplete') throw unusable(truncated, usage)
         const output = body.output ?? []
         return {
           text: output.filter(item => item.type === 'message').flatMap(item => item.content ?? [])
             .filter(part => part.type === 'output_text').map(part => part.text).join(''),
           toolCalls: output.filter(item => item.type === 'function_call').map(item => functionCall(item.call_id, item.name, item.arguments)),
+          usage,
         }
       },
     }
@@ -254,11 +276,14 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
         const content = []
         const partial = []
         let stop_reason
+        // message_start carries the input counts and message_delta the output count.
+        let usage
         for await (const event of stream) {
           const block = content[event.index]
           const delta = event.delta ?? {}
           if (event.type === 'content_block_start') { content[event.index] = { ...event.content_block }; partial[event.index] = '' }
-          else if (event.type === 'message_delta') stop_reason = delta.stop_reason ?? stop_reason
+          else if (event.type === 'message_start') usage = event.message?.usage
+          else if (event.type === 'message_delta') { stop_reason = delta.stop_reason ?? stop_reason; usage = { ...usage, ...event.usage } }
           else if (event.type === 'content_block_stop' && block?.type === 'tool_use') {
             try { block.input = partial[event.index] ? JSON.parse(partial[event.index]) : {} } catch { malformed.add(block.id) }
           } else if (event.type !== 'content_block_delta' || !block) continue
@@ -268,14 +293,18 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           else if (delta.type === 'signature_delta') block.signature = delta.signature
         }
         if (!stop_reason) throw new Error(incomplete)
-        return { content: content.filter(Boolean), stop_reason }
+        return { content: content.filter(Boolean), stop_reason, usage }
       })
-      if (body.stop_reason === 'max_tokens') throw new Error(truncated)
-      if (body.stop_reason === 'refusal') throw new Error('The model declined this request; stopped this reply')
-      if (body.stop_reason === 'pause_turn') throw new Error('The model paused before finishing; stopped this reply')
+      // Anthropic counts cached input apart from input_tokens.
+      const { input_tokens, output_tokens, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 } = body.usage ?? {}
+      const usage = tokenUsage(input_tokens + cache_creation_input_tokens + cache_read_input_tokens, output_tokens, cache_read_input_tokens)
+      if (body.stop_reason === 'max_tokens') throw unusable(truncated, usage)
+      if (body.stop_reason === 'refusal') throw unusable('The model declined this request; stopped this reply', usage)
+      if (body.stop_reason === 'pause_turn') throw unusable('The model paused before finishing; stopped this reply', usage)
       const blocks = body.content ?? []
       return {
         blocks,
+        usage,
         text: blocks.filter(block => block.type === 'text').map(block => block.text).join(''),
         toolCalls: blocks.filter(block => block.type === 'tool_use').map(block => ({
           id: block.id, name: block.name, args: block.input ?? {}, ...(malformed.has(block.id) ? { error: 'Tool arguments are not valid JSON' } : {}),

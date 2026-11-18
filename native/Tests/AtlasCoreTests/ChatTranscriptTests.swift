@@ -180,6 +180,66 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     #expect(Set(next.entries.map(\.id)).count == 3)
 }
 
+@Test func chatTranscriptAttachesUsageToTheLastTextOfTheReply() {
+    var transcript = ChatTranscript()
+    transcript.send("Look")
+    transcript.apply(line(#"{"type":"assistant","text":"Checking"}"#))
+    transcript.apply(line(#"{"type":"tool_call","id":"c1","name":"design_get_state","args":{}}"#))
+    transcript.apply(line(#"{"type":"tool_result","id":"c1","name":"design_get_state","ok":true,"text":"[]"}"#))
+    transcript.apply(line(#"{"type":"assistant","text":"Done"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":250,"output":30,"cached":90}}"#))
+    #expect(transcript.entries.map(\.usage) == [nil, nil, nil, ChatUsage(input: 250, output: 30, cached: 90)])
+    #expect(transcript.entries[3].usage?.total == 280)
+}
+
+@Test func chatTranscriptDropsUsageWhenTheReplyHasNoText() {
+    var transcript = ChatTranscript()
+    transcript.send("Hello")
+    transcript.apply(line(#"{"type":"assistant","text":"Hi"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    transcript.send("Again")
+    transcript.apply(line(#"{"type":"error","message":"Quota exceeded or too many requests"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":100,"output":10,"cached":0}}"#))
+    // The earlier reply is not given the usage of this one.
+    #expect(transcript.entries.allSatisfy { $0.usage == nil })
+    #expect(!transcript.busy)
+}
+
+@Test func chatTranscriptKeepsUsageOfAStoppedReply() {
+    var transcript = ChatTranscript()
+    transcript.send("Hello")
+    transcript.apply(line(#"{"type":"assistant_delta","text":"Half"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":true,"usage":{"input":100,"output":10,"cached":0}}"#))
+    #expect(transcript.entries.map(\.kind) == [.user, .assistant, .notice])
+    #expect(transcript.entries[1].usage == ChatUsage(input: 100, output: 10, cached: 0))
+}
+
+@Test func chatTranscriptIgnoresMalformedUsage() {
+    var transcript = ChatTranscript()
+    transcript.send("Hello")
+    transcript.apply(line(#"{"type":"assistant","text":"Hi"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":"x","output":10,"cached":0}}"#))
+    #expect(transcript.entries[1].usage == nil)
+    #expect(!transcript.busy)
+}
+
+@Test func chatUsageIsSavedAndOlderConversationsStillLoad() throws {
+    var transcript = ChatTranscript()
+    transcript.send("Hello")
+    transcript.apply(line(#"{"type":"assistant","text":"Hi"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false,"usage":{"input":250,"output":30,"cached":90}}"#))
+    let restored = try JSONDecoder().decode([ChatEntry].self, from: JSONEncoder().encode(transcript.entries))
+    #expect(restored[1].usage == ChatUsage(input: 250, output: 30, cached: 90))
+    // Saved before usage was recorded.
+    let older = try JSONDecoder().decode([ChatEntry].self, from: line(#"[{"id":0,"kind":"assistant","text":"Old","context":[]}]"#))
+    #expect(older[0].usage == nil)
+}
+
+@Test func chatUsageFormatsCompactCounts() {
+    #expect([0, 856, 999, 1000, 30_349, 999_949, 999_950, 1_234_567].map(ChatUsage.compact)
+        == ["0", "856", "999", "1.0K", "30.3K", "999.9K", "1.0M", "1.2M"])
+}
+
 @Test func toolSubjectNamesWhatACallActsOn() {
     func subject(_ args: String) -> String? {
         ChatEntry.toolSubject(arguments: args) { ["n1": "Hero", "n2": "Title"][$0] }

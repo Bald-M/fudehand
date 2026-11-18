@@ -13,6 +13,29 @@ public struct ChatContext: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// The tokens the model API reported for one reply, added up over its requests. `input` includes the `cached` tokens.
+public struct ChatUsage: Codable, Equatable, Sendable {
+    public let input: Int
+    public let output: Int
+    public let cached: Int
+
+    public init(input: Int, output: Int, cached: Int) {
+        self.input = input
+        self.output = output
+        self.cached = cached
+    }
+
+    public var total: Int { input + output }
+
+    /// A count short enough for the message's action row: "856", "30.3K", "1.2M".
+    public static func compact(_ count: Int) -> String {
+        if count < 1000 { return String(count) }
+        // 999 950 would round up to "1000.0K".
+        if count < 999_950 { return String(format: "%.1fK", Double(count) / 1000) }
+        return String(format: "%.1fM", Double(count) / 1_000_000)
+    }
+}
+
 /// One entry in the chat panel. A tool call and its result are one entry, making it clear what the Agent did.
 public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
@@ -35,6 +58,8 @@ public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public fileprivate(set) var result: String?
     /// The layers selected when a user message was sent.
     public fileprivate(set) var context: [ChatContext] = []
+    /// What the whole reply consumed, on its last assistant text; nil when the model API reported no usage.
+    public fileprivate(set) var usage: ChatUsage?
     /// The harness's id of a tool call, matching the result to its call.
     fileprivate var call: String?
 
@@ -109,6 +134,10 @@ public struct ChatTranscript: Equatable, Sendable {
         case "error":
             append(.error, event["message"] as? String ?? L("Unknown error"))
         case "done":
+            if let usage = event["usage"] as? [String: Any], let input = usage["input"] as? Int, let output = usage["output"] as? Int,
+               let cached = usage["cached"] as? Int, let reply = lastReplyID, let index = entries.lastIndex(where: { $0.id == reply }) {
+                entries[index].usage = ChatUsage(input: input, output: output, cached: cached)
+            }
             if event["stopped"] as? Bool == true { stop() } else { busy = false; settle() }
         default:
             return

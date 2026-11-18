@@ -234,6 +234,8 @@
 "Cancel editing" = "Cancel editing";
 "Copy message" = "Copy message";
 "Regenerate" = "Regenerate";
+"%@ tokens" = "%@ tokens";
+"Input %@ (%@ cached) · Output %@" = "Input %@ (%@ cached) · Output %@";
 "Copied" = "Copied";
 "Code" = "Code";
 "Copy code" = "Copy code";

@@ -77,6 +77,11 @@ private struct AssistantMessage: View {
                 HStack(spacing: 2) {
                     CopyButton(text: entry.text, title: L("Copy message"))
                     if regenerable { MessageButton(title: L("Regenerate"), symbol: "arrow.clockwise", action: regenerate) }
+                    if let usage = entry.usage {
+                        Text(L("%@ tokens", ChatUsage.compact(usage.total)))
+                            .font(.caption).monospacedDigit().foregroundStyle(.secondary).padding(.leading, 4)
+                            .help(L("Input %@ (%@ cached) · Output %@", ChatUsage.compact(usage.input), ChatUsage.compact(usage.cached), ChatUsage.compact(usage.output)))
+                    }
                 }
                 // The newest reply always shows its actions; earlier ones show them under the pointer.
                 .opacity(hovering || regenerable ? 1 : 0)

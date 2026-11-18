@@ -234,6 +234,8 @@
 "Cancel editing" = "取消編輯";
 "Copy message" = "拷貝訊息";
 "Regenerate" = "重新產生";
+"%@ tokens" = "用量 %@ tokens";
+"Input %@ (%@ cached) · Output %@" = "輸入 %@（快取 %@）· 輸出 %@";
 "Copied" = "已拷貝";
 "Code" = "程式碼";
 "Copy code" = "拷貝程式碼";

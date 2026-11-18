@@ -234,6 +234,8 @@
 "Cancel editing" = "取消编辑";
 "Copy message" = "复制消息";
 "Regenerate" = "重新生成";
+"%@ tokens" = "用量 %@ tokens";
+"Input %@ (%@ cached) · Output %@" = "输入 %@（缓存 %@）· 输出 %@";
 "Copied" = "已复制";
 "Code" = "代码";
 "Copy code" = "复制代码";

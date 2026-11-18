@@ -9,8 +9,10 @@ import { createProvider, listModels } from './agent-providers.mjs'
  * The Agent harness of the in-App chat panel. Started on demand by ui-atlas, exchanging JSON lines over stdin/stdout:
  *   Input:  {type:'user',text,context?:[{id,name,type}]} | {type:'stop'} | {type:'load',messages:[{role:'user'|'assistant',text}]}
  *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
- *        | {type:'tool_result',id,name,ok,text} | {type:'error',message} | {type:'done',stopped}
+ *        | {type:'tool_result',id,name,ok,text} | {type:'error',message} | {type:'done',stopped,usage?:{input,output,cached}}
  * The reply text streams in as assistant_delta events; the assistant event that follows carries the complete text of that round.
+ * `usage` is the tokens the model API reported for the reply, added up over its rounds: `input` includes the `cached` tokens.
+ * It is left out when a round reported none, since the sum would understate the reply.
  * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
@@ -92,12 +94,22 @@ async function reply(text, controller) {
   log.push({ role: 'user', text })
   // The text of the round in progress: kept in the history when the user stops the reply halfway.
   let partial = ''
+  // The usage of the rounds that completed; `reported` turns false when one of them came without any.
+  const usage = { input: 0, output: 0, cached: 0 }
+  let rounds = 0
+  let reported = true
+  const count = round => {
+    rounds++
+    if (round.usage) for (const key in usage) usage[key] += round.usage[key]
+    else reported = false
+  }
   try {
     if (providerError) throw new Error(providerError)
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
       if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(system, log, tools, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
+      count(answer)
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
@@ -124,11 +136,13 @@ async function reply(text, controller) {
       if (signal.aborted) break
     }
   } catch (error) {
+    // A request that completed with a reply that cannot be used (cut off, declined) was consumed like any other.
+    if (error instanceof Error && 'usage' in error) count(error)
     if (!signal.aborted) emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
     if (signal.aborted && partial) log.push({ role: 'assistant', text: partial, toolCalls: [] })
     current = null
-    emit({ type: 'done', stopped: signal.aborted })
+    emit({ type: 'done', stopped: signal.aborted, ...(rounds && reported ? { usage } : {}) })
   }
 }
 
