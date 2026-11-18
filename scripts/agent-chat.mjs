@@ -62,6 +62,14 @@ let current = null
 
 const imagesOmitted = 'The image was left out because the current model provider cannot receive images. Check the result with design_get_node or design_get_document instead.'
 
+const imageTooLarge = 'The image was left out because it is larger than 8000 px on a side, which the model API rejects. Take the snapshot again with a smaller scale.'
+
+/** Whether a PNG is wider or taller than the model APIs accept; an oversized image would be rejected again on every later request. */
+function tooLarge(image) {
+  const header = Buffer.from(image.data.slice(0, 32), 'base64')
+  return header.length >= 24 && Math.max(header.readUInt32BE(16), header.readUInt32BE(20)) > 8000
+}
+
 function toolText(result) {
   return result.content.filter(item => item.type === 'text').map(item => item.text).join('\n')
 }
@@ -92,7 +100,10 @@ async function reply(text, controller) {
         const images = result.content.filter(item => item.type === 'image').map(item => ({ data: item.data, mimeType: item.mimeType }))
         log.push({
           role: 'tool', id: call.id, name: call.name, isError: Boolean(result.isError),
-          ...(!images.length ? { text: output } : provider.images ? { text: output, images } : { text: `${output}\n${imagesOmitted}` }),
+          ...(!images.length ? { text: output }
+            : !provider.images ? { text: `${output}\n${imagesOmitted}` }
+            : images.some(tooLarge) ? { text: `${output}\n${imageTooLarge}` }
+            : { text: output, images }),
         })
         emit({ type: 'tool_result', id: call.id, name: call.name, ok: !result.isError, text: output.slice(0, 4000) })
       }

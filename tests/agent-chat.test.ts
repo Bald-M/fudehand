@@ -426,6 +426,22 @@ describe('Agent harness: design_snapshot images', () => {
     expect(model.requests[0].body.instructions).toMatch(/design_snapshot to check the result/)
   })
 
+  it('leaves out a snapshot too large for the model API and asks for a smaller scale', async () => {
+    // Only the PNG header matters here: signature, IHDR length and tag, then width 9000 and height 100.
+    const header = Buffer.alloc(24)
+    Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').copy(header)
+    header.writeUInt32BE(9000, 16)
+    header.writeUInt32BE(100, 20)
+    const huge = header.toString('base64')
+    const app = await startApp(() => ({ ok: true, result: { id: 'home', width: 9000, height: 100, mimeType: 'image/png', data: huge } }))
+    const model = await fakeModel([anthropicTool('toolu_1', 'design_snapshot', { id: 'home', scale: 4 }), anthropicText('Too large.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('Check the home page')
+    const result = model.requests[1].body.messages[2].content[0]
+    expect(result.content).toMatch(/^Snapshot of layer home \(9000×100\)\n.*larger than 8000 px.*smaller scale/)
+    expect(JSON.stringify(model.requests[1].body)).not.toContain(huge)
+  })
+
   it('tells a provider that cannot receive images that the snapshot image was left out', async () => {
     const app = await startSnapshotApp()
     const model = await fakeModel([openaiTool('call_1', 'design_snapshot', { id: 'home' }), openaiText('I cannot see it.')])
