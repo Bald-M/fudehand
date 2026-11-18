@@ -15,7 +15,12 @@ struct ChatPanel: View {
     @State private var showingSettings = false
     /// Selected layers whose context tag the user removed; forgotten once the layer is no longer selected.
     @State private var dismissed: Set<String> = []
-    @State private var follow = ChatScrollFollow()
+    /// The last user message is in the input to be changed; sending replaces it and its reply.
+    @State private var editing = false
+    /// Scroll position bookkeeping, kept out of view state so scrolling does not re-render the panel every frame.
+    @State private var scroll = ScrollTracker()
+    @State private var following = true
+    @State private var atBottom = true
     @FocusState private var inputFocused: Bool
     @Environment(\.locale) private var locale
 
@@ -36,6 +41,8 @@ struct ChatPanel: View {
         .frame(minWidth: 300)
         .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat, root: root, runtime: runtime) }
         .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
+        // The message being edited is gone: another conversation was opened, or something was sent.
+        .onChange(of: chat.transcript.lastUserID) { editing = false }
     }
 
     private var header: some View {
@@ -82,7 +89,7 @@ struct ChatPanel: View {
     private var messages: some View {
         let transcript = chat.transcript
         let groups = transcript.groups
-        let lastAssistant = transcript.entries.last { $0.kind == .assistant }?.id
+        let lastReply = transcript.lastReplyID
         let actions = ChatRowActions(regenerate: { chat.regenerate(root: root, runtime: runtime) }, edit: edit, layerName: layerName)
         return GeometryReader { viewport in
             ScrollViewReader { proxy in
@@ -92,7 +99,7 @@ struct ChatPanel: View {
                         if groups.isEmpty { emptyState }
                         ForEach(groups) { group in
                             ChatGroupRow(group: group, active: busy && group.id == groups.last?.id,
-                                         actionable: !busy && group.id == (group.entries[0].kind == .user ? transcript.lastUserID : lastAssistant),
+                                         actionable: !busy && group.id == (group.entries[0].kind == .user ? transcript.lastUserID : lastReply),
                                          actions: actions)
                         }
                         if busy {
@@ -104,7 +111,9 @@ struct ChatPanel: View {
                     .background(GeometryReader { content in
                         // Where the content sits in the scroll view: scrolled distance and total height.
                         Color.clear.onChange(of: content.frame(in: .named("chat")), initial: true) { _, frame in
-                            follow.update(offset: -frame.minY, contentHeight: frame.height, viewportHeight: viewport.size.height)
+                            scroll.follow.update(offset: -frame.minY, contentHeight: frame.height, viewportHeight: viewport.size.height)
+                            if following != scroll.follow.following { following = scroll.follow.following }
+                            if atBottom != scroll.follow.atBottom { atBottom = scroll.follow.atBottom }
                         }
                     })
                 }
@@ -112,12 +121,12 @@ struct ChatPanel: View {
                 .defaultScrollAnchor(.bottom)
                 // Follow new text only while the user is at the bottom.
                 .onChange(of: [transcript.entries.count, transcript.entries.last?.text.count ?? 0, busy ? 1 : 0]) {
-                    if follow.following { proxy.scrollTo(Self.bottom, anchor: .bottom) }
+                    if scroll.follow.following { proxy.scrollTo(Self.bottom, anchor: .bottom) }
                 }
                 .overlay(alignment: .bottom) {
                     // Also offered when the view is merely left behind, for example after a tool card above was opened.
-                    if !follow.following || (!busy && !follow.atBottom) {
-                        Button { follow = ChatScrollFollow(); proxy.scrollTo(Self.bottom, anchor: .bottom) } label: {
+                    if !following || (!busy && !atBottom) {
+                        Button { scroll.follow = ChatScrollFollow(); following = true; proxy.scrollTo(Self.bottom, anchor: .bottom) } label: {
                             Image(systemName: "arrow.down").font(.callout.weight(.semibold)).frame(width: 28, height: 28)
                                 .background(.regularMaterial, in: Circle()).overlay(Circle().strokeBorder(.quaternary))
                                 .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
@@ -146,6 +155,15 @@ struct ChatPanel: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !context.isEmpty { contextTags }
+            if editing {
+                HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                    Text(L("Editing the last message"))
+                    Spacer()
+                    Button { editing = false } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                        .buttonStyle(.plain).help(L("Cancel editing")).accessibilityLabel(L("Cancel editing"))
+                }.font(.caption).foregroundStyle(.secondary)
+            }
             // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
             TextField(L("Message"), text: $draft, axis: .vertical)
                 .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
@@ -171,22 +189,21 @@ struct ChatPanel: View {
         .padding(12)
     }
 
-    /// The selected layers as removable tags; the first few by name, the rest as a count.
+    /// The selected layers as removable tags; with many selected, the row scrolls sideways.
     private var contextTags: some View {
-        HStack(spacing: 6) {
-            ForEach(context.prefix(2), id: \.id) { layer in
-                HStack(spacing: 4) {
-                    Image(systemName: NodeType(rawValue: layer.type)?.symbol ?? "square").font(.caption2)
-                    Text(layer.name).font(.caption).lineLimit(1)
-                    Button { dismissed.insert(layer.id) } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                        .help(L("Remove from context")).accessibilityLabel(L("Remove %@ from context", layer.name))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(context, id: \.id) { layer in
+                    HStack(spacing: 4) {
+                        Image(systemName: NodeType(rawValue: layer.type)?.symbol ?? "square").font(.caption2)
+                        Text(layer.name).font(.caption).lineLimit(1)
+                        Button { dismissed.insert(layer.id) } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .help(L("Remove from context")).accessibilityLabel(L("Remove %@ from context", layer.name))
+                    }
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
                 }
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(.quaternary.opacity(0.6), in: Capsule())
-            }
-            if context.count > 2 {
-                Text(L("+%d more", context.count - 2)).font(.caption).foregroundStyle(.secondary).fixedSize()
             }
         }
         .accessibilityElement(children: .contain).accessibilityLabel(L("Context"))
@@ -208,7 +225,8 @@ struct ChatPanel: View {
             Text(chat.settings.model.isEmpty ? L("Default model") : chat.settings.model).font(.caption).lineLimit(1)
         }
         .menuStyle(.borderlessButton).fixedSize()
-        .help("\(L("Choose model")) · \(chat.settings.providerTitle)").accessibilityLabel(L("Choose model"))
+        // Changing the model restarts the harness, which would cut a running reply short.
+        .help("\(L("Choose model")) · \(chat.settings.providerTitle)").accessibilityLabel(L("Choose model")).disabled(busy)
     }
 
     @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
@@ -218,17 +236,24 @@ struct ChatPanel: View {
     private func submit() {
         guard !busy, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // Sending always returns to the newest message.
-        follow = ChatScrollFollow()
+        scroll.follow = ChatScrollFollow()
+        following = true
+        if editing { _ = chat.editLast() }
         chat.send(draft, context: context, root: root, runtime: runtime)
         draft = ""
     }
 
-    /// Puts the last user message back into the input to be changed and sent again.
+    /// Copies the last user message into the input to be changed; the conversation is only rewound once the new text is sent.
     private func edit() {
-        guard let last = chat.editLast() else { return }
+        guard let last = chat.transcript.entries.last(where: { $0.kind == .user }) else { return }
         draft = last.text
+        editing = true
         inputFocused = true
     }
+}
+
+private final class ScrollTracker {
+    var follow = ChatScrollFollow()
 }
 
 /// Makes Shift-Return insert a line break in the focused text field instead of submitting it; the field itself only does that for Option-Return.
@@ -246,7 +271,8 @@ private struct ShiftReturnLineBreak: ViewModifier {
                 monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                     // Left alone while an input method is composing, where Return confirms the candidate.
                     guard event.keyCode == 36, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift,
-                          let editor = event.window?.firstResponder as? NSTextView, !editor.hasMarkedText() else { return event }
+                          let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor, editor.string == text,
+                          !editor.hasMarkedText() else { return event }
                     // Change the bound text rather than the field editor, so SwiftUI does not put the old text back.
                     let range = editor.selectedRange()
                     text = (text as NSString).replacingCharacters(in: NSIntersectionRange(range, NSRange(location: 0, length: text.utf16.count)), with: "\n")

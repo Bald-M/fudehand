@@ -219,10 +219,11 @@
 "Context" = "Context";
 "Remove from context" = "Remove from context";
 "Remove %@ from context" = "Remove %@ from context";
-"+%d more" = "+%d more";
 "Selected layers: %@" = "Selected layers: %@";
 "Model Settings…" = "Model Settings…";
 "Edit and resend" = "Edit and resend";
+"Editing the last message" = "Editing the last message";
+"Cancel editing" = "Cancel editing";
 "Copy message" = "Copy message";
 "Regenerate" = "Regenerate";
 "Copied" = "Copied";

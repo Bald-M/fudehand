@@ -220,6 +220,7 @@ private func temporaryHistory() -> ChatHistory {
     session.send("Hello", root: repository, runtime: nil)
     await session.shutdown()
     #expect(history.list().map(\.title) == ["Hello"])
+    #expect(history.load(session.conversationID)?.entries.map(\.text) == ["Hello", "Reply stopped"])
 }
 
 /// A stand-in harness that records what the App sends it and answers every user message with "ok".

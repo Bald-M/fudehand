@@ -95,7 +95,7 @@ async function reply(text, controller) {
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
       if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
-      const answer = await provider.turn(system, log, tools, signal, delta => { partial += delta; emit({ type: 'assistant_delta', text: delta }) })
+      const answer = await provider.turn(system, log, tools, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break

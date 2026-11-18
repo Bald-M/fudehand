@@ -47,8 +47,10 @@ async function* events(response, signal) {
   const decoder = new TextDecoder()
   let buffer = ''
   try {
-    for await (const chunk of response.body) {
-      buffer += decoder.decode(chunk, { stream: true })
+    // The empty chunk at the end closes a last event that has no blank line after it.
+    const chunks = (async function* () { yield* response.body; yield null })()
+    for await (const chunk of chunks) {
+      buffer += chunk ? decoder.decode(chunk, { stream: true }) : '\n\n'
       for (let end; (end = buffer.search(/\r?\n\r?\n/)) >= 0;) {
         const data = buffer.slice(0, end).split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n')
         buffer = buffer.slice(end).replace(/^\r?\n\r?\n/, '')
@@ -132,6 +134,8 @@ function anthropicMessages(history) {
 }
 
 const truncated = 'The model reply was cut off by the length limit; stopped this reply'
+// The stream closed without the event that ends a reply; what arrived may be half a sentence or half a tool call.
+const incomplete = 'The model reply ended before it was complete; stopped this reply'
 
 function functionCall(id, name, raw) {
   try {
@@ -179,13 +183,17 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
             if (choice.finish_reason) finish_reason = choice.finish_reason
             if (choice.delta?.content) { message.content += choice.delta.content; onText(choice.delta.content) }
             for (const part of choice.delta?.tool_calls ?? []) {
-              const call = message.tool_calls[part.index ?? 0] ??= { id: '', function: { name: '', arguments: '' } }
+              // Some compatible servers send each call whole and without an index; a new id then starts a new call.
+              const last = message.tool_calls.length - 1
+              const slot = part.index ?? (part.id && part.id !== message.tool_calls[last]?.id ? last + 1 : Math.max(last, 0))
+              const call = message.tool_calls[slot] ??= { id: '', function: { name: '', arguments: '' } }
               if (part.id) call.id = part.id
               if (part.function?.name) call.function.name = part.function.name
               call.function.arguments += part.function?.arguments ?? ''
             }
           }
-          return { choices: [{ finish_reason, message }] }
+          if (!finish_reason) throw new Error(incomplete)
+          return { choices: [{ finish_reason, message: { ...message, tool_calls: message.tool_calls.filter(Boolean) } }] }
         })
         const choice = body.choices?.[0] ?? {}
         if (choice.finish_reason === 'length') throw new Error(truncated)
@@ -216,7 +224,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
             if (event.type === 'response.output_text.delta' && event.delta) onText(event.delta)
             else if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response
           }
-          if (!response) throw new Error('The model API returned an unparseable response')
+          if (!response) throw new Error(incomplete)
           return response
         })
         if (body.status === 'incomplete') throw new Error(truncated)
@@ -259,6 +267,7 @@ export function createProvider({ provider, model, baseUrl, apiKey }) {
           else if (delta.type === 'thinking_delta') block.thinking += delta.thinking
           else if (delta.type === 'signature_delta') block.signature = delta.signature
         }
+        if (!stop_reason) throw new Error(incomplete)
         return { content: content.filter(Boolean), stop_reason }
       })
       if (body.stop_reason === 'max_tokens') throw new Error(truncated)

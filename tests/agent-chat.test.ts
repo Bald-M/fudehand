@@ -312,6 +312,29 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(events).toEqual([{ type: 'error', message: 'Model API error: upstream overloaded' }, { type: 'done', stopped: false }])
   })
 
+  it('reports a stream that ends before the reply is complete instead of accepting it', async () => {
+    const cut = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Half an ans' } }] })}\n\n`
+    // The closing event has no blank line after it; it still counts.
+    const whole = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Whole' } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}`
+    const model = await fakeModel([{ body: null, sse: cut }, { body: null, sse: whole }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    expect(await chat.ask('Hi')).toEqual([{ type: 'error', message: 'The model reply ended before it was complete; stopped this reply' }, { type: 'done', stopped: false }])
+    expect(await chat.ask('Again')).toEqual([{ type: 'assistant', text: 'Whole' }, { type: 'done', stopped: false }])
+  })
+
+  it('keeps parallel tool calls apart when the stream gives them no index', async () => {
+    const app = await startApp()
+    const call = (id: string) => ({ choices: [{ delta: { tool_calls: [{ id, type: 'function', function: { name: 'design_get_state', arguments: '{}' } }] } }] })
+    const sse = [call('call_a'), call('call_b'), { choices: [{ delta: { content: '' }, finish_reason: 'tool_calls' }] }].map(event => `data: ${JSON.stringify(event)}\n\n`).join('')
+    const model = await fakeModel([{ body: null, sse }, openaiText('Done.')])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    await chat.ask('Look twice')
+    // The empty text delta is not reported either.
+    expect(chat.events.map(event => event.type).slice(0, 4)).toEqual(['tool_call', 'tool_result', 'tool_call', 'tool_result'])
+    expect(chat.events.filter(event => event.type === 'tool_call').map(event => event.id)).toEqual(['call_a', 'call_b'])
+    expect(app.received.map(request => request.command)).toEqual(['get_state', 'get_state'])
+  })
+
   it('tells the model which layers the user has selected', async () => {
     const model = await fakeModel([openaiText('Done.')])
     const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
@@ -399,6 +422,20 @@ describe('Agent harness: streaming from the Responses and Anthropic APIs', () =>
       ['assistant_delta', 'assistant_delta', 'assistant', 'tool_call', 'tool_result', 'assistant_delta', 'assistant_delta', 'assistant', 'done'])
     expect(chat.events[3]).toMatchObject({ name: 'design_get_node', args: { id: 'nope' } })
     expect(app.received).toEqual([{ id: expect.anything(), command: 'get_node', args: { id: 'nope' } }])
+  })
+})
+
+describe('Agent harness: an Anthropic stream cut short', () => {
+  it('does not run a tool whose arguments were still arriving', async () => {
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const events = [
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'design_delete_nodes', input: {} } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"ids":["ho' } },
+    ]
+    const model = await fakeModel([{ body: null, sse: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') }])
+    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    expect((await chat.ask('Delete home')).map(event => event.type)).toEqual(['error', 'done'])
+    expect(app.received).toEqual([])
   })
 })
 

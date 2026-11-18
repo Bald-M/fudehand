@@ -140,6 +140,12 @@ public struct ChatTranscript: Equatable, Sendable {
 
     public var lastUserID: Int? { entries.last { $0.kind == .user }?.id }
 
+    /// The last assistant text of the reply to the last user message: the one regenerating replaces. Nil when that reply has no text.
+    public var lastReplyID: Int? {
+        guard let user = entries.lastIndex(where: { $0.kind == .user }) else { return nil }
+        return entries[user...].last { $0.kind == .assistant }?.id
+    }
+
     /// The user and assistant texts, in the form the harness's `load` message takes to restore its history.
     public var messages: [[String: String]] {
         entries.filter { ($0.kind == .user || $0.kind == .assistant) && !$0.text.isEmpty }.map { ["role": $0.kind.rawValue, "text": $0.text] }

@@ -219,10 +219,11 @@
 "Context" = "上下文";
 "Remove from context" = "从上下文中移除";
 "Remove %@ from context" = "从上下文中移除 %@";
-"+%d more" = "另外 %d 个";
 "Selected layers: %@" = "选中的图层：%@";
 "Model Settings…" = "模型设置…";
 "Edit and resend" = "编辑后重新发送";
+"Editing the last message" = "正在编辑上一条消息";
+"Cancel editing" = "取消编辑";
 "Copy message" = "复制消息";
 "Regenerate" = "重新生成";
 "Copied" = "已复制";

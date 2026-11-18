@@ -72,7 +72,7 @@ private struct AssistantMessage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            MarkdownText(text: entry.text).equatable()
+            MarkdownText(text: entry.text, language: L10n.language).equatable()
             if !streaming {
                 HStack(spacing: 2) {
                     CopyButton(text: entry.text, title: L("Copy message"))
@@ -117,6 +117,8 @@ private struct CopyButton: View {
 /// An assistant reply drawn as Markdown. Equatable, so a streaming reply only re-renders its own text.
 private struct MarkdownText: View, Equatable {
     let text: String
+    /// Not drawn; makes the code block labels follow a change of the UI language.
+    let language: AppLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

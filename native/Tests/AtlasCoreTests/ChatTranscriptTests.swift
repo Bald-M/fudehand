@@ -110,6 +110,7 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     transcript.apply(line(#"{"type":"assistant","text":"Two."}"#))
     transcript.apply(line(#"{"type":"done","stopped":false}"#))
     #expect(transcript.lastUserID == transcript.entries[2].id)
+    #expect(transcript.lastReplyID == transcript.entries[4].id)
     let removed = transcript.rewind()
     #expect(removed?.text == "Second")
     #expect(removed?.context == [layer])
@@ -117,6 +118,18 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     // Entry ids are never reused, so views keyed by id do not mix up old and new entries.
     transcript.send("Second again")
     #expect(Set(transcript.entries.map(\.id) + [removed!.id]).count == 4)
+}
+
+@Test func chatTranscriptOffersNoReplyToRegenerateWhenTheLastTurnHasNoText() {
+    var transcript = ChatTranscript()
+    transcript.send("First")
+    transcript.apply(line(#"{"type":"assistant","text":"One."}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    transcript.send("Second")
+    transcript.apply(line(#"{"type":"error","message":"boom"}"#))
+    transcript.apply(line(#"{"type":"done","stopped":false}"#))
+    // The reply to "First" is not the one a regenerate would replace.
+    #expect(transcript.lastReplyID == nil)
 }
 
 @Test func chatTranscriptListsTheMessagesToRestoreInTheHarness() {
