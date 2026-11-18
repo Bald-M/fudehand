@@ -29,6 +29,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 - `design_snapshot` drew image layers upside down; images now appear upright in snapshots.
 
+### Fixed
+
+- Chat panel with DeepSeek: the default model is now `deepseek-flash`. The previous default, `deepseek-chat`, was discontinued by DeepSeek on 2026-07-24 and is not in its model list, so the context ring had no context window for it.
+
 ## [0.0.3] - 2026-11-18
 
 ### Summary

@@ -205,7 +205,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     await chat.ask('Thanks')
     expect(model.requests[0].url).toBe('/chat/completions')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
-    expect(model.requests[0].body.model).toBe('deepseek-chat')
+    expect(model.requests[0].body.model).toBe('deepseek-flash')
     expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toContain('design_create_node')
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
@@ -872,11 +872,11 @@ async function listModels(env: Record<string, string>) {
 
 describe('Agent harness: listing available models', () => {
   it('reads /models from an OpenAI-compatible API and includes the default model', async () => {
-    const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-chat', context_window: 1048576 }, { id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] } }])
+    const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-flash', context_window: 1048576 }, { id: 'deepseek-v4-pro' }, { id: 'deepseek-flash' }] } }])
     const result = await listModels({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: `${model.baseUrl}/`, FUDEHAND_API_KEY: KEY })
     expect(result.code).toBe(0)
     // A model's context window is passed on when the list reports one.
-    expect(result.event).toEqual({ type: 'models', models: ['deepseek-chat', 'deepseek-reasoner'], default: 'deepseek-chat', windows: { 'deepseek-chat': 1048576 } })
+    expect(result.event).toEqual({ type: 'models', models: ['deepseek-flash', 'deepseek-v4-pro'], default: 'deepseek-flash', windows: { 'deepseek-flash': 1048576 } })
     expect(model.requests[0].url).toBe('/models')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
   })

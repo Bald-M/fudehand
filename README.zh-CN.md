@@ -114,7 +114,7 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 
 | 模型提供方 | 接口 | 默认接口地址 | 默认模型 |
 | --- | --- | --- | --- |
-| DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-chat` |
+| DeepSeek | OpenAI 兼容 | `https://api.deepseek.com` | `deepseek-flash` |
 | Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | ChatGPT | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 
