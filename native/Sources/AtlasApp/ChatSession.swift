@@ -196,7 +196,8 @@ final class ChatSession: ObservableObject {
     /// The settings sheet's starting state, from the stored settings and key flags; reads no Keychain.
     func draft() -> ModelSettingsDraft {
         let providers = Dictionary(uniqueKeysWithValues: ChatSettings.providers.map { provider in
-            let stored = stored(provider.id)
+            // The provider in use shows the selected conversation's model, which may differ from the one stored last.
+            let stored = provider.id == settings.provider ? settings : stored(provider.id)
             return (provider.id, ProviderDraft(model: stored.model, baseUrl: stored.baseUrl, hasSavedKey: savedKey(for: provider.id)))
         })
         return ModelSettingsDraft(order: ChatSettings.providers.map(\.id), providers: providers, inUse: settings.provider)
@@ -330,7 +331,15 @@ final class ChatSession: ObservableObject {
 
     /// Opens an empty conversation in a new tab, using the current conversation's model. A tab that is already empty is selected instead of adding a second one.
     func newConversation() {
-        if let empty = tabs.first(where: { $0.transcript.entries.isEmpty }) { conversationID = empty.id; return }
+        let settings = settings
+        if let index = tabs.firstIndex(where: { $0.transcript.entries.isEmpty }) {
+            if tabs[index].settings != settings {
+                tabs[index].settings = settings
+                terminate(tabs[index].id)
+            }
+            conversationID = tabs[index].id
+            return
+        }
         let tab = Tab(settings: settings)
         tabs.append(tab)
         conversationID = tab.id
@@ -359,6 +368,8 @@ final class ChatSession: ObservableObject {
     /// Closes a tab, stopping its reply; the conversation stays in the history. Closing the last tab leaves an empty conversation.
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        // The only conversation, still empty: closing it would only put another empty one in its place.
+        if tabs.count == 1, tabs[index].transcript.entries.isEmpty { return }
         terminate(id)
         update(id) { $0.stop() }
         let closed = tabs.remove(at: index)

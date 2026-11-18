@@ -50,6 +50,8 @@ struct ChatPanel: View {
         // The message being edited is gone: something was sent, or another conversation is shown.
         .onChange(of: chat.transcript.lastUserID) { editing = false }
         .onChange(of: chat.conversationID) {
+            // A message taken back for editing belongs to the conversation that was left; it is not carried into this one.
+            if editing { draft = "" }
             editing = false
             // The conversation shown starts at its newest message.
             scroll.follow = ChatScrollFollow()

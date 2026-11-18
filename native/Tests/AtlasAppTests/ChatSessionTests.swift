@@ -525,6 +525,30 @@ private func exited(_ pids: [Int32]) async throws -> Bool {
     #expect(session.settings == openai)
     #expect(!session.hasKey)
 
+    // An empty conversation that is reused takes the current model, like a new one.
+    session.newConversation()
+    #expect(session.tabs.count == 2 && session.settings == openai)
+
+    // The settings sheet starts from the selected conversation's model, so saving another field does not replace it
+    // with the model chosen last in another conversation; that conversation keeps its own model too.
+    session.settings = ChatSettings(provider: "openai", model: "gpt-y", baseUrl: "")
+    session.select(first)
+    session.keyUpdated(provider: "openai", saved: true) // Without a key the sheet would move the chat to another provider.
+    var draft = session.draft()
+    #expect(draft.providers["openai"]?.model == "gpt-x")
+    draft.setBaseUrl("https://example.test/v1", for: "openai")
+    try session.apply(draft.changes())
+    #expect(session.tabs.map(\.settings.model) == ["gpt-x", "gpt-y"])
+    #expect(session.tabs.map(\.settings.baseUrl) == ["https://example.test/v1", "https://example.test/v1"])
+    draft = session.draft()
+    draft.setBaseUrl("", for: "openai")
+    try session.apply(draft.changes())
+    session.keyUpdated(provider: "openai", saved: false)
+    session.select(session.tabs[1].id)
+    session.settings = claude
+    session.select(first)
+    session.send("hang", root: harness.root, runtime: nil)
+
     // Only the conversations using a provider are restarted when its key changes.
     session.keyUpdated(provider: "anthropic", saved: false)
     #expect(session.transcript.busy)
