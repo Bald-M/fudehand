@@ -4,9 +4,9 @@
 
 ## Goal and Acceptance Scope
 
-Make the ui-atlas workbench, the Liubai (留白) three-platform example, the Inspiration Field (灵感原野) example, and the project's own documentation consistently natural Simplified Chinese. This covers main pages, text in decorative illustrations, empty states, dynamic buttons, dialogs, form validation, accessibility labels, page titles, and language attributes, as well as documentation, code comments, test descriptions, and the project's own startup messages.
+Make the Fudehand workbench, the Liubai (留白) three-platform example, the Inspiration Field (灵感原野) example, and the project's own documentation consistently natural Simplified Chinese. This covers main pages, text in decorative illustrations, empty states, dynamic buttons, dialogs, form validation, accessibility labels, page titles, and language attributes, as well as documentation, code comments, test descriptions, and the project's own startup messages.
 
-Display names are uniformly "ui-atlas", "留白", and "灵感原野". Technical proper nouns (such as Vue, React, CSS), real shortcut key names, versions, and units keep their usual spelling.
+Display names are uniformly "fudehand", "留白", and "灵感原野". Technical proper nouns (such as Vue, React, CSS), real shortcut key names, versions, and units keep their usual spelling.
 
 Code identifiers, types, style class names, directories, package names, import paths, commands, configuration keys, internal category values, storage keys, and the message protocol stay compatible. Internal category values are separated from the Chinese display labels so that translation does not break filtering or adding items. Dependencies, third-party command output, and Git history are not modified, and no internationalization runtime dependency is introduced.
 

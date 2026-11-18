@@ -9,7 +9,7 @@ Environment: 2026-11-06, Apple Silicon, macOS 15.2, Command Line Tools Swift 6.0
 - `pnpm check`: passed the web workspace type check, 24 Vitest tests, and three web builds, including 4 new real-process tests for the native service entry point.
 - The default execution sandbox forbids listening on local ports, so the first HTTP test run failed; rerunning in an environment that allows loopback passed everything, with no tests deleted or skipped.
 - `pnpm test:native`: 7 Swift Testing tests passed, covering valid configuration, invalid configuration groups, geometry, layout restoration, and a regression where resizing the window after switching web projects keeps the user's viewpoint.
-- `pnpm build:native`: Release compile, link, and App packaging succeeded; `codesign --verify --deep --strict dist/ui-atlas.app` passed.
+- `pnpm build:native`: Release compile, link, and App packaging succeeded; `codesign --verify --deep --strict dist/Fudehand.app` passed.
 
 ## Real App Acceptance
 
@@ -20,7 +20,7 @@ Environment: 2026-11-06, Apple Silicon, macOS 15.2, Command Line Tools Swift 6.0
 - Real web-dialog acceptance found that the native responder chain handled Escape too early; fixed so that during interaction the web bridge decides whether to exit. Both the real App and an NSWindow keyboard regression confirmed that the first Escape closes the dialog and keeps interaction, and the second exits interaction.
 - Loading an empty folder via Open Project Folder (打开项目目录) showed No Enabled Web Projects (没有已启用的作品); choosing an invalid configuration with missing fields showed an error and kept the previous valid folder; switching back to the real project afterwards became ready normally.
 - Checked 1440×940 and roughly 940×672 windows: in the narrower window the description scrolls independently, and the sidebar status and the canvas's bottom controls stay visible; also checked Fit All on the canvas after resizing the window with the system zoom.
-- A local-state regression probe ran the same test against AtlasStore before and after the fix: switch to an uncached web project → 100% → resize the window. The old version failed and the new one passed; the behavior is kept as an AtlasAppTests automated test.
+- A local-state regression probe ran the same test against FudehandStore before and after the fix: switch to an uncached web project → 100% → resize the window. The old version failed and the new one passed; the behavior is kept as an FudehandAppTests automated test.
 
 ## Real WebKit Probes
 

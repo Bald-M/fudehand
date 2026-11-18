@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="native/Resources/AppIcon/AppIcon-1024.png" width="128" alt="ui-atlas app icon">
+  <img src="native/Resources/AppIcon/AppIcon-1024.png" width="128" alt="Fudehand app icon">
 </p>
 
-<h1 align="center">ui-atlas</h1>
+<h1 align="center">Fudehand</h1>
 
 <p align="center">
   A native macOS design tool where you and AI agents edit the same canvas.
@@ -12,9 +12,9 @@
   English | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-![ui-atlas main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/localization-en-US-light.jpg)
+![fudehand main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/localization-en-US-light.jpg)
 
-ui-atlas runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.uiatlas` project files, which are plain JSON.
+Fudehand runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.fudehand` project files, which are plain JSON.
 
 The current version is v0.0.3; see the [CHANGELOG](CHANGELOG.md) for changes.
 
@@ -24,7 +24,7 @@ The current version is v0.0.3; see the [CHANGELOG](CHANGELOG.md) for changes.
 - **One document for people and agents.** The App is the sole owner of the design document. Your edits and an agent's edits go through the same editor and share one undo history.
 - **Design tools for agents.** An MCP server lets Claude Code, Codex, DeepSeek Harness, or any MCP client read, create, and change layers, then take a snapshot to check the result.
 - **Built-in chat panel.** Ask a model to build or change the UI from inside the App, using DeepSeek, Claude, or ChatGPT with your own API key (ChatGPT needs an OpenAI API key).
-- **Open file format.** `.uiatlas` files are versioned JSON that you can read, diff, and keep in Git.
+- **Open file format.** `.fudehand` files are versioned JSON that you can read, diff, and keep in Git.
 - **Four UI languages.** US English (the default), British English, Simplified Chinese, and Traditional Chinese.
 
 ## Requirements
@@ -42,11 +42,11 @@ There is no prebuilt installer; build the App from source on your own Mac.
 
 ```bash
 pnpm install
-pnpm build:native        # release build with ad-hoc signing → dist/ui-atlas.app
-open dist/ui-atlas.app
+pnpm build:native        # release build with ad-hoc signing → dist/Fudehand.app
+open dist/Fudehand.app
 ```
 
-You can drag `dist/ui-atlas.app` into the Applications folder. Keep this checkout, though: the chat panel and the MCP connector use the source directory the App was built from.
+You can drag `dist/Fudehand.app` into the Applications folder. Keep this checkout, though: the chat panel and the MCP connector use the source directory the App was built from.
 
 ## Using the App
 
@@ -59,27 +59,27 @@ The App opens on the launch window, where you can:
 
 In the editor, use the tools in the toolbar at the bottom of the canvas to create layers: Frame (F), Rectangle (R), Ellipse (O), and Text (T). Arrange layers in the layers panel on the left, and edit position, size, fill, stroke, text, and auto layout in the *Design* tab on the right.
 
-To change the UI language, choose *ui-atlas → Language*. The choice applies immediately and is remembered across launches.
+To change the UI language, choose *Fudehand → Language*. The choice applies immediately and is remembered across launches.
 
 The [macOS guide](docs/macos.md) covers canvas interaction, panels, files, and keyboard shortcuts in full.
 
 ## Working with AI agents
 
-Agents work through a set of design tools that the MCP server and the in-app chat panel share. Every tool call is forwarded to the running App, so the App must be open; otherwise a tool returns `ui-atlas is not running`.
+Agents work through a set of design tools that the MCP server and the in-app chat panel share. Every tool call is forwarded to the running App, so the App must be open; otherwise a tool returns `Fudehand is not running`.
 
 ### Connect an agent
 
-The quickest way is *ui-atlas → MCP Connector…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. An agent that is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
+The quickest way is *Fudehand → MCP Connector…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. An agent that is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
 
 You can also set it up by hand:
 
-- **Claude Code.** The `.mcp.json` at the repository root already registers `ui-atlas`. Start `claude` from the repository root and approve the project MCP server when asked; it then appears in `/mcp`.
-- **Codex.** Run `codex mcp add ui-atlas -- node /path/to/ui-atlas/scripts/mcp-server.mjs`, or add this to `~/.codex/config.toml`, using the absolute path of this checkout:
+- **Claude Code.** The `.mcp.json` at the repository root already registers `fudehand`. Start `claude` from the repository root and approve the project MCP server when asked; it then appears in `/mcp`.
+- **Codex.** Run `codex mcp add fudehand -- node /path/to/fudehand/scripts/mcp-server.mjs`, or add this to `~/.codex/config.toml`, using the absolute path of this checkout:
 
   ```toml
-  [mcp_servers.ui-atlas]
+  [mcp_servers.fudehand]
   command = "node"
-  args = ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+  args = ["/path/to/fudehand/scripts/mcp-server.mjs"]
   ```
 
   Codex asks for approval before every MCP tool call, and rejects the call outright in unattended modes such as `codex exec`. To skip approval, add `default_tools_approval_mode = "approve"` to the block above. Write tools change the design document directly, so enable this only when you need it.
@@ -88,13 +88,13 @@ You can also set it up by hand:
 
   ```yaml
   - insert:
-      - id: mcp-ui-atlas
+      - id: mcp-fudehand
         name: "@deepseek-ai/dsh-mcp-client"
         config:
-          serverName: ui-atlas
+          serverName: fudehand
           transport: stdio
           command: "/path/to/node"
-          args: ["/path/to/ui-atlas/scripts/mcp-server.mjs"]
+          args: ["/path/to/fudehand/scripts/mcp-server.mjs"]
   ```
 
 The MCP server uses the repository that contains the script. Append `--root <directory>` to point it at another checkout.
@@ -117,7 +117,7 @@ A few details worth knowing:
 - For an image, pass `image.path` (a local PNG or JPEG) and the tool reads the file for you. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
 - In file and image paths, `~` expands to your home directory.
 
-The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/ui-atlas/control.sock` (override it with `UI_ATLAS_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
+The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/fudehand/control.sock` (override it with `FUDEHAND_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
 
 ### Chat panel
 
@@ -135,17 +135,17 @@ Leave *Model* and *Base URL* empty to use the defaults above. For another servic
 
 Claude and ChatGPT receive the image that `design_snapshot` returns, so the model can look at its own work. The OpenAI-compatible API cannot carry an image in a tool result, so with DeepSeek the model is told the image was left out and checks its changes by reading the layers back instead.
 
-The API key is stored only in your local Keychain (service name `ui-atlas.agent`). The App passes it to the chat program through an environment variable, and never writes it to the repository, project files, preferences, or logs.
+The API key is stored only in your local Keychain (service name `fudehand.agent`). The App passes it to the chat program through an environment variable, and never writes it to the repository, project files, preferences, or logs.
 
 ## Project files
 
-*File → Save* (⌘S) and *Save As…* (⇧⌘S) write a design to a `.uiatlas` project file; *Open…* (⌘O) and *Open Recent* reopen it. The App registers the `.uiatlas` file type, so double-clicking a file in Finder, dragging it onto the Dock icon, or choosing *Open With* opens it in ui-atlas. If the current document has unsaved changes, the App asks whether to save them first.
+*File → Save* (⌘S) and *Save As…* (⇧⌘S) write a design to a `.fudehand` project file; *Open…* (⌘O) and *Open Recent* reopen it. The App registers the `.fudehand` file type, so double-clicking a file in Finder, dragging it onto the Dock icon, or choosing *Open With* opens it in Fudehand. If the current document has unsaved changes, the App asks whether to save them first.
 
 A design document is a tree of layers: frames, rectangles, ellipses, text, images, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout. A project file is JSON with a format version number:
 
 ```json
 {
-  "format": "ui-atlas.design",
+  "format": "fudehand.design",
   "version": 1,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
@@ -161,14 +161,14 @@ A design document is a tree of layers: frames, rectangles, ellipses, text, image
 
 Coordinates are relative to the parent layer. Array order is stacking order, with later items on top. The saved geometry is the result after auto layout. For every field and validation rule, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md).
 
-ui-atlas does not import or export Figma files.
+Fudehand does not import or export Figma files.
 
 ## Development
 
 ```bash
 pnpm dev               # debug build, then open the App
-pnpm build:native      # release build with ad-hoc signing → dist/ui-atlas.app
-pnpm test:native       # Swift tests: AtlasCoreTests and AtlasAppTests
+pnpm build:native      # release build with ad-hoc signing → dist/Fudehand.app
+pnpm test:native       # Swift tests: FudehandCoreTests and FudehandAppTests
 pnpm bench:native      # canvas drag and hover benchmark on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness
 pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
@@ -180,8 +180,8 @@ The repository is laid out like this:
 
 | Path | Contents |
 | --- | --- |
-| `native/Sources/AtlasCore/` | Document model, validation, auto layout, edit history, interaction rules, and the control protocol. No AppKit dependency. |
-| `native/Sources/AtlasApp/` | The SwiftUI shell, canvas rendering, layers and properties panels, chat panel, and control channel. |
+| `native/Sources/FudehandCore/` | Document model, validation, auto layout, edit history, interaction rules, and the control protocol. No AppKit dependency. |
+| `native/Sources/FudehandApp/` | The SwiftUI shell, canvas rendering, layers and properties panels, chat panel, and control channel. |
 | `native/Tests/` | Swift tests. |
 | `scripts/` | Native build and test scripts, the MCP server, the Agent harness, and the shared design tools. |
 | `tests/` | Node tests (Vitest). |
@@ -211,6 +211,6 @@ pnpm version:check       # check that every location agrees; otherwise list the 
 
 ## License
 
-ui-atlas is released under the [Apache-2.0 license](LICENSE). The source is hosted on [GitHub](https://github.com/Bald-M/ui-atlas). The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.
+Fudehand is released under the [Apache-2.0 license](LICENSE). The source is hosted on [GitHub](https://github.com/Bald-M/fudehand). The App is built and run only on your own machine; there is no CI, cloud sync, or production deployment.
 
 The Agent's design guidance in `scripts/design-guidance.mjs` is adapted from the `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design), Copyright Anthropic, PBC, licensed under Apache-2.0; the file lists what was changed.

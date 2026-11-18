@@ -1,6 +1,6 @@
 # macOS Usage Guide
 
-ui-atlas is a native SwiftUI/AppKit design tool. The canvas renders the layers of the design document directly with Core Animation and does not depend on a web server (see [ADR 0006](adr/0006-native-design-document.md)).
+Fudehand is a native SwiftUI/AppKit design tool. The canvas renders the layers of the design document directly with Core Animation and does not depend on a web server (see [ADR 0006](adr/0006-native-design-document.md)).
 
 ## Launching and Building
 
@@ -10,7 +10,7 @@ Requires macOS 14+, Swift 6+, Node.js 22.12+, and pnpm 11.7.0. Installing the Xc
 pnpm install
 pnpm dev                 # Debug build, then open the App
 pnpm build:native        # Release build with local ad-hoc signing
-open dist/ui-atlas.app
+open dist/Fudehand.app
 ```
 
 When the App starts it first shows the launch window and starts no Node processes:
@@ -23,18 +23,18 @@ Once editing starts — via New, Open, a recent item, a template, opening a file
 
 **UI language.** The App comes in US English, British English, Simplified Chinese, and Traditional Chinese. The first launch uses US English whatever the system language is. The app menu's Language submenu switches language: every window and the App's own menu items change immediately, the choice is saved and used at the next launch, and the system-provided menu items (About, Quit, Hide, the standard Edit and Window items) change at the next launch, as the submenu notes. Switching never changes a design document: layer names stay as they are. A layer without a name — newly created, or read from a project file that omits `name` — gets its default name in the language in use at that moment. Project-file errors (not a project file, missing or newer format version) follow the UI language wherever they are shown, including the Agent's `open_document`; the control channel's other errors (protocol, field validation, commands) are not localized.
 
-Templates live in `native/Resources/Templates/`: put a `.uiatlas` file there and rebuild, and it appears in the Templates section, named after the file, with no code changes.
+Templates live in `native/Resources/Templates/`: put a `.fudehand` file there and rebuild, and it appears in the Templates section, named after the file, with no code changes.
 
 The build script writes the local source directory, the Node path, and the PATH at launch time into the App's `Contents/Resources/workspace.json`; the chat panel uses it to find `scripts/agent-chat.mjs` and Node. The canvas, layers, and project files do not depend on the source directory; if the App is copied to another machine, only the chat panel stops working.
 
-SwiftPM build output and the module cache go to the system temporary directory by default. `UI_ATLAS_SWIFT_SCRATCH` overrides the build directory, and `UI_ATLAS_SWIFT_MODULE_CACHE` overrides the module cache directory. Do not run two Swift builds in the same scratch directory at the same time.
+SwiftPM build output and the module cache go to the system temporary directory by default. `FUDEHAND_SWIFT_SCRATCH` overrides the build directory, and `FUDEHAND_SWIFT_MODULE_CACHE` overrides the module cache directory. Do not run two Swift builds in the same scratch directory at the same time.
 
 ## Files
 
-- File menu (文件): New ⌘N, Open ⌘O, Open Recent (打开最近), Save ⌘S, Save As ⇧⌘S. Open Recent shares one record with the launch window's Recent list (written on every successful open or save, deduplicated, moved to the top, up to 10 items), and the record can be cleared at the end of the submenu. Project files use the `.uiatlas` extension and contain versioned JSON (see the [design spec](superpowers/specs/2026-11-17-native-design-document-design.md#document-format-atlascoredesigndocumentswift) for the format).
+- File menu (文件): New ⌘N, Open ⌘O, Open Recent (打开最近), Save ⌘S, Save As ⇧⌘S. Open Recent shares one record with the launch window's Recent list (written on every successful open or save, deduplicated, moved to the top, up to 10 items), and the record can be cleared at the end of the submenu. Project files use the `.fudehand` extension and contain versioned JSON (see the [design spec](superpowers/specs/2026-11-17-native-design-document-design.md#document-format-fudehandcoredesigndocumentswift) for the format).
 - With unsaved changes, the window title shows Edited (已编辑); New, Open, or quitting first asks whether to save.
 - Opening a malformed file, or one created by a newer version, shows the specific reason and leaves the current document unchanged.
-- The App exports the `.uiatlas` file type in Info.plist (`local.ui-atlas.design`, conforming to JSON) and registers itself as its editor: after building, double-clicking in Finder, dragging onto the Dock icon, or Open With all open project files in ui-atlas. The App has only one window, so opening a file replaces the current document (asking first if there are unsaved changes).
+- The App exports the `.fudehand` file type in Info.plist (`local.fudehand.design`, conforming to JSON) and registers itself as its editor: after building, double-clicking in Finder, dragging onto the Dock icon, or Open With all open project files in Fudehand. The App has only one window, so opening a file replaces the current document (asking first if there are unsaved changes).
 
 ## Canvas Interaction
 
@@ -79,7 +79,7 @@ Interaction follows Figma.
 
 ### Chat panel
 
-- **Conversations**: the header shows the open conversations as conversation tabs, then *New conversation*, the *Conversation history* menu, and *Model settings*. A tab shows the conversation's name (the start of its first message, or *New conversation*), a dot while its reply is running, and a close button; the tabs share the header's width, shortening their names, and scroll sideways once they cannot get any narrower. Each conversation has its own messages, context, model, and Agent harness process: *New conversation* opens an empty one with the current conversation's model (or selects a tab that is already empty), and a reply keeps running while another tab is shown. Stopping, regenerating, editing, and choosing a model act on the selected conversation only. Closing a tab stops its reply and keeps the conversation in the history; closing the last tab leaves an empty conversation. Conversations are saved as JSON under `~/Library/Application Support/ui-atlas/chats` (the 50 most recent are kept) when a message is sent and when a reply ends; the most recent one is reopened at launch, in a single tab. Choosing a conversation in *Conversation history* selects its tab when it is open; otherwise it opens in place of an empty current conversation, or in a new tab. *Delete This Conversation* removes the selected conversation from the history and closes its tab; it is unavailable while that conversation is replying. Saving a provider's API key or base URL in *Model settings* stops the running replies of every conversation using that provider, since their harnesses restart with the new value. Quitting the App ends every harness.
+- **Conversations**: the header shows the open conversations as conversation tabs, then *New conversation*, the *Conversation history* menu, and *Model settings*. A tab shows the conversation's name (the start of its first message, or *New conversation*), a dot while its reply is running, and a close button; the tabs share the header's width, shortening their names, and scroll sideways once they cannot get any narrower. Each conversation has its own messages, context, model, and Agent harness process: *New conversation* opens an empty one with the current conversation's model (or selects a tab that is already empty), and a reply keeps running while another tab is shown. Stopping, regenerating, editing, and choosing a model act on the selected conversation only. Closing a tab stops its reply and keeps the conversation in the history; closing the last tab leaves an empty conversation. Conversations are saved as JSON under `~/Library/Application Support/fudehand/chats` (the 50 most recent are kept) when a message is sent and when a reply ends; the most recent one is reopened at launch, in a single tab. Choosing a conversation in *Conversation history* selects its tab when it is open; otherwise it opens in place of an empty current conversation, or in a new tab. *Delete This Conversation* removes the selected conversation from the history and closes its tab; it is unavailable while that conversation is replying. Saving a provider's API key or base URL in *Model settings* stops the running replies of every conversation using that provider, since their harnesses restart with the new value. Quitting the App ends every harness.
 - **Transcript**: replies stream in and render Markdown (headings, lists, inline code, links, quotes, code blocks with *Copy code*; long code lines scroll sideways). A tool call is one card: a running, succeeded, or failed icon and a title naming the action and what it acts on, opening to show the arguments and the result. Two or more consecutive calls fold into "Ran N steps", open while they are the newest thing happening.
 - **Scrolling**: the transcript follows new text while the view is at the bottom. Scrolling up stops the following and shows *Scroll to bottom*; sending a message returns to the bottom.
 - **Input**: grows up to 8 lines; Return sends, Shift-Return starts a new line, and a draft can be typed while a reply is running. Below it are the model menu and the send or stop button. The model menu's button shows the provider and model; the menu has one section per model provider. A provider with an API key lists its models as last fetched (more than 8 fold into an *All N Models* submenu, which keeps the default and the selected model visible), and choosing one switches the provider and model in one step. A provider without a key shows *Add API Key…*, which opens *Model settings* on that provider. *Reload Model List* reloads the provider in use, and *Model Settings…* opens the sheet; the menu is unavailable while the selected conversation's reply is running. The draft in the input is kept when another tab is selected. Stopping keeps the text received so far.
@@ -95,11 +95,11 @@ Interaction follows Figma.
 pnpm test:native
 pnpm check
 pnpm build:native
-codesign --verify --deep --strict dist/ui-atlas.app
+codesign --verify --deep --strict dist/Fudehand.app
 ```
 
 The Swift tests cover document reading/writing and version checks, field patches, auto layout, edit history, click-selection rules, the canvas interaction state machine, incremental renderer updates and snapshots, and control commands. The Node tests cover MCP tool forwarding, image reading, and the chat harness.
 
 ## Performance Troubleshooting
 
-Launch the App with `UI_ATLAS_FRAME_LOG=1` and it prints one line per second to stderr, `[frame] hitches=N frames=M`, for comparing dropped frames while panning and zooming.
+Launch the App with `FUDEHAND_FRAME_LOG=1` and it prints one line per second to stderr, `[frame] hitches=N frames=M`, for comparing dropped frames while panning and zooming.

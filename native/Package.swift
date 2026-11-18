@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "UIAtlas",
+    name: "Fudehand",
     defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "AtlasCore", targets: ["AtlasCore"]),
-        .executable(name: "AtlasApp", targets: ["AtlasApp"]),
+        .library(name: "FudehandCore", targets: ["FudehandCore"]),
+        .executable(name: "FudehandApp", targets: ["FudehandApp"]),
     ],
     targets: [
-        .target(name: "AtlasCore", resources: [.process("Resources")]),
+        .target(name: "FudehandCore", resources: [.process("Resources")]),
         .executableTarget(
-            name: "AtlasApp",
-            dependencies: ["AtlasCore"],
+            name: "FudehandApp",
+            dependencies: ["FudehandCore"],
             swiftSettings: [.enableUpcomingFeature("InferSendableFromCaptures")]
         ),
-        .testTarget(name: "AtlasCoreTests", dependencies: ["AtlasCore"]),
-        .testTarget(name: "AtlasAppTests", dependencies: ["AtlasApp", "AtlasCore"]),
+        .testTarget(name: "FudehandCoreTests", dependencies: ["FudehandCore"]),
+        .testTarget(name: "FudehandAppTests", dependencies: ["FudehandApp", "FudehandCore"]),
     ],
     swiftLanguageModes: [.v5]
 )

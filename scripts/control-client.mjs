@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 /** The location of the native App's control channel, matching ControlServer.defaultPath on the Swift side. */
 export function defaultSocketPath(env = process.env) {
-  return env.UI_ATLAS_CONTROL_SOCKET || join(homedir(), 'Library/Application Support/ui-atlas/control.sock')
+  return env.FUDEHAND_CONTROL_SOCKET || join(homedir(), 'Library/Application Support/fudehand/control.sock')
 }
 
 let nextId = 1
@@ -25,10 +25,10 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
     }
     // StringDecoder ensures a multi-byte character split across chunks is not cut off.
     socket.setEncoding('utf8')
-    socket.setTimeout(timeoutMs, () => finish(new Error('ui-atlas did not respond')))
+    socket.setTimeout(timeoutMs, () => finish(new Error('Fudehand did not respond')))
     socket.once('error', error => finish(new Error(
-      ['ENOENT', 'ECONNREFUSED', 'ENOTSOCK'].includes(error.code) ? 'ui-atlas is not running'
-        : ['ECONNRESET', 'EPIPE'].includes(error.code) ? 'ui-atlas closed the connection early' : error.message,
+      ['ENOENT', 'ECONNREFUSED', 'ENOTSOCK'].includes(error.code) ? 'Fudehand is not running'
+        : ['ECONNRESET', 'EPIPE'].includes(error.code) ? 'Fudehand closed the connection early' : error.message,
     )))
     socket.once('connect', () => socket.write(JSON.stringify({ id, command, args }) + '\n'))
     socket.on('data', chunk => {
@@ -36,10 +36,10 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
       if (end < 0) { chunks.push(chunk); return }
       chunks.push(chunk.slice(0, end))
       let response
-      try { response = JSON.parse(chunks.join('')) } catch { return finish(new Error('ui-atlas returned an unparseable response')) }
+      try { response = JSON.parse(chunks.join('')) } catch { return finish(new Error('Fudehand returned an unparseable response')) }
       if (response.ok) finish(null, response.result)
-      else finish(new Error(response.error || 'ui-atlas returned an error'))
+      else finish(new Error(response.error || 'Fudehand returned an error'))
     })
-    socket.once('end', () => finish(new Error('ui-atlas closed the connection early')))
+    socket.once('end', () => finish(new Error('Fudehand closed the connection early')))
   })
 }

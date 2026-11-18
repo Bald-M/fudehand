@@ -2,12 +2,12 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
-import { callTool, tools } from './atlas-tools.mjs'
+import { callTool, tools } from './fudehand-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 import { designGuidance } from './design-guidance.mjs'
 
 /**
- * The Agent harness of the in-App chat panel. Started on demand by ui-atlas, exchanging JSON lines over stdin/stdout:
+ * The Agent harness of the in-App chat panel. Started on demand by Fudehand, exchanging JSON lines over stdin/stdout:
  *   Input:  {type:'user',text,context?:[{id,name,type}]} | {type:'stop'} | {type:'load',messages:[{role:'user'|'assistant',text}]}
  *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
  *        | {type:'tool_result',id,name,ok,text} | {type:'error',message} | {type:'done',stopped,usage?:{input,output,cached}}
@@ -21,18 +21,18 @@ import { designGuidance } from './design-guidance.mjs'
 
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
-const apiKey = process.env.UI_ATLAS_API_KEY ?? ''
+const apiKey = process.env.FUDEHAND_API_KEY ?? ''
 const maximumRounds = 16
 
 let provider = null
 let providerError = null
-try { provider = createProvider({ provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', model: process.env.UI_ATLAS_MODEL, baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }) }
+try { provider = createProvider({ provider: process.env.FUDEHAND_PROVIDER || 'deepseek', model: process.env.FUDEHAND_MODEL, baseUrl: process.env.FUDEHAND_BASE_URL, apiKey }) }
 catch (error) { providerError = error.message }
 
 const system = [
-  'You are the design assistant built into ui-atlas. ui-atlas is a native design tool: the canvas shows a design document made of layers, and you and the user edit the same document.',
+  'You are the design assistant built into Fudehand. Fudehand is a native design tool: the canvas shows a design document made of layers, and you and the user edit the same document.',
   // Models cannot tell which model they are and otherwise name whichever one their training data mentions most.
-  provider && `You are running on the model "${provider.model}" (provider setting: ${process.env.UI_ATLAS_PROVIDER || 'deepseek'}). If asked which model you are, answer with that and do not claim to be any other model.`,
+  provider && `You are running on the model "${provider.model}" (provider setting: ${process.env.FUDEHAND_PROVIDER || 'deepseek'}). If asked which model you are, answer with that and do not claim to be any other model.`,
   'First use design_get_state or design_get_document to learn the current state, then make changes with design_create_node, design_update_node, design_delete_nodes, and design_move_node; the canvas updates immediately after each change.',
   'When building a UI, prefer frames with auto layout (layout), and create a whole group of layers with children in a single design_create_node call; mobile frames are usually 390×844.',
   provider?.images === false
@@ -55,7 +55,7 @@ function emit(event) {
 if (values['list-models']) {
   try {
     if (!apiKey) throw new Error('No API key configured')
-    const settings = { provider: process.env.UI_ATLAS_PROVIDER || 'deepseek', baseUrl: process.env.UI_ATLAS_BASE_URL, apiKey }
+    const settings = { provider: process.env.FUDEHAND_PROVIDER || 'deepseek', baseUrl: process.env.FUDEHAND_BASE_URL, apiKey }
     emit({ type: 'models', ...await listModels(settings, AbortSignal.timeout(15000)) })
   } catch (error) {
     emit({ type: 'error', message: error?.name === 'TimeoutError' ? 'Timed out fetching the model list' : String(error?.message ?? error) })

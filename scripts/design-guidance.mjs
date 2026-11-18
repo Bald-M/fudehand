@@ -1,12 +1,12 @@
 /**
- * The design guidance every Agent editing a ui-atlas design document gets: the chat panel's harness puts it in its
+ * The design guidance every Agent editing a Fudehand design document gets: the chat panel's harness puts it in its
  * system prompt and the MCP server sends it as its `instructions`. This is the only copy. Keep it under 2,000 characters:
  * MCP clients such as Claude Code cut a server's instructions off at about 2,048.
  *
  * Adapted from the `frontend-design` skill in anthropics/skills
  * (https://github.com/anthropics/skills/tree/main/skills/frontend-design), Copyright Anthropic, PBC, licensed under
  * the Apache License, Version 2.0 (the same license as this repository; see LICENSE).
- * Changes from the original: rewritten for the ui-atlas layer model and tools; the parts about web pages that have no
+ * Changes from the original: rewritten for the Fudehand layer model and tools; the parts about web pages that have no
  * counterpart in a static design document were removed; the process was turned into five numbered steps in which the
  * Agent states its assumption and carries on instead of confirming with the client; the quality floor was rewritten;
  * the whole text was shortened; the white-with-indigo look was added to the generic looks and copy in the user's

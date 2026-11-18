@@ -2,7 +2,7 @@
 
 > Superseded by [ADR 0006](0006-native-design-document.md): the web-project pipeline has been removed, and this document is kept only as a historical record.
 
-2026-11-17. ui-atlas is positioned so that web projects are viewed only in the App's frames (#36). Previously the frame title bar had an Open in Browser (在浏览器打开) button, cross-origin links, `window.open`, and `target=_blank` were handed to the default browser, and any browser could access the preview ports on `127.0.0.1` directly.
+2026-11-17. Fudehand is positioned so that web projects are viewed only in the App's frames (#36). Previously the frame title bar had an Open in Browser (在浏览器打开) button, cross-origin links, `window.open`, and `target=_blank` were handed to the default browser, and any browser could access the preview ports on `127.0.0.1` directly.
 
 Frames no longer launch a browser: the title bar button is removed, and main-frame navigations and new-window requests that leave the web project's local server are ignored. The preview ports are guarded by a **preview token**:
 

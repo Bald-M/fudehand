@@ -117,7 +117,7 @@ async function startHarness(env: Record<string, string>) {
   const root = await mkdtemp(join(tmpdir(), 'uia-chat-'))
   cleanup.push(() => rm(root, { recursive: true, force: true }))
   const child: ChildProcess = spawn(process.execPath, [harness, '--root', root], {
-    env: { PATH: process.env.PATH ?? '', UI_ATLAS_CONTROL_SOCKET: join(root, 'missing.sock'), ...env },
+    env: { PATH: process.env.PATH ?? '', FUDEHAND_CONTROL_SOCKET: join(root, 'missing.sock'), ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   const events: Event[] = []
@@ -190,7 +190,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
   it('holds a multi-turn conversation and reads the design document through tools', async () => {
     const app = await startApp()
     const model = await fakeModel([openaiTool('call_1', 'design_get_state', {}), openaiText('The document has 1 frame: Demo page.'), openaiText('You are welcome.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const first = await chat.ask('Look at the document')
     expect(first.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
     expect(first[0]).toMatchObject({ name: 'design_get_state', args: {} })
@@ -219,7 +219,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
       openaiTool('call_1', 'design_update_node', { id: 'nope', changes: { name: 'Title' } }),
       openaiText('There is no such layer.'),
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Rename nope to Title')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false })
     expect(events[1].text).toContain('Layer not found: nope')
@@ -229,9 +229,9 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('canvas tools return an English error when the App is not running', async () => {
     const model = await fakeModel([openaiTool('call_1', 'canvas_focus_node', { id: 'home' }), openaiText('The App is not running.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     const events = await chat.ask('Focus the home page')
-    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'ui-atlas is not running' })
+    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'Fudehand is not running' })
   })
 
   it('HTTP errors, network failures and a missing key show English errors', async () => {
@@ -241,22 +241,22 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
       { status: 402, body: { error: { message: 'Insufficient Balance' } } },
       { status: 500, body: { error: { message: 'boom' } } },
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     const messages = []
     for (let i = 0; i < 4; i++) messages.push((await chat.ask('Hello')).find(event => event.type === 'error')?.message)
     expect(messages).toEqual(['Invalid API key or insufficient permissions', 'Quota exceeded or too many requests', 'Quota exceeded or too many requests', 'Model API error (HTTP 500): boom'])
 
-    const offline = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: 'http://127.0.0.1:9', UI_ATLAS_API_KEY: KEY })
+    const offline = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: 'http://127.0.0.1:9', FUDEHAND_API_KEY: KEY })
     expect((await offline.ask('Hello')).find(event => event.type === 'error')?.message).toMatch(/^Could not connect to the model API/)
 
-    const missing = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl })
+    const missing = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl })
     expect((await missing.ask('Hello')).find(event => event.type === 'error')?.message).toBe('No API key configured')
   })
 
   it('executes no further tool calls after a stop', async () => {
     const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
     const model = await fakeModel([{ ...openaiTool('call_1', 'design_delete_nodes', { ids: ['home'] }), delayMs: 800 }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
     chat.send({ type: 'user', text: 'Delete the home page' })
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -272,7 +272,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     const malformed = { body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'design_delete_nodes', arguments: '{"ids":' } }] } }] } }
     const model = await fakeModel([malformed, openaiText('The arguments are wrong.')])
     const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Delete the home page')
     expect(events[1]).toMatchObject({ type: 'tool_result', ok: false, text: 'Tool arguments are not valid JSON' })
     expect(app.received).toEqual([])
@@ -280,7 +280,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('keeps an empty reply out of the history and replaces the history when a conversation is loaded', async () => {
     const model = await fakeModel([{ body: { choices: [{ message: { role: 'assistant', content: null } }] } }, openaiText('Second'), openaiText('After clearing')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('one')
     await chat.ask('two')
     expect(model.requests[1].body.messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
@@ -296,7 +296,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('streams the reply as text deltas before the complete text', async () => {
     const model = await fakeModel([openaiText('Hello there, world.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Hi')
     expect(model.requests[0].body.stream).toBe(true)
     expect(chat.events.map(event => event.type)).toEqual(['assistant_delta', 'assistant_delta', 'assistant', 'done'])
@@ -306,14 +306,14 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('reads a plain JSON body when the endpoint ignores streaming', async () => {
     const model = await fakeModel([{ ...openaiText('Not streamed.'), json: true }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Hi')
     expect(chat.events).toEqual([{ type: 'assistant', text: 'Not streamed.' }, { type: 'done', stopped: false }])
   })
 
   it('keeps the text received before a stop in the history', async () => {
     const model = await fakeModel([{ ...openaiText('Hello world'), chunkDelayMs: 400 }, openaiText('OK')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     chat.send({ type: 'user', text: 'Say hello' })
     await chat.until(event => event.type === 'assistant_delta')
     chat.send({ type: 'stop' })
@@ -329,7 +329,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
   it('reports an error sent in the middle of a stream', async () => {
     const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Half' } }] })}\n\ndata: ${JSON.stringify({ error: { message: 'upstream overloaded' } })}\n\n`
     const model = await fakeModel([{ body: null, sse }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     const events = await chat.ask('Hi')
     expect(events).toEqual([{ type: 'error', message: 'Model API error: upstream overloaded' }, { type: 'done', stopped: false }])
   })
@@ -339,7 +339,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     // The closing event has no blank line after it; it still counts.
     const whole = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Whole' } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}`
     const model = await fakeModel([{ body: null, sse: cut }, { body: null, sse: whole }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect(await chat.ask('Hi')).toEqual([{ type: 'error', message: 'The model reply ended before it was complete; stopped this reply' }, { type: 'done', stopped: false }])
     expect(await chat.ask('Again')).toEqual([{ type: 'assistant', text: 'Whole' }, { type: 'done', stopped: false }])
   })
@@ -349,7 +349,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     const call = (id: string) => ({ choices: [{ delta: { tool_calls: [{ id, type: 'function', function: { name: 'design_get_state', arguments: '{}' } }] } }] })
     const sse = [call('call_a'), call('call_b'), { choices: [{ delta: { content: '' }, finish_reason: 'tool_calls' }] }].map(event => `data: ${JSON.stringify(event)}\n\n`).join('')
     const model = await fakeModel([{ body: null, sse }, openaiText('Done.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Look twice')
     // The empty text delta is not reported either.
     expect(chat.events.map(event => event.type).slice(0, 4)).toEqual(['tool_call', 'tool_result', 'tool_call', 'tool_result'])
@@ -359,7 +359,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('tells the model which layers the user has selected', async () => {
     const model = await fakeModel([openaiText('Done.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Make it blue', { context: [{ id: 'n1', name: 'Hero "card"', type: 'frame' }, { id: 'n2', name: 'Title', type: 'text' }] })
     expect(model.requests[0].body.messages[1].content).toBe(
       'The user has these layers selected: "Hero \\"card\\"" (frame, id n1), "Title" (text, id n2)\n\nMake it blue')
@@ -367,12 +367,12 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('tells the model which provider and model it runs on', async () => {
     const model = await fakeModel([openaiText('Done.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_MODEL: 'deepseek-v4-pro', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_MODEL: 'deepseek-v4-pro', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Which model are you?')
     expect(model.requests[0].body.messages[0].content).toContain('You are running on the model "deepseek-v4-pro" (provider setting: deepseek).')
 
     const claude = await fakeModel([anthropicText('Done.')])
-    const other = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: claude.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const other = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: claude.baseUrl, FUDEHAND_API_KEY: KEY })
     await other.ask('Which model are you?')
     expect(claude.requests[0].body.system).toContain('You are running on the model "claude-sonnet-5-5" (provider setting: anthropic).')
   })
@@ -380,7 +380,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
   it('sends a validly formatted history in the next request after a stop', async () => {
     const app = await startApp()
     const model = await fakeModel([{ ...openaiTool('call_1', 'design_get_state', {}), delayMs: 600 }, openaiText('OK')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
     chat.send({ type: 'user', text: 'Look at the document' })
     await new Promise(resolve => setTimeout(resolve, 150))
@@ -393,7 +393,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
   it('stops the reply when tool calls exceed 16 rounds', async () => {
     const app = await startApp()
     const model = await fakeModel(Array.from({ length: 17 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})))
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Keep checking')
     expect(events.at(-2)).toEqual({ type: 'error', message: 'Too many tool-call rounds; stopped this reply' })
     expect(model.requests).toHaveLength(16)
@@ -402,7 +402,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
 
   it('exits after stdin closes and keeps the key out of the output', async () => {
     const model = await fakeModel([{ status: 401, body: { error: { message: `bad key ${KEY}` } } }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Hello')
     chat.child.stdin!.end()
     expect(await chat.exited).toBe(0)
@@ -414,7 +414,7 @@ describe('Agent harness: OpenAI Responses API (Codex series)', () => {
   it('holds a multi-turn conversation and reads the design document through tools', async () => {
     const app = await startApp()
     const model = await fakeModel([responsesTool('call_1', 'design_get_state', {}), responsesText('There is 1 frame.'), responsesText('OK.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const first = await chat.ask('Look at the document')
     expect(first.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
     await chat.ask('Thanks')
@@ -438,7 +438,7 @@ describe('Agent harness: OpenAI Responses API (Codex series)', () => {
 describe('Agent harness: streaming from the Responses and Anthropic APIs', () => {
   it('streams Responses API text and reports a reply cut off by the length limit', async () => {
     const model = await fakeModel([responsesText('Two frames here.'), { body: { status: 'incomplete', output: [] } }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     await chat.ask('Hi')
     expect(model.requests[0].body.stream).toBe(true)
     expect(chat.events.map(event => event.type)).toEqual(['assistant_delta', 'assistant_delta', 'assistant', 'done'])
@@ -449,7 +449,7 @@ describe('Agent harness: streaming from the Responses and Anthropic APIs', () =>
   it('streams Anthropic text and assembles tool arguments from partial JSON', async () => {
     const app = await startApp(() => ({ ok: false, error: 'Layer not found: nope' }))
     const model = await fakeModel([anthropicTool('toolu_1', 'design_get_node', { id: 'nope' }), anthropicText('No such layer.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Look at nope')
     expect(model.requests[0].body.stream).toBe(true)
     expect(chat.events.map(event => event.type)).toEqual(
@@ -467,7 +467,7 @@ describe('Agent harness: an Anthropic stream cut short', () => {
       { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"ids":["ho' } },
     ]
     const model = await fakeModel([{ body: null, sse: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     expect((await chat.ask('Delete home')).map(event => event.type)).toEqual(['error', 'done'])
     expect(app.received).toEqual([])
   })
@@ -477,7 +477,7 @@ describe('Agent harness: Anthropic Messages API', () => {
   it('holds a multi-turn conversation and reads the design document through tools', async () => {
     const app = await startApp()
     const model = await fakeModel([anthropicTool('toolu_1', 'design_get_state', {}), anthropicText('There is 1 frame.'), anthropicText('OK.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const first = await chat.ask('Look at the document')
     expect(first.map(event => event.type)).toEqual(['assistant', 'tool_call', 'tool_result', 'assistant', 'done'])
     await chat.ask('Thanks')
@@ -501,7 +501,7 @@ describe('Agent harness: Anthropic Messages API', () => {
       { body: { content: [{ type: 'tool_use', id: 'toolu_2', name: 'design_get_state', input: {} }], stop_reason: 'max_tokens' } },
     ])
     const app = await startApp(() => ({ ok: false, error: 'Layer not found: nope' }))
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Look at nope')
     expect(model.requests[1].body.messages[2].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true })
     const truncated = await chat.ask('Look at the document')
@@ -518,7 +518,7 @@ describe('Agent harness: Anthropic Messages API', () => {
       { type: 'tool_use', id: 'toolu_1', name: 'design_get_state', input: {} },
     ]
     const model = await fakeModel([{ body: { content, stop_reason: 'tool_use' } }, anthropicText('One frame.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('look at the document')
     expect(model.requests[1].body.messages[1]).toEqual({ role: 'assistant', content })
   })
@@ -529,7 +529,7 @@ describe('Agent harness: Anthropic Messages API', () => {
       { body: { content: [{ type: 'text', text: 'Working on it' }], stop_reason: 'pause_turn' } },
       anthropicText('Hello.'),
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     const refused = await chat.ask('one')
     expect(refused.map(event => event.type)).toEqual(['error', 'done'])
     expect(refused[0].message).toBe('The model declined this request; stopped this reply')
@@ -543,7 +543,7 @@ describe('Agent harness: Anthropic Messages API', () => {
 
   it('HTTP errors are shown in English', async () => {
     const model = await fakeModel([{ status: 529, body: { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } } }])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect((await chat.ask('Hello')).find(event => event.type === 'error')?.message).toBe('Model API error (HTTP 529): Overloaded')
   })
 })
@@ -553,7 +553,7 @@ const withUsage = (reply: { body: object }, usage: object) => ({ body: { ...repl
 
 describe('Agent harness: token usage', () => {
   const deepseek = (baseUrl: string, extra: Record<string, string> = {}) =>
-    startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: baseUrl, UI_ATLAS_API_KEY: KEY, ...extra })
+    startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: baseUrl, FUDEHAND_API_KEY: KEY, ...extra })
 
   it('reports the usage a Chat Completions stream ends with', async () => {
     const model = await fakeModel([
@@ -568,13 +568,13 @@ describe('Agent harness: token usage', () => {
 
   it('reports Responses API usage', async () => {
     const model = await fakeModel([withUsage(responsesText('Hi.'), { input_tokens: 200, output_tokens: 40, input_tokens_details: { cached_tokens: 150 } })])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 200, output: 40, cached: 150 } })
   })
 
   it('counts Anthropic cache tokens as input', async () => {
     const model = await fakeModel([withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 300, output_tokens: 50 })])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 330, output: 50, cached: 300 } })
   })
 
@@ -584,7 +584,7 @@ describe('Agent harness: token usage', () => {
       { ...withUsage(anthropicText('Hi.'), { input_tokens: 10, cache_read_input_tokens: 300, output_tokens: 50 }), json: true },
     ])
     expect((await (await deepseek(model.baseUrl)).ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 120, output: 30, cached: 0 } })
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect((await chat.ask('Hi')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 310, output: 50, cached: 300 } })
   })
 
@@ -601,14 +601,14 @@ describe('Agent harness: token usage', () => {
       withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }),
       withUsage(openaiText('Done.'), { prompt_tokens: 150, completion_tokens: 20, prompt_cache_hit_tokens: 90 }),
     ])
-    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
     expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 250, output: 30, cached: 90 } })
   })
 
   it('reports no usage when one round did not report any', async () => {
     const app = await startApp()
     const model = await fakeModel([withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }), openaiText('Done.')])
-    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
     expect((await chat.ask('Look')).at(-1)).toEqual({ type: 'done', stopped: false })
   })
 
@@ -618,7 +618,7 @@ describe('Agent harness: token usage', () => {
       withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }),
       { ...openaiText('Too late.'), delayMs: 1500 },
     ])
-    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
     chat.send({ type: 'user', text: 'Look' })
     await chat.until(event => event.type === 'tool_result')
     chat.send({ type: 'stop' })
@@ -632,7 +632,7 @@ describe('Agent harness: token usage', () => {
       { body: { content: [{ type: 'text', text: 'Half' }], stop_reason: 'max_tokens', usage: { input_tokens: 150, output_tokens: 16000 } } },
       { body: { choices: [{ finish_reason: 'length', message: { role: 'assistant', content: 'Half' } }], usage: { prompt_tokens: 40, completion_tokens: 8 } } },
     ])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Look')
     expect(events.slice(-2)).toEqual([
       { type: 'error', message: 'The model reply was cut off by the length limit; stopped this reply' },
@@ -644,7 +644,7 @@ describe('Agent harness: token usage', () => {
   it('still reports usage when a later round fails', async () => {
     const app = await startApp()
     const model = await fakeModel([withUsage(openaiTool('call_1', 'design_get_state', {}), { prompt_tokens: 100, completion_tokens: 10 }), { status: 500, body: {} }])
-    const chat = await deepseek(model.baseUrl, { UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await deepseek(model.baseUrl, { FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Look')
     expect(events.slice(-2).map(event => event.type)).toEqual(['error', 'done'])
     expect(events.at(-1)).toEqual({ type: 'done', stopped: false, usage: { input: 100, output: 10, cached: 0 } })
@@ -664,7 +664,7 @@ async function listModels(env: Record<string, string>) {
 describe('Agent harness: listing available models', () => {
   it('reads /models from an OpenAI-compatible API and includes the default model', async () => {
     const model = await fakeModel([{ body: { object: 'list', data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] } }])
-    const result = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: `${model.baseUrl}/`, UI_ATLAS_API_KEY: KEY })
+    const result = await listModels({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: `${model.baseUrl}/`, FUDEHAND_API_KEY: KEY })
     expect(result.code).toBe(0)
     expect(result.event).toEqual({ type: 'models', models: ['deepseek-chat', 'deepseek-reasoner'], default: 'deepseek-chat' })
     expect(model.requests[0].url).toBe('/models')
@@ -673,14 +673,14 @@ describe('Agent harness: listing available models', () => {
 
   it('reads /models for the OpenAI Responses provider too', async () => {
     const model = await fakeModel([{ body: { data: [{ id: 'gpt-5.3-codex' }] } }])
-    const result = await listModels({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const result = await listModels({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect(result.event).toEqual({ type: 'models', models: ['gpt-5.3-codex'], default: 'gpt-5.3-codex' })
     expect(model.requests[0].url).toBe('/models')
   })
 
   it('reads /v1/models from Anthropic with its own auth headers', async () => {
     const model = await fakeModel([{ body: { data: [{ id: 'claude-opus-5-5', type: 'model' }, { id: 'claude-sonnet-5-5', type: 'model' }], has_more: false } }])
-    const result = await listModels({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const result = await listModels({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect(result.event).toEqual({ type: 'models', models: ['claude-opus-5-5', 'claude-sonnet-5-5'], default: 'claude-sonnet-5-5' })
     expect(model.requests[0].url).toBe('/v1/models?limit=1000')
     expect(model.requests[0].headers['x-api-key']).toBe(KEY)
@@ -689,12 +689,12 @@ describe('Agent harness: listing available models', () => {
 
   it('errors are shown in English and the key never appears in the output', async () => {
     const model = await fakeModel([{ status: 401, body: { error: { message: `bad key ${KEY}` } } }, { status: 404, body: { error: { message: `no route for ${KEY}` } } }])
-    const unauthorized = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const unauthorized = await listModels({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect(unauthorized.event).toEqual({ type: 'error', message: 'Invalid API key or insufficient permissions' })
-    const missing = await listModels({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY })
+    const missing = await listModels({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY })
     expect(missing.event.type).toBe('error')
     expect(missing.output).not.toContain(KEY)
-    expect((await listModels({ UI_ATLAS_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: 'No API key configured' })
+    expect((await listModels({ FUDEHAND_PROVIDER: 'deepseek' })).event).toEqual({ type: 'error', message: 'No API key configured' })
   })
 })
 
@@ -709,7 +709,7 @@ describe('Agent harness: design_snapshot images', () => {
   it('sends the snapshot image to Anthropic inside the tool result', async () => {
     const app = await startSnapshotApp()
     const model = await fakeModel([anthropicTool('toolu_1', 'design_snapshot', { id: 'home' }), anthropicText('Looks right.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const events = await chat.ask('Check the home page')
     expect(model.requests[1].body.messages[2].content[0]).toEqual({
       type: 'tool_result', tool_use_id: 'toolu_1',
@@ -726,7 +726,7 @@ describe('Agent harness: design_snapshot images', () => {
   it('sends the snapshot image to the OpenAI Responses API inside the function call output', async () => {
     const app = await startSnapshotApp()
     const model = await fakeModel([responsesTool('call_1', 'design_snapshot', { id: 'home' }), responsesText('Looks right.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'openai', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'openai', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Check the home page')
     expect(model.requests[1].body.input.at(-1)).toEqual({
       type: 'function_call_output', call_id: 'call_1',
@@ -747,7 +747,7 @@ describe('Agent harness: design_snapshot images', () => {
     const huge = header.toString('base64')
     const app = await startApp(() => ({ ok: true, result: { id: 'home', width: 9000, height: 100, mimeType: 'image/png', data: huge } }))
     const model = await fakeModel([anthropicTool('toolu_1', 'design_snapshot', { id: 'home', scale: 4 }), anthropicText('Too large.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'anthropic', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'anthropic', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Check the home page')
     const result = model.requests[1].body.messages[2].content[0]
     expect(result.content).toMatch(/^Snapshot of layer home \(9000×100\)\n.*larger than 8000 px.*smaller scale/)
@@ -757,7 +757,7 @@ describe('Agent harness: design_snapshot images', () => {
   it('tells a provider that cannot receive images that the snapshot image was left out', async () => {
     const app = await startSnapshotApp()
     const model = await fakeModel([openaiTool('call_1', 'design_snapshot', { id: 'home' }), openaiText('I cannot see it.')])
-    const chat = await startHarness({ UI_ATLAS_PROVIDER: 'deepseek', UI_ATLAS_BASE_URL: model.baseUrl, UI_ATLAS_API_KEY: KEY, UI_ATLAS_CONTROL_SOCKET: app.socketPath })
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     await chat.ask('Check the home page')
     const result = model.requests[1].body.messages.at(-1)
     expect(result).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })

@@ -12,7 +12,7 @@ const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
 
 async function copyOfRepo() {
-  const root = await mkdtemp(join(tmpdir(), 'ui-atlas-version-'))
+  const root = await mkdtemp(join(tmpdir(), 'fudehand-version-'))
   roots.push(root)
   await mkdir(join(root, 'native', 'Resources'), { recursive: true })
   await copyFile(join(repo, 'package.json'), join(root, 'package.json'))
