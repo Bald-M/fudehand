@@ -12,7 +12,8 @@ struct ChatPanel: View {
     /// A layer's current name by id, for tool card titles.
     let layerName: (String) -> String?
     @State private var draft = ""
-    @State private var showingSettings = false
+    /// Set to show the model settings sheet; `provider` picks the provider it opens on (nil = the one in use).
+    @State private var settingsFor: SettingsTarget?
     /// Selected layers whose context tag the user removed; forgotten once the layer is no longer selected.
     @State private var dismissed: Set<String> = []
     /// The last user message is in the input to be changed; sending replaces it and its reply.
@@ -23,6 +24,11 @@ struct ChatPanel: View {
     @State private var atBottom = true
     @FocusState private var inputFocused: Bool
     @Environment(\.locale) private var locale
+
+    private struct SettingsTarget: Identifiable {
+        let id = UUID()
+        var provider: String?
+    }
 
     private static let bottom = "bottom"
 
@@ -39,7 +45,7 @@ struct ChatPanel: View {
             composer
         }
         .frame(minWidth: 300)
-        .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat, root: root, runtime: runtime) }
+        .sheet(item: $settingsFor) { target in ChatSettingsSheet(chat: chat, root: root, runtime: runtime, provider: target.provider) }
         .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
         // The message being edited is gone: another conversation was opened, or something was sent.
         .onChange(of: chat.transcript.lastUserID) { editing = false }
@@ -67,7 +73,7 @@ struct ChatPanel: View {
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L("Conversation history")).disabled(busy)
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+            Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.horizontal, 16).padding(.vertical, 12)
     }
@@ -77,7 +83,7 @@ struct ChatPanel: View {
             Image(systemName: "key").foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("No API key set for %@", chat.settings.providerTitle)).font(.callout)
-                Button(L("Set API Key…")) { showingSettings = true }.controlSize(.small)
+                Button(L("Set API Key…")) { settingsFor = SettingsTarget(provider: nil) }.controlSize(.small)
             }
             Spacer()
         }
@@ -210,27 +216,44 @@ struct ChatPanel: View {
     }
 
     private var modelMenu: some View {
-        Menu {
-            Button { chat.settings.model = "" } label: { menuLabel(L("Default model"), selected: chat.settings.model.isEmpty) }
-            if !chat.models.isEmpty {
-                Divider()
-                ForEach(chat.models, id: \.self) { id in
-                    Button { chat.settings.model = id } label: { menuLabel(id, selected: chat.settings.model == id) }
+        let providers = ChatSettings.providers.map {
+            ModelMenuProvider(id: $0.id, title: $0.title, hasKey: chat.savedKey(for: $0.id), models: chat.models(for: $0.id), defaultModel: chat.defaultModel(for: $0.id))
+        }
+        let current = chat.settings
+        return Menu {
+            ForEach(ModelMenu.sections(providers: providers, provider: current.provider, model: current.model), id: \.provider) { section in
+                Section(section.title) {
+                    ForEach(section.entries, id: \.model) { entry in modelButton(entry, section: section) }
+                    if !section.all.isEmpty {
+                        Menu(L("All %d Models", section.all.count)) {
+                            ForEach(section.all, id: \.model) { entry in modelButton(entry, section: section) }
+                        }
+                    }
+                    if section.needsKey {
+                        Button(L("Add API Key…")) { settingsFor = SettingsTarget(provider: section.provider) }
+                    }
                 }
             }
             Divider()
             Button(L("Reload Model List")) { Task { await chat.reloadModels(root: root, runtime: runtime) } }.disabled(!chat.hasKey)
-            Button(L("Model Settings…")) { showingSettings = true }
+            Button(L("Model Settings…")) { settingsFor = SettingsTarget(provider: nil) }
         } label: {
-            Text(chat.settings.model.isEmpty ? L("Default model") : chat.settings.model).font(.caption).lineLimit(1)
+            Text("\(current.providerTitle) · \(ModelMenu.currentModel(providers: providers, provider: current.provider, model: current.model) ?? L("Default model"))")
+                .font(.caption).lineLimit(1)
         }
         .menuStyle(.borderlessButton).fixedSize()
-        // Changing the model restarts the harness, which would cut a running reply short.
-        .help("\(L("Choose model")) · \(chat.settings.providerTitle)").accessibilityLabel(L("Choose model")).disabled(busy)
+        // Changing the provider or model restarts the harness, which would cut a running reply short.
+        .help(L("Choose model")).accessibilityLabel(L("Choose model")).disabled(busy)
     }
 
-    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
-        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
+    /// Choosing an entry sets the provider and model in one step, keeping that provider's stored base URL.
+    private func modelButton(_ entry: ModelMenuEntry, section: ModelMenuSection) -> some View {
+        let title: String
+        if let id = entry.title { title = entry.isDefault ? "\(id) — \(L("Default"))" : id } else { title = L("Default model") }
+        // A Toggle is drawn as a native checkable menu item; a Label's checkmark image is not shown in this menu.
+        return Toggle(title, isOn: Binding(get: { entry.selected }, set: { _ in
+            chat.settings = ChatSettings(provider: section.provider, model: entry.model, baseUrl: chat.stored(section.provider).baseUrl)
+        }))
     }
 
     private func submit() {
@@ -294,90 +317,140 @@ private struct ChatSettingsSheet: View {
     let root: URL?
     let runtime: WorkspaceLocation?
     @Environment(\.dismiss) private var dismiss
-    @State private var provider = ""
-    @State private var model = ""
-    @State private var baseUrl = ""
-    @State private var key = ""
-    @State private var hasSavedKey = false
-    @State private var editingKey = false
+    @State private var draft: ModelSettingsDraft
+    @State private var selected: String
+    @State private var replacingKey: Set<String> = []
     @State private var error: String?
-    @State private var models: [String] = []
-    @State private var defaultModel: String?
-    @State private var listing = false
-    @State private var listError: String?
-    @State private var listToken = UUID()
-    @FocusState private var keyFocused: Bool
+    @FocusState private var focusedKey: String?
     @Environment(\.locale) private var locale
 
-    private var trimmedKey: String { key.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// `provider` is selected when the sheet opens; nil selects the provider in use.
+    init(chat: ChatSession, root: URL?, runtime: WorkspaceLocation?, provider: String? = nil) {
+        self.chat = chat
+        self.root = root
+        self.runtime = runtime
+        _draft = State(initialValue: chat.draft())
+        _selected = State(initialValue: provider ?? chat.settings.provider)
+    }
 
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
         VStack(alignment: .leading, spacing: 16) {
             Text(L("Model settings")).font(.title3.bold())
-            Form {
-                Picker(L("Model provider"), selection: $provider) {
-                    ForEach(ChatSettings.providers, id: \.id) { Text($0.title).tag($0.id) }
+            HStack(alignment: .top, spacing: 16) {
+                List(draft.order, id: \.self, selection: Binding(get: { selected }, set: { if let id = $0 { selected = id } })) { id in
+                    providerRow(id)
                 }
-                LabeledContent(L("Model")) {
-                    HStack(spacing: 4) {
-                        TextField(L("Model"), text: $model, prompt: Text(defaultModel.map { L("Default: %@", $0) } ?? L("Leave empty to use the default model"))).labelsHidden()
-                        modelMenu
-                    }
-                }
-                TextField(L("Base URL"), text: $baseUrl, prompt: Text(L("Leave empty to use the official endpoint"))).onSubmit(refreshModels)
-                LabeledContent(L("API key")) { keyField }
+                .listStyle(.bordered).frame(width: 200, height: 260)
+                if let provider = draft.providers[selected] { detail(selected, provider) }
             }
-            listStatus
-            Text(L("The API key is stored only in this Mac’s keychain and passed to the chat process through an environment variable when it starts; it is never written to the repository or logs, and the UI shows only the first and last 4 characters. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API."))
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             HStack {
-                if hasSavedKey {
-                    Button(L("Delete Saved Key"), role: .destructive) {
-                        Keychain.delete(provider)
-                        chat.keyUpdated(provider: provider, saved: false)
-                        key = ""; hasSavedKey = false; editingKey = false
-                        // Discard requests still in progress that were sent with the old key.
-                        listToken = UUID(); listing = false; models = []; listError = nil
-                    }
-                }
                 Spacer()
                 Button(L("Cancel"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(L("Save"), action: save).keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20).frame(width: 460)
-        .onAppear { load(chat.settings); refreshModels() }
-        .onChange(of: provider) { previous, next in
-            // On first load previous is empty, so keep the value read in onAppear; after that every switch replaces it with the settings saved for that provider.
-            hasSavedKey = chat.savedKey(for: next)
-            guard !previous.isEmpty else { return }
-            let stored = ChatSession.stored(next, .standard)
-            model = stored.model; baseUrl = stored.baseUrl; key = ""; editingKey = false
-            models = []; defaultModel = nil
-            refreshModels()
-        }
-        .onChange(of: keyFocused) { _, focused in
-            // Keep the plain-text field while typing; after leaving the field, switch to the masked display and fetch the models again with the new key.
-            if focused { editingKey = true; return }
-            guard editingKey, !trimmedKey.isEmpty || hasSavedKey else { return }
-            editingKey = false
-            if !trimmedKey.isEmpty { refreshModels() }
+        .padding(20).frame(width: 640)
+        .onChange(of: focusedKey) { left, _ in
+            // Leaving the key field after typing a new key tests it.
+            guard let left, draft.providers[left]?.test == .untested, !trimmed(draft.providers[left]?.newKey ?? "").isEmpty else { return }
+            runTest(left)
         }
     }
 
-    private var modelMenu: some View {
-        Menu {
-            Button { model = "" } label: { menuLabel(defaultModel.map { L("Default model (%@)", $0) } ?? L("Default model"), selected: model.isEmpty) }
-            if !models.isEmpty {
-                Divider()
-                ForEach(models, id: \.self) { id in
-                    Button { model = id } label: { menuLabel(id, selected: model == id) }
+    private func title(_ id: String) -> String { ChatSettings.providers.first { $0.id == id }?.title ?? id }
+
+    private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func providerRow(_ id: String) -> some View {
+        let hasKey = draft.hasKey(id)
+        let model = trimmed(draft.providers[id]?.model ?? "")
+        return HStack(spacing: 8) {
+            Image(systemName: hasKey ? "circle.fill" : "circle").font(.caption2)
+                .foregroundStyle(hasKey ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary)).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title(id))
+                Text(hasKey ? (model.isEmpty ? chat.defaultModel(for: id) ?? L("Default model") : model) : L("No API key"))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if id == draft.inUse { inUseTag }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var inUseTag: some View {
+        Text(L("In use")).font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).background(.quaternary, in: Capsule())
+    }
+
+    private func detail(_ id: String, _ provider: ProviderDraft) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(title(id)).font(.headline)
+                Spacer()
+                if id == draft.inUse { inUseTag }
+                else if draft.canUse(id) { Button(L("Use for Chat")) { draft.use(id) } }
+                else if !draft.hasKey(id) { Text(L("Add an API key to use this provider")).font(.caption).foregroundStyle(.secondary) }
+            }
+            Form {
+                LabeledContent(L("API key")) { keyRow(id, provider) }
+                TextField(L("Base URL"), text: Binding(get: { provider.baseUrl }, set: { draft.setBaseUrl($0, for: id) }),
+                          prompt: Text(L("Leave empty to use the official endpoint")))
+                LabeledContent(L("Model")) {
+                    HStack(spacing: 4) {
+                        TextField(L("Model"), text: Binding(get: { provider.model }, set: { draft.setModel($0, for: id) }),
+                                  prompt: Text(chat.defaultModel(for: id).map { L("Default: %@", $0) } ?? L("Leave empty to use the default model"))).labelsHidden()
+                        modelMenu(id, model: provider.model)
+                    }
                 }
             }
-            Divider()
-            Button(L("Reload Model List"), action: refreshModels).disabled(listing)
+            status(id, provider.test)
+            Text(L("Each provider keeps its own key, base URL, and model. Keys are stored only in this Mac’s keychain and are passed to the chat process through an environment variable; the UI shows only the first and last 4 characters."))
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if id == "openai" {
+                Text(L("ChatGPT needs an OpenAI API key; a ChatGPT subscription does not include one."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func keyRow(_ id: String, _ provider: ProviderDraft) -> some View {
+        let showsSaved = provider.hasSavedKey && !provider.removesKey && !replacingKey.contains(id) && trimmed(provider.newKey).isEmpty
+        HStack(spacing: 8) {
+            if showsSaved {
+                Text(chat.keyHint(for: id) ?? L("Saved")).font(.body.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    .accessibilityLabel(L("Saved API key"))
+                Spacer()
+            } else {
+                SecureField(L("API key"), text: Binding(get: { provider.newKey }, set: { draft.setKey($0, for: id) }),
+                            prompt: Text(provider.hasSavedKey && !provider.removesKey ? L("Enter a new key, or leave empty to keep the current one") : L("Required")))
+                    .labelsHidden().focused($focusedKey, equals: id).onSubmit { focusedKey = nil }
+            }
+            Button(provider.test == .testing ? L("Testing…") : L("Test")) { runTest(id) }.disabled(!draft.canTest(id))
+            if showsSaved {
+                Button(L("Replace")) {
+                    replacingKey.insert(id)
+                    DispatchQueue.main.async { focusedKey = id }
+                }
+                Button(L("Remove"), role: .destructive) { draft.removeKey(id) }
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private func modelMenu(_ id: String, model: String) -> some View {
+        Menu {
+            Toggle(chat.defaultModel(for: id).map { L("Default model (%@)", $0) } ?? L("Default model"),
+                   isOn: Binding(get: { trimmed(model).isEmpty }, set: { _ in draft.setModel("", for: id) }))
+            let models = chat.models(for: id)
+            if !models.isEmpty {
+                Divider()
+                ForEach(models, id: \.self) { item in
+                    Toggle(item, isOn: Binding(get: { trimmed(model) == item }, set: { _ in draft.setModel(item, for: id) }))
+                }
+            }
         } label: {
             Image(systemName: "chevron.up.chevron.down")
         }
@@ -385,85 +458,53 @@ private struct ChatSettingsSheet: View {
         .help(L("Choose model")).accessibilityLabel(L("Choose model"))
     }
 
-    @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {
-        if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
-    }
-
-    @ViewBuilder private var keyField: some View {
-        if editingKey || (trimmedKey.isEmpty && !hasSavedKey) {
-            SecureField(L("API key"), text: $key, prompt: Text(hasSavedKey ? L("Enter a new key, or leave empty to keep the current one") : L("Required")))
-                .labelsHidden().focused($keyFocused).onSubmit { keyFocused = false }
-        } else {
-            HStack(spacing: 8) {
-                Text(trimmedKey.isEmpty ? chat.keyHint(for: provider) ?? L("Saved") : ChatSettings.maskedKey(trimmedKey))
-                    .font(.body.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                    .accessibilityLabel(trimmedKey.isEmpty ? L("Saved API key") : L("Newly entered API key"))
-                Spacer()
-                Button(L("Replace")) {
-                    key = ""; editingKey = true
-                    DispatchQueue.main.async { keyFocused = true }
-                }.controlSize(.small)
-            }
-        }
-    }
-
-    @ViewBuilder private var listStatus: some View {
+    @ViewBuilder private func status(_ id: String, _ test: KeyTest) -> some View {
         HStack(spacing: 6) {
-            if listing {
+            switch test {
+            case .testing:
                 ProgressView().controlSize(.small)
-                Text(L("Loading available models…"))
-            } else if let listError {
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                Text(L("Could not load the model list: %@. You can still enter a model manually.", listError))
-            } else if !models.isEmpty {
-                Image(systemName: "checkmark.circle").foregroundStyle(.green)
-                Text(L("Available models: %d. Choose one from the menu next to the model field.", models.count))
-            } else if trimmedKey.isEmpty && !hasSavedKey {
-                Text(L("Available models load automatically once you enter an API key."))
+                Text(L("Testing…"))
+            case .passed(let count):
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(L("The key works. %d models available.", count))
+            case .failed(let message):
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(L("The test failed: %@. You can still save.", message.hasSuffix(".") ? String(message.dropLast()) : message))
+            case .untested:
+                let cached = chat.models(for: id).count
+                Text(!draft.hasKey(id) ? L("Add an API key, then test it.")
+                     : cached > 0 ? L("%d models available.", cached) : L("Test the key to load the available models."))
             }
         }
-        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        .font(.caption).foregroundStyle(test.isFailure ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary)).fixedSize(horizontal: false, vertical: true)
     }
 
-    private func load(_ settings: ChatSettings) {
-        provider = settings.provider; model = settings.model; baseUrl = settings.baseUrl
-        hasSavedKey = chat.savedKey(for: settings.provider)
-    }
-
-    /// Reads the current provider's model list with the new key in the field (or the key in the Keychain when there is none); only the result of the last request is used.
-    private func refreshModels() {
-        let token = UUID()
-        listToken = token
-        listError = nil
-        guard let root else { listing = false; listError = L("Cannot find the ui-atlas source directory, so the model list is unavailable"); return }
-        let typed = trimmedKey
-        guard !typed.isEmpty || hasSavedKey else { listing = false; models = []; return }
-        let settings = ChatSettings(provider: provider, model: "", baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))
-        listing = true
+    /// Lists the provider's models with the draft key (or the saved key when none was typed) and the draft base URL; only the latest request counts.
+    private func runTest(_ id: String) {
+        guard let token = draft.beginTest(id), let provider = draft.providers[id] else { return }
+        guard let root else { draft.finishTest(id, token: token, result: .failed(L("Cannot find the ui-atlas source directory, so the model list is unavailable"))); return }
+        let typed = trimmed(provider.newKey)
+        let settings = ChatSettings(provider: id, model: "", baseUrl: trimmed(provider.baseUrl))
         Task {
-            let apiKey = typed.isEmpty ? chat.savedKeyValue(for: settings.provider) : typed
-            // The read clears the saved flag when the Keychain no longer has the key.
-            if provider == settings.provider { hasSavedKey = chat.savedKey(for: provider) }
+            // The only Keychain read the sheet makes, and only when no new key was typed.
+            let apiKey = typed.isEmpty ? chat.savedKeyValue(for: id) : typed
             let result = await ChatSession.listModels(root: root, runtime: runtime, settings: settings, apiKey: apiKey)
-            guard listToken == token else { return }
-            listing = false
+            let before = draft
             switch result {
-            case .success(let list):
-                models = list.models; defaultModel = list.defaultModel.isEmpty ? nil : list.defaultModel
-                chat.cacheModels(list.models, provider: settings.provider)
-            case .failure(let failure): models = []; listError = failure.message
+            case .success(let list): draft.finishTest(id, token: token, result: .passed(models: list.models.count))
+            case .failure(let failure): draft.finishTest(id, token: token, result: .failed(failure.message))
             }
+            // A stale result leaves the draft unchanged and is not cached.
+            if case .success(let list) = result, draft != before { chat.cacheModels(list.models, defaultModel: list.defaultModel, provider: id) }
         }
     }
 
     private func save() {
-        do {
-            if !trimmedKey.isEmpty { try Keychain.save(trimmedKey, account: provider) }
-        } catch { self.error = error.localizedDescription; return }
-        // ChatSession restarts itself when the settings change; notify only when a new key was actually saved.
-        chat.settings = ChatSettings(provider: provider, model: model.trimmingCharacters(in: .whitespaces),
-                                     baseUrl: baseUrl.trimmingCharacters(in: .whitespaces))
-        if !trimmedKey.isEmpty { chat.keyUpdated(provider: provider, saved: true, key: trimmedKey) }
+        do { try chat.apply(draft.changes()) } catch { self.error = error.localizedDescription; return }
         dismiss()
     }
+}
+
+private extension KeyTest {
+    var isFailure: Bool { if case .failed = self { return true } else { return false } }
 }

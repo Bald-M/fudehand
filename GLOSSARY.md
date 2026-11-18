@@ -50,6 +50,6 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
 
-**Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Anthropic Claude, and OpenAI. DeepSeek uses an OpenAI-compatible API, and OpenAI uses the Responses API.
+**Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Claude, and ChatGPT. DeepSeek uses an OpenAI-compatible API, Claude uses the Anthropic Messages API, and ChatGPT uses OpenAI's Responses API and needs an OpenAI API key.
 
 **UI language (界面语言 / 介面語言)**: The language of the App's own copy, chosen in the app menu's *Language* submenu and remembered across launches. It does not follow the system language and never changes the content of a design document; a new layer's default name is written once, in the UI language at that moment.

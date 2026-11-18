@@ -4,7 +4,7 @@ import Foundation
 
 /// The chat panel's model settings; excludes the API key (the key is in the Keychain).
 struct ChatSettings: Equatable {
-    static let providers: [(id: String, title: String)] = [("deepseek", "DeepSeek"), ("anthropic", "Anthropic Claude"), ("openai", "OpenAI")]
+    static let providers: [(id: String, title: String)] = [("deepseek", "DeepSeek"), ("anthropic", "Claude"), ("openai", "ChatGPT")]
 
     var provider: String
     /// When left empty, the harness uses the provider's default model and official address.
@@ -68,6 +68,8 @@ final class ChatSession: ObservableObject {
 
     private let defaults: UserDefaults
     private let readKey: (String) -> String?
+    private let writeKey: (String, String) throws -> Void
+    private let deleteKey: (String) -> Void
     /// Where conversations are saved; nil keeps them in memory only.
     private let history: ChatHistory?
     /// Whether the running harness holds this conversation's history. False for a new process and after the conversation is switched or rewound.
@@ -84,9 +86,13 @@ final class ChatSession: ObservableObject {
         ChatHistory(directory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/ui-atlas/chats"))
     }
 
-    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read, history: ChatHistory? = nil) {
+    init(defaults: UserDefaults = .standard, readKey: @escaping (String) -> String? = Keychain.read,
+         writeKey: @escaping (String, String) throws -> Void = { try Keychain.save($0, account: $1) },
+         deleteKey: @escaping (String) -> Void = Keychain.delete, history: ChatHistory? = nil) {
         self.defaults = defaults
         self.readKey = readKey
+        self.writeKey = writeKey
+        self.deleteKey = deleteKey
         self.history = history
         let provider = defaults.string(forKey: "agent.provider").flatMap { id in ChatSettings.providers.contains { $0.id == id } ? id : nil } ?? "deepseek"
         settings = Self.stored(provider, defaults)
@@ -103,6 +109,22 @@ final class ChatSession: ObservableObject {
     nonisolated static func stored(_ provider: String, _ defaults: UserDefaults) -> ChatSettings {
         ChatSettings(provider: provider, model: defaults.string(forKey: "agent.\(provider).model") ?? "",
                      baseUrl: defaults.string(forKey: "agent.\(provider).baseUrl") ?? "")
+    }
+
+    func stored(_ provider: String) -> ChatSettings { Self.stored(provider, defaults) }
+
+    /// Saves `settings.provider`'s model and address. The provider in use restarts the harness; another provider only has its defaults written.
+    func store(_ settings: ChatSettings) {
+        if settings.provider == self.settings.provider { self.settings = settings; return }
+        defaults.set(settings.model, forKey: "agent.\(settings.provider).model")
+        defaults.set(settings.baseUrl, forKey: "agent.\(settings.provider).baseUrl")
+        objectWillChange.send()
+    }
+
+    func models(for provider: String) -> [String] { defaults.stringArray(forKey: "agent.\(provider).models") ?? [] }
+
+    func defaultModel(for provider: String) -> String? {
+        defaults.string(forKey: "agent.\(provider).defaultModel").flatMap { $0.isEmpty ? nil : $0 }
     }
 
     func savedKey(for provider: String) -> Bool { defaults.bool(forKey: "agent.\(provider).hasKey") }
@@ -134,15 +156,44 @@ final class ChatSession: ObservableObject {
         defaults.set(saved, forKey: "agent.\(provider).hasKey")
         if !saved { defaults.removeObject(forKey: "agent.\(provider).keyHint") }
         else if let key { defaults.set(ChatSettings.maskedKey(key), forKey: "agent.\(provider).keyHint") }
-        guard provider == settings.provider else { return }
+        guard provider == settings.provider else { objectWillChange.send(); return }
         hasKey = saved
         restart()
     }
 
+    /// The settings sheet's starting state, from the stored settings and key flags; reads no Keychain.
+    func draft() -> ModelSettingsDraft {
+        let providers = Dictionary(uniqueKeysWithValues: ChatSettings.providers.map { provider in
+            let stored = stored(provider.id)
+            return (provider.id, ProviderDraft(model: stored.model, baseUrl: stored.baseUrl, hasSavedKey: savedKey(for: provider.id)))
+        })
+        return ModelSettingsDraft(order: ChatSettings.providers.map(\.id), providers: providers, inUse: settings.provider)
+    }
+
+    /// Writes what the settings sheet's Save produced. A failed Keychain write stops before anything later is written,
+    /// so the provider in use stays as it was; the harness restarts only when the provider in use, or its key or settings, changed.
+    func apply(_ changes: ModelSettingsChanges) throws {
+        for id in ChatSettings.providers.map(\.id) {
+            guard let key = changes.saveKeys[id] else { continue }
+            try writeKey(key, id)
+            keyUpdated(provider: id, saved: true, key: key)
+        }
+        for id in changes.deleteKeys {
+            deleteKey(id)
+            keyUpdated(provider: id, saved: false)
+        }
+        for id in ChatSettings.providers.map(\.id) {
+            guard let change = changes.settings[id] else { continue }
+            store(ChatSettings(provider: id, model: change.model, baseUrl: change.baseUrl))
+        }
+        if changes.inUse != settings.provider { settings = stored(changes.inUse) }
+    }
+
     /// Remembers a model list fetched for `provider`.
-    func cacheModels(_ list: [String], provider: String) {
+    func cacheModels(_ list: [String], defaultModel: String? = nil, provider: String) {
         defaults.set(list, forKey: "agent.\(provider).models")
-        if provider == settings.provider { models = list }
+        if let defaultModel, !defaultModel.isEmpty { defaults.set(defaultModel, forKey: "agent.\(provider).defaultModel") }
+        if provider == settings.provider { models = list } else { objectWillChange.send() }
     }
 
     /// Fetches the current provider's model list with the saved key (may trigger a Keychain authorization prompt).
@@ -150,7 +201,7 @@ final class ChatSession: ObservableObject {
         let settings = settings
         guard let root, let key = savedKeyValue(for: settings.provider) else { return }
         if case .success(let listing) = await Self.listModels(root: root, runtime: runtime, settings: settings, apiKey: key) {
-            cacheModels(listing.models, provider: settings.provider)
+            cacheModels(listing.models, defaultModel: listing.defaultModel, provider: settings.provider)
         }
     }
 
