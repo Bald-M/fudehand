@@ -151,15 +151,21 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     #expect((layer.contents as! CGImage).width == 48)
     renderer.contentsScale = 8
     #expect((layer.contents as! CGImage).width == 384)
+    // Growing redraws with 1.5× headroom (768 needed → 1152), so a little more growth reuses that raster.
     node.width = 96
     node.height = 48
     renderer.sync([node])
-    #expect((layer.contents as! CGImage).width == 768)
+    let grown = layer.contents as! CGImage
+    #expect(grown.width == 1152)
+    node.width = 120
+    node.height = 60
+    renderer.sync([node])
+    #expect(layer.contents as! CGImage === grown)
     // Shrinking keeps the sharper raster.
     node.width = 48
     node.height = 24
     renderer.sync([node])
-    #expect((layer.contents as! CGImage).width == 768)
+    #expect(layer.contents as! CGImage === grown)
 }
 
 @Test @MainActor func svgFollowsImageFitAndCornerRadius() throws {
@@ -176,10 +182,28 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     #expect(layer.contentsGravity == .resizeAspectFill && (layer.contents as! CGImage).height == 200)
 }
 
-@Test @MainActor func snapshotIncludesSVGContent() throws {
-    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(svgImage(), scale: 4)))
+@Test @MainActor func snapshotIncludesSVGContentUpright() throws {
+    // Red on top, blue below, so an upside-down raster fails.
+    var node = svgImage()
+    node.image?.data = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="12" fill="#FF0000"/><rect y="12" width="48" height="12" fill="#0000FF"/></svg>"##.utf8)
+    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(node, scale: 4)))
     #expect(image.pixelsWide == 192 && image.pixelsHigh == 96)
     // Compare the stored bytes: colorAt reports sRGB data as calibrated RGB, so converting it would shift saturated colors.
-    let pixel = try #require(image.bitmapData).advanced(by: 48 * image.bytesPerRow + 96 * image.samplesPerPixel)
-    #expect((0..<4).map { pixel[$0] } == [255, 0, 0, 255])
+    let bytes = try #require(image.bitmapData)
+    func pixel(_ x: Int, _ y: Int) -> [UInt8] { (0..<4).map { bytes[y * image.bytesPerRow + x * image.samplesPerPixel + $0] } }
+    #expect(pixel(96, 20) == [255, 0, 0, 255])
+    #expect(pixel(96, 76) == [0, 0, 255, 255])
+}
+
+@Test @MainActor func snapshotDrawsBitmapImagesUpright() throws {
+    // A PNG with red on top and blue below, made from the same drawing as the SVG test.
+    let svg = try #require(NSImage(data: Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="12" fill="#FF0000"/><rect y="12" width="48" height="12" fill="#0000FF"/></svg>"##.utf8)))
+    let tiff = try #require(svg.tiffRepresentation)
+    let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+    var node = DesignNode(id: "p", type: .image, width: 48, height: 24)
+    node.image = DesignImage(data: png)
+    let image = try #require(NSBitmapImageRep(data: try DesignRenderer.snapshotPNG(node, scale: 4)))
+    let bytes = try #require(image.bitmapData)
+    #expect(bytes[20 * image.bytesPerRow + 96 * image.samplesPerPixel] == 255)
+    #expect(bytes[76 * image.bytesPerRow + 96 * image.samplesPerPixel + 2] == 255)
 }

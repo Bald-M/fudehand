@@ -12,6 +12,8 @@ private func imageNode(_ data: Data) throws -> DesignNode {
     #expect(try imageNode(logo).image?.data == logo)
     let viewBoxOnly = Data(#"<?xml version="1.0"?><svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>"#.utf8)
     #expect(try imageNode(viewBoxOnly).image?.data == viewBoxOnly)
+    let prefixed = Data(#"<svg:svg xmlns:svg="http://www.w3.org/2000/svg" width="8" height="8"/>"#.utf8)
+    #expect(try imageNode(prefixed).image?.data == prefixed)
 }
 
 @Test func rejectsDataThatIsNotPNGJPEGOrSVG() {

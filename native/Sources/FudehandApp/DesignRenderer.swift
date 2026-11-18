@@ -194,13 +194,14 @@ final class DesignRenderer {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw ControlCommandError("Could not create the snapshot canvas")
         }
-        // The bitmap has a bottom-left origin; flipping it matches the layers' top-left origin. A text layer's bitmap would be
-        // turned upside down as a whole in this flipped context, so it is drawn reversed in advance.
+        // The bitmap has a bottom-left origin; flipping it matches the layers' top-left origin. A text or image layer's bitmap would
+        // be turned upside down as a whole in this flipped context, so it is drawn reversed in advance.
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
         renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
         renderer.root.layoutIfNeeded()
         for case let layer as TextLayer in renderer.records.values.map(\.layer) { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
+        for case let layer as ImageLayer in renderer.records.values.map(\.layer) { layer.invertForSnapshot() }
         renderer.root.render(in: context)
         guard let image = context.makeImage() else { throw ControlCommandError("Snapshot failed") }
         let data = NSMutableData()
@@ -221,24 +222,41 @@ final class ImageLayer: CALayer {
     private var raster: CGSize = .zero
 
     @MainActor func load(_ data: Data) {
-        svg = DesignRenderer.svgImage(data)
-        if svg == nil {
-            contents = DesignRenderer.cgImage(data)
-        } else {
-            rasterize(force: true)
+        if let bitmap = DesignRenderer.cgImage(data) {
+            svg = nil
+            contents = bitmap
+            return
         }
+        svg = DesignRenderer.svgImage(data)
+        contents = nil
+        rasterize(force: true)
+    }
+
+    /// Replaces the contents with a vertically mirrored copy, for the flipped snapshot context (see `snapshotPNG`).
+    @MainActor func invertForSnapshot() {
+        guard let value = contents, CFGetTypeID(value as CFTypeRef) == CGImage.typeID else { return }
+        let image = value as! CGImage
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        context.translateBy(x: 0, y: CGFloat(image.height))
+        context.scaleBy(x: 1, y: -1)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        contents = context.makeImage()
     }
 
     /// Rasterizes the SVG at the size that covers the bounds (what fill shows) × `contentsScale`. Unless forced, only when that is
-    /// larger than the current raster: shrinking keeps the sharper raster, and a resize drag does not redraw on every frame.
+    /// larger than the current raster, and then with 1.5× headroom: shrinking keeps the sharper raster, and a resize drag that
+    /// enlarges the layer redraws in a few steps rather than on every frame.
     @MainActor func rasterize(force: Bool) {
         guard let svg else { return }
         let size = svg.size
         let cover = max(bounds.width / size.width, bounds.height / size.height) * contentsScale
         let limit = DesignRenderer.maximumRasterSide / max(size.width, size.height)
-        let factor = min(cover, limit)
+        let needed = CGSize(width: max(1, (size.width * min(cover, limit)).rounded(.up)), height: max(1, (size.height * min(cover, limit)).rounded(.up)))
+        guard force || needed.width > raster.width || needed.height > raster.height else { return }
+        let factor = min(force ? cover : cover * 1.5, limit)
         let pixels = CGSize(width: max(1, (size.width * factor).rounded(.up)), height: max(1, (size.height * factor).rounded(.up)))
-        guard force || pixels.width > raster.width || pixels.height > raster.height else { return }
         guard let context = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height), bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }

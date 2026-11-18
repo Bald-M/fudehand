@@ -192,6 +192,8 @@ public enum DesignJSON {
     /// only checks the structure: an SVG the system cannot draw passes and shows up blank.
     public static func isSVG(_ data: Data) -> Bool {
         let parser = XMLParser(data: data)
+        // Reports the local name, so a root written as `<svg:svg xmlns:svg="…">` is recognized too.
+        parser.shouldProcessNamespaces = true
         let root = RootElement()
         parser.delegate = root
         return parser.parse() && root.name == "svg"
