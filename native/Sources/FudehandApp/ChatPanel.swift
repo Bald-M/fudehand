@@ -18,6 +18,14 @@ struct ChatPanel: View {
     @State private var dismissed: Set<String> = []
     /// The last user message is in the input to be changed; sending replaces it and its reply.
     @State private var editing = false
+    /// The row of the command menu that Return would choose.
+    @State private var highlight = 0
+    /// The input text for which Esc closed the command menu; the menu opens again once the text changes.
+    @State private var menuClosedFor: String?
+    /// The menu row the arrow keys last moved to, to scroll a long list to it; hovering highlights without scrolling.
+    @State private var menuScrollTarget: String?
+    /// Why the command in the input was not run; shown until the input changes.
+    @State private var commandError: String?
     /// Scroll position bookkeeping, kept out of view state so scrolling does not re-render the panel every frame.
     @State private var scroll = ScrollTracker()
     @State private var following = true
@@ -30,6 +38,24 @@ struct ChatPanel: View {
         var provider: String?
     }
 
+    /// The menu above the input while a slash command is being typed: the commands, or the models once `/model` is chosen.
+    private struct CommandMenu {
+        var title: String
+        /// Shown when nothing matches what was typed.
+        var empty: String
+        /// Whether the rows are commands, whose names line up in a column.
+        var commands: Bool
+        var items: [Item]
+
+        struct Item: Identifiable {
+            let id: String
+            var name: String
+            var detail: String
+            var checked = false
+            var run: () -> Void
+        }
+    }
+
     private static let bottom = "bottom"
 
     private var busy: Bool { chat.transcript.busy }
@@ -37,7 +63,8 @@ struct ChatPanel: View {
     private var waiting: Bool { chat.transcript.waiting }
     private var context: [ChatContext] { selection.filter { !dismissed.contains($0.id) } }
     /// The predicted next message to offer in the empty input. Not while the last message is being edited: sending would replace that message with it.
-    private var suggestion: String? { editing || waiting ? nil : chat.transcript.suggestion }
+    /// Not offered in plan or goal mode, where the placeholder says what the mode expects.
+    private var suggestion: String? { editing || waiting || chat.mode != nil ? nil : chat.transcript.suggestion }
 
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
@@ -51,6 +78,11 @@ struct ChatPanel: View {
         .frame(minWidth: 300)
         .sheet(item: $settingsFor) { target in ChatSettingsSheet(chat: chat, root: root, runtime: runtime, provider: target.provider) }
         .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
+        .onChange(of: draft) {
+            highlight = 0
+            commandError = nil
+            menuClosedFor = nil
+        }
         // The message being edited is gone: something was sent, or another conversation is shown.
         .onChange(of: chat.transcript.lastUserID) { editing = false }
         .onChange(of: chat.conversationID) {
@@ -225,6 +257,13 @@ struct ChatPanel: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !context.isEmpty { contextTags }
+            if let mode = chat.mode { modeTag(mode) }
+            if chat.planReady && !busy {
+                HStack(spacing: 8) {
+                    Button(L("Run Plan"), action: runPlan).buttonStyle(.borderedProminent).controlSize(.small)
+                    Text(L("Or reply to change the plan")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             if editing {
                 HStack(spacing: 4) {
                     Image(systemName: "pencil")
@@ -237,10 +276,11 @@ struct ChatPanel: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 // Return sends and Shift-Return starts a new line; a draft can be typed while a reply is still running.
                 // The placeholder is the predicted next message when there is one, and Tab puts it in the input.
-                TextField(L("Message"), text: $draft, prompt: Text(verbatim: waiting ? L("Answer the question above, or add details here") : suggestion ?? L("Message")), axis: .vertical)
+                TextField(L("Message"), text: $draft, prompt: Text(verbatim: placeholder), axis: .vertical)
                     .textFieldStyle(.plain).lineLimit(1...8).focused($inputFocused)
                     .onSubmit(submit)
                     .modifier(ComposerKeys(text: $draft, suggestion: suggestion, active: inputFocused))
+                    .modifier(CommandMenuKeys(text: draft, active: inputFocused && commandMenu != nil, move: moveHighlight, close: { menuClosedFor = draft }))
                     .accessibilityLabel(L("Chat input"))
                 if draft.isEmpty, suggestion != nil {
                     Text(L("Tab")).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
@@ -249,6 +289,7 @@ struct ChatPanel: View {
                         .help(L("Press Tab to use the predicted message")).accessibilityLabel(L("Press Tab to use the predicted message"))
                 }
             }
+            if let commandError { Text(commandError).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             HStack(spacing: 8) {
                 modelMenu
                 Spacer()
@@ -267,6 +308,134 @@ struct ChatPanel: View {
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(inputFocused ? AnyShapeStyle(Color.accentColor.opacity(0.7)) : AnyShapeStyle(.quaternary)))
         .padding(12)
+        // The command menu sits above the input, over the transcript.
+        .overlay(alignment: .top) {
+            // Anchored to a line along the input's top edge, so the menu takes its own height and grows upward.
+            Color.clear.frame(height: 0).overlay(alignment: .bottom) {
+                if let menu = commandMenu { commandMenuView(menu).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 12) }
+            }
+        }
+        .zIndex(1)
+    }
+
+    private var placeholder: String {
+        if waiting { return L("Answer the question above, or add details here") }
+        switch chat.mode {
+        case .plan: return L("Describe what to do; AI plans first")
+        case .goal: return L("Describe the goal to reach")
+        case nil: return suggestion ?? L("Message")
+        }
+    }
+
+    private func modeTitle(_ mode: ChatMode) -> String {
+        switch mode {
+        case .plan: L("Plan mode")
+        case .goal: L("Goal mode")
+        }
+    }
+
+    /// The conversation's mode, with a button to leave it.
+    private func modeTag(_ mode: ChatMode) -> some View {
+        HStack(spacing: 6) {
+            Text(modeTitle(mode)).font(.caption.weight(.semibold))
+            Button { chat.mode = nil } label: {
+                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).frame(width: 16, height: 16).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(L("Leave %@", modeTitle(mode))).accessibilityLabel(L("Leave %@", modeTitle(mode)))
+        }
+        .foregroundStyle(Color.accentColor)
+        .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 2)
+        .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func commandSummary(_ command: ChatCommand) -> String {
+        switch command {
+        case .plan: L("Plan mode: list the steps, edit after you confirm")
+        case .goal: L("Goal mode: keep working until the goal is done")
+        case .new: L("Start a new conversation")
+        case .clear: L("Clear this conversation")
+        case .model: L("Switch model")
+        }
+    }
+
+    /// The menu for what is in the input, whether or not Esc closed it; nil when the input is not a command being chosen.
+    private var commandChoices: CommandMenu? {
+        switch ChatCommandInput(draft) {
+        case .typing(let commands):
+            return CommandMenu(title: L("Commands"), empty: L("No matching commands"), commands: true, items: commands.map { command in
+                CommandMenu.Item(id: command.name, name: command.name, detail: commandSummary(command)) { run(command, argument: "") }
+            })
+        case .command(.model, let argument):
+            let current = chat.settings
+            let choices = ModelMenu.choices(providers: modelProviders, provider: current.provider, model: current.model, matching: argument)
+            var items = choices.map { choice in
+                let name = choice.title.map { choice.isDefault ? "\($0) — \(L("Default"))" : $0 } ?? L("Default model")
+                return CommandMenu.Item(id: "\(choice.provider)/\(choice.model)", name: name, detail: choice.providerTitle, checked: choice.selected) { choose(choice) }
+            }
+            // As in the model menu, the settings come last; they are also the way on when no provider has a key yet.
+            if argument.isEmpty {
+                items.append(CommandMenu.Item(id: "settings", name: L("Model Settings…"), detail: "") {
+                    draft = ""
+                    settingsFor = SettingsTarget(provider: nil)
+                })
+            }
+            return CommandMenu(title: L("Models"), empty: L("No matching models"), commands: false, items: items)
+        case .message, .command, .unknown:
+            return nil
+        }
+    }
+
+    private var commandMenu: CommandMenu? { menuClosedFor == draft ? nil : commandChoices }
+
+    private func highlighted(in menu: CommandMenu) -> Int { min(max(highlight, 0), menu.items.count - 1) }
+
+    private func moveHighlight(_ step: Int) {
+        guard let menu = commandMenu, !menu.items.isEmpty else { return }
+        highlight = (highlighted(in: menu) + step + menu.items.count) % menu.items.count
+        menuScrollTarget = menu.items[highlight].id
+    }
+
+    private func commandMenuView(_ menu: CommandMenu) -> some View {
+        let current = highlighted(in: menu)
+        let rows = VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(menu.items.enumerated()), id: \.element.id) { index, item in
+                Button(action: item.run) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(item.name).font(.system(.caption, design: .monospaced).weight(.semibold)).foregroundStyle(Color.accentColor)
+                            .lineLimit(1).frame(width: menu.commands ? 56 : nil, alignment: .leading)
+                        Text(item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(menu.commands ? 2 : 1)
+                        Spacer(minLength: 0)
+                        if item.checked { Image(systemName: "checkmark").font(.caption2.weight(.bold)).accessibilityHidden(true) }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .background(index == current ? AnyShapeStyle(Color.accentColor.opacity(0.14)) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).onHover { if $0 { highlight = index } }
+                .accessibilityAddTraits(item.checked ? .isSelected : []).id(item.id)
+            }
+        }
+        return VStack(alignment: .leading, spacing: 1) {
+            Text(menu.title).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.top, 4).padding(.bottom, 2)
+            if menu.items.isEmpty {
+                Text(menu.empty).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 6)
+            } else if menu.items.count > 7 {
+                // A long model list scrolls, following the arrow keys.
+                ScrollViewReader { proxy in
+                    ScrollView { rows }.frame(height: 200)
+                        .onChange(of: menuScrollTarget) { _, id in if let id { proxy.scrollTo(id) } }
+                }
+            } else {
+                rows
+            }
+            Divider().padding(.vertical, 4)
+            Text(L("↑↓ to choose · Return to confirm · Esc to close")).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.bottom, 2)
+        }
+        .padding(6)
+        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        .shadow(color: .black.opacity(0.14), radius: 12, y: 4)
+        .accessibilityElement(children: .contain).accessibilityLabel(menu.title)
     }
 
     /// The selected layers as removable tags; with many selected, the row scrolls sideways.
@@ -289,10 +458,14 @@ struct ChatPanel: View {
         .accessibilityElement(children: .contain).accessibilityLabel(L("Context"))
     }
 
-    private var modelMenu: some View {
-        let providers = ChatSettings.providers.map {
+    private var modelProviders: [ModelMenuProvider] {
+        ChatSettings.providers.map {
             ModelMenuProvider(id: $0.id, title: $0.title, hasKey: chat.savedKey(for: $0.id), models: chat.models(for: $0.id), defaultModel: chat.defaultModel(for: $0.id))
         }
+    }
+
+    private var modelMenu: some View {
+        let providers = modelProviders
         let current = chat.settings
         return Menu {
             ForEach(ModelMenu.sections(providers: providers, provider: current.provider, model: current.model), id: \.provider) { section in
@@ -330,7 +503,25 @@ struct ChatPanel: View {
         }))
     }
 
+    /// Return in the input: runs the slash command in it, or sends it as a message. A command is never sent to the model.
     private func submit() {
+        switch ChatCommandInput(draft) {
+        case .message:
+            send()
+        case .typing(let commands) where commands.isEmpty:
+            commandError = L("Unknown command %@. Type / to see the commands.", draft)
+        case .typing, .command(.model, _):
+            // Return chooses only from a menu that is showing: after Esc it shows the menu again.
+            if let menu = commandMenu { if !menu.items.isEmpty { menu.items[highlighted(in: menu)].run() } }
+            else { menuClosedFor = nil }
+        case .command(let command, let argument):
+            run(command, argument: argument)
+        case .unknown(let name):
+            commandError = L("Unknown command %@. Type / to see the commands.", name)
+        }
+    }
+
+    private func send() {
         guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // While a question waits, what is typed here answers it; editing the last message instead replaces the turn that asked.
         if waiting && !editing {
@@ -351,6 +542,42 @@ struct ChatPanel: View {
         scroll.follow = ChatScrollFollow()
         following = true
         chat.answer(text, root: root, runtime: runtime)
+    }
+
+    /// `argument` is the text typed after the command: for `/plan` and `/goal` it is sent as the first message in that mode.
+    private func run(_ command: ChatCommand, argument: String) {
+        switch command {
+        case .plan, .goal:
+            chat.mode = command.mode
+            draft = argument
+            send()
+        case .new:
+            draft = ""
+            chat.newConversation()
+        case .clear:
+            draft = ""
+            editing = false
+            chat.clearConversation()
+        case .model:
+            // The menu now lists the models; typing narrows them.
+            draft = "\(command.name) "
+        }
+        inputFocused = true
+    }
+
+    /// The same change as choosing the model in the model menu, which is likewise unavailable during a reply.
+    private func choose(_ choice: ModelChoice) {
+        guard !busy else { commandError = L("The model cannot be changed while a reply is running"); return }
+        chat.settings = ChatSettings(provider: choice.provider, model: choice.model, baseUrl: chat.stored(choice.provider).baseUrl)
+        draft = ""
+        inputFocused = true
+    }
+
+    private func runPlan() {
+        editing = false
+        scroll.follow = ChatScrollFollow()
+        following = true
+        chat.runPlan(root: root, runtime: runtime)
     }
 
     /// Copies the last user message into the input to be changed; the conversation is only rewound once the new text is sent.
@@ -401,6 +628,47 @@ private struct ComposerKeys: ViewModifier {
             let range = editor.selectedRange()
             text = (text as NSString).replacingCharacters(in: NSIntersectionRange(range, NSRange(location: 0, length: text.utf16.count)), with: "\n")
             DispatchQueue.main.async { editor.setSelectedRange(NSRange(location: range.location + 1, length: 0)) }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+}
+
+/// While the command menu is open, the arrow keys move its highlight and Esc closes it, instead of acting on the text field.
+private struct CommandMenuKeys: ViewModifier {
+    /// The input's text, to tell its field editor from another field's.
+    let text: String
+    /// Whether the menu is open and the field has keyboard focus; keys are only watched while it is.
+    let active: Bool
+    let move: (Int) -> Void
+    let close: () -> Void
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: active, initial: true) { watch() }
+            // The monitor holds the text it was started with.
+            .onChange(of: text) { watch() }
+            .onDisappear(perform: stop)
+    }
+
+    private func watch() {
+        stop()
+        guard active else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Left alone while an input method is composing, where these keys work on the candidates.
+            guard let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor, editor.string == text, !editor.hasMarkedText(),
+                  event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty else { return event }
+            switch event.keyCode {
+            case 125: move(1)
+            case 126: move(-1)
+            case 53: close()
+            default: return event
+            }
             return nil
         }
     }

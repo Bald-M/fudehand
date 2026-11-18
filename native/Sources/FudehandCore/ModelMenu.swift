@@ -81,3 +81,30 @@ public enum ModelMenu {
         model.isEmpty ? providers.first { $0.id == provider }?.defaultModel : model
     }
 }
+
+/// One model of one provider, for a flat list such as the one the `/model` command shows.
+public struct ModelChoice: Equatable, Sendable {
+    public var provider: String
+    public var providerTitle: String
+    /// "" for the provider's default model.
+    public var model: String
+    /// The id to show; nil means the view shows the localized "Default model".
+    public var title: String?
+    public var isDefault: Bool
+    public var selected: Bool
+}
+
+extension ModelMenu {
+    /// Every model the menu offers, across the providers that have a key, narrowed to those whose model or provider name contains `query`.
+    public static func choices(providers: [ModelMenuProvider], provider: String, model: String, matching query: String) -> [ModelChoice] {
+        let query = query.lowercased()
+        return sections(providers: providers, provider: provider, model: model).flatMap { section in
+            // A folded section repeats the default and the selected model in `all`.
+            let head = section.entries.filter { entry in entry.isDefault || !section.all.contains { $0.model == entry.model } }
+            let rest = section.all.filter { entry in !head.contains { $0.isDefault && $0.title == entry.model } }
+            return (head + rest).map {
+                ModelChoice(provider: section.provider, providerTitle: section.title, model: $0.model, title: $0.title, isDefault: $0.isDefault, selected: $0.selected)
+            }
+        }.filter { query.isEmpty || ($0.title ?? "").lowercased().contains(query) || $0.providerTitle.lowercased().contains(query) }
+    }
+}

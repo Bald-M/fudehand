@@ -13,6 +13,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Added
 
 - Next-message prediction in the chat panel: after a reply ends, the empty input shows the message you are likely to send next as its placeholder, and Tab puts it in the input to edit or send. The prediction is a separate short model request that is kept out of the conversation.
+- Slash commands in the chat panel: typing `/` at the start of the input opens a command menu that narrows as you type and is driven by the arrow keys, Return, Esc, or the mouse. `/plan` switches the conversation to plan mode, where the Agent can only read the design document and replies with a plan that *Run Plan* carries out; `/goal` switches to goal mode, where the Agent keeps working on the goal until it reports it done or is stopped; `/new` starts a conversation, `/clear` empties the current one, and `/model` lists the models to switch to. A tag above the input shows the mode and leaves it. An unknown command is reported under the input and is not sent to the model.
 
 ### Changed
 

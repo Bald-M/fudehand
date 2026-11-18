@@ -55,6 +55,12 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 **Next-message prediction (下一条消息预测 / 下一則訊息預測)**: The message the Agent harness predicts the user will send next, shown as the placeholder of the empty chat input after a reply ends; Tab puts it in the input. It is not part of the conversation.
 _Avoid_: autocomplete, completion (nothing is completed while typing), suggestion chips
 
+**Slash command (快捷指令 / 快捷指令)**: A command typed in the chat input, starting with `/` and chosen from the command menu: `/plan`, `/goal`, `/new`, `/clear`, `/model`. It acts on the chat panel and is never sent to the model.
+
+**Plan mode (计划模式 / 計畫模式)**: A conversation mode, entered with `/plan`, in which the Agent can only read the design document and replies with a plan; the plan is carried out after the user confirms it with *Run Plan*.
+
+**Goal mode (目标模式 / 目標模式)**: A conversation mode, entered with `/goal`, in which the next message is a goal the Agent keeps working on until it reports it done or the reply is stopped.
+
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
 
 **Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Claude, and ChatGPT. DeepSeek uses an OpenAI-compatible API, Claude uses the Anthropic Messages API, and ChatGPT uses OpenAI's Responses API and needs an OpenAI API key.
