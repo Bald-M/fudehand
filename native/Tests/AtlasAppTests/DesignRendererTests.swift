@@ -46,6 +46,25 @@ import Testing
     #expect(renderer.layer(for: "f")?.sublayers?.first === renderer.layer(for: "e"))
 }
 
+@Test @MainActor func syncHandlesReplacedRetypedAndReparentedNodes() {
+    let renderer = DesignRenderer()
+    var nodes = sample()
+    renderer.sync(nodes)
+    let dot = renderer.layer(for: "e")
+    // One node deleted and one added in the same sync: the count is unchanged, and the deleted layer still goes away.
+    nodes[1] = DesignNode(id: "n", type: .rectangle, x: 300, y: 0)
+    renderer.sync(nodes)
+    #expect(renderer.layer(for: "r") == nil && renderer.layer(for: "n") != nil && renderer.layerCount == 4)
+    #expect(renderer.root.sublayers?.count == 2)
+    // A node that changes type gets a new layer; one that moves to another parent keeps its layer.
+    nodes[1].type = .ellipse
+    nodes.append(nodes[0].children.removeLast())
+    renderer.sync(nodes)
+    #expect(renderer.layer(for: "n") is CAShapeLayer && renderer.layerCount == 4)
+    #expect(renderer.layer(for: "e") === dot && dot?.superlayer === renderer.root)
+    #expect(renderer.layer(for: "f")?.sublayers?.count == 1 && renderer.root.sublayers?.count == 3)
+}
+
 @Test @MainActor func snapshotRendersNodeAtScale() throws {
     var frame = sample()[0]
     frame.x = 500

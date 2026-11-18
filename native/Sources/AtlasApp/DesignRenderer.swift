@@ -7,16 +7,24 @@ import ImageIO
 final class DesignRenderer {
     /// The parent of all top-level layers. The canvas puts it inside the flipped world view layer, which already has a top-left origin, so it is not flipped again here.
     let root = CALayer()
-    private var layers: [String: CALayer] = [:]
-    /// The node last applied to each layer (without children), used to skip unchanged nodes.
-    private var applied: [String: DesignNode] = [:]
+    /// One per node, so a sync looks each id up once.
+    private final class Record {
+        let layer: CALayer
+        /// The node last applied to the layer (without children), used to skip unchanged nodes.
+        var applied: DesignNode?
+        /// The sync that last saw the node; records an older sync left behind belong to deleted nodes.
+        var pass = 0
+        init(_ layer: CALayer) { self.layer = layer }
+    }
+    private var records: [String: Record] = [:]
+    private var pass = 0
     /// Text and images are rasterized at this scale: screen scale × canvas zoom.
     var contentsScale: CGFloat = 2 {
         didSet {
             guard contentsScale != oldValue else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in layers.values where layer is TextLayer || layer.contents != nil {
+            for layer in records.values.map(\.layer) where layer is TextLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
                 if layer is TextLayer { layer.setNeedsDisplay() }
             }
@@ -35,46 +43,54 @@ final class DesignRenderer {
         "lineWidth": NSNull(), "contentsScale": NSNull(), "onOrderIn": NSNull(), "onOrderOut": NSNull(),
     ]
 
-    var layerCount: Int { layers.count }
-    func layer(for id: String) -> CALayer? { layers[id] }
+    var layerCount: Int { records.count }
+    func layer(for id: String) -> CALayer? { records[id]?.layer }
 
     func sync(_ nodes: [DesignNode]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        var seen = Set<String>()
-        syncChildren(of: root, nodes, seen: &seen)
-        for id in layers.keys where !seen.contains(id) {
-            layers[id]?.removeFromSuperlayer()
-            layers[id] = nil
-            applied[id] = nil
+        pass += 1
+        let seen = syncChildren(of: root, nodes)
+        // Ids are unique, so when as many nodes were synced as there are records, none was left behind by a deleted node.
+        if seen != records.count {
+            for (id, record) in records where record.pass != pass {
+                record.layer.removeFromSuperlayer()
+                records[id] = nil
+            }
         }
         CATransaction.commit()
     }
 
-    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], seen: inout Set<String>) {
+    /// Returns the number of nodes synced, descendants included.
+    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode]) -> Int {
         var ordered: [CALayer] = []
+        var seen = nodes.count
         for node in nodes {
-            seen.insert(node.id)
-            var layer = layers[node.id]
-            if let existing = layer, applied[node.id]?.type != node.type {
-                existing.removeFromSuperlayer()
-                layer = nil
+            var record = records[node.id]
+            if let existing = record, existing.applied?.type != node.type {
+                existing.layer.removeFromSuperlayer()
+                record = nil
             }
-            let target = layer ?? Self.makeLayer(for: node.type, scale: contentsScale)
-            layers[node.id] = target
+            let current = record ?? {
+                let created = Record(Self.makeLayer(for: node.type, scale: contentsScale))
+                records[node.id] = created
+                return created
+            }()
+            current.pass = pass
             var shallow = node
             shallow.children = []
-            if applied[node.id] != shallow {
-                Self.apply(node, to: target, previous: applied[node.id], scale: contentsScale)
-                applied[node.id] = shallow
+            if current.applied != shallow {
+                Self.apply(node, to: current.layer, previous: current.applied, scale: contentsScale)
+                current.applied = shallow
             }
-            syncChildren(of: target, node.children, seen: &seen)
-            ordered.append(target)
+            seen += syncChildren(of: current.layer, node.children)
+            ordered.append(current.layer)
         }
         let current = parent.sublayers ?? []
         if current.count != ordered.count || !zip(current, ordered).allSatisfy({ $0 === $1 }) {
             parent.sublayers = ordered
         }
+        return seen
     }
 
     static func makeLayer(for type: NodeType, scale: CGFloat) -> CALayer {
@@ -167,7 +183,7 @@ final class DesignRenderer {
         context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
         renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
         renderer.root.layoutIfNeeded()
-        for case let layer as TextLayer in renderer.layers.values { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
+        for case let layer as TextLayer in renderer.records.values.map(\.layer) { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
         renderer.root.render(in: context)
         guard let image = context.makeImage() else { throw ControlCommandError("Snapshot failed") }
         let data = NSMutableData()

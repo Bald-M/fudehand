@@ -154,6 +154,7 @@ ui-atlas does not import or export Figma files.
 pnpm dev               # debug build, then open the App
 pnpm build:native      # release build with ad-hoc signing → dist/ui-atlas.app
 pnpm test:native       # Swift tests: AtlasCoreTests and AtlasAppTests
+pnpm bench:native      # canvas drag and hover benchmark on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness
 pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
 ```

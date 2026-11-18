@@ -24,12 +24,16 @@ public enum DesignHitTest {
     /// Decides which level of the hit path to select given the current selection: inside a top-level frame its children are selected directly; siblings of a selected layer can be hit directly;
     /// `deep` (⌘-click) selects the deepest level.
     public static func selectable(path: [String], selection: Set<String>, document: DesignDocument, deep: Bool) -> String? {
+        selectable(path: path, selection: selection, index: DesignIndex(document), deep: deep)
+    }
+
+    public static func selectable(path: [String], selection: Set<String>, index: DesignIndex, deep: Bool) -> String? {
         guard !path.isEmpty else { return nil }
         if deep { return path.last }
         var depth = 0
-        if path.count > 1, document.node(path[0])?.type == .frame { depth = 1 }
+        if path.count > 1, index.node(path[0])?.type == .frame { depth = 1 }
         for id in selection {
-            let ancestry = document.ancestry(of: id)
+            let ancestry = index.ancestry(of: id)
             let level = ancestry.count - 1
             if level > depth, path.count > level, Array(path.prefix(level)) == Array(ancestry.prefix(level)) { depth = level }
         }

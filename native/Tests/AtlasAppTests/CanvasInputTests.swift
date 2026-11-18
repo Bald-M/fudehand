@@ -232,6 +232,35 @@ final class CanvasHarness {
     #expect(!h.canvas.spaceHeld)
 }
 
+@Test @MainActor func nestedLayerMovesAndResizesInCanvasCoordinates() {
+    var document = CanvasHarness.document()
+    document.nodes[0].x = 40
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    // card sits at canvas (60,20), screen (60,120).
+    h.drag(from: NSPoint(x: 100, y: 140), to: NSPoint(x: 130, y: 150), flags: .control)
+    #expect(h.store.selection == ["card"])
+    #expect(h.node("card")?.frame == Rect(x: 50, y: 30, width: 100, height: 50))
+    #expect(h.node("a")?.x == 40)
+    #expect(h.canvas.hitTarget(at: NSPoint(x: 190, y: 180)) == .handle("card", .bottomRight))
+    h.drag(from: NSPoint(x: 190, y: 180), to: NSPoint(x: 200, y: 200))
+    #expect(h.node("card")?.frame == Rect(x: 50, y: 30, width: 110, height: 70))
+    h.store.undo()
+    h.store.undo()
+    #expect(h.node("card")?.frame == Rect(x: 20, y: 20, width: 100, height: 50))
+}
+
+@Test @MainActor func selectionAndHandlesFollowUndoneLayers() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.setTool(.rectangle)
+    h.drag(from: NSPoint(x: 500, y: 500), to: NSPoint(x: 560, y: 540))
+    #expect(h.store.selection.count == 1 && h.canvas.handleTarget != nil)
+    h.store.undo()
+    #expect(h.store.selection.isEmpty && h.canvas.selection.isEmpty && h.canvas.handleTarget == nil)
+    #expect(h.canvas.overlay.selectionBounds.isNull)
+}
+
 // MARK: Viewport
 
 @Test func frameIntervalLogCountsHitchesOncePerSecond() {

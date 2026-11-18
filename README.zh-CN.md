@@ -154,6 +154,7 @@ ui-atlas 不能导入或导出 Figma 文件。
 pnpm dev               # Debug 构建并打开 App
 pnpm build:native      # Release 构建并 ad-hoc 签名 → dist/ui-atlas.app
 pnpm test:native       # Swift 测试：AtlasCoreTests 与 AtlasAppTests
+pnpm bench:native      # 大文档下的画布拖动与悬停基准（release 构建）
 pnpm check             # Vitest：MCP 工具、MCP server 与对话 harness
 pnpm mcp               # 以 stdio 启动 MCP server（通常由 Agent 拉起）
 ```

@@ -13,7 +13,7 @@ export function runCommand(executable, args, options = {}) {
   })
 }
 
-export async function runSwift(operation, { configuration = 'debug' } = {}) {
+export async function runSwift(operation, { configuration = 'debug', args = [], env = {} } = {}) {
   if (process.platform !== 'darwin') throw new Error('The native app must be built and tested on macOS.')
   const configured = process.env.UI_ATLAS_SWIFT_SCRATCH
   const scratch = configured
@@ -25,10 +25,10 @@ export async function runSwift(operation, { configuration = 'debug' } = {}) {
   await runCommand('swift', [
     operation, '--package-path', join(root, 'native'), '--configuration', configuration,
     '--scratch-path', scratch, '--cache-path', cache, '--config-path', join(scratch, 'configuration'),
-    '--security-path', join(scratch, 'security'), '--disable-sandbox',
+    '--security-path', join(scratch, 'security'), '--disable-sandbox', ...args,
   ], {
     cwd: root,
-    env: { ...process.env, CLANG_MODULE_CACHE_PATH: modules, SWIFTPM_MODULECACHE_OVERRIDE: modules },
+    env: { ...process.env, ...env, CLANG_MODULE_CACHE_PATH: modules, SWIFTPM_MODULECACHE_OVERRIDE: modules },
   })
   return scratch
 }
