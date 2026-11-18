@@ -279,3 +279,14 @@
 "Registered to another directory: %@. Disconnect to reconnect it to this one." = "已註冊到其他目錄：%@。中斷後可重新連線到本目錄。";
 "Connect" = "連線";
 "Disconnect" = "中斷連線";
+"A quick question" = "AI 想先確認一下";
+"Recommended" = "推薦";
+"Other: write your own answer" = "其他：自己寫回答";
+"Answer" = "回答";
+"Your answer" = "自己回答";
+"Skip, let AI decide" = "略過，由 AI 決定";
+"Skipped, AI decides" = "已略過，由 AI 決定";
+"Question cancelled" = "提問已取消";
+"Waiting for your answer" = "等待你回答";
+"Stop and cancel the question" = "停止並取消提問";
+"Answer the question above, or add details here" = "回答上面的問題後繼續，也可以直接在這裡補充";

@@ -6,6 +6,8 @@ import SwiftUI
 struct ChatRowActions {
     let regenerate: () -> Void
     let edit: () -> Void
+    /// Answers the waiting question; `nil` skips it.
+    let answer: (String?) -> Void
     /// A layer's current name by id, for tool card titles.
     let layerName: (String) -> String?
 }
@@ -30,6 +32,7 @@ struct ChatGroupRow: View {
             case .user: UserMessage(entry: entry, editable: actionable, edit: actions.edit)
             case .assistant: AssistantMessage(entry: entry, streaming: active, regenerable: actionable, regenerate: actions.regenerate)
             case .tool: ToolCard(entry: entry, layerName: actions.layerName)
+            case .question: QuestionCard(entry: entry, answer: actions.answer)
             case .error:
                 Label(entry.text, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout).foregroundStyle(.red).textSelection(.enabled)
@@ -172,6 +175,88 @@ private struct CodeBlock: View {
             }
         }
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// A question the Agent paused to ask. While it waits: the options (the Agent's recommendation first), a field for another answer,
+/// and a way to skip. Afterwards it folds down to the question and its answer.
+private struct QuestionCard: View {
+    let entry: ChatEntry
+    let answer: (String?) -> Void
+    @State private var custom = ""
+
+    var body: some View {
+        if let question = entry.question {
+            Group {
+                switch question.state {
+                case .pending: pending(question)
+                case .answered(let text): settled(text)
+                case .skipped: settled(L("Skipped, AI decides"))
+                case .cancelled: settled(L("Question cancelled")).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        }
+    }
+
+    private func pending(_ question: ChatQuestion) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(L("A quick question"), systemImage: "questionmark.circle").font(.caption.weight(.semibold)).foregroundStyle(.orange)
+            Text(entry.text).fontWeight(.semibold).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            if let detail = question.detail {
+                Text(detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
+                Button { answer(option.label) } label: { optionLabel(option, recommended: index == 0) }.buttonStyle(.plain)
+            }
+            HStack(spacing: 6) {
+                TextField(L("Your answer"), text: $custom, prompt: Text(L("Other: write your own answer")))
+                    .textFieldStyle(.roundedBorder).labelsHidden().onSubmit(sendCustom)
+                Button(L("Answer"), action: sendCustom).buttonStyle(.borderedProminent)
+                    .disabled(custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .controlSize(.small)
+            Button(L("Skip, let AI decide")) { answer(nil) }.buttonStyle(.link).font(.callout)
+        }
+        .padding(12)
+    }
+
+    private func optionLabel(_ option: ChatQuestion.Option, recommended: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(option.label).fontWeight(.semibold)
+                if recommended {
+                    Text(L("Recommended")).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                }
+            }
+            if let description = option.description {
+                Text(description).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(recommended ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.clear)))
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func settled(_ answer: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(entry.text).font(.callout).foregroundStyle(.secondary)
+            Text(answer).fontWeight(.semibold)
+        }
+        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private func sendCustom() {
+        let text = custom.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { answer(text) }
     }
 }
 
