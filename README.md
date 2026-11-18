@@ -57,7 +57,7 @@ The App opens on the launch window, where you can:
 - continue a file from *Recent*, or
 - start from a built-in template.
 
-In the editor, use the toolbar tools to create layers on the canvas: Frame (F), Rectangle (R), Ellipse (O), and Text (T). Arrange layers in the layers panel on the left, and edit position, size, fill, stroke, text, and auto layout in the *Design* tab on the right.
+In the editor, use the tools in the toolbar at the bottom of the canvas to create layers: Frame (F), Rectangle (R), Ellipse (O), and Text (T). Arrange layers in the layers panel on the left, and edit position, size, fill, stroke, text, and auto layout in the *Design* tab on the right.
 
 To change the UI language, choose *ui-atlas → Language*. The choice applies immediately and is remembered across launches.
 

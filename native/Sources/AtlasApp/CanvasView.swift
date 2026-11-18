@@ -37,6 +37,13 @@ final class AtlasCanvasView: NSView {
     var document: DesignDocument { index.document }
     private(set) var selection: Set<String> = []
     private var requestToken: Int?
+    /// Where the toolbar floating above the canvas sits, in canvas coordinates. SwiftUI still routes the pointer events it
+    /// does not handle there to the canvas underneath, so the canvas ignores them itself.
+    var floatingFrame = CGRect.zero {
+        didSet { if floatingFrame != oldValue { window?.invalidateCursorRects(for: self) } }
+    }
+
+    private func isOverFloatingView(_ event: NSEvent) -> Bool { floatingFrame.contains(convert(event.locationInWindow, from: nil)) }
     private(set) var tool = CanvasTool.move {
         didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
     }
@@ -111,7 +118,8 @@ final class AtlasCanvasView: NSView {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .keyUp]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             if event.type == .keyUp, event.keyCode == 49 { self.spaceHeld = false; return event }
-            guard event.type == .magnify, self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else { return event }
+            guard event.type == .magnify, self.bounds.contains(self.convert(event.locationInWindow, from: nil)),
+                  !self.isOverFloatingView(event) else { return event }
             self.magnify(with: event)
             return nil
         }
@@ -285,6 +293,7 @@ final class AtlasCanvasView: NSView {
     }
 
     private func pointerDown(_ event: NSEvent, button: PointerButton) {
+        guard !isOverFloatingView(event) else { return }
         commitPendingZoom()
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
@@ -336,6 +345,7 @@ final class AtlasCanvasView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        if isOverFloatingView(event) { setHover(nil); return }
         if spaceHeld, !gesturePanned { NSCursor.openHand.set() }
         let next: String?
         switch hitTarget(at: screenPoint(event).0, deep: event.modifierFlags.contains(.command)) {
@@ -388,6 +398,7 @@ final class AtlasCanvasView: NSView {
     // MARK: Scroll and zoom
 
     override func scrollWheel(with event: NSEvent) {
+        guard !isOverFloatingView(event) else { return }
         stopAnimation()
         // A line-based mouse wheel reports about one unit per notch; trackpads report points.
         let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY),
@@ -492,8 +503,16 @@ final class AtlasCanvasView: NSView {
     // MARK: Cursor
 
     override func resetCursorRects() {
-        if tool == .hand || spaceHeld { addCursorRect(bounds, cursor: .openHand) }
-        else if tool.creates != nil { addCursorRect(bounds, cursor: .crosshair) }
+        let cursor: NSCursor
+        if tool == .hand || spaceHeld { cursor = .openHand } else if tool.creates != nil { cursor = .crosshair } else { return }
+        // The four strips around the floating toolbar, so the pointer stays an arrow over it.
+        let (b, f) = (bounds, floatingFrame)
+        for rect in [CGRect(x: b.minX, y: b.minY, width: b.width, height: f.minY - b.minY),
+                     CGRect(x: b.minX, y: f.maxY, width: b.width, height: b.maxY - f.maxY),
+                     CGRect(x: b.minX, y: f.minY, width: f.minX - b.minX, height: f.height),
+                     CGRect(x: f.maxX, y: f.minY, width: b.maxX - f.maxX, height: f.height)] where rect.width > 0 && rect.height > 0 {
+            addCursorRect(rect, cursor: cursor)
+        }
     }
 
     private var restingCursor: NSCursor { tool == .hand || spaceHeld ? .openHand : tool.creates != nil ? .crosshair : .arrow }
