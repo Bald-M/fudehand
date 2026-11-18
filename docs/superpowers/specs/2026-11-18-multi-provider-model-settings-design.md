@@ -1,6 +1,6 @@
 # Multi-Provider Model Settings Design
 
-Tracking: issue to be created on approval. Date: 2026-11-18. Status: awaiting approval.
+Tracking: #133. Date: 2026-11-18. Status: approved.
 
 Prototype: the canvas "ui-atlas AI 对话面板原型", row "模型设置改进 · 多提供方" (artboards "模型设置 · 提供方列表" and "模型菜单 · 跨提供方切换"). The prototype copy is Chinese; the App's source language is US English. The prototype is a private canvas and is not in the repository: this document and its sketches are the authority, and they carry everything the prototype decided.
 
