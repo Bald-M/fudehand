@@ -159,6 +159,27 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("f")?.x == 25 && store.editor.document.worldRect("c")?.x == 35)
 }
 
+@Test @MainActor func movingLayersUnderDifferentParentsInOneDragMovesEach() throws {
+    let store = makeStore()
+    var frame = DesignNode(id: "f", type: .frame, x: 100, y: 50, width: 300, height: 300)
+    frame.children = [DesignNode(id: "c", type: .rectangle, x: 10, y: 10), DesignNode(id: "d", type: .rectangle, x: 150, y: 10)]
+    try store.perform("Create") { document in
+        try document.insert(frame, parent: nil, index: nil)
+        try document.insert(DesignNode(id: "t", type: .rectangle, x: 600, y: 0), parent: nil, index: nil)
+    }
+    store.canvasBeginGesture("Move Layers")
+    for step in [1.0, 2.0] {
+        store.canvasMove(["c": Point(x: 110 + 20 * step, y: 60), "t": Point(x: 600, y: 30 * step)])
+    }
+    store.canvasEndGesture()
+    let document = store.editor.document
+    #expect(document.worldRect("c") == Rect(x: 150, y: 60, width: 100, height: 100) && document.node("c")?.x == 50)
+    #expect(document.node("t")?.frame == Rect(x: 600, y: 60, width: 100, height: 100))
+    #expect(document.node("d")?.x == 150 && document.node("f")?.x == 100)
+    store.undo()
+    #expect(store.editor.document.node("c")?.x == 10 && store.editor.document.node("t")?.y == 0)
+}
+
 @Test @MainActor func openingAndSavingRecordRecentDocumentsThatPersist() async throws {
     let suite = "ui-atlas-tests-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
