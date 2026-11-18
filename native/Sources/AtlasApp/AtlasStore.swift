@@ -23,6 +23,8 @@ final class AtlasStore: ObservableObject {
     @Published var tool: CanvasTool = .move
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
+    /// The content at the last save (or at New/Open); returning to it by dragging back or undoing is not an edit.
+    private var savedDocument = DesignDocument()
     /// The most recent viewport request; pushed directly to the canvas, bypassing SwiftUI, so the panels are not recomputed on every zoom.
     private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
     @Published var inspectorTab: InspectorTab = .design
@@ -74,7 +76,7 @@ final class AtlasStore: ObservableObject {
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
-    var isDirty: Bool { editor.revision != savedRevision }
+    var isDirty: Bool { editor.revision != savedRevision && editor.document != savedDocument }
     var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? L("Untitled") }
     var canUndo: Bool { editor.canUndo }
     var canRedo: Bool { editor.canRedo }
@@ -265,6 +267,7 @@ final class AtlasStore: ObservableObject {
         inGesture = false
         fileURL = url
         savedRevision = editor.revision
+        savedDocument = editor.document
         setSelection([])
         changed()
         fitAll(animated: false)
@@ -361,6 +364,7 @@ final class AtlasStore: ObservableObject {
         try editor.document.encoded().write(to: url, options: .atomic)
         fileURL = url
         savedRevision = editor.revision
+        savedDocument = editor.document
         recordRecent(url)
     }
 
@@ -435,8 +439,7 @@ extension AtlasStore: CanvasHost {
         changed()
     }
 
-    func canvasCreate(_ type: NodeType, in rect: Rect) {
-        let clicked = rect.width == CanvasInteraction.defaultSize && rect.height == CanvasInteraction.defaultSize
+    func canvasCreate(_ type: NodeType, in rect: Rect, clicked: Bool) {
         create(type, in: rect, clicked: clicked)
     }
 

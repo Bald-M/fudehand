@@ -57,7 +57,7 @@ Interaction follows Figma.
 
 **Creating**
 
-- The toolbar switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas, and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move.
+- The toolbar switches tools: Move V, Hand H, Frame F, Rectangle R, Ellipse O, Text T. A creation tool drags out a size on the canvas (at least 1×1, so a straight-line drag still creates a visible layer), and a single click uses the default size (auto width and height for text); if the start point is inside a top-level frame, the new layer goes into that frame. After creating, the tool returns to Move.
 - The toolbar or Canvas › Insert Image… (画布 › 插入图片…, ⇧⌘I) inserts a PNG/JPEG: when a frame is selected it goes into that frame, otherwise it is placed at the center of the viewport.
 
 **Navigation**

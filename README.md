@@ -120,6 +120,8 @@ In *Model Settings*, choose a model provider and enter an API key:
 
 Leave *Model* and *API URL* empty to use the defaults above. For another service that is compatible with OpenAI Chat Completions, choose DeepSeek and enter your own API URL and model name.
 
+Anthropic Claude and OpenAI receive the image that `design_snapshot` returns, so the model can look at its own work. The OpenAI-compatible API cannot carry an image in a tool result, so with DeepSeek the model is told the image was left out and checks its changes by reading the layers back instead.
+
 The API key is stored only in your local Keychain (service name `ui-atlas.agent`). The App passes it to the chat program through an environment variable, and never writes it to the repository, project files, preferences, or logs.
 
 ## Project files

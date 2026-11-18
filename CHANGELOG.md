@@ -14,6 +14,11 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 - `README.md` and `README.zh-CN.md` are rewritten and reorganized: a highlights list, requirements, a quick start, one section on working with AI agents (with the tools as a table), and a development section. Stale statements are corrected, such as error messages being in Chinese.
 
+### Fixed
+
+- Properties panel number fields no longer rewrite a value when they only gain and lose focus. Previously, focusing and leaving X, Y, W, H, or any other number field rounded the value to the one decimal place shown, added an undo step, and marked the document as edited; passing through W or H also turned off a text layer's auto sizing (#57).
+- In the chat panel, the model now receives the image that `design_snapshot` returns when the model provider is Anthropic Claude or OpenAI; before, only the accompanying text was sent, so the model never saw the snapshot. With DeepSeek (the OpenAI-compatible API, which cannot carry an image in a tool result) the model is told that the image was left out, and its instructions now say to check changes by reading the layers back (#59).
+
 ## [0.0.2] - 2026-11-17
 
 ### Summary

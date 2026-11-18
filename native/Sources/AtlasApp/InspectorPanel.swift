@@ -96,20 +96,14 @@ private struct NumberField: View {
                 .accessibilityLabel(label)
         }
         .disabled(disabled)
-        .onAppear { text = Self.format(value) }
-        .onChange(of: value) { _, next in if !focused { text = Self.format(next) } }
+        .onAppear { text = NumberInput.format(value) }
+        .onChange(of: value) { _, next in if !focused { text = NumberInput.format(next) } }
     }
 
     private func submit() {
-        guard let number = Double(text.trimmingCharacters(in: .whitespaces)), number.isFinite else { text = Self.format(value); return }
-        let limit = DesignJSON.maximumMagnitude
-        let clamped = min(limit, max(minimum ?? -limit, number))
-        if clamped != value { commit(clamped) }
-        text = Self.format(clamped)
-    }
-
-    static func format(_ value: Double) -> String {
-        value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        let next = NumberInput.committedValue(text: text, current: value, minimum: minimum)
+        if let next { commit(next) }
+        text = NumberInput.format(next ?? value)
     }
 }
 
