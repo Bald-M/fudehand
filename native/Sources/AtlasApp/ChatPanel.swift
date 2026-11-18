@@ -12,7 +12,8 @@ struct ChatPanel: View {
     /// A layer's current name by id, for tool card titles.
     let layerName: (String) -> String?
     @State private var draft = ""
-    @State private var showingSettings = false
+    /// Set to show the model settings sheet; `provider` picks the provider it opens on (nil = the one in use).
+    @State private var settingsFor: SettingsTarget?
     /// Selected layers whose context tag the user removed; forgotten once the layer is no longer selected.
     @State private var dismissed: Set<String> = []
     /// The last user message is in the input to be changed; sending replaces it and its reply.
@@ -23,6 +24,11 @@ struct ChatPanel: View {
     @State private var atBottom = true
     @FocusState private var inputFocused: Bool
     @Environment(\.locale) private var locale
+
+    private struct SettingsTarget: Identifiable {
+        let id = UUID()
+        var provider: String?
+    }
 
     private static let bottom = "bottom"
 
@@ -39,7 +45,7 @@ struct ChatPanel: View {
             composer
         }
         .frame(minWidth: 300)
-        .sheet(isPresented: $showingSettings) { ChatSettingsSheet(chat: chat, root: root, runtime: runtime) }
+        .sheet(item: $settingsFor) { target in ChatSettingsSheet(chat: chat, root: root, runtime: runtime, provider: target.provider) }
         .onChange(of: selection.map(\.id)) { _, ids in dismissed.formIntersection(ids) }
         // The message being edited is gone: another conversation was opened, or something was sent.
         .onChange(of: chat.transcript.lastUserID) { editing = false }
@@ -67,7 +73,7 @@ struct ChatPanel: View {
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L("Conversation history")).disabled(busy)
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+            Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.horizontal, 16).padding(.vertical, 12)
     }
@@ -77,7 +83,7 @@ struct ChatPanel: View {
             Image(systemName: "key").foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("No API key set for %@", chat.settings.providerTitle)).font(.callout)
-                Button(L("Set API Key…")) { showingSettings = true }.controlSize(.small)
+                Button(L("Set API Key…")) { settingsFor = SettingsTarget(provider: nil) }.controlSize(.small)
             }
             Spacer()
         }
@@ -210,23 +216,43 @@ struct ChatPanel: View {
     }
 
     private var modelMenu: some View {
-        Menu {
-            Button { chat.settings.model = "" } label: { menuLabel(L("Default model"), selected: chat.settings.model.isEmpty) }
-            if !chat.models.isEmpty {
-                Divider()
-                ForEach(chat.models, id: \.self) { id in
-                    Button { chat.settings.model = id } label: { menuLabel(id, selected: chat.settings.model == id) }
+        let providers = ChatSettings.providers.map {
+            ModelMenuProvider(id: $0.id, title: $0.title, hasKey: chat.savedKey(for: $0.id), models: chat.models(for: $0.id), defaultModel: chat.defaultModel(for: $0.id))
+        }
+        let current = chat.settings
+        return Menu {
+            ForEach(ModelMenu.sections(providers: providers, provider: current.provider, model: current.model), id: \.provider) { section in
+                Section(section.title) {
+                    ForEach(section.entries, id: \.model) { entry in modelButton(entry, section: section) }
+                    if !section.all.isEmpty {
+                        Menu(L("All %d Models", section.all.count)) {
+                            ForEach(section.all, id: \.model) { entry in modelButton(entry, section: section) }
+                        }
+                    }
+                    if section.needsKey {
+                        Button(L("Add API Key…")) { settingsFor = SettingsTarget(provider: section.provider) }
+                    }
                 }
             }
             Divider()
             Button(L("Reload Model List")) { Task { await chat.reloadModels(root: root, runtime: runtime) } }.disabled(!chat.hasKey)
-            Button(L("Model Settings…")) { showingSettings = true }
+            Button(L("Model Settings…")) { settingsFor = SettingsTarget(provider: nil) }
         } label: {
-            Text(chat.settings.model.isEmpty ? L("Default model") : chat.settings.model).font(.caption).lineLimit(1)
+            Text("\(current.providerTitle) · \(ModelMenu.currentModel(providers: providers, provider: current.provider, model: current.model) ?? L("Default model"))")
+                .font(.caption).lineLimit(1)
         }
         .menuStyle(.borderlessButton).fixedSize()
-        // Changing the model restarts the harness, which would cut a running reply short.
-        .help("\(L("Choose model")) · \(chat.settings.providerTitle)").accessibilityLabel(L("Choose model")).disabled(busy)
+        // Changing the provider or model restarts the harness, which would cut a running reply short.
+        .help(L("Choose model")).accessibilityLabel(L("Choose model")).disabled(busy)
+    }
+
+    /// Choosing an entry sets the provider and model in one step, keeping that provider's stored base URL.
+    private func modelButton(_ entry: ModelMenuEntry, section: ModelMenuSection) -> some View {
+        let title: String
+        if let id = entry.title { title = entry.isDefault ? "\(id) — \(L("Default"))" : id } else { title = L("Default model") }
+        return Button {
+            chat.settings = ChatSettings(provider: section.provider, model: entry.model, baseUrl: chat.stored(section.provider).baseUrl)
+        } label: { menuLabel(title, selected: entry.selected) }
     }
 
     @ViewBuilder private func menuLabel(_ title: String, selected: Bool) -> some View {

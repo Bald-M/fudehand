@@ -170,6 +170,9 @@
 /* Chat panel */
 "Model settings" = "Model settings";
 "Default model" = "Default model";
+"Default" = "Default";
+"All %d Models" = "All %d Models";
+"Add API Key…" = "Add API Key…";
 "No API key set for %@" = "No API key set for %@";
 "Set API Key…" = "Set API Key…";
 "Replying…" = "Replying…";

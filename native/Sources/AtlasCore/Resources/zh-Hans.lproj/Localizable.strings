@@ -170,6 +170,9 @@
 /* Chat panel */
 "Model settings" = "模型设置";
 "Default model" = "默认模型";
+"Default" = "默认";
+"All %d Models" = "全部 %d 个模型";
+"Add API Key…" = "添加 API Key…";
 "No API key set for %@" = "尚未配置 %@ 的 API key";
 "Set API Key…" = "设置 API key…";
 "Replying…" = "正在回复…";
