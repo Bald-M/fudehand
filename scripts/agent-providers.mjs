@@ -156,7 +156,14 @@ function tokenUsage(input, output, cached) {
   return Object.values(usage).every(count => Number.isInteger(count) && count >= 0) ? usage : undefined
 }
 
-/** Reads the provider's model list, returning { models: [id], default }; used for the dropdown menu in the settings panel. */
+// OpenAI's model list reports no context window; these are the documented ones, by model id prefix.
+const openaiWindows = [['gpt-6', 1_050_000], ['gpt-5.3-codex', 400_000]]
+
+/**
+ * Reads the provider's model list, returning { models: [id], default, windows: { id: tokens } }; used for the model menus and the
+ * context ring. windows holds the context window of the models for which one is known: DeepSeek reports `context_window` and
+ * Anthropic `max_input_tokens`.
+ */
 export async function listModels({ provider, baseUrl, apiKey }, signal) {
   const defaults = providerDefaults[provider]
   if (!defaults) throw new Error(`Unknown model provider: ${provider}`)
@@ -164,8 +171,14 @@ export async function listModels({ provider, baseUrl, apiKey }, signal) {
   const body = defaults.kind === 'anthropic'
     ? await request(`${base}/v1/models?limit=1000`, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } }, signal)
     : await request(`${base}/models`, { headers: { authorization: `Bearer ${apiKey}` } }, signal)
-  const ids = (Array.isArray(body.data) ? body.data : []).map(item => item?.id).filter(id => typeof id === 'string' && id)
-  return { models: [...new Set(ids)], default: defaults.model }
+  const items = (Array.isArray(body.data) ? body.data : []).filter(item => typeof item?.id === 'string' && item.id)
+  const windows = {}
+  for (const item of items) {
+    const known = provider === 'openai' ? openaiWindows.find(([prefix]) => item.id.startsWith(prefix))?.[1] : undefined
+    const window = item.context_window ?? item.max_input_tokens ?? known
+    if (Number.isInteger(window) && window > 0) windows[item.id] = window
+  }
+  return { models: [...new Set(items.map(item => item.id))], default: defaults.model, windows }
 }
 
 /**

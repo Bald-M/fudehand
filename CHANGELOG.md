@@ -13,6 +13,8 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Added
 
 - Next-message prediction in the chat panel: after a reply ends, the empty input shows the message you are likely to send next as its placeholder, and Tab puts it in the input to edit or send. The prediction is a separate short model request that is kept out of the conversation.
+- Chat panel: a context ring in the input shows how much of the model's context window the conversation takes up, with the numbers on hover; it turns orange and then red near the limit and follows the selected model. The window comes from the provider's model list, so use *Reload Model List* once to fill it in (#104).
+- Chat panel: sending `/compact` replaces the earlier messages the model sees with a summary, so a long conversation can continue; the messages stay in the panel, under a *Context compacted* row that shows the summary (#104).
 
 ### Changed
 

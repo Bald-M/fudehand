@@ -36,6 +36,35 @@ public struct ChatUsage: Codable, Equatable, Sendable {
     }
 }
 
+/// How much of the model's context window a conversation takes up, for the chat panel's context ring.
+public struct ContextUsage: Equatable, Sendable {
+    public enum Level: Sendable {
+        case normal, high, critical
+    }
+
+    /// The tokens the conversation takes up, as last reported by the model API.
+    public let used: Int
+    /// The model's context window in tokens; nil when it is not known.
+    public let window: Int?
+
+    public init(used: Int, window: Int?) {
+        self.used = used
+        self.window = window.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// The share of the window in use, at most 1; nil without a known window.
+    public var fraction: Double? { window.map { min(1, Double(used) / Double($0)) } }
+
+    /// The share as a whole percentage; anything in use shows as at least 1.
+    public var percent: Int? { fraction.map { used > 0 ? max(1, Int(($0 * 100).rounded())) : 0 } }
+
+    /// From three quarters of the window on, the ring warns; from nine tenths on, it warns that the limit is close.
+    public var level: Level {
+        guard let fraction else { return .normal }
+        return fraction >= 0.9 ? .critical : fraction >= 0.75 ? .high : .normal
+    }
+}
+
 /// A question the Agent paused its reply to ask, shown as a question card.
 public struct ChatQuestion: Codable, Equatable, Sendable {
     public struct Option: Codable, Equatable, Sendable {
@@ -62,7 +91,8 @@ public struct ChatQuestion: Codable, Equatable, Sendable {
 /// One entry in the chat panel. A tool call and its result are one entry, making it clear what the Agent did.
 public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
-        case user, assistant, tool, error, notice, question
+        /// `summary` is what compacting left: from there on, the Agent sees this text instead of the entries before it.
+        case user, assistant, tool, error, notice, question, summary
     }
 
     public enum ToolStatus: String, Codable, Sendable {
@@ -85,6 +115,8 @@ public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public fileprivate(set) var usage: ChatUsage?
     /// Only for question entries.
     public fileprivate(set) var question: ChatQuestion?
+    /// The tokens the conversation took up once this reply or summary was made; nil when the model API reported none.
+    public fileprivate(set) var contextTokens: Int?
     /// The harness's id of a tool call, matching the result to its call, or the answer to its question.
     fileprivate var call: String?
 
@@ -115,6 +147,8 @@ public struct ChatTranscript: Equatable, Sendable {
     public private(set) var busy = false
     /// The harness's prediction of the next user message, offered in the empty input once a reply has ended. Not saved with the conversation.
     public private(set) var suggestion: String?
+    /// Whether the running turn is a compaction rather than a reply.
+    public private(set) var compacting = false
     private var nextID = 0
     /// Whether the last entry is assistant text that is still streaming in.
     private var streaming = false
@@ -135,6 +169,14 @@ public struct ChatTranscript: Equatable, Sendable {
         append(.user, text)
         entries[entries.count - 1].context = context
         busy = true
+    }
+
+    /// Starts a compaction: the harness is asked to summarize the conversation. Nothing happens while a reply is running or when
+    /// there is nothing to compact.
+    public mutating func compact() {
+        guard canCompact else { return }
+        busy = true
+        compacting = true
     }
 
     public mutating func apply(_ line: Data) {
@@ -168,14 +210,23 @@ public struct ChatTranscript: Equatable, Sendable {
             append(.question, event["question"] as? String ?? "")
             entries[entries.count - 1].question = ChatQuestion(detail: event["detail"] as? String, options: options, state: .pending)
             entries[entries.count - 1].call = event["id"] as? String
+        case "compacted":
+            append(.summary, event["summary"] as? String ?? "")
         case "error":
-            append(.error, event["message"] as? String ?? L("Unknown error"))
+            let message = event["message"] as? String ?? L("Unknown error")
+            append(.error, compacting ? L("Could not compact the context: %@", message) : message)
         case "done":
-            if let usage = event["usage"] as? [String: Any], let input = usage["input"] as? Int, let output = usage["output"] as? Int,
-               let cached = usage["cached"] as? Int, let reply = lastReplyID, let index = entries.lastIndex(where: { $0.id == reply }) {
-                entries[index].usage = ChatUsage(input: input, output: output, cached: cached)
+            // A compaction's tokens belong to its summary; the reply before it keeps its own.
+            let index = compacting ? (entries.last?.kind == .summary ? entries.count - 1 : nil)
+                : lastReplyID.flatMap { reply in entries.lastIndex { $0.id == reply } }
+            if let index {
+                if !compacting, let usage = event["usage"] as? [String: Any], let input = usage["input"] as? Int, let output = usage["output"] as? Int,
+                   let cached = usage["cached"] as? Int {
+                    entries[index].usage = ChatUsage(input: input, output: output, cached: cached)
+                }
+                if let context = event["context"] as? Int { entries[index].contextTokens = context }
             }
-            if event["stopped"] as? Bool == true { stop() } else { busy = false; settle() }
+            if event["stopped"] as? Bool == true { stop() } else { busy = false; compacting = false; settle() }
         case "suggestion":
             // One that arrives while a reply is running was predicted before that reply's message was sent.
             if !busy, !text.isEmpty { suggestion = text }
@@ -188,6 +239,7 @@ public struct ChatTranscript: Equatable, Sendable {
     public mutating func fail(_ message: String) {
         append(.error, message)
         busy = false
+        compacting = false
         settle()
     }
 
@@ -202,9 +254,11 @@ public struct ChatTranscript: Equatable, Sendable {
     /// stays open: answering it later starts the reply again.
     public mutating func suspend() {
         guard busy else { return }
+        let notice = compacting ? L("Compacting stopped") : L("Reply stopped")
         busy = false
+        compacting = false
         settle()
-        if !waiting { append(.notice, L("Reply stopped")) }
+        if !waiting { append(.notice, notice) }
     }
 
     /// The question waiting for the user's answer.
@@ -242,15 +296,26 @@ public struct ChatTranscript: Equatable, Sendable {
     }
 
     /// The user and assistant texts, in the form the harness's `load` message takes to restore its history. An answered question
-    /// is the Agent's text and the user's.
+    /// is the Agent's text and the user's. After a compaction they start at the last summary, which stands for everything before it.
     public var messages: [[String: String]] {
-        entries.flatMap { entry -> [[String: String]] in
+        let start = entries.lastIndex { $0.kind == .summary } ?? entries.startIndex
+        return entries[start...].flatMap { entry -> [[String: String]] in
             if case .answered(let answer) = entry.question?.state {
                 return [["role": "assistant", "text": entry.text], ["role": "user", "text": answer]]
             }
-            guard entry.kind == .user || entry.kind == .assistant, !entry.text.isEmpty else { return [] }
+            guard [.user, .assistant, .summary].contains(entry.kind), !entry.text.isEmpty else { return [] }
             return [["role": entry.kind.rawValue, "text": entry.text]]
         }
+    }
+
+    /// Whether there are messages a compaction would summarize: none while a reply is running, and none right after a compaction.
+    public var canCompact: Bool { !busy && messages.contains { $0["role"] != "summary" } }
+
+    /// The tokens the conversation takes up in the model's context window, as last reported; nil before the first report.
+    /// Reports from before the last compaction no longer describe the conversation, so they are not looked at.
+    public var contextTokens: Int? {
+        let start = entries.lastIndex { $0.kind == .summary } ?? entries.startIndex
+        return entries[start...].last { $0.contextTokens != nil }?.contextTokens
     }
 
     /// The first line of the first user message, shortened, as the conversation's name in the history menu.
