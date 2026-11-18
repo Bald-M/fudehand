@@ -22,6 +22,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - **Breaking:** the product is renamed from ui-atlas to Fudehand. The App is now `Fudehand.app` (bundle identifier `local.fudehand.native`), project files use the `.fudehand` extension, the MCP server is registered as `fudehand`, the control channel and saved conversations live under `~/Library/Application Support/fudehand`, and the `UI_ATLAS_*` environment variables are now `FUDEHAND_*`. Nothing is migrated: rename existing `.uiatlas` files to `.fudehand` to open them, reconnect Agents in *MCP Connectors…*, and enter API keys again in *Model settings*. Earlier entries below keep the old name.
 - The app icon is now an ink-wash painting: mountains receding in three ink tones under a red sun.
 
+### Fixed
+
+- Chat panel with DeepSeek: the default model is now `deepseek-flash`. The previous default, `deepseek-chat`, was discontinued by DeepSeek on 2026-07-24 and is not in its model list, so the context ring had no context window for it.
+
 ## [0.0.3] - 2026-11-18
 
 ### Summary

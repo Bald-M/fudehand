@@ -127,7 +127,7 @@ In *Model Settings*, every model provider is listed with its own key, base URL, 
 
 | Model provider | API | Default base URL | Default model |
 | --- | --- | --- | --- |
-| DeepSeek | OpenAI-compatible | `https://api.deepseek.com` | `deepseek-chat` |
+| DeepSeek | OpenAI-compatible | `https://api.deepseek.com` | `deepseek-flash` |
 | Claude | Messages API | `https://api.anthropic.com` | `claude-sonnet-5-5` |
 | ChatGPT | Responses API | `https://api.openai.com/v1` | `gpt-5.3-codex` |
 

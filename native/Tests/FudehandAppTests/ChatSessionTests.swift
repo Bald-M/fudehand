@@ -280,9 +280,9 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
 @Test @MainActor func chatModelListIsCachedPerProvider() {
     let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
     let session = ChatSession(defaults: defaults, readKey: { _ in nil })
-    session.cacheModels(["deepseek-chat", "deepseek-reasoner"], provider: "deepseek")
+    session.cacheModels(["deepseek-flash", "deepseek-v4-pro"], provider: "deepseek")
     session.cacheModels(["gpt-x"], provider: "openai")
-    #expect(session.models == ["deepseek-chat", "deepseek-reasoner"])
+    #expect(session.models == ["deepseek-flash", "deepseek-v4-pro"])
     session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
     #expect(session.models == ["gpt-x"])
     #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).models == ["gpt-x"])
@@ -296,8 +296,8 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     #expect(session.transcript.busy) // The running reply is left alone.
     #expect(session.settings.provider == "deepseek")
     #expect(session.stored("openai") == ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://example.test/v1"))
-    session.store(ChatSettings(provider: "deepseek", model: "deepseek-reasoner", baseUrl: ""))
-    #expect(session.settings.model == "deepseek-reasoner")
+    session.store(ChatSettings(provider: "deepseek", model: "deepseek-v4-pro", baseUrl: ""))
+    #expect(session.settings.model == "deepseek-v4-pro")
     #expect(!session.transcript.busy) // Changing the provider in use restarts the harness.
     await session.shutdown()
 }
@@ -306,7 +306,7 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
     let session = ChatSession(defaults: defaults, readKey: { _ in nil })
     session.cacheModels(["gpt-x", "gpt-y"], defaultModel: "gpt-x", provider: "openai")
-    session.cacheModels(["deepseek-chat"], provider: "deepseek")
+    session.cacheModels(["deepseek-flash"], provider: "deepseek")
     #expect(session.models(for: "openai") == ["gpt-x", "gpt-y"])
     #expect(session.defaultModel(for: "openai") == "gpt-x")
     #expect(session.defaultModel(for: "deepseek") == nil)
