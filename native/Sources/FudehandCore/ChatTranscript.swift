@@ -36,10 +36,33 @@ public struct ChatUsage: Codable, Equatable, Sendable {
     }
 }
 
+/// A question the Agent paused its reply to ask, shown as a question card.
+public struct ChatQuestion: Codable, Equatable, Sendable {
+    public struct Option: Codable, Equatable, Sendable {
+        public let label: String
+        public let description: String?
+
+        public init(label: String, description: String?) {
+            self.label = label
+            self.description = description
+        }
+    }
+
+    public enum State: Codable, Equatable, Sendable {
+        case pending, answered(String), skipped, cancelled
+    }
+
+    /// Why the Agent asks, under the question.
+    public let detail: String?
+    /// The answers offered, the Agent's recommendation first; may be empty.
+    public let options: [Option]
+    public fileprivate(set) var state: State
+}
+
 /// One entry in the chat panel. A tool call and its result are one entry, making it clear what the Agent did.
 public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
-        case user, assistant, tool, error, notice
+        case user, assistant, tool, error, notice, question
     }
 
     public enum ToolStatus: String, Codable, Sendable {
@@ -48,7 +71,7 @@ public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
 
     public let id: Int
     public let kind: Kind
-    /// The message text; for a tool entry, the tool's name.
+    /// The message text; for a tool entry, the tool's name; for a question entry, the question.
     public fileprivate(set) var text: String
     /// Only for tool entries.
     public fileprivate(set) var status: ToolStatus?
@@ -60,7 +83,9 @@ public struct ChatEntry: Codable, Equatable, Identifiable, Sendable {
     public fileprivate(set) var context: [ChatContext] = []
     /// What the whole reply consumed, on its last assistant text; nil when the model API reported no usage.
     public fileprivate(set) var usage: ChatUsage?
-    /// The harness's id of a tool call, matching the result to its call.
+    /// Only for question entries.
+    public fileprivate(set) var question: ChatQuestion?
+    /// The harness's id of a tool call, matching the result to its call, or the answer to its question.
     fileprivate var call: String?
 
     /// What a tool call acts on, for the card's title: the layer names (looked up by id), the file name, or the zoom level.
@@ -102,6 +127,8 @@ public struct ChatTranscript: Equatable, Sendable {
     }
 
     public mutating func send(_ text: String, context: [ChatContext] = []) {
+        // A new message moves on from a question left unanswered.
+        cancelQuestion()
         append(.user, text)
         entries[entries.count - 1].context = context
         busy = true
@@ -131,6 +158,13 @@ public struct ChatTranscript: Equatable, Sendable {
             if index == nil { append(.tool, name); index = entries.count - 1 }
             entries[index!].status = status
             entries[index!].result = text
+        case "question":
+            let options = (event["options"] as? [[String: Any]] ?? []).compactMap { option in
+                (option["label"] as? String).map { ChatQuestion.Option(label: $0, description: option["description"] as? String) }
+            }
+            append(.question, event["question"] as? String ?? "")
+            entries[entries.count - 1].question = ChatQuestion(detail: event["detail"] as? String, options: options, state: .pending)
+            entries[entries.count - 1].call = event["id"] as? String
         case "error":
             append(.error, event["message"] as? String ?? L("Unknown error"))
         case "done":
@@ -151,12 +185,36 @@ public struct ChatTranscript: Equatable, Sendable {
         settle()
     }
 
-    /// Ends the running reply as stopped, keeping the text received so far; also used when the harness is terminated before it can report `done`.
+    /// Ends the running reply as stopped, keeping the text received so far and cancelling a question that was waiting.
     public mutating func stop() {
+        guard busy else { return }
+        cancelQuestion()
+        suspend()
+    }
+
+    /// Ends the running reply because its harness is going away (quitting, closing the tab, new settings). A question that was waiting
+    /// stays open: answering it later starts the reply again.
+    public mutating func suspend() {
         guard busy else { return }
         busy = false
         settle()
-        append(.notice, L("Reply stopped"))
+        if !waiting { append(.notice, L("Reply stopped")) }
+    }
+
+    /// The question waiting for the user's answer.
+    public var pendingQuestion: ChatEntry? { entries.last { $0.question?.state == .pending } }
+
+    public var waiting: Bool { pendingQuestion != nil }
+
+    /// Records the answer to the waiting question (`nil` skips it, leaving the choice to the Agent) and returns the harness's `answer`
+    /// message for it; nil when no question is waiting. A reply that had ended with the question open is running again.
+    public mutating func answer(_ text: String?) -> [String: Any]? {
+        guard let index = entries.lastIndex(where: { $0.question?.state == .pending }) else { return nil }
+        entries[index].question?.state = text.map { .answered($0) } ?? .skipped
+        busy = true
+        var message: [String: Any] = ["type": "answer", "id": entries[index].call ?? "", "question": entries[index].text]
+        if let text { message["text"] = text } else { message["skipped"] = true }
+        return message
     }
 
     /// Removes the last user message and everything after it, returning that message so it can be sent again or edited. Nothing happens while a reply is running.
@@ -175,9 +233,16 @@ public struct ChatTranscript: Equatable, Sendable {
         return entries[user...].last { $0.kind == .assistant }?.id
     }
 
-    /// The user and assistant texts, in the form the harness's `load` message takes to restore its history.
+    /// The user and assistant texts, in the form the harness's `load` message takes to restore its history. An answered question
+    /// is the Agent's text and the user's.
     public var messages: [[String: String]] {
-        entries.filter { ($0.kind == .user || $0.kind == .assistant) && !$0.text.isEmpty }.map { ["role": $0.kind.rawValue, "text": $0.text] }
+        entries.flatMap { entry -> [[String: String]] in
+            if case .answered(let answer) = entry.question?.state {
+                return [["role": "assistant", "text": entry.text], ["role": "user", "text": answer]]
+            }
+            guard entry.kind == .user || entry.kind == .assistant, !entry.text.isEmpty else { return [] }
+            return [["role": entry.kind.rawValue, "text": entry.text]]
+        }
     }
 
     /// The first line of the first user message, shortened, as the conversation's name in the history menu.
@@ -198,6 +263,10 @@ public struct ChatTranscript: Equatable, Sendable {
     private mutating func settle() {
         streaming = false
         for index in entries.indices where entries[index].status == .running { entries[index].status = .failed }
+    }
+
+    private mutating func cancelQuestion() {
+        for index in entries.indices where entries[index].question?.state == .pending { entries[index].question?.state = .cancelled }
     }
 
     private mutating func append(_ kind: ChatEntry.Kind, _ text: String) {

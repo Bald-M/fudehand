@@ -253,3 +253,100 @@ private func line(_ json: String) -> Data { Data(json.utf8) }
     #expect(subject("{}") == nil)
     #expect(subject("not json") == nil)
 }
+
+private let questionEvent = #"{"type":"question","id":"q1","question":"How many entries?","detail":"It decides the icon size.","options":[{"label":"3 entries","description":"Roomy"},{"label":"4 entries"}]}"#
+
+private func asking() -> ChatTranscript {
+    var transcript = ChatTranscript()
+    transcript.send("Add a bottom navigation")
+    transcript.apply(line(#"{"type":"tool_call","id":"c1","name":"design_get_state","args":{}}"#))
+    transcript.apply(line(#"{"type":"tool_result","id":"c1","name":"design_get_state","ok":true,"text":"[…]"}"#))
+    transcript.apply(line(questionEvent))
+    return transcript
+}
+
+@Test func chatTranscriptShowsAQuestionAndWaitsForTheAnswer() {
+    var transcript = asking()
+    #expect(transcript.busy)
+    #expect(transcript.waiting)
+    let entry = transcript.entries.last
+    #expect(entry?.kind == .question)
+    #expect(entry?.text == "How many entries?")
+    #expect(entry?.question?.detail == "It decides the icon size.")
+    #expect(entry?.question?.options == [ChatQuestion.Option(label: "3 entries", description: "Roomy"), ChatQuestion.Option(label: "4 entries", description: nil)])
+    #expect(entry?.question?.state == .pending)
+    #expect(transcript.pendingQuestion?.id == entry?.id)
+    // A question is its own row, not one of the folded tool steps.
+    #expect(transcript.groups.map(\.entries.count) == [1, 1, 1])
+
+    let message = transcript.answer("3 entries")
+    #expect(message?["type"] as? String == "answer")
+    #expect(message?["id"] as? String == "q1")
+    #expect(message?["question"] as? String == "How many entries?")
+    #expect(message?["text"] as? String == "3 entries")
+    #expect(message?["skipped"] == nil)
+    #expect(transcript.entries.last?.question?.state == .answered("3 entries"))
+    #expect(!transcript.waiting)
+    #expect(transcript.busy)
+    // Nothing is left to answer.
+    #expect(transcript.answer("4 entries") == nil)
+}
+
+@Test func chatTranscriptRecordsASkippedQuestion() {
+    var transcript = asking()
+    let message = transcript.answer(nil)
+    #expect(message?["skipped"] as? Bool == true)
+    #expect(message?["text"] == nil)
+    #expect(transcript.entries.last?.question?.state == .skipped)
+}
+
+@Test func chatTranscriptCancelsTheQuestionWhenTheReplyIsStopped() {
+    var transcript = asking()
+    transcript.apply(line(#"{"type":"done","stopped":true}"#))
+    #expect(!transcript.busy)
+    #expect(!transcript.waiting)
+    #expect(transcript.entries.first { $0.kind == .question }?.question?.state == .cancelled)
+    #expect(transcript.entries.last?.kind == .notice)
+}
+
+@Test func chatTranscriptKeepsTheQuestionWhenTheHarnessGoesAway() throws {
+    var transcript = asking()
+    transcript.suspend()
+    #expect(!transcript.busy)
+    #expect(transcript.waiting)
+    // No "Reply stopped" notice: the reply is only waiting for the answer.
+    #expect(transcript.entries.last?.kind == .question)
+
+    // Saved and reopened, the question is still there to answer.
+    let saved = try JSONEncoder().encode(transcript.entries)
+    var restored = ChatTranscript(entries: try JSONDecoder().decode([ChatEntry].self, from: saved))
+    #expect(restored.waiting)
+    #expect(!restored.busy)
+    #expect(restored.entries == transcript.entries)
+    // The history given to a new harness leaves the open question out; the answer restates it.
+    #expect(restored.messages == [["role": "user", "text": "Add a bottom navigation"]])
+    let message = restored.answer("4 entries")
+    #expect(message?["id"] as? String == "q1")
+    // Answering starts the reply again.
+    #expect(restored.busy)
+    #expect(restored.messages == [["role": "user", "text": "Add a bottom navigation"], ["role": "assistant", "text": "How many entries?"], ["role": "user", "text": "4 entries"]])
+}
+
+@Test func chatTranscriptCancelsAnOpenQuestionWhenAnotherMessageIsSentOrTheTurnIsRewound() {
+    var transcript = asking()
+    transcript.suspend()
+    transcript.send("Never mind, make it a tab bar")
+    #expect(transcript.entries.first { $0.kind == .question }?.question?.state == .cancelled)
+    #expect(transcript.pendingQuestion == nil)
+
+    var rewound = asking()
+    rewound.suspend()
+    #expect(rewound.rewind()?.text == "Add a bottom navigation")
+    #expect(rewound.entries.isEmpty)
+}
+
+@Test func chatEntriesSavedBeforeQuestionsExistedStillLoad() throws {
+    let saved = #"[{"id":0,"kind":"user","text":"Hello","context":[]},{"id":1,"kind":"tool","text":"design_undo","status":"succeeded","context":[],"call":"c1"}]"#
+    let entries = try JSONDecoder().decode([ChatEntry].self, from: Data(saved.utf8))
+    #expect(entries.map(\.question) == [nil, nil])
+}

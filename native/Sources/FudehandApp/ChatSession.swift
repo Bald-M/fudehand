@@ -379,6 +379,27 @@ final class ChatSession: ObservableObject {
         write(["type": "user", "text": trimmed, "context": context.map { ["id": $0.id, "name": $0.name, "type": $0.type] }], to: id)
     }
 
+    /// Answers the selected conversation's waiting question; `nil` skips it, leaving the choice to the Agent. When the harness that
+    /// asked is gone (the App was quit, the tab closed), a new one is given the conversation so far and continues from the answer.
+    func answer(_ text: String?, root: URL?, runtime: WorkspaceLocation?) {
+        let id = conversationID
+        let earlier = transcript.messages
+        var message: [String: Any]?
+        update(id) { message = $0.answer(text.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }) }
+        guard let message else { return }
+        save(id)
+        guard let root else { update(id) { $0.fail(L("Cannot find the Fudehand source directory, so the chat process cannot start")) }; return }
+        if harnesses[id] == nil {
+            do { try start(id, root: root, runtime: runtime) }
+            catch { update(id) { $0.fail(L("Cannot start the chat process: %@", error.localizedDescription)) }; return }
+        }
+        if let harness = harnesses[id], !harness.synced {
+            write(["type": "load", "messages": earlier], to: id)
+            harness.synced = true
+        }
+        write(message, to: id)
+    }
+
     /// Stops the selected conversation's reply; replies in other tabs keep running.
     func stopReply() { write(["type": "stop"], to: conversationID) }
 
@@ -439,7 +460,7 @@ final class ChatSession: ObservableObject {
         // The only conversation, still empty: closing it would only put another empty one in its place.
         if tabs.count == 1, tabs[index].transcript.entries.isEmpty { return }
         terminate(id)
-        update(id) { $0.stop() }
+        update(id) { $0.suspend() }
         let closed = tabs.remove(at: index)
         if tabs.isEmpty { tabs.append(Tab(settings: closed.settings)) }
         if conversationID == id { conversationID = tabs[min(index, tabs.count - 1)].id }
@@ -457,17 +478,18 @@ final class ChatSession: ObservableObject {
     func shutdown() async {
         for tab in tabs {
             terminate(tab.id)
-            // Keep what a reply cut short by quitting had already produced.
-            update(tab.id) { $0.stop() }
+            // Keep what a reply cut short by quitting had already produced, and a question it was waiting on.
+            update(tab.id) { $0.suspend() }
         }
     }
 
-    /// Changes a tab's transcript. A finished reply is saved at once, so the conversation survives a crash or a quit.
+    /// Changes a tab's transcript. A finished reply and a new question are saved at once, so the conversation survives a crash or a quit.
     private func update(_ id: UUID, _ change: (inout ChatTranscript) -> Void) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let wasBusy = tabs[index].transcript.busy
+        let wasWaiting = tabs[index].transcript.waiting
         change(&tabs[index].transcript)
-        if wasBusy && !tabs[index].transcript.busy { save(id) }
+        if (wasBusy && !tabs[index].transcript.busy) || (!wasWaiting && tabs[index].transcript.waiting) { save(id) }
     }
 
     private func save(_ id: UUID) {
@@ -482,7 +504,7 @@ final class ChatSession: ObservableObject {
         terminate(id)
         // terminate() discards the old harness's `done` and exit callbacks, so end the running reply here.
         // The next message starts a new harness, which is given the conversation so far.
-        update(id) { $0.stop() }
+        update(id) { $0.suspend() }
     }
 
     private func start(_ id: UUID, root: URL, runtime: WorkspaceLocation?) throws {
