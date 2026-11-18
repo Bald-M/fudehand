@@ -1,7 +1,7 @@
 import Foundation
 
 /// A way of working that a conversation can be switched into from the chat input.
-public enum ChatMode: String, CaseIterable, Sendable {
+public enum ChatMode: String, CaseIterable, Codable, Sendable {
     /// The Agent replies with a plan and changes nothing until the user confirms it.
     case plan
     /// The next message is a goal the Agent keeps working on until it reports it done.
@@ -10,7 +10,7 @@ public enum ChatMode: String, CaseIterable, Sendable {
 
 /// A slash command of the chat input.
 public enum ChatCommand: String, CaseIterable, Sendable {
-    case plan, goal, new, clear, model
+    case plan, goal, new, clear, compact, model
 
     public var name: String { "/\(rawValue)" }
 
@@ -19,7 +19,7 @@ public enum ChatCommand: String, CaseIterable, Sendable {
         switch self {
         case .plan: .plan
         case .goal: .goal
-        case .new, .clear, .model: nil
+        case .new, .clear, .compact, .model: nil
         }
     }
 }

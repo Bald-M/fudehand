@@ -116,6 +116,8 @@ private let repository = URL(fileURLWithPath: #filePath)
 @Test func modelListingIsParsedFromTheHarnessOutput() {
     #expect(ChatSession.parseModelListing(Data(#"{"type":"models","models":["a","b"],"default":"a"}"#.utf8) + Data("\n".utf8))
             == .success(ModelListing(models: ["a", "b"], defaultModel: "a")))
+    #expect(ChatSession.parseModelListing(Data(#"{"type":"models","models":["a","b"],"default":"a","windows":{"a":200000,"b":"big"}}"#.utf8))
+            == .success(ModelListing(models: ["a", "b"], defaultModel: "a", windows: ["a": 200_000])))
     #expect(ChatSession.parseModelListing(Data(#"{"type":"error","message":"Invalid API key or insufficient permissions"}"#.utf8))
             == .failure(ModelListError(message: "Invalid API key or insufficient permissions")))
     #expect(ChatSession.parseModelListing(Data()) == .failure(ModelListError(message: "The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
@@ -916,6 +918,43 @@ private func askingHarness() throws -> (root: URL, received: () throws -> [[Stri
     #expect(history.load(relaunched.conversationID)?.entries.last?.text == "resumed: 4 entries")
 }
 
+@Test @MainActor func aPlanReplysQuestionIsStillAnsweredInPlanModeAfterARelaunchOrReopenedTab() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    session.mode = .plan
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    #expect(history.load(session.conversationID)?.replyMode == .plan)
+    await session.shutdown()
+
+    // After a relaunch the answer still cannot edit the document: it continues the plan, which is then ready to run.
+    let relaunched = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(relaunched.mode == .plan)
+    relaunched.answer("4 entries", root: harness.root, runtime: nil)
+    try await settle(relaunched)
+    #expect(relaunched.planReady)
+    // Once nothing waits, the mode is no longer saved.
+    #expect(history.load(relaunched.conversationID)?.replyMode == nil)
+
+    // The same after closing the tab and reopening the conversation from the history.
+    relaunched.send("Fewer entries", root: harness.root, runtime: nil)
+    try await waiting(relaunched)
+    let id = relaunched.conversationID
+    relaunched.close(id)
+    relaunched.open(id)
+    #expect(relaunched.mode == .plan)
+    relaunched.answer("3 entries", root: harness.root, runtime: nil)
+    try await settle(relaunched)
+    await relaunched.shutdown()
+
+    let answers = try harness.received().filter { $0["type"] as? String == "answer" }
+    #expect(answers.map { $0["mode"] as? String } == ["plan", "plan"])
+}
+
 @Test @MainActor func closingATabKeepsItsQuestionOpen() async throws {
     let harness = try askingHarness()
     defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -1053,4 +1092,83 @@ private func askingHarness() throws -> (root: URL, received: () throws -> [[Stri
 
     let sent = try harness.received().filter { $0["type"] as? String == "user" }
     #expect(sent.map { $0["mode"] as? String } == [nil, "plan", "goal"])
+}
+
+@Test @MainActor func contextWindowFollowsTheModelOfTheSelectedConversation() {
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil })
+    #expect(session.contextUsage == ContextUsage(used: 0, window: nil))
+    session.cacheModels(["deepseek-flash", "deepseek-v4-pro"], defaultModel: "deepseek-flash", windows: ["deepseek-flash": 1_048_576, "deepseek-v4-pro": 524_288], provider: "deepseek")
+    session.cacheModels(["gpt-x"], defaultModel: "gpt-x", provider: "openai")
+    // An empty model means the provider's default.
+    #expect(session.contextUsage.window == 1_048_576)
+    session.settings = ChatSettings(provider: "deepseek", model: "deepseek-v4-pro", baseUrl: "")
+    #expect(session.contextUsage.window == 524_288)
+    session.settings = ChatSettings(provider: "deepseek", model: "something-else", baseUrl: "")
+    #expect(session.contextUsage.window == nil)
+    // A list that reports no windows leaves none behind.
+    session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
+    #expect(session.contextUsage.window == nil)
+    #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).contextWindow(provider: "deepseek", model: "") == 1_048_576)
+}
+
+/// A stand-in harness that records what the App sends it, answers a user message with "ok", and a compact with a summary.
+private func compactingHarness() throws -> (root: URL, received: () throws -> [[String: Any]]) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-harness-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+    let script = """
+    import { createInterface } from 'node:readline'
+    import { appendFileSync } from 'node:fs'
+    createInterface({ input: process.stdin }).on('line', line => {
+      appendFileSync(new URL('../received.jsonl', import.meta.url), line + '\\n')
+      const type = JSON.parse(line).type
+      if (type === 'user') process.stdout.write('{"type":"assistant","text":"ok"}\\n{"type":"done","stopped":false,"context":5000}\\n')
+      if (type === 'compact') process.stdout.write('{"type":"compacted","summary":"All blue."}\\n{"type":"done","stopped":false,"context":40}\\n')
+    })
+    """
+    try script.write(to: root.appendingPathComponent("scripts/agent-chat.mjs"), atomically: true, encoding: .utf8)
+    return (root, {
+        try String(contentsOf: root.appendingPathComponent("received.jsonl"), encoding: .utf8).split(separator: "\n")
+            .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+    })
+}
+
+@Test @MainActor func compactingKeepsTheMessagesAndRestoresTheHarnessFromTheSummary() async throws {
+    let harness = try compactingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    // Nothing to compact yet: no harness is started for it.
+    session.compact(root: harness.root, runtime: nil)
+    #expect(!session.transcript.busy)
+    session.send("Make it blue", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.contextUsage.used == 5000)
+    session.compact(root: harness.root, runtime: nil)
+    #expect(session.transcript.compacting)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["Make it blue", "ok", "All blue."])
+    #expect(session.contextUsage.used == 40)
+    await session.shutdown()
+
+    // The compaction is saved: after a relaunch the messages are shown, and a new harness is given the summary instead of them.
+    let relaunched = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(relaunched.transcript.entries.map(\.kind) == [.user, .assistant, .summary])
+    #expect(relaunched.contextUsage.used == 40)
+    relaunched.send("Which color?", root: harness.root, runtime: nil)
+    try await settle(relaunched)
+    await relaunched.shutdown()
+    // A conversation reopened without a running harness can be compacted too: the harness is given the conversation first.
+    let again = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    again.compact(root: harness.root, runtime: nil)
+    try await settle(again)
+    #expect(again.transcript.entries.map(\.kind) == [.user, .assistant, .summary, .user, .assistant, .summary])
+    await again.shutdown()
+
+    let received = try harness.received()
+    #expect(received.map { $0["type"] as? String } == ["load", "user", "compact", "load", "user", "load", "compact"])
+    #expect((received[3]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."]])
+    #expect((received[5]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."], ["role": "user", "text": "Which color?"], ["role": "assistant", "text": "ok"]])
 }

@@ -10,7 +10,7 @@ import Testing
 
 @Test func typingACommandNameListsTheCommandsItStarts() {
     #expect(ChatCommandInput("/") == .typing(ChatCommand.allCases))
-    #expect(ChatCommand.allCases.map(\.name) == ["/plan", "/goal", "/new", "/clear", "/model"])
+    #expect(ChatCommand.allCases.map(\.name) == ["/plan", "/goal", "/new", "/clear", "/compact", "/model"])
     #expect(ChatCommandInput("/pl") == .typing([.plan]))
     #expect(ChatCommandInput("/PL") == .typing([.plan]))
     #expect(ChatCommandInput("/plan") == .typing([.plan]))
@@ -26,7 +26,7 @@ import Testing
 }
 
 @Test func onlyPlanAndGoalSwitchTheMode() {
-    #expect(ChatCommand.allCases.map(\.mode) == [.plan, .goal, nil, nil, nil])
+    #expect(ChatCommand.allCases.map(\.mode) == [.plan, .goal, nil, nil, nil, nil])
 }
 
 private func provider(_ id: String, key: Bool = true, models: [String] = [], default defaultModel: String? = nil) -> ModelMenuProvider {

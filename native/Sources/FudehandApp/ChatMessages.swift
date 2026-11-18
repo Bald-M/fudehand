@@ -38,6 +38,32 @@ struct ChatGroupRow: View {
                     .font(.callout).foregroundStyle(.red).textSelection(.enabled)
             case .notice:
                 Text(entry.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            case .summary: CompactedSummary(entry: entry)
+            }
+        }
+    }
+}
+
+/// Where the conversation was compacted: the Agent continues from the summary, which can be opened here; the messages above stay for reading.
+private struct CompactedSummary: View {
+    let entry: ChatEntry
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { expanded.toggle() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    Text(L("Context compacted"))
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 8, weight: .bold))
+                }
+                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(expanded ? L("Hide summary") : L("Show summary"))
+            if expanded {
+                Text(entry.text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }

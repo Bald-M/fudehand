@@ -241,6 +241,8 @@
 "Plan mode: list the steps, edit after you confirm" = "Plan mode: list the steps, edit after you confirm";
 "Goal mode: keep working until the goal is done" = "Goal mode: keep working until the goal is done";
 "Start a new conversation" = "Start a new conversation";
+"Summarize earlier messages to free up context" = "Summarise earlier messages to free up context";
+"The context cannot be compacted while a reply is running" = "The context cannot be compacted while a reply is running";
 "Clear this conversation" = "Clear this conversation";
 "Switch model" = "Switch model";
 "No matching commands" = "No matching commands";
@@ -259,6 +261,18 @@
 "Regenerate" = "Regenerate";
 "%@ tokens" = "%@ tokens";
 "Input %@ (%@ cached) · Output %@" = "Input %@ (%@ cached) · Output %@";
+"Compacting context…" = "Compacting context…";
+"Stop compacting" = "Stop compacting";
+"Compacting stopped" = "Compacting stopped";
+"Could not compact the context: %@" = "Could not compact the context: %@";
+"Context compacted" = "Context compacted";
+"Show summary" = "Show summary";
+"Hide summary" = "Hide summary";
+"Context usage" = "Context usage";
+"Context: %@ of %@ tokens (%d%%)" = "Context: %@ of %@ tokens (%d%%)";
+"Context: %@ tokens used. The context window of this model is not known; reload the model list to look it up." = "Context: %@ tokens used. The context window of this model is not known; reload the model list to look it up.";
+"The context is filling up. Send /compact to compact it." = "The context is filling up. Send /compact to compact it.";
+"The context is almost full. Send /compact to compact it." = "The context is almost full. Send /compact to compact it.";
 "Copied" = "Copied";
 "Code" = "Code";
 "Copy code" = "Copy code";

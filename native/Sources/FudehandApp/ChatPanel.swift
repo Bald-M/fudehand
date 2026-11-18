@@ -205,7 +205,10 @@ struct ChatPanel: View {
                                 Text(L("Waiting for your answer")).font(.caption).foregroundStyle(.secondary)
                             }
                         } else if busy {
-                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(L("Replying…")).font(.caption).foregroundStyle(.secondary) }
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text(transcript.compacting ? L("Compacting context…") : L("Replying…")).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         Color.clear.frame(height: 1).id(Self.bottom)
                     }
@@ -293,10 +296,11 @@ struct ChatPanel: View {
             HStack(spacing: 8) {
                 modelMenu
                 Spacer()
+                ContextRing(usage: chat.contextUsage)
                 if busy {
+                    let stop = waiting ? L("Stop and cancel the question") : chat.transcript.compacting ? L("Stop compacting") : L("Stop replying")
                     Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
-                        .buttonStyle(.borderless).help(waiting ? L("Stop and cancel the question") : L("Stop replying"))
-                        .accessibilityLabel(waiting ? L("Stop and cancel the question") : L("Stop replying"))
+                        .buttonStyle(.borderless).help(stop).accessibilityLabel(stop)
                 } else {
                     Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
                         .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
@@ -354,6 +358,7 @@ struct ChatPanel: View {
         case .goal: L("Goal mode: keep working until the goal is done")
         case .new: L("Start a new conversation")
         case .clear: L("Clear this conversation")
+        case .compact: L("Summarize earlier messages to free up context")
         case .model: L("Switch model")
         }
     }
@@ -558,6 +563,13 @@ struct ChatPanel: View {
             draft = ""
             editing = false
             chat.clearConversation()
+        case .compact:
+            guard !busy else { commandError = L("The context cannot be compacted while a reply is running"); return }
+            draft = ""
+            editing = false
+            scroll.follow = ChatScrollFollow()
+            following = true
+            chat.compact(root: root, runtime: runtime)
         case .model:
             // The menu now lists the models; typing narrows them.
             draft = "\(command.name) "
@@ -586,6 +598,44 @@ struct ChatPanel: View {
         draft = last.text
         editing = true
         inputFocused = true
+    }
+}
+
+/// The context ring: how much of the model's context window the conversation takes up. Hovering shows the numbers.
+private struct ContextRing: View {
+    let usage: ContextUsage
+
+    private var color: Color {
+        switch usage.level {
+        case .normal: return .secondary
+        case .high: return .orange
+        case .critical: return .red
+        }
+    }
+
+    private var summary: String {
+        let used = ChatUsage.compact(usage.used)
+        guard let window = usage.window, let percent = usage.percent else {
+            return L("Context: %@ tokens used. The context window of this model is not known; reload the model list to look it up.", used)
+        }
+        let numbers = L("Context: %@ of %@ tokens (%d%%)", used, ChatUsage.compact(window), percent)
+        switch usage.level {
+        case .normal: return numbers
+        case .high: return numbers + "\n" + L("The context is filling up. Send /compact to compact it.")
+        case .critical: return numbers + "\n" + L("The context is almost full. Send /compact to compact it.")
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.quaternary, lineWidth: 2.5)
+            Circle().trim(from: 0, to: usage.fraction ?? 0)
+                .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 14, height: 14).padding(3).contentShape(Rectangle())
+        .help(summary)
+        .accessibilityElement().accessibilityAddTraits(.isImage).accessibilityLabel(L("Context usage")).accessibilityValue(summary)
     }
 }
 
@@ -862,7 +912,7 @@ private struct ChatSettingsSheet: View {
             case .failure(let failure): draft.finishTest(id, token: token, result: .failed(failure.message))
             }
             // A stale result leaves the draft unchanged and is not cached.
-            if case .success(let list) = result, draft != before { chat.cacheModels(list.models, defaultModel: list.defaultModel, provider: id) }
+            if case .success(let list) = result, draft != before { chat.cacheModels(list.models, defaultModel: list.defaultModel, windows: list.windows, provider: id) }
         }
     }
 

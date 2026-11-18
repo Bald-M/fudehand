@@ -241,6 +241,8 @@
 "Plan mode: list the steps, edit after you confirm" = "计划模式：先列出步骤，确认后再修改设计文档";
 "Goal mode: keep working until the goal is done" = "目标模式：设定目标，持续执行到完成";
 "Start a new conversation" = "新建一个会话";
+"Summarize earlier messages to free up context" = "总结之前的消息以腾出上下文";
+"The context cannot be compacted while a reply is running" = "回复进行中，无法压缩上下文";
 "Clear this conversation" = "清空当前会话";
 "Switch model" = "切换模型";
 "No matching commands" = "没有匹配的指令";
@@ -259,6 +261,18 @@
 "Regenerate" = "重新生成";
 "%@ tokens" = "用量 %@ tokens";
 "Input %@ (%@ cached) · Output %@" = "输入 %@（缓存 %@）· 输出 %@";
+"Compacting context…" = "正在压缩上下文…";
+"Stop compacting" = "停止压缩";
+"Compacting stopped" = "已停止压缩";
+"Could not compact the context: %@" = "无法压缩上下文：%@";
+"Context compacted" = "已压缩上下文";
+"Show summary" = "显示摘要";
+"Hide summary" = "隐藏摘要";
+"Context usage" = "上下文用量";
+"Context: %@ of %@ tokens (%d%%)" = "上下文：已用 %@ / %@ tokens（%d%%）";
+"Context: %@ tokens used. The context window of this model is not known; reload the model list to look it up." = "上下文：已用 %@ tokens。当前模型的上下文窗口未知，重新加载模型列表即可获取。";
+"The context is filling up. Send /compact to compact it." = "上下文即将占满，发送 /compact 可压缩。";
+"The context is almost full. Send /compact to compact it." = "上下文几乎已满，发送 /compact 可压缩。";
 "Copied" = "已复制";
 "Code" = "代码";
 "Copy code" = "复制代码";

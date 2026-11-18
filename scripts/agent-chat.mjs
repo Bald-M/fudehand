@@ -8,17 +8,23 @@ import { designGuidance } from './design-guidance.mjs'
 
 /**
  * The Agent harness of the in-App chat panel. Started on demand by Fudehand, exchanging JSON lines over stdin/stdout:
- *   Input:  {type:'user',text,context?:[{id,name,type}],mode?:'plan'|'goal'} | {type:'stop'} | {type:'load',messages:[{role:'user'|'assistant',text}]}
+ *   Input:  {type:'user',text,context?:[{id,name,type}],mode?:'plan'|'goal'} | {type:'stop'} | {type:'compact'}
+ *        | {type:'load',messages:[{role:'user'|'assistant'|'summary',text}]}
  *        | {type:'answer',id,question,text,mode?} | {type:'answer',id,question,skipped:true,mode?}
  *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
  *        | {type:'tool_result',id,name,ok,text} | {type:'question',id,question,detail?,options:[{label,description?}]}
- *        | {type:'error',message} | {type:'done',stopped,usage?:{input,output,cached}} | {type:'suggestion',text}
+ *        | {type:'compacted',summary} | {type:'error',message}
+ *        | {type:'done',stopped,usage?:{input,output,cached},context?} | {type:'suggestion',text}
  * The reply text streams in as assistant_delta events; the assistant event that follows carries the complete text of that round.
  * `usage` is the tokens the model API reported for the reply, added up over its rounds: `input` includes the `cached` tokens.
  * It is left out when a round reported none, since the sum would understate the reply.
  * A `question` is the model calling the harness's own ask_user tool: the reply pauses, with no tool_call or tool_result event, until
  * the `answer` with that id arrives and becomes the tool's result. An `answer` to a question that is no longer waiting (the harness
  * was restarted since) starts a new turn that restates the question and the answer.
+ * `done.context` is the tokens the conversation takes up in the model's context window: the input plus output of the reply's last request.
+ * `compact` has the model summarize the conversation and replaces the history with that summary, reported in `compacted`; the
+ * history is unchanged when that fails or is stopped. Its `done` carries the summary request's usage, and as `context` the
+ * summary's own tokens. In `load`, a `summary` message is the summary an earlier compaction left.
  * `suggestion` is the predicted next user message. It may follow the `done` of a reply that ended normally, comes from a separate
  * model request that is kept out of the history and of `usage`, and is simply not sent when that request fails.
  * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
@@ -26,7 +32,7 @@ import { designGuidance } from './design-guidance.mjs'
  * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, over more rounds than an
  * ordinary reply gets, until it calls goal_done, whose summary is sent as the reply's last assistant text.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
- * With --list-models it only prints one line, {type:'models',models,default} or {type:'error',message}, then exits.
+ * With --list-models it only prints one line, {type:'models',models,default,windows} or {type:'error',message}, then exits.
  */
 
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
@@ -216,6 +222,8 @@ async function reply(text, controller, mode) {
   let rounds = 0
   let reported = true
   let failed = false
+  // What the conversation takes up after the last round that completed; unknown when that round reported no usage.
+  let context
   const count = round => {
     rounds++
     if (round.usage) for (const key in usage) usage[key] += round.usage[key]
@@ -228,6 +236,7 @@ async function reply(text, controller, mode) {
       if (round === (goal ? maximumGoalRounds : maximumRounds)) throw new Error('Too many tool-call rounds; stopped this reply')
       const answer = await provider.turn(prompt, log, offered, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
       count(answer)
+      context = answer.usage && answer.usage.input + answer.usage.output
       if (signal.aborted) break
       // Neither API accepts an empty reply written back into the history, so end this turn right away.
       if (!answer.text && !answer.toolCalls.length) break
@@ -294,9 +303,47 @@ async function reply(text, controller, mode) {
     current = null
     // goal_done is offered only to this reply, so the reminders must not ask later replies for it.
     for (const reminder of reminders) reminder.text = 'Continue.'
-    emit({ type: 'done', stopped: signal.aborted, ...(rounds && reported ? { usage } : {}) })
+    emit({ type: 'done', stopped: signal.aborted, ...(rounds && reported ? { usage } : {}), ...(context ? { context } : {}) })
     // The panel shows no prediction in plan mode, where the next step is to confirm or change the plan.
     if (!signal.aborted && !failed && !plan) void predict(log)
+  }
+}
+
+const summaryRequest = [
+  'Summarize this conversation so that it can continue from your summary alone; the messages above will be removed.',
+  'Cover what the user asked for and the preferences they stated, the decisions made, the current state of the design document (name the layers that were created or changed, with their ids), and anything left unfinished.',
+  'Write it in the language the user has been using. Reply with the summary only, and do not call any tools.',
+].join(' ')
+
+const summaryHeading = 'The earlier part of this conversation was compacted to free up context. This is its summary:'
+
+function summaryMessage(summary) {
+  return { role: 'user', text: `${summaryHeading}\n\n${summary}` }
+}
+
+/** Has the model summarize the conversation, then replaces the history with the summary. A failure or a stop leaves the history as it was. */
+async function compact(controller) {
+  const { signal } = controller
+  const log = history
+  let usage
+  try {
+    if (providerError) throw new Error(providerError)
+    if (!apiKey) throw new Error('No API key configured')
+    if (!log.length) throw new Error('There is nothing to compact yet')
+    // The same system prompt and tools as a reply: a history with tool calls is only valid with its tools, and the request can reuse the prompt cache.
+    const answer = await provider.turn(system, [...log, { role: 'user', text: summaryRequest }], [...tools, askTool], signal, () => {})
+    if (signal.aborted) return
+    usage = answer.usage
+    if (!answer.text.trim()) throw new Error('The model returned no summary; the context was not compacted')
+    log.splice(0, log.length, summaryMessage(answer.text))
+    emit({ type: 'compacted', summary: answer.text })
+  } catch (error) {
+    usage = undefined
+    if (!signal.aborted) emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+  } finally {
+    current = null
+    // Until the next reply reports a real count, the summary's own tokens stand for the context; the system prompt and tools are not in them.
+    emit({ type: 'done', stopped: signal.aborted, ...(usage ? { usage, context: usage.output } : {}) })
   }
 }
 
@@ -305,7 +352,7 @@ input.on('line', line => {
   let message
   try { message = JSON.parse(line) } catch { return emit({ type: 'error', message: 'Received an unparseable message' }) }
   // A prediction still in progress is for a conversation state that this message is about to change.
-  if (['user', 'answer', 'stop', 'load'].includes(message.type)) predicting?.abort()
+  if (['user', 'answer', 'compact', 'stop', 'load'].includes(message.type)) predicting?.abort()
   if (message.type === 'user' && typeof message.text === 'string') {
     if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
     current = new AbortController()
@@ -316,12 +363,17 @@ input.on('line', line => {
       current = new AbortController()
       void reply(`You asked the user: ${message.question}\n${answerText(message)}`, current, message.mode)
     }
+  } else if (message.type === 'compact') {
+    if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
+    current = new AbortController()
+    void compact(current)
   } else if (message.type === 'stop') {
     current?.abort()
   } else if (message.type === 'load' && Array.isArray(message.messages)) {
     current?.abort()
-    history = message.messages.filter(entry => typeof entry?.text === 'string' && entry.text && (entry.role === 'user' || entry.role === 'assistant'))
-      .map(entry => entry.role === 'user' ? { role: 'user', text: entry.text } : { role: 'assistant', text: entry.text, toolCalls: [] })
+    history = message.messages.filter(entry => typeof entry?.text === 'string' && entry.text && ['user', 'assistant', 'summary'].includes(entry.role))
+      .map(entry => entry.role === 'user' ? { role: 'user', text: entry.text }
+        : entry.role === 'summary' ? summaryMessage(entry.text) : { role: 'assistant', text: entry.text, toolCalls: [] })
   }
 })
 input.on('close', () => {
