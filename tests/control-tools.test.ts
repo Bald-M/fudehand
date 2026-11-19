@@ -26,7 +26,7 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
@@ -55,6 +55,25 @@ describe('design tools', () => {
     await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
     await fake.close()
+  })
+
+  it('describes icon layers and searches icons through the App', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string, inputSchema: any }[]).find(tool => tool.name === name)!
+    for (const field of ['icon', 'design_search_icons', '24×24'])
+      expect(byName('design_create_node').description).toContain(field)
+    const search = byName('design_search_icons')
+    for (const field of ['sf', 'material-rounded', 'weui', 'lucide', 'Android', 'mini program'])
+      expect(search.description).toContain(field)
+    expect(search.inputSchema.required).toEqual(['query'])
+    expect(search.inputSchema.properties.library.enum).toEqual(['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'])
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_search_icons', { query: 'home' }, ctx)
+    await callTool('design_search_icons', { query: 'home', library: 'lucide', limit: 5 }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'search_icons', args: { query: 'home' } },
+      { command: 'search_icons', args: { query: 'home', library: 'lucide', limit: 5 } },
+    ])
   })
 
   it('forwards the command and the defined arguments to the App', async () => {

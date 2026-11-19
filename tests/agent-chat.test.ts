@@ -1131,7 +1131,7 @@ describe('Agent harness: plan and goal modes', () => {
     ])
     const chat = await deepseek(model.baseUrl, app.socketPath)
     const events = await chat.ask('Remove the demo page', { mode: 'plan' })
-    expect(toolNames(model.requests[0])).toEqual(['design_get_state', 'design_get_document', 'design_get_node', 'design_snapshot', 'ask_user'])
+    expect(toolNames(model.requests[0])).toEqual(['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_snapshot', 'ask_user'])
     expect(model.requests[0].body.messages[0].content).toMatch(/Plan mode is on/)
     expect(app.received.map(request => request.command)).toEqual(['get_state'])
     expect(events.find(event => event.type === 'tool_result' && event.name === 'design_delete_nodes'))

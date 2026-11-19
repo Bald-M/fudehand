@@ -36,11 +36,12 @@ async function inlineImages(value, root) {
 
 const NODE_GUIDE = [
   'Layer fields (coordinates are relative to the parent layer, in pt): ',
-  'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/group), name, x, y, width, height, ',
+  'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/icon/group), name, x, y, width, height, ',
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent; a group ignores fill and stretch and keeps the size of its children), ',
   'text {content, fontSize, fontWeight integer 100–900, fontFamily (a family from design_list_fonts; any other falls back to the system font), color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
   'image {path to a PNG, JPEG, or SVG file (~ expands to the home directory) or data (base64 of one), fit fill/fit/stretch} (required for image; an SVG stays vector and is drawn sharp at any zoom), ',
+  'icon {name "<library>/<name>" as returned by design_search_icons, color (default #000000)} (required for icon; a single-color vector icon drawn to fit width and height, default 24×24; an unknown name is an error that lists similar names). Use real icons rather than shapes or words standing in for them. ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
   'interaction (prototype click interaction, any layer): {action: "navigate", destination: <top-level frame id>, transition {type none/dissolve/push-left/push-right/push-up/push-down/sheet, duration seconds 0–10 (default 0.3), easing linear/ease-in/ease-out/ease-in-out (default ease-out)}} or {action: "back"}, which returns to the previous frame playing its transition in reverse; a push names the direction the content travels (push-left brings the destination in from the right), and sheet slides it up from the bottom. ',
   'animation (prototype animation, any layer; plays when the layer\'s frame appears in the prototype window, never on the canvas or in snapshots): {type fade-in/slide-in/scale-in (entrances) or spin/pulse/shimmer (loops), duration seconds >0–60 (one cycle for a loop; default 0.3 for entrances, 1 for spin and pulse, 1.5 for shimmer), delay seconds 0–60 (default 0), easing linear/ease-in/ease-out/ease-in-out (default ease-out for entrances, ease-in-out for pulse, linear otherwise), repeat integer 1–1000 or "infinite" (default 1 for entrances, "infinite" for loops); slide-in only: from left/right/top/bottom (default bottom) and distance pt (default 40); pulse only: property scale/opacity (default scale)}. slide-in and scale-in also fade in; spin turns clockwise about the center; shimmer sweeps a see-through band across the layer (skeleton loading). ',
@@ -99,6 +100,15 @@ export const tools = [
   controlTool('design_import_font', 'import_font', 'Import a font file (.ttf, .otf, or .ttc) into the Fudehand font library, which makes it available to Fudehand only, and return its font families.',
     path('Font file path; ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), ['path'],
     async (args, root) => ({ ...args, path: absolute(args.path, root) })),
+  controlTool('design_search_icons', 'search_icons',
+    'Search the built-in icon libraries by keyword (matched against icon names, and tags for Lucide) and return icon names for an icon layer. ' +
+    'Pick the library by the prototype\'s target platform: sf (SF Symbols) for iOS and macOS, one material-outlined/material-rounded/material-sharp style for Android, weui for a WeChat mini program, lucide for the web; keep one library and style per screen. ' +
+    'Material fill variants end in .fill (material-rounded/home.fill). SF Symbols are licensed by Apple for mockups of apps on Apple platforms only.',
+    {
+      query: { type: 'string', description: 'Keyword, e.g. home, search, arrow' },
+      library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
+      limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
+    }, ['query']),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',
