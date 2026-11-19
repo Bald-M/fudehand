@@ -14,7 +14,10 @@ extension FudehandStore {
             return DesignJSON.object(try requireNode(id), includeImageData: false)
         case .createNode(let parent, let index, let object):
             var existing = editor.document.allIDs()
-            let node = try DesignJSON.node(from: DesignDocument.assigningIDs(object.value, existing: &existing))
+            let node = try DesignJSON.node(from: DesignDocument.assigningIDs(Self.iconDefaults(object.value), existing: &existing))
+            var icons: [String] = []
+            DesignDocument(nodes: [node]).forEach { if let icon = $0.icon { icons.append(icon.name) } }
+            try icons.forEach(requireIcon)
             try perform("Agent: Create Layers") { document in
                 try document.insert(node, parent: parent, index: index)
                 try Prototype.checkDestinations(of: node, in: document)
@@ -23,6 +26,8 @@ extension FudehandStore {
             DesignDocument(nodes: [node]).forEach { ids.append($0.id) }
             return ["id": node.id, "ids": ids, "node": DesignJSON.object(try requireNode(node.id), includeImageData: false)]
         case .updateNode(let id, let changes):
+            // Only a name the update sets must exist: a layer opened from a file may name an icon this Mac lacks.
+            if let name = (changes.value["icon"] as? [String: Any])?["name"] as? String { try requireIcon(name) }
             try perform("Agent: Update Layer") { document in
                 try document.update(id) { try DesignJSON.apply(changes.value, to: &$0) }
                 if changes.value["interaction"] != nil, let node = document.node(id) {
@@ -80,6 +85,8 @@ extension FudehandStore {
             return ["id": id, "mimeType": "image/png", "data": png.base64EncodedString(), "width": node.width, "height": node.height]
         case .listFonts:
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
+        case .searchIcons(let query, let library, let limit):
+            return ["icons": IconCatalog.shared.search(query, library: library, limit: limit)]
         case .importFont(let path):
             do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
             catch let error as FontImportError { throw ControlCommandError(error.english) }
@@ -89,6 +96,23 @@ extension FudehandStore {
     private func requireNode(_ id: String) throws -> DesignNode {
         guard let node = editor.document.node(id) else { throw ControlCommandError("Layer not found: \(id)") }
         return node
+    }
+
+    /// Agent edits may only use icons that exist; the error lists similar names to try instead.
+    private func requireIcon(_ name: String) throws {
+        guard !IconCatalog.shared.exists(name) else { return }
+        let similar = IconCatalog.shared.suggestions(for: name)
+        throw ControlCommandError("Unknown icon \(name)" + (similar.isEmpty ? "" : "; similar: \(similar.joined(separator: ", "))"))
+    }
+
+    /// A new icon layer without a size is 24 × 24, the common icon size, rather than the 100 × 100 other layers get.
+    nonisolated static func iconDefaults(_ object: [String: Any]) -> [String: Any] {
+        var object = object
+        if object["type"] as? String == NodeType.icon.rawValue {
+            for key in ["width", "height"] where object[key] == nil || object[key] is NSNull { object[key] = 24 }
+        }
+        if let children = object["children"] as? [Any] { object["children"] = children.map { ($0 as? [String: Any]).map(iconDefaults) ?? $0 } }
+        return object
     }
 
     private func requireDiscardable(_ discard: Bool) throws {

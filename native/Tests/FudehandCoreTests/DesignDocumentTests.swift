@@ -39,7 +39,7 @@ let sampleDocument = """
 @Test func encodesSortedKeysWithFormatHeader() throws {
     let text = String(decoding: try DesignDocument(nodes: []).encoded(), as: UTF8.self)
     #expect(text.contains("\"format\" : \"fudehand.design\""))
-    #expect(text.contains("\"version\" : 2"))
+    #expect(text.contains("\"version\" : \(DesignDocument.formatVersion)"))
     #expect(text.range(of: "\"format\"")!.lowerBound < text.range(of: "\"nodes\"")!.lowerBound)
 }
 
@@ -57,8 +57,9 @@ let sampleDocument = """
 }
 
 @Test func rejectsNewerVersion() {
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":3,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 3); upgrade Fudehand to open it")
+    let newer = DesignDocument.formatVersion + 1
+    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":"# + "\(newer)" + #","nodes":[]}"#) }
+            == "File was created by a newer version of Fudehand (format version \(newer)); upgrade Fudehand to open it")
 }
 
 @Test func rejectsMissingOrInvalidVersion() {

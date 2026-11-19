@@ -14,7 +14,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 ## 2. One path
 
 1. A tool is defined once, in `scripts/fudehand-tools.mjs`. The MCP server and the Agent harness MUST NOT define their own copies. The only tools outside that file are those that act on the harness's own reply (the question card's `ask_user`), and they MUST be listed in the coverage table.
-2. A tool MUST forward to the App over the control channel: a command in `FudehandCore/ControlProtocol.swift`, dispatched in `FudehandApp/ControlCommands.swift`.
+2. A tool MUST forward to the App over the control channel: a command in `FudehandCore/ControlProtocol.swift`, dispatched in `FudehandApp/ControlCommands.swift`. The one exception is the `style_*` tools, which read the style library's reference files in Node and never touch the design document ([ADR 0008](adr/0008-style-library-tools-run-in-node.md)).
 3. The App MUST carry out a command by calling the same store method that the UI calls for that feature. Logic that only Agents reach is not allowed; if the UI method needs a parameter the UI gets from a dialog, give the method that parameter and have the UI pass it.
 4. Field validation happens once, in Swift (`DesignJSON` for layers). The Node side MUST NOT validate fields; it only reads `image.path` into data and resolves relative file paths, as it does today.
 
@@ -44,6 +44,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 | `app_*` | Windows, the launch window, recent files, templates |
 | `settings_*` | UI language, appearance, model providers, API keys, MCP connectors |
 | `chat_*` | Conversations in the chat panel |
+| `style_*` | The style library: reference files for the Agent, read in Node (no App feature) |
 
 1. Tool names are `snake_case` with one of these prefixes. The control-channel command is the same name without the prefix (`design_get_node` → `get_node`). A new namespace MUST be added to this table first.
 2. Before adding a tool, check whether the behavior is a variant of an existing one; if so, add an argument instead (for example a scale argument rather than separate zoom-in and zoom-out tools).
@@ -67,8 +68,8 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Feature | Tool |
 |---|---|
 | Read the document overview, the layer tree, one layer | `design_get_state`, `design_get_document`, `design_get_node` |
-| Create layers (frame, rectangle, ellipse, text, image, group), insert an image | `design_create_node` |
-| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, clip content, interaction | `design_update_node` |
+| Create layers (frame, rectangle, ellipse, text, image, icon, group), insert an image | `design_create_node` |
+| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, icon name and color, clip content, interaction, scrolling, fixed position when scrolling, hover and pressed states, animation, text sequence | `design_update_node` |
 | Rename, show/hide, lock a layer | `design_update_node` |
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
@@ -77,6 +78,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |
 | Snapshot a layer as PNG | `design_snapshot` |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |
+| Search the built-in icon libraries | `design_search_icons` (people search in a panel that comes later; the Agent tool ships first) |
 
 ### Canvas and windows
 
@@ -90,6 +92,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Show or hide the inspector, switch its tab | Missing |
 | Expand or collapse layers in the layers panel | Missing |
 | Play the prototype, play from the start, close the prototype window | Missing |
+| Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | Missing |
 | List, open, remove, clear recent files | Missing |
 | List templates, create a document from a template | Missing |
@@ -111,3 +114,9 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | List conversations, open, switch, close a conversation tab, start a new one, delete one | Missing |
 | Send a message (with context tags, `/plan`, `/goal`), stop, regenerate, edit the last message, answer a question card, `/compact` | Missing |
 | Ask the user a question (question card) | `ask_user`, Agent harness only |
+
+### Agent-only reference
+
+| Feature | Tool |
+|---|---|
+| List the styles in the style library, read one style | `style_list`, `style_read`, read in Node without the App ([ADR 0008](adr/0008-style-library-tools-run-in-node.md)) |

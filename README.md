@@ -115,6 +115,7 @@ A few details worth knowing:
 - `design_update_node` is a partial patch: nested objects are merged field by field.
 - A field error explains what is wrong and leaves the document unchanged.
 - For an image, pass `image.path` (a local PNG, JPEG, or SVG) and the tool reads the file for you. An SVG is kept as vector source, so icons stay sharp at any zoom. One request is limited to 32 MB, which leaves room for about 24 MB of image files.
+- For an icon, call `design_search_icons` to find a name such as `lucide/house` or `sf/house.fill`, then create a layer with `type: "icon"` and `icon: { name, color }`. Icons come from four built-in libraries — SF Symbols, Material Symbols (outlined, rounded, sharp), WeUI, and Lucide — and stay sharp at any zoom.
 - In file and image paths, `~` expands to your home directory.
 
 The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/fudehand/control.sock` (override it with `FUDEHAND_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
@@ -141,12 +142,12 @@ The API key is stored only in your local Keychain (service name `fudehand.agent`
 
 *File → Save* (⌘S) and *Save As…* (⇧⌘S) write a design to a `.fudehand` project file; *Open…* (⌘O) and *Open Recent* reopen it. The App registers the `.fudehand` file type, so double-clicking a file in Finder, dragging it onto the Dock icon, or choosing *Open With* opens it in Fudehand. If the current document has unsaved changes, the App asks whether to save them first.
 
-A design document is a tree of layers: frames, rectangles, ellipses, text, images, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout. A project file is JSON with a format version number:
+A design document is a tree of layers: frames, rectangles, ellipses, text, images, icons, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout. A project file is JSON with a format version number:
 
 ```json
 {
   "format": "fudehand.design",
-  "version": 2,
+  "version": 5,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
@@ -208,6 +209,7 @@ pnpm version:check       # check that every location agrees; otherwise list the 
 - [ADR 0003](docs/adr/0003-agent-mcp.md): MCP, the control channel, and the chat panel
 - [ADR 0006](docs/adr/0006-native-design-document.md): the native design document
 - [Agent tools](docs/agent-tools.md) and [ADR 0007](docs/adr/0007-agent-parity.md): every App feature is an Agent tool
+- [ADR 0008](docs/adr/0008-style-library-tools-run-in-node.md) and [style library](styles/README.md): reference styles the Agent reads when you name one
 - [CHANGELOG](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
 
 ## License

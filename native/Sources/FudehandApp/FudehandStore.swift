@@ -93,6 +93,7 @@ final class FudehandStore: ObservableObject {
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
     init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
         self.defaults = defaults
+        SystemSymbols.install()
         fontLibrary = FontLibrary(directory: fontDirectory)
         fontFamilies = fontLibrary.families()
         self.chatRoot = chatRoot
@@ -179,7 +180,7 @@ final class FudehandStore: ObservableObject {
         case .frame: node.fill = .white
         case .rectangle, .ellipse: node.fill = try? DesignColor(hex: "#D9D9D9")
         case .text: node.text = DesignText(content: L("Text"), fontSize: 16, autoResize: clicked ? .widthAndHeight : .height)
-        case .image, .group: break
+        case .image, .icon, .group: break
         }
         return node
     }

@@ -4,9 +4,11 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "children"]
-    /// The nested objects that are merged field by field on update. `interaction` is not one of them: an update replaces it whole.
-    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
+                                        "scroll", "fixedOnScroll", "states", "children"]
+    /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
+    /// not among them: an update replaces them whole.
+    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
     public static let maximumMagnitude = 1_000_000.0
@@ -119,8 +121,10 @@ public enum DesignJSON {
         try unsupported("cornerRadius", type.hasCornerRadius)
         try unsupported("clipsContent", type == .frame)
         try unsupported("layout", type == .frame)
+        try unsupported("scroll", type == .frame)
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
+        try unsupported("icon", type == .icon)
 
         var node = DesignNode(id: id, type: type, name: try reader.string("name", default: type.title),
                               x: try reader.number("x", default: 0), y: try reader.number("y", default: 0),
@@ -142,7 +146,7 @@ public enum DesignJSON {
         }
         if type == .text {
             guard let text = try reader.child("text") else { throw reader.fail("text layer is missing text") }
-            try text.checkKeys(["content", "fontSize", "fontWeight", "fontFamily", "color", "align", "lineHeight", "autoResize"])
+            try text.checkKeys(["content", "fontSize", "fontWeight", "fontFamily", "color", "align", "lineHeight", "autoResize", "sequence"])
             let family = try text.string("fontFamily", default: "")
             node.text = DesignText(content: try text.string("content", default: ""),
                                    fontSize: try text.number("fontSize", default: 16, min: 1),
@@ -151,7 +155,8 @@ public enum DesignJSON {
                                    color: try text.color("color", default: .black)!,
                                    align: try text.choice("align", default: .left),
                                    lineHeight: try text.optionalNumber("lineHeight", min: 0.1),
-                                   autoResize: try text.choice("autoResize", default: .widthAndHeight))
+                                   autoResize: try text.choice("autoResize", default: .widthAndHeight),
+                                   sequence: try text.child("sequence").map(sequence))
         }
         if type == .image {
             guard let image = try reader.child("image") else { throw reader.fail("image layer is missing image") }
@@ -161,6 +166,17 @@ public enum DesignJSON {
                 throw reader.fail("image.data must be a base64-encoded PNG, JPEG, or SVG")
             }
             node.image = DesignImage(data: data, fit: try image.choice("fit", default: .fill))
+        }
+        if type == .icon {
+            guard let icon = try reader.child("icon") else { throw reader.fail("icon layer is missing icon") }
+            try icon.checkKeys(["name", "color"])
+            // Only the name's form is checked here: whether the icon exists depends on the icon libraries on this Mac, and a file
+            // naming an icon this Mac lacks still opens (the layer draws a placeholder).
+            let name = try icon.string("name")
+            guard IconLibrary.parse(name) != nil else {
+                throw reader.fail("icon.name must be <library>/<name> with library one of \(IconLibrary.allCases.map(\.rawValue).joined(separator: ", ")); got \(name)")
+            }
+            node.icon = DesignIcon(name: name, color: try icon.color("color", default: .black)!)
         }
         if let layout = try reader.child("layout") {
             try layout.checkKeys(["direction", "spacing", "padding", "align", "crossAlign"])
@@ -179,6 +195,21 @@ public enum DesignJSON {
         if let interaction = try reader.child("interaction") {
             node.interaction = try self.interaction(interaction)
         }
+        node.scroll = try reader.choice("scroll", default: .none)
+        node.fixedOnScroll = try reader.bool("fixedOnScroll", default: false)
+        if let states = try reader.child("states") {
+            try states.checkKeys(["hover", "pressed"])
+            func style(_ key: String) throws -> LayerStyle? {
+                guard let style = try states.child(key) else { return nil }
+                try style.checkKeys(["fill", "opacity"])
+                return LayerStyle(fill: try style.color("fill"), opacity: style.value("opacity") == nil ? nil : try style.number("opacity", min: 0, max: 1))
+            }
+            let value = LayerStates(hover: try style("hover"), pressed: try style("pressed"))
+            node.states = value == LayerStates() ? nil : value
+        }
+        if let animation = try reader.child("animation") {
+            node.animation = try self.animation(animation)
+        }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
@@ -186,27 +217,87 @@ public enum DesignJSON {
         return node
     }
 
+    static let actions = ["navigate", "back", "open-overlay", "close-overlay", "toggle-visibility"]
+
     static func interaction(_ reader: Reader) throws -> DesignInteraction {
         let action = try reader.string("action")
+        func destination() throws -> String {
+            let destination = try reader.string("destination")
+            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
+            return destination
+        }
         switch action {
         case "back":
             try reader.checkKeys(["action"])
             return .back
+        case "close-overlay":
+            try reader.checkKeys(["action"])
+            return .closeOverlay
         case "navigate":
             try reader.checkKeys(["action", "destination", "transition"])
-            let destination = try reader.string("destination")
-            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
-            var transition = PrototypeTransition()
-            if let value = try reader.child("transition") {
-                try value.checkKeys(["type", "duration", "easing"])
-                transition = PrototypeTransition(type: try value.choice("type", default: .none),
-                                                 duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
-                                                 easing: try value.choice("easing", default: .easeOut))
+            return .navigate(destination: try destination(), transition: try transition(reader))
+        case "open-overlay":
+            try reader.checkKeys(["action", "destination", "position", "background", "closeOnOutsideClick", "transition"])
+            let overlay = OverlaySettings(position: try reader.choice("position", default: .center), background: try reader.color("background"),
+                                          closeOnOutsideClick: try reader.bool("closeOnOutsideClick", default: true))
+            return .openOverlay(destination: try destination(), overlay: overlay, transition: try transition(reader))
+        case "toggle-visibility":
+            try reader.checkKeys(["action", "targets"])
+            guard let list = reader.value("targets") else { throw reader.fail("missing \(reader.name("targets"))") }
+            guard let targets = list as? [String], !targets.isEmpty, !targets.contains("") else {
+                throw reader.fail("\(reader.name("targets")) must be a non-empty array of layer ids")
             }
-            return .navigate(destination: destination, transition: transition)
+            return .toggleVisibility(targets: targets)
         default:
-            throw reader.fail("\(reader.name("action")) must be one of navigate, back; got \(action)")
+            throw reader.fail("\(reader.name("action")) must be one of \(actions.joined(separator: ", ")); got \(action)")
         }
+    }
+
+    static func transition(_ reader: Reader) throws -> PrototypeTransition {
+        guard let value = try reader.child("transition") else { return PrototypeTransition() }
+        try value.checkKeys(["type", "duration", "easing"])
+        return PrototypeTransition(type: try value.choice("type", default: .none),
+                                   duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
+                                   easing: try value.choice("easing", default: .easeOut))
+    }
+
+    static func animation(_ reader: Reader) throws -> LayerAnimation {
+        let type: AnimationType = try reader.choice("type", default: .fadeIn)
+        guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
+        var keys: Set<String> = ["type", "duration", "delay", "easing", "repeat"]
+        if type == .slideIn { keys.formUnion(["from", "distance"]) }
+        if type == .pulse { keys.insert("property") }
+        try reader.checkKeys(keys)
+        var animation = LayerAnimation(type: type)
+        animation.from = try reader.choice("from", default: animation.from)
+        animation.distance = try reader.number("distance", default: animation.distance, min: 0, max: LayerAnimation.maximumDistance)
+        animation.property = try reader.choice("property", default: animation.property)
+        animation.duration = try reader.number("duration", default: animation.duration, max: LayerAnimation.maximumDuration)
+        guard animation.duration > 0 else { throw reader.fail("\(reader.name("duration")) must be greater than 0") }
+        animation.delay = try reader.number("delay", default: 0, min: 0, max: LayerAnimation.maximumDelay)
+        animation.easing = try reader.choice("easing", default: animation.easing)
+        if let count = reader.value("repeat") {
+            if count as? String == "infinite" {
+                animation.repeatCount = nil
+            } else if let number = count as? NSNumber, !isBool(number), number.doubleValue == number.doubleValue.rounded(),
+                      (1...Double(LayerAnimation.maximumRepeat)).contains(number.doubleValue) {
+                animation.repeatCount = number.intValue
+            } else {
+                throw reader.fail("\(reader.name("repeat")) must be an integer from 1 to \(LayerAnimation.maximumRepeat) or \"infinite\"")
+            }
+        }
+        return animation
+    }
+
+    static func sequence(_ reader: Reader) throws -> TextSequence {
+        try reader.checkKeys(["items", "interval", "loop"])
+        guard let raw = reader.value("items") else { throw reader.fail("missing \(reader.name("items"))") }
+        guard let items = raw as? [Any], let strings = items as? [String], (1...TextSequence.maximumItems).contains(strings.count) else {
+            throw reader.fail("\(reader.name("items")) must hold 1 to \(TextSequence.maximumItems) strings")
+        }
+        return TextSequence(items: strings,
+                            interval: try reader.number("interval", default: 1, min: TextSequence.minimumInterval, max: TextSequence.maximumInterval),
+                            loop: try reader.bool("loop", default: false))
     }
 
     static func isImage(_ data: Data) -> Bool {
@@ -252,24 +343,56 @@ public enum DesignJSON {
                                         "color": text.color.hex, "align": text.align.rawValue, "autoResize": text.autoResize.rawValue]
             if let family = text.fontFamily { value["fontFamily"] = family }
             if let lineHeight = text.lineHeight { value["lineHeight"] = lineHeight }
+            if let sequence = text.sequence { value["sequence"] = ["items": sequence.items, "interval": sequence.interval, "loop": sequence.loop] }
             object["text"] = value
         }
         if let image = node.image {
             object["image"] = ["data": includeImageData ? image.data.base64EncodedString() : "<\(image.data.count) bytes>",
                                "fit": image.fit.rawValue]
         }
+        if let icon = node.icon { object["icon"] = ["name": icon.name, "color": icon.color.hex] }
         if let layout = node.layout {
             object["layout"] = ["direction": layout.direction.rawValue, "spacing": layout.spacing,
                                 "padding": ["top": layout.padding.top, "right": layout.padding.right,
                                             "bottom": layout.padding.bottom, "left": layout.padding.left],
                                 "align": layout.align.rawValue, "crossAlign": layout.crossAlign.rawValue]
         }
+        func transition(_ value: PrototypeTransition) -> [String: Any] {
+            ["type": value.type.rawValue, "duration": value.duration, "easing": value.easing.rawValue]
+        }
         switch node.interaction {
-        case .navigate(let destination, let transition):
-            object["interaction"] = ["action": "navigate", "destination": destination,
-                                     "transition": ["type": transition.type.rawValue, "duration": transition.duration, "easing": transition.easing.rawValue]]
+        case .navigate(let destination, let value):
+            object["interaction"] = ["action": "navigate", "destination": destination, "transition": transition(value)]
         case .back: object["interaction"] = ["action": "back"]
+        case .openOverlay(let destination, let overlay, let value):
+            var interaction: [String: Any] = ["action": "open-overlay", "destination": destination, "position": overlay.position.rawValue,
+                                              "closeOnOutsideClick": overlay.closeOnOutsideClick, "transition": transition(value)]
+            if let background = overlay.background { interaction["background"] = background.hex }
+            object["interaction"] = interaction
+        case .closeOverlay: object["interaction"] = ["action": "close-overlay"]
+        case .toggleVisibility(let targets): object["interaction"] = ["action": "toggle-visibility", "targets": targets]
         case nil: break
+        }
+        if node.scroll != .none { object["scroll"] = node.scroll.rawValue }
+        if node.fixedOnScroll { object["fixedOnScroll"] = true }
+        if let states = node.states {
+            func style(_ value: LayerStyle) -> [String: Any] {
+                var style: [String: Any] = [:]
+                if let fill = value.fill { style["fill"] = fill.hex }
+                if let opacity = value.opacity { style["opacity"] = opacity }
+                return style
+            }
+            var value: [String: Any] = [:]
+            if let hover = states.hover { value["hover"] = style(hover) }
+            if let pressed = states.pressed { value["pressed"] = style(pressed) }
+            object["states"] = value
+        }
+        if let animation = node.animation {
+            var value: [String: Any] = ["type": animation.type.rawValue, "duration": animation.duration, "delay": animation.delay,
+                                        "easing": animation.easing.rawValue, "repeat": animation.repeatCount.map { $0 as Any } ?? "infinite"]
+            if animation.type == .slideIn { value["from"] = animation.from.rawValue; value["distance"] = animation.distance }
+            if animation.type == .pulse { value["property"] = animation.property.rawValue }
+            object["animation"] = value
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

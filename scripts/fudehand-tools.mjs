@@ -2,10 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { sendControl } from './control-client.mjs'
+import { styleTools } from './style-library.mjs'
 
 /**
  * The only tool implementation, shared by the MCP server and the in-App Agent harness. Every tool is forwarded through the local control channel to the running App;
  * the App is the sole owner of the design document, and field validation happens in one place only, the App (Swift).
+ * The style library tools are the exception: they read reference files and never touch the document (ADR 0008).
  */
 
 const json = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] })
@@ -36,13 +38,22 @@ async function inlineImages(value, root) {
 
 const NODE_GUIDE = [
   'Layer fields (coordinates are relative to the parent layer, in pt): ',
-  'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/group), name, x, y, width, height, ',
+  'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/icon/group), name, x, y, width, height, ',
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent; a group ignores fill and stretch and keeps the size of its children), ',
   'text {content, fontSize, fontWeight integer 100–900, fontFamily (a family from design_list_fonts; any other falls back to the system font), color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
   'image {path to a PNG, JPEG, or SVG file (~ expands to the home directory) or data (base64 of one), fit fill/fit/stretch} (required for image; an SVG stays vector and is drawn sharp at any zoom), ',
+  'icon {name "<library>/<name>" as returned by design_search_icons, color (default #000000)} (required for icon; a single-color vector icon drawn to fit width and height, default 24×24; an unknown name is an error that lists similar names). Use real icons rather than shapes or words standing in for them. ',
   'layout {direction vertical/horizontal, spacing, padding {top,right,bottom,left}, align start/center/end/space-between, crossAlign start/center/end/stretch} (auto layout for a frame), ',
-  'interaction (prototype click interaction, any layer): {action: "navigate", destination: <top-level frame id>, transition {type none/dissolve/push-left/push-right/push-up/push-down/sheet, duration seconds 0–10 (default 0.3), easing linear/ease-in/ease-out/ease-in-out (default ease-out)}} or {action: "back"}, which returns to the previous frame playing its transition in reverse; a push names the direction the content travels (push-left brings the destination in from the right), and sheet slides it up from the bottom. ',
+  'interaction (prototype click interaction, any layer; transition is {type none/dissolve/push-left/push-right/push-up/push-down/sheet, duration seconds 0–10 (default 0.3), easing linear/ease-in/ease-out/ease-in-out (default ease-out)}): ',
+  '{action: "navigate", destination: <top-level frame id>, transition}; {action: "back"}, which returns to the previous frame playing its transition in reverse (or closes the topmost overlay when one is open); ',
+  '{action: "open-overlay", destination: <top-level frame id>, position center/bottom/below-trigger (default center; below-trigger puts it under the clicked layer), background (#RRGGBBAA scrim drawn over the frame below; omit for none), closeOnOutsideClick (default true), transition}, which shows that frame over the current one, where only it takes input; ',
+  '{action: "close-overlay"}, which closes the topmost overlay; {action: "toggle-visibility", targets: [layer ids]}, which shows the hidden and hides the shown among those layers for this playback only (tabs, switches, checkboxes, expand/collapse). ',
+  'A push names the direction the content travels (push-left brings the destination in from the right), and sheet slides it up from the bottom. Navigating from an overlay closes it first. ',
+  'scroll (frame): none/vertical/horizontal; in playback the frame\'s overflowing content scrolls with the wheel or trackpad. fixedOnScroll (true on a direct child of a scrolling frame): the layer stays in place above the scrolled content, e.g. a navigation bar or tab bar. ',
+  'states {hover {fill, opacity}, pressed {fill, opacity}}: how the layer looks in playback while the pointer is over it and while it is pressed (pressed applies on top of hover); omitted fields keep the layer\'s own. ',
+  'animation (prototype animation, any layer; plays when the layer\'s frame appears in the prototype window, never on the canvas or in snapshots): {type fade-in/slide-in/scale-in (entrances) or spin/pulse/shimmer (loops), duration seconds >0–60 (one cycle for a loop; default 0.3 for entrances, 1 for spin and pulse, 1.5 for shimmer), delay seconds 0–60 (default 0), easing linear/ease-in/ease-out/ease-in-out (default ease-out for entrances, ease-in-out for pulse, linear otherwise), repeat integer 1–1000 or "infinite" (default 1 for entrances, "infinite" for loops); slide-in only: from left/right/top/bottom (default bottom) and distance pt (default 40); pulse only: property scale/opacity (default scale)}. slide-in and scale-in also fade in; spin turns clockwise about the center; shimmer sweeps a see-through band across the layer (skeleton loading). ',
+  'text.sequence (text sequence, text layers): {items: array of 1–1000 strings shown in turn during playback, interval seconds 0.05–3600 (default 1), loop true/false (default false: stays on the last item)}, e.g. a countdown; text.content is what the canvas and snapshots show. ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
 
@@ -76,7 +87,7 @@ export const tools = [
     }, ['node'],
     async (args, root) => ({ ...args, node: await inlineImages(args.node, root) })),
   controlTool('design_update_node', 'update_node',
-    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, interaction is replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction to make a layer clickable in prototype playback (see design_create_node for its fields).',
+    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding) are merged field by field, interaction, animation, states, and text.sequence are replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction, states, scroll, or fixedOnScroll to make a layer interactive in prototype playback, and animation or text.sequence to make it move (see design_create_node for their fields).',
     { ...id, changes: { type: 'object', description: 'Fields to change' } }, ['id', 'changes'],
     async (args, root) => ({ ...args, changes: await inlineImages(args.changes, root) })),
   controlTool('design_delete_nodes', 'delete_nodes', 'Delete layers and their child layers, as a single undo step.', ids),
@@ -97,6 +108,15 @@ export const tools = [
   controlTool('design_import_font', 'import_font', 'Import a font file (.ttf, .otf, or .ttc) into the Fudehand font library, which makes it available to Fudehand only, and return its font families.',
     path('Font file path; ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), ['path'],
     async (args, root) => ({ ...args, path: absolute(args.path, root) })),
+  controlTool('design_search_icons', 'search_icons',
+    'Search the built-in icon libraries by keywords (matched against icon names and, for Lucide and SF Symbols, their tags; case, word order, and the separators space - _ . do not matter) and return icon names for an icon layer. ' +
+    'Pick the library by the prototype\'s target platform: sf (SF Symbols) for iOS and macOS, one material-outlined/material-rounded/material-sharp style for Android, weui for a WeChat mini program, lucide for the web; keep one library and style per screen. ' +
+    'Material fill variants end in .fill (material-rounded/home.fill). SF Symbols are licensed by Apple for mockups of apps on Apple platforms only.',
+    {
+      query: { type: 'string', description: 'Keyword, e.g. home, search, arrow' },
+      library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
+      limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
+    }, ['query']),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',
@@ -109,6 +129,7 @@ export const tools = [
       ] }
     },
   },
+  ...styleTools,
 ]
 
 /** Calls a tool; any error becomes an error result carrying its message instead of being thrown. */

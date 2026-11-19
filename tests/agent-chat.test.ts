@@ -182,6 +182,8 @@ describe('Design guidance', () => {
     expect(designGuidance).toMatch(/Lorem ipsum/)
     expect(designGuidance).toMatch(/At most two font families/)
     expect(designGuidance).toMatch(/user's own words take precedence/)
+    // Real icons instead of stand-ins, from the library of the prototype's platform.
+    for (const word of ['design_search_icons', 'sf', 'material-', 'weui', 'lucide']) expect(designGuidance).toContain(word)
     expect(designGuidance).not.toMatch(/\bCSS\b|\bHTML\b|oklch|text-wrap|semantic|selector|animation|motion|transition|hover|keyboard|focus ring|focus state|disabled|shadow|interaction state|responsive|breakpoint/i)
     // The Chinese range is deliberate: the guidance is written in English only.
     expect(designGuidance).not.toMatch(/[一-鿿]/)
@@ -192,7 +194,7 @@ describe('Design guidance', () => {
     // MCP clients such as Claude Code cut a server's instructions off at about 2,048 characters: what comes before the
     // design principles must survive that cut whole.
     expect(designGuidance.indexOf('## Design principles')).toBeGreaterThan(0)
-    const core = designGuidance.slice(0, designGuidance.indexOf('## Design principles'))
+    const core = designGuidance.slice(0, designGuidance.indexOf('## Design principles')).trimEnd()
     expect(core).toMatch(/5\. Critique\./)
     expect(core).toMatch(/Generic looks to avoid/)
     expect(core.length).toBeLessThan(2000)
@@ -227,7 +229,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(model.requests[0].url).toBe('/chat/completions')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
     expect(model.requests[0].body.model).toBe('deepseek-chat')
-    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toContain('design_create_node')
+    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toEqual(expect.arrayContaining(['design_create_node', 'style_list', 'style_read']))
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
     expect(third[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })
@@ -408,10 +410,12 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
     const from = chat.events.length
     chat.send({ type: 'user', text: 'Look at the document' })
-    await new Promise(resolve => setTimeout(resolve, 150))
+    // Stop only once the request is with the model, which is still holding its tool call; a stop before then sends no request at all.
+    while (!model.requests.length) await new Promise(resolve => setTimeout(resolve, 10))
     chat.send({ type: 'stop' })
     await chat.until(event => event.type === 'done', from)
     await chat.ask('Continue')
+    expect(model.requests).toHaveLength(2)
     expect(model.requests.at(-1)!.body.messages.map((message: any) => message.role)).toEqual(['system', 'user', 'user'])
   })
 
@@ -1132,5 +1136,164 @@ describe('Agent harness: asking the user a question', () => {
     await new Promise(resolve => setTimeout(resolve, 100))
     expect(chat.events.filter(event => event.type === 'error')).toEqual([])
     expect(model.requests).toHaveLength(1)
+  })
+})
+
+describe('Agent harness: plan and goal modes', () => {
+  const deepseek = (baseUrl: string, socketPath: string) =>
+    startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: socketPath })
+  const toolNames = (request: Captured) => request.body.tools.map((tool: any) => tool.function.name)
+
+  it('offers only reading tools in plan mode and refuses an edit the model asks for anyway', async () => {
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const model = await fakeModel([
+      openaiTool('call_1', 'design_get_state', {}),
+      openaiTool('call_2', 'design_delete_nodes', { ids: ['home'] }),
+      openaiText('1. Delete the Demo page frame.'),
+      openaiText('Deleted.'),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Remove the demo page', { mode: 'plan' })
+    expect(toolNames(model.requests[0])).toEqual(['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_snapshot', 'ask_user'])
+    expect(model.requests[0].body.messages[0].content).toMatch(/Plan mode is on/)
+    expect(app.received.map(request => request.command)).toEqual(['get_state'])
+    expect(events.find(event => event.type === 'tool_result' && event.name === 'design_delete_nodes'))
+      .toMatchObject({ ok: false, text: 'Plan mode: the design document cannot be changed until the user confirms the plan.' })
+    expect(events.at(-2)).toEqual({ type: 'assistant', text: '1. Delete the Demo page frame.' })
+    // What comes next is confirming the plan, so no next message is predicted.
+    await pause(300)
+    expect(model.predictions).toEqual([])
+
+    // Confirming is an ordinary message: every tool is back and the plan is in the history.
+    await chat.ask('Carry out the plan.')
+    expect(toolNames(model.requests[3])).toContain('design_delete_nodes')
+    expect(model.requests[3].body.messages[0].content).not.toMatch(/Plan mode is on/)
+    expect(model.requests[3].body.messages.at(-2).content).toBe('1. Delete the Demo page frame.')
+  })
+
+  it('keeps plan mode when an answer reaches a harness that was started anew', async () => {
+    const app = await startApp()
+    const model = await fakeModel([openaiText('1. Use three entries.')])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    chat.send({ type: 'answer', id: 'call_before_restart', question: 'How many entries?', text: '3 entries', mode: 'plan' })
+    await chat.until(event => event.type === 'done')
+    expect(toolNames(model.requests[0])).not.toContain('design_create_node')
+    expect(model.requests[0].body.messages[0].content).toMatch(/Plan mode is on/)
+  })
+
+  it('keeps working in goal mode until the model reports the goal done', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      openaiTool('call_1', 'design_get_state', {}),
+      openaiText('I looked at the document.'),
+      openaiTool('call_2', 'goal_done', { summary: 'The page is ready.' }),
+      openaiText('Hello.'),
+    ], [openaiText('Add a footer')])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Get the page ready', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'assistant', 'done'])
+    expect(events.at(-2)).toEqual({ type: 'assistant', text: 'The page is ready.' })
+    expect(events.at(-1)).toMatchObject({ stopped: false })
+    expect(model.requests).toHaveLength(3)
+    expect(toolNames(model.requests[0])).toContain('goal_done')
+    expect(model.requests[0].body.messages[0].content).toMatch(/Goal mode is on/)
+    // A reply without tool calls did not end the goal: the model was told to go on.
+    expect(model.requests[2].body.messages.at(-1)).toMatchObject({ role: 'user', content: expect.stringMatching(/not been marked as done/) })
+    expect(app.received.map(request => request.command)).toEqual(['get_state'])
+
+    // The prediction that follows reads the summary as the reply, and not the reminder as something the user said.
+    await chat.until(event => event.type === 'suggestion')
+    expect(model.predictions[0].body.messages[1].content).toMatch(/Assistant: The page is ready\.$/)
+    expect(model.predictions[0].body.messages[1].content).not.toMatch(/marked as done/)
+
+    // Afterwards goal_done is gone, and so is the reminder's request to call it.
+    await chat.ask('Hi')
+    expect(toolNames(model.requests[3])).not.toContain('goal_done')
+    const later = model.requests[3].body.messages
+    expect(later.some((message: any) => /goal_done/.test(String(message.content)))).toBe(false)
+    expect(later.at(-2)).toMatchObject({ role: 'assistant', content: 'The page is ready.' })
+  })
+
+  it('keeps a goal going through progress notes without tool calls', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      openaiText('Next I will add the header.'),
+      openaiText('Now the footer.'),
+      openaiTool('call_1', 'design_get_state', {}),
+      openaiTool('call_2', 'goal_done', { summary: 'Done.' }),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Build the page', { mode: 'goal' })
+    expect(events.at(-2)).toEqual({ type: 'assistant', text: 'Done.' })
+    expect(model.requests).toHaveLength(4)
+    expect(model.requests[0].body.messages[0].content).toMatch(/progress note/)
+  })
+
+  it('ends a goal the model stops working on without reporting it done', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      openaiText('What colour should it be?'), openaiText('I need the colour.'), openaiText('Still need it.'), openaiText('Cannot go on.'),
+      openaiText('Unused'),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Make it nicer', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['assistant', 'assistant', 'assistant', 'assistant', 'done'])
+    expect(model.requests).toHaveLength(4)
+  })
+
+  it('lets a goal run past the tool-call rounds of an ordinary reply', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      ...Array.from({ length: 20 }, (_, index) => openaiTool(`call_${index}`, 'design_get_state', {})),
+      openaiTool('call_done', 'goal_done', { summary: 'Checked.' }),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Keep checking', { mode: 'goal' })
+    expect(events.some(event => event.type === 'error')).toBe(false)
+    expect(events.at(-2)).toEqual({ type: 'assistant', text: 'Checked.' })
+    expect(app.received).toHaveLength(20)
+  })
+
+  it('runs no tool the model called after reporting the goal done', async () => {
+    const app = await startApp(() => ({ ok: true, result: { deleted: ['home'] } }))
+    const calls = [['call_1', 'design_get_state', {}], ['call_2', 'goal_done', { summary: 'Checked.' }], ['call_3', 'design_delete_nodes', { ids: ['home'] }]]
+      .map(([id, name, args]) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }))
+    const model = await fakeModel([{ body: { choices: [{ message: { role: 'assistant', content: null, tool_calls: calls } }] } }, openaiText('Hello.')])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Check the page', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['tool_call', 'tool_result', 'assistant', 'done'])
+    expect(app.received.map(request => request.command)).toEqual(['get_state'])
+    // The skipped call still has a result in the history, as the APIs require.
+    await chat.ask('Hi')
+    expect(model.requests[1].body.messages.find((message: any) => message.tool_call_id === 'call_3').content).toMatch(/not executed/)
+  })
+
+  it('asks for the summary when the model reports a goal done without one', async () => {
+    const app = await startApp()
+    const model = await fakeModel([openaiTool('call_1', 'goal_done', { summary: '  ' }), openaiTool('call_2', 'goal_done', { summary: 'The page is ready.' })])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const events = await chat.ask('Get the page ready', { mode: 'goal' })
+    expect(events.map(event => event.type)).toEqual(['assistant', 'done'])
+    expect(events[0].text).toBe('The page is ready.')
+    expect(model.requests[1].body.messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_1', content: expect.stringMatching(/summary/) })
+  })
+
+  it('runs nothing further once a goal is stopped', async () => {
+    const app = await startApp()
+    const model = await fakeModel([
+      openaiTool('call_1', 'design_get_state', {}),
+      { ...openaiTool('call_2', 'design_get_state', {}), delayMs: 800 },
+      openaiTool('call_3', 'design_get_state', {}),
+    ])
+    const chat = await deepseek(model.baseUrl, app.socketPath)
+    const from = chat.events.length
+    chat.send({ type: 'user', text: 'Keep checking', mode: 'goal' })
+    await chat.until(event => event.type === 'tool_result', from)
+    chat.send({ type: 'stop' })
+    const done = await chat.until(event => event.type === 'done', from)
+    expect(done.stopped).toBe(true)
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    expect(app.received).toHaveLength(1)
+    expect(model.requests).toHaveLength(2)
   })
 })

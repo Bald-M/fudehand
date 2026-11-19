@@ -11,14 +11,17 @@ public struct ChatConversation: Codable, Equatable, Identifiable, Sendable {
     /// The API key and the base URL are never saved here.
     public let provider: String?
     public let model: String?
+    /// The mode of the reply waiting on a question, so the answer continues it in that mode after a relaunch; nil otherwise.
+    public let replyMode: ChatMode?
 
-    public init(id: UUID, transcript: ChatTranscript, updatedAt: Date, provider: String? = nil, model: String? = nil) {
+    public init(id: UUID, transcript: ChatTranscript, updatedAt: Date, provider: String? = nil, model: String? = nil, replyMode: ChatMode? = nil) {
         self.id = id
         title = transcript.title
         self.updatedAt = updatedAt
         entries = transcript.entries
         self.provider = provider
         self.model = model
+        self.replyMode = replyMode
     }
 }
 

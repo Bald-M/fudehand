@@ -16,11 +16,15 @@
     "version:set": "node scripts/version.mjs set",
     "version:check": "node scripts/version.mjs check",
     "test": "vitest run",
-    "check": "pnpm test"
+    "check": "pnpm test",
+    "build:icons": "node scripts/build-icons.mjs"
   },
   "devDependencies": {
+    "@material-symbols/svg-400": "0.49.0",
     "@types/node": "^22.0.0",
-    "vitest": "^5.1.0"
+    "lucide-static": "1.70.0",
+    "vitest": "^5.1.0",
+    "weui": "2.6.26"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2"

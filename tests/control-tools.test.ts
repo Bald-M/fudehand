@@ -26,7 +26,8 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
   })
@@ -35,7 +36,7 @@ describe('design tools', () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['interaction', 'navigate', 'back', 'destination', 'push-left', 'sheet', 'ease-in-out'])
       expect(byName('design_create_node').description).toContain(field)
-    expect(byName('design_update_node').description).toContain('interaction is replaced whole')
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
     const fake = await app(echo)
     const interaction = { action: 'navigate', destination: 'detail', transition: { type: 'push-left', duration: 0.3 } }
     await callTool('design_update_node', { id: 'a', changes: { interaction } }, { root: '/repo', socketPath: fake.socketPath })
@@ -43,6 +44,59 @@ describe('design tools', () => {
       { command: 'update_node', args: { id: 'a', changes: { interaction } } },
     ])
     await fake.close()
+  })
+
+  it('describes in-screen interactions and forwards them to the App unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['open-overlay', 'close-overlay', 'toggle-visibility', 'targets', 'below-trigger', 'closeOnOutsideClick',
+      'background', 'scroll', 'vertical', 'horizontal', 'fixedOnScroll', 'states', 'hover', 'pressed'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
+    const fake = await app(echo)
+    const changes = {
+      scroll: 'vertical',
+      states: { hover: { fill: '#EEEEEE' }, pressed: { opacity: 0.6 } },
+      interaction: { action: 'open-overlay', destination: 'menu', position: 'below-trigger', background: '#00000066', closeOnOutsideClick: false },
+    }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    await callTool('design_update_node', { id: 'b', changes: { fixedOnScroll: true, interaction: { action: 'toggle-visibility', targets: ['x', 'y'] } } },
+      { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'update_node', args: { id: 'a', changes } },
+      { command: 'update_node', args: { id: 'b', changes: { fixedOnScroll: true, interaction: { action: 'toggle-visibility', targets: ['x', 'y'] } } } },
+    ])
+    await fake.close()
+  })
+
+  it('describes animations and text sequences and forwards them unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['animation', 'fade-in', 'slide-in', 'scale-in', 'spin', 'pulse', 'shimmer', 'delay', 'repeat', '"infinite"', 'text.sequence', 'interval', 'loop'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
+    const fake = await app(echo)
+    const changes = { animation: { type: 'pulse', property: 'opacity', repeat: 'infinite' }, text: { sequence: { items: ['3', '2', '1'] } } }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
+    await fake.close()
+  })
+
+  it('describes icon layers and searches icons through the App', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string, inputSchema: any }[]).find(tool => tool.name === name)!
+    for (const field of ['icon', 'design_search_icons', '24×24'])
+      expect(byName('design_create_node').description).toContain(field)
+    const search = byName('design_search_icons')
+    for (const field of ['sf', 'material-rounded', 'weui', 'lucide', 'Android', 'mini program'])
+      expect(search.description).toContain(field)
+    expect(search.inputSchema.required).toEqual(['query'])
+    expect(search.inputSchema.properties.library.enum).toEqual(['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'])
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_search_icons', { query: 'home' }, ctx)
+    await callTool('design_search_icons', { query: 'home', library: 'lucide', limit: 5 }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'search_icons', args: { query: 'home' } },
+      { command: 'search_icons', args: { query: 'home', library: 'lucide', limit: 5 } },
+    ])
   })
 
   it('forwards the command and the defined arguments to the App', async () => {

@@ -220,7 +220,7 @@ private struct ConnectorRow: View {
     var body: some View {
         let _ = locale // Re-render when the UI language changes.
         HStack(alignment: .top, spacing: 12) {
-            Circle().fill(color).frame(width: 8, height: 8).padding(.top, 6)
+            icon
             VStack(alignment: .leading, spacing: 3) {
                 Text(connector.title).font(.headline)
                 Text(statusText).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -237,6 +237,23 @@ private struct ConnectorRow: View {
             }
         }
         .padding(12)
+    }
+
+    /// The Agent's icon with the status dot as a badge on its corner; dimmed and desaturated when the CLI is not installed. The name
+    /// beside it says the same, so VoiceOver skips it.
+    private var icon: some View {
+        Group {
+            if let image = ConnectorIcon.image(for: connector) { Image(nsImage: image).resizable().interpolation(.high) } else { Color.clear }
+        }
+        .frame(width: 28, height: 28)
+        .saturation(entry.status == .unavailable ? 0 : 1)
+        .opacity(entry.status == .unavailable ? 0.4 : 1)
+        .overlay(alignment: .bottomTrailing) {
+            Circle().fill(color).frame(width: 9, height: 9)
+                .overlay(Circle().strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5).padding(-1.5))
+                .offset(x: 3, y: 3)
+        }
+        .accessibilityHidden(true)
     }
 
     private var statusText: String {

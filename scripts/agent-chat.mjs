@@ -8,9 +8,9 @@ import { designGuidance } from './design-guidance.mjs'
 
 /**
  * The Agent harness of the in-App chat panel. Started on demand by Fudehand, exchanging JSON lines over stdin/stdout:
- *   Input:  {type:'user',text,context?:[{id,name,type}]} | {type:'stop'} | {type:'compact'}
+ *   Input:  {type:'user',text,context?:[{id,name,type}],mode?:'plan'|'goal'} | {type:'stop'} | {type:'compact'}
  *        | {type:'load',messages:[{role:'user'|'assistant'|'summary',text}]}
- *        | {type:'answer',id,question,text} | {type:'answer',id,question,skipped:true}
+ *        | {type:'answer',id,question,text,mode?} | {type:'answer',id,question,skipped:true,mode?}
  *   Output: {type:'assistant_delta',text} | {type:'assistant',text} | {type:'tool_call',id,name,args}
  *        | {type:'tool_result',id,name,ok,text} | {type:'question',id,question,detail?,options:[{label,description?}]}
  *        | {type:'compacted',summary} | {type:'error',message}
@@ -28,6 +28,9 @@ import { designGuidance } from './design-guidance.mjs'
  * `suggestion` is the predicted next user message. It may follow the `done` of a reply that ended normally, comes from a separate
  * model request that is kept out of the history and of `usage`, and is simply not sent when that request fails.
  * `context` lists the layers selected when the message was sent. `load` replaces the conversation history, for a new or reopened conversation.
+ * `mode` applies to that one message. In plan mode the model gets only the tools that read the design document and replies with a plan;
+ * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, over more rounds than an
+ * ordinary reply gets, until it calls goal_done, whose summary is sent as the reply's last assistant text.
  * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default,windows} or {type:'error',message}, then exits.
  */
@@ -36,6 +39,23 @@ const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models
 const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
 const apiKey = process.env.FUDEHAND_API_KEY ?? ''
 const maximumRounds = 16
+const maximumGoalRounds = 64
+/** Goal mode: how many rounds in a row without tool calls get a reminder to go on; the next one ends the goal as it stands. */
+const maximumGoalReminders = 3
+
+/** The tools plan mode offers: the ones that only read the design document. A tool not listed here cannot run before the plan is confirmed. */
+const readingTools = ['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_snapshot']
+
+const planNote = 'Plan mode is on. Do not change the design document: only the tools that read it are available. Read what you need, then reply with a short numbered plan of the steps you would take, and ask the user to confirm it. You carry the plan out only after the user confirms.'
+const planRefusal = 'Plan mode: the design document cannot be changed until the user confirms the plan.'
+
+const goalNote = 'Goal mode is on. The user\'s message is a goal. Keep working with the tools until it is achieved, checking the result as you go, without asking the user to confirm each step. Do not end a round with only a progress note: each round should call a tool until the goal is done. When the goal is achieved, or you are certain it cannot be, call goal_done with a summary of the result for the user.'
+const goalReminder = 'Goal mode: the goal has not been marked as done. Continue working on it, or call goal_done with a summary if it is achieved or cannot be.'
+const goalDone = {
+  name: 'goal_done',
+  description: 'End goal mode: call this once the goal is achieved, or when it cannot be. The summary is shown to the user as the result.',
+  inputSchema: { type: 'object', properties: { summary: { type: 'string', description: 'What was done and the result, in the user\'s language' } }, required: ['summary'] },
+}
 
 let provider = null
 let providerError = null
@@ -148,7 +168,7 @@ const predictionSystem = [
  */
 async function predict(log) {
   const controller = predicting = new AbortController()
-  const texts = log.filter(entry => (entry.role === 'user' || entry.role === 'assistant') && entry.text).slice(-8)
+  const texts = log.filter(entry => (entry.role === 'user' || entry.role === 'assistant') && entry.text && !entry.internal).slice(-8)
     .map(entry => `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.text.slice(0, 1500)}`)
   try {
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])
@@ -182,8 +202,18 @@ function withContext(text, context) {
   return layers.length ? `The user has these layers selected: ${layers.join(', ')}\n\n${text}` : text
 }
 
-async function reply(text, controller) {
+async function reply(text, controller, mode) {
   const { signal } = controller
+  const plan = mode === 'plan'
+  const goal = mode === 'goal'
+  // A question changes nothing in the design document, so the model may ask one in every mode.
+  const offered = [...(plan ? tools.filter(tool => readingTools.includes(tool.name)) : goal ? [...tools, goalDone] : tools), askTool]
+  const prompt = plan ? `${system}\n\n${planNote}` : goal ? `${system}\n\n${goalNote}` : system
+  // Goal mode: how many rounds in a row without tool calls the model was told to go on after, and whether it reported the goal done.
+  let reminded = 0
+  let finished = false
+  let summary = ''
+  const reminders = []
   // Loading a conversation replaces history; this turn's reply always goes into the history it started with.
   const log = history
   log.push({ role: 'user', text })
@@ -205,8 +235,8 @@ async function reply(text, controller) {
     if (providerError) throw new Error(providerError)
     if (!apiKey) throw new Error('No API key configured')
     for (let round = 0; ; round++) {
-      if (round === maximumRounds) throw new Error('Too many tool-call rounds; stopped this reply')
-      const answer = await provider.turn(system, log, [...tools, askTool], signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
+      if (round === (goal ? maximumGoalRounds : maximumRounds)) throw new Error('Too many tool-call rounds; stopped this reply')
+      const answer = await provider.turn(prompt, log, offered, signal, delta => { if (delta) { partial += delta; emit({ type: 'assistant_delta', text: delta }) } })
       count(answer)
       context = answer.usage && answer.usage.input + answer.usage.output
       if (signal.aborted) break
@@ -215,7 +245,15 @@ async function reply(text, controller) {
       log.push({ role: 'assistant', text: answer.text, toolCalls: answer.toolCalls, blocks: answer.blocks })
       partial = ''
       if (answer.text) emit({ type: 'assistant', text: answer.text })
-      if (!answer.toolCalls.length) break
+      if (!answer.toolCalls.length) {
+        // A goal ends with goal_done; a round without tool calls gets a reminder, and only too many in a row end the goal as it stands.
+        if (!goal || reminded === maximumGoalReminders) break
+        reminded++
+        reminders.push({ role: 'user', text: goalReminder, internal: true })
+        log.push(reminders.at(-1))
+        continue
+      }
+      reminded = 0
       let questioned = false
       for (const call of answer.toolCalls) {
         // After a stop, no further tool calls are executed; placeholder results are only filled in for the model to keep the history complete.
@@ -229,8 +267,20 @@ async function reply(text, controller) {
           log.push({ role: 'tool', id: call.id, name: call.name, text: given ? answerText(given) : 'The user stopped this reply; not executed.' })
           continue
         }
+        // The goal is over with goal_done: what the model called after it in the same round is not run.
+        if (finished) { log.push({ role: 'tool', id: call.id, name: call.name, text: 'The goal was already reported done; not executed.' }); continue }
+        if (goal && call.name === goalDone.name && !call.error) {
+          summary = typeof call.args?.summary === 'string' ? call.args.summary.trim() : ''
+          // Without a summary the user would see the goal end with no result, so the model is asked for one.
+          if (!summary) { log.push({ role: 'tool', id: call.id, name: call.name, isError: true, text: 'goal_done: a summary of the result is required' }); continue }
+          finished = true
+          log.push({ role: 'tool', id: call.id, name: call.name, text: 'Goal mode ended.' })
+          continue
+        }
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
-        const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] } : await callTool(call.name, call.args, ctx)
+        const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] }
+          : plan && !readingTools.includes(call.name) ? { isError: true, content: [{ type: 'text', text: planRefusal }] }
+          : await callTool(call.name, call.args, ctx)
         const output = toolText(result)
         const images = result.content.filter(item => item.type === 'image').map(item => ({ data: item.data, mimeType: item.mimeType }))
         log.push({
@@ -242,6 +292,11 @@ async function reply(text, controller) {
         })
         emit({ type: 'tool_result', id: call.id, name: call.name, ok: !result.isError, text: output.slice(0, 4000) })
       }
+      if (finished) {
+        // The summary is the reply's last text, in the history as well as in the panel.
+        if (!signal.aborted) { log.push({ role: 'assistant', text: summary, toolCalls: [] }); emit({ type: 'assistant', text: summary }) }
+        break
+      }
       if (signal.aborted) break
     }
   } catch (error) {
@@ -252,8 +307,11 @@ async function reply(text, controller) {
   } finally {
     if (signal.aborted && partial) log.push({ role: 'assistant', text: partial, toolCalls: [] })
     current = null
+    // goal_done is offered only to this reply, so the reminders must not ask later replies for it.
+    for (const reminder of reminders) reminder.text = 'Continue.'
     emit({ type: 'done', stopped: signal.aborted, ...(rounds && reported ? { usage } : {}), ...(context ? { context } : {}) })
-    if (!signal.aborted && !failed) void predict(log)
+    // The panel shows no prediction in plan mode, where the next step is to confirm or change the plan.
+    if (!signal.aborted && !failed && !plan) void predict(log)
   }
 }
 
@@ -304,12 +362,12 @@ input.on('line', line => {
   if (message.type === 'user' && typeof message.text === 'string') {
     if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
     current = new AbortController()
-    void reply(withContext(message.text, message.context), current)
+    void reply(withContext(message.text, message.context), current, message.mode)
   } else if (message.type === 'answer') {
     if (asking) { if (asking.id === message.id) asking.resolve(message) }
     else if (!current && !asked.has(message.id) && typeof message.question === 'string') {
       current = new AbortController()
-      void reply(`You asked the user: ${message.question}\n${answerText(message)}`, current)
+      void reply(`You asked the user: ${message.question}\n${answerText(message)}`, current, message.mode)
     }
   } else if (message.type === 'compact') {
     if (current) return emit({ type: 'error', message: 'The previous reply has not finished yet' })
