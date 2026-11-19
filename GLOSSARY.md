@@ -11,7 +11,13 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 
 **Project file (工程文件 / 專案檔)**: The file a design document is saved as, with the extension `.fudehand`; its content is public JSON with a format name (`fudehand.design`) and a format version.
 
-**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer. An image layer holds PNG, JPEG, or SVG data; SVG is kept as source and drawn sharp at any zoom.
+**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, icon, or group. Coordinates are relative to the parent layer. An image layer holds PNG, JPEG, or SVG data; SVG is kept as source and drawn sharp at any zoom.
+
+**Icon layer (图标图层 / 圖示圖層)**: A layer that shows one single-color icon from an icon library. It stores only the icon name and color; its size is the layer's width and height, and it is drawn sharp at any zoom. An icon the library does not have draws as a placeholder.
+
+**Icon library (图标库 / 圖示庫)**: A set of icons built into Fudehand, one per target platform: `sf` (SF Symbols, from the system), `material-outlined`, `material-rounded`, `material-sharp` (Material Symbols), `weui` (WeUI), and `lucide` (Lucide).
+
+**Icon name (图标名字 / 圖示名稱)**: How an icon layer names its icon: `<library>/<name>`, such as `sf/house.fill` or `material-rounded/home.fill`.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.

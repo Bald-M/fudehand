@@ -2,7 +2,8 @@ import Foundation
 
 /// The built-in icon libraries: which icon names exist, their artwork, search, and similar names for a mistyped one.
 ///
-/// Bundled libraries are read lazily from `Resources/Icons/<library>.json.zlib` (flattened into the resource bundle) (raw DEFLATE JSON written by
+/// Bundled libraries are read lazily from `<library>.json.zlib`: the App carries them in `Contents/Resources/Icons`
+/// (copied by `scripts/native-build.mjs`), and `swift test` reads them from the package's resource bundle (raw DEFLATE JSON written by
 /// `scripts/build-icons.mjs`). SF Symbols come from the system, which only the App can reach, so the App sets
 /// `symbolExists` and `symbolNames` at launch.
 public final class IconCatalog: @unchecked Sendable {
@@ -10,21 +11,14 @@ public final class IconCatalog: @unchecked Sendable {
 
     private struct Icon { let svg: String; let tags: [String] }
 
-    private let bundle: Bundle
     private let lock = NSLock()
     private var libraries: [IconLibrary: [String: Icon]] = [:]
     private var symbolNameCache: [String]?
     private var _symbolExists: @Sendable (String) -> Bool
     private var _symbolNames: @Sendable () -> [String]
 
-    public convenience init(symbolExists: @escaping @Sendable (String) -> Bool = { _ in false },
-                            symbolNames: @escaping @Sendable () -> [String] = { [] }) {
-        self.init(bundle: .module, symbolExists: symbolExists, symbolNames: symbolNames)
-    }
-
-    public init(bundle: Bundle, symbolExists: @escaping @Sendable (String) -> Bool = { _ in false },
+    public init(symbolExists: @escaping @Sendable (String) -> Bool = { _ in false },
                 symbolNames: @escaping @Sendable () -> [String] = { [] }) {
-        self.bundle = bundle
         _symbolExists = symbolExists
         _symbolNames = symbolNames
     }
@@ -109,7 +103,7 @@ public final class IconCatalog: @unchecked Sendable {
     }
 
     private func load(_ library: IconLibrary) -> [String: Icon] {
-        guard let url = bundle.url(forResource: library.rawValue, withExtension: "json.zlib"),
+        guard let url = Self.resource(library.rawValue),
               let compressed = try? Data(contentsOf: url),
               let json = try? (compressed as NSData).decompressed(using: .zlib) as Data,
               let object = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any],
@@ -117,6 +111,13 @@ public final class IconCatalog: @unchecked Sendable {
         return icons.compactMapValues { value in
             (value["svg"] as? String).map { Icon(svg: $0, tags: value["tags"] as? [String] ?? []) }
         }
+    }
+
+    static func resource(_ name: String) -> URL? {
+        if let url = Bundle.main.url(forResource: name, withExtension: "json.zlib", subdirectory: "Icons") { return url }
+        // The app bundle does not carry the package's resource bundle, and asking for a missing one traps.
+        guard Bundle.main.bundleURL.pathExtension != "app" else { return nil }
+        return Bundle.module.url(forResource: name, withExtension: "json.zlib")
     }
 
     static func editDistance(_ a: String, _ b: String) -> Int {
