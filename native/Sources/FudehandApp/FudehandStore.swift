@@ -209,19 +209,43 @@ final class FudehandStore: ObservableObject {
         do {
             let data = try Data(contentsOf: url)
             guard let size = DesignRenderer.imageSize(data) else { throw DesignError(L("Could not read image: %@", url.lastPathComponent)) }
-            let parent = selection.count == 1 ? selection.first.flatMap { id in editor.document.node(id)?.type == .frame ? id : nil } : nil
             let width = Double(size.width), height = Double(size.height)
-            let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
+            let place = insertionPlacement(width: width, height: height)
             let id = DesignDocument.newID(existing: editor.document.allIDs())
             var node = DesignNode(id: id, type: .image, name: url.deletingPathExtension().lastPathComponent,
-                                  x: parent == nil ? center.x - width / 2 : 0, y: parent == nil ? center.y - height / 2 : 0,
-                                  width: width, height: height)
+                                  x: place.x, y: place.y, width: width, height: height)
             node.image = DesignImage(data: data)
-            try perform("Insert Image") { try $0.insert(node, parent: parent, index: nil) }
+            try perform("Insert Image") { try $0.insert(node, parent: place.parent, index: nil) }
             setSelection([id])
         } catch {
             alert = error.localizedDescription
         }
+    }
+
+    /// Inserts a 24 × 24 icon layer named after the icon, placed as Insert Image places an image, and selects it.
+    func insertIcon(_ name: String) {
+        let place = insertionPlacement(width: 24, height: 24)
+        let id = DesignDocument.newID(existing: editor.document.allIDs())
+        var node = DesignNode(id: id, type: .icon, name: IconLibrary.parse(name)?.name ?? name, x: place.x, y: place.y, width: 24, height: 24)
+        node.icon = DesignIcon(name: name)
+        do {
+            try perform("Insert Icon") { try $0.insert(node, parent: place.parent, index: nil) }
+            setSelection([id])
+        } catch {
+            alert = error.localizedDescription
+        }
+    }
+
+    /// Swaps an icon layer's icon, keeping its position, size, and color.
+    func replaceIcon(_ id: String, with name: String) {
+        updateNode(id, "Replace Icon") { $0.icon?.name = name }
+    }
+
+    /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.
+    private func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
+        if selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame { return (id, 0, 0) }
+        let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
+        return (nil, center.x - width / 2, center.y - height / 2)
     }
 
     // MARK: Prototype

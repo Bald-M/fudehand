@@ -549,3 +549,43 @@ private func temporaryFile() -> URL {
     store.undo()
     #expect(store.editor.document.node("i")?.icon?.color == .black)
 }
+
+@Test @MainActor func insertingAnIconAddsOneSelectedLayerAtTheViewportCenter() throws {
+    let store = makeStore()
+    store.insertIcon("lucide/house")
+    let id = try #require(store.selection.first)
+    let node = try #require(store.editor.document.node(id))
+    let center = CanvasGeometry.screenToWorld(Point(x: store.canvasSize.width / 2, y: store.canvasSize.height / 2), viewport: store.viewport)
+    #expect(store.selection.count == 1)
+    #expect(node.type == .icon && node.name == "house" && node.icon == DesignIcon(name: "lucide/house"))
+    #expect(node.frame == Rect(x: center.x - 12, y: center.y - 12, width: 24, height: 24))
+    #expect(store.editor.document.nodes.map(\.id) == [id])
+    #expect(store.editor.undoName == "Insert Icon")
+    store.undo()
+    #expect(store.editor.document.nodes.isEmpty)
+}
+
+@Test @MainActor func insertingAnIconWithAFrameSelectedPutsItInTheFrame() throws {
+    let store = makeStore()
+    try store.perform("Add Frame") { try $0.insert(DesignNode(id: "f", type: .frame, x: 200, y: 200, width: 300, height: 300), parent: nil, index: nil) }
+    store.setSelection(["f"])
+    store.insertIcon("sf/house.fill")
+    let id = try #require(store.selection.first)
+    let frame = try #require(store.editor.document.node("f"))
+    #expect(frame.children.map(\.id) == [id])
+    #expect(frame.children.first?.frame == Rect(x: 0, y: 0, width: 24, height: 24))
+    #expect(frame.children.first?.name == "house.fill")
+}
+
+@Test @MainActor func replacingAnIconKeepsFrameAndColor() throws {
+    let store = makeStore()
+    var node = DesignNode(id: "i", type: .icon, x: 10, y: 20, width: 40, height: 40)
+    let color = try DesignColor(hex: "#336699")
+    node.icon = DesignIcon(name: "sf/not.a.real.symbol", color: color)
+    try store.perform("Add Icon") { try $0.insert(node, parent: nil, index: nil) }
+    store.replaceIcon("i", with: "material-outlined/home")
+    let replaced = try #require(store.editor.document.node("i"))
+    #expect(replaced.frame == Rect(x: 10, y: 20, width: 40, height: 40))
+    #expect(replaced.icon == DesignIcon(name: "material-outlined/home", color: color))
+    #expect(store.editor.undoName == "Replace Icon")
+}
