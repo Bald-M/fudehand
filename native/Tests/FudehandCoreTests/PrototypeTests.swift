@@ -50,20 +50,22 @@ private let prototype = """
     #expect(back["interaction"] as? [String: String] == ["action": "back"])
 }
 
-@Test func versionOneFilesOpenAndAreSavedAsVersionTwo() throws {
-    let old = try decode(#"{"format":"fudehand.design","version":1,"nodes":[{"id":"a","type":"frame"}]}"#)
-    #expect(old.nodes[0].interaction == nil)
-    let text = String(decoding: try old.encoded(), as: UTF8.self)
-    #expect(text.contains("\"version\" : 2"))
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":3,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 3); upgrade Fudehand to open it")
+@Test func olderFilesOpenAndAreSavedAsVersionThree() throws {
+    for version in [1, 2] {
+        let old = try decode(#"{"format":"fudehand.design","version":"# + "\(version)" + #","nodes":[{"id":"a","type":"frame"}]}"#)
+        #expect(old.nodes[0].interaction == nil && old.nodes[0].scroll == .none && old.nodes[0].states == nil)
+        let text = String(decoding: try old.encoded(), as: UTF8.self)
+        #expect(text.contains("\"version\" : 3"))
+    }
+    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":4,"nodes":[]}"#) }
+            == "File was created by a newer version of Fudehand (format version 4); upgrade Fudehand to open it")
 }
 
 @Test func validatesInteractionFields() {
     func failure(_ interaction: String) -> String? {
         message { _ = try node(#"{"id":"a","type":"rectangle","interaction":"# + interaction + "}") }
     }
-    #expect(failure(#"{"action":"jump"}"#) == "Layer a: interaction.action must be one of navigate, back; got jump")
+    #expect(failure(#"{"action":"jump"}"#) == "Layer a: interaction.action must be one of navigate, back, open-overlay, close-overlay, toggle-visibility; got jump")
     #expect(failure(#"{}"#) == "Layer a: missing interaction.action")
     #expect(failure(#"{"action":"navigate"}"#) == "Layer a: missing interaction.destination")
     #expect(failure(#"{"action":"navigate","destination":""}"#) == "Layer a: interaction.destination must be a non-empty frame id")
@@ -132,12 +134,12 @@ private let prototype = """
     let document = try decode(prototype)
     var player = PrototypePlayer(start: "home")
     let push = PrototypeTransition(type: .pushLeft, duration: 0.25, easing: .easeInOut)
-    #expect(player.click(at: Point(x: 30, y: 110), in: document) == .init(from: "home", to: "detail", transition: push, reversed: false))
+    #expect(player.click(at: Point(x: 30, y: 110), in: document) == .move(.init(from: "home", to: "detail", transition: push, reversed: false)))
     #expect(player.current == "detail" && player.isTransitioning)
     // A click while the transition plays is ignored.
     #expect(player.click(at: Point(x: 10, y: 10), in: document) == nil)
     player.finishTransition()
-    #expect(player.click(at: Point(x: 10, y: 10), in: document) == .init(from: "detail", to: "home", transition: push, reversed: true))
+    #expect(player.click(at: Point(x: 10, y: 10), in: document) == .move(.init(from: "detail", to: "home", transition: push, reversed: true)))
     player.finishTransition()
     #expect(player.current == "home")
     // Back with nowhere to go does nothing.
@@ -163,5 +165,5 @@ private let prototype = """
     _ = player.perform(.navigate(destination: "third", transition: PrototypeTransition()), in: document)
     #expect(!player.isTransitioning)
     try document.delete(["detail"])
-    #expect(player.perform(.back, in: document)?.to == "home")
+    #expect(player.perform(.back, in: document) == .move(.init(from: "third", to: "home", transition: PrototypeTransition(), reversed: true)))
 }

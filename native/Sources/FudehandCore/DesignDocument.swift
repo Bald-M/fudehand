@@ -120,11 +120,48 @@ public struct PrototypeTransition: Equatable, Sendable {
     public static let maximumDuration = 10.0
 }
 
-/// A layer's click interaction in a prototype: go to a top-level frame, or back to the frame shown before it.
+/// Where an overlay is placed over the frame on show: centered, along the bottom edge, or just below the layer that opened it.
+public enum OverlayPosition: String, Sendable, CaseIterable { case center, bottom, belowTrigger = "below-trigger" }
+
+/// How an overlay opens: where it sits, the color drawn between it and the frame below (nil draws none), and whether a click
+/// outside it closes it.
+public struct OverlaySettings: Equatable, Sendable {
+    public var position: OverlayPosition
+    public var background: DesignColor?
+    public var closeOnOutsideClick: Bool
+    public init(position: OverlayPosition = .center, background: DesignColor? = nil, closeOnOutsideClick: Bool = true) {
+        self.position = position; self.background = background; self.closeOnOutsideClick = closeOnOutsideClick
+    }
+}
+
+/// A layer's click interaction in a prototype: go to a top-level frame, or back to the frame shown before it; open a top-level
+/// frame as an overlay over the frame on show, or close the topmost overlay; or show the hidden and hide the shown among some layers.
 /// Going back replays, in reverse, the transition that arrived at the current frame.
 public enum DesignInteraction: Equatable, Sendable {
     case navigate(destination: String, transition: PrototypeTransition)
     case back
+    case openOverlay(destination: String, overlay: OverlaySettings, transition: PrototypeTransition)
+    case closeOverlay
+    case toggleVisibility(targets: [String])
+}
+
+/// The direction a frame's content scrolls in prototype playback when it overflows the frame.
+public enum ScrollDirection: String, Sendable, CaseIterable { case none, vertical, horizontal }
+
+/// The look a layer takes on in one state during prototype playback; nil fields keep the layer's own value.
+public struct LayerStyle: Equatable, Sendable {
+    public var fill: DesignColor?
+    public var opacity: Double?
+    public init(fill: DesignColor? = nil, opacity: Double? = nil) { self.fill = fill; self.opacity = opacity }
+}
+
+/// How a layer looks while the pointer is over it and while it is pressed during prototype playback.
+public struct LayerStates: Equatable, Sendable {
+    public var hover: LayerStyle?
+    public var pressed: LayerStyle?
+    public init(hover: LayerStyle? = nil, pressed: LayerStyle? = nil) { self.hover = hover; self.pressed = pressed }
+    /// Seconds a layer takes to change into and out of a state.
+    public static let transitionDuration = 0.15
 }
 
 public enum NodeType: String, Sendable, CaseIterable {
@@ -167,6 +204,11 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var image: DesignImage?
     public var layout: AutoLayout?
     public var interaction: DesignInteraction?
+    /// Frames only.
+    public var scroll = ScrollDirection.none
+    /// Stays in place, above the scrolled content, when its parent frame scrolls.
+    public var fixedOnScroll = false
+    public var states: LayerStates?
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -186,8 +228,9 @@ public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
-    /// 2 added layer interactions; version 1 files open unchanged and are written as version 2.
-    public static let formatVersion = 2
+    /// 2 added layer interactions; 3 added scrolling, layer states, overlays, and visibility toggles. Older files open
+    /// unchanged and are written as the current version.
+    public static let formatVersion = 3
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
