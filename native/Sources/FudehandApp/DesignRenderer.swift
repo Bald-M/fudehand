@@ -109,6 +109,7 @@ final class DesignRenderer {
         default: layer = CALayer()
         }
         // Centered, so a played animation rotates and scales a layer about its center (see `LayerAnimationPlayer`).
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         layer.actions = noActions
         layer.contentsScale = scale
         return layer

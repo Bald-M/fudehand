@@ -23,4 +23,4 @@
 
 - Animations start when a frame appears; click- or scroll-triggered animation, real timers, and Smart Animate remain out of scope.
 - When overlays (#150) land, opening one starts the player for the overlay's frame the same way.
-- A layer that changes type during playback gets a new Core Animation layer and stops animating until its frame appears again.
+- Animations are set up when their frame appears: an animation edited during playback, or one that depends on a layer's opacity or size (fades, Pulse, Shimmer), plays as edited the next time the frame appears; a layer that changes type gets a new Core Animation layer and stops animating until then.

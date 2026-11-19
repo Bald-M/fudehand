@@ -90,7 +90,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Show or hide the inspector, switch its tab | Missing |
 | Expand or collapse layers in the layers panel | Missing |
 | Play the prototype, play from the start, close the prototype window | Missing |
-| Preview a layer's animation in the properties panel | Missing |
+| Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | Missing |
 | List, open, remove, clear recent files | Missing |
 | List templates, create a document from a template | Missing |

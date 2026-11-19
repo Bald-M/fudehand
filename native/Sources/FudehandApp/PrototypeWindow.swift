@@ -105,6 +105,8 @@ final class PrototypeStageView: NSView {
     override func accessibilityLabel() -> String? { L("Prototype") }
 
     override func viewDidMoveToWindow() {
+        // Closing the window stops the loops and sequence timers; showing it again starts the frame's animations anew.
+        if window == nil { players.values.forEach { $0.stop() } } else if let player { bringIn(shown, player.current, after: 0) }
         window?.makeFirstResponder(self)
         rasterize()
     }
@@ -121,8 +123,11 @@ final class PrototypeStageView: NSView {
             shown.root.removeAllAnimations()
             if let player { bringIn(shown, player.current, after: 0) }
         }
-        // Edits re-render the frame without restarting its animations.
-        if let player { render(shown, player.current) }
+        // Edits re-render the frame without restarting its animations; text sequences follow them.
+        if let player {
+            render(shown, player.current)
+            if let frame = Prototype.frame(player.current, in: document) { animations(shown).update(frame) }
+        }
     }
 
     private func animations(_ renderer: DesignRenderer) -> LayerAnimationPlayer {
@@ -136,6 +141,8 @@ final class PrototypeStageView: NSView {
     /// transition bringing the frame in has finished.
     private func bringIn(_ renderer: DesignRenderer, _ id: String, after wait: Double) {
         let player = animations(renderer)
+        // Stopping would otherwise redraw the frame this renderer showed before.
+        player.redraw = {}
         player.stop()
         render(renderer, id)
         player.redraw = { [weak self, unowned renderer] in self?.render(renderer, id) }

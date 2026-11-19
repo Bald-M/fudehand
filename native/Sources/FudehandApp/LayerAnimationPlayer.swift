@@ -46,6 +46,16 @@ final class LayerAnimationPlayer {
         schedule()
     }
 
+    /// The subtree was edited while playing: text sequences follow the new items and intervals from now on. Animations keep
+    /// running as they started; they pick up edits the next time the subtree appears.
+    func update(_ node: DesignNode) {
+        guard begin != nil else { return }
+        subtree = node
+        timer?.invalidate()
+        timer = nil
+        schedule()
+    }
+
     func stop() {
         timer?.invalidate()
         timer = nil
@@ -122,9 +132,9 @@ final class LayerAnimationPlayer {
             parts = [animation.property == .scale ? keyframes("transform.scale", [1, 1.1, 1])
                                                   : keyframes("opacity", [opacity, opacity * 0.4, opacity])]
         case .shimmer:
-            // A band sweeps across, letting what is behind show through: a mask three times as wide as the layer, see-through
+            // A band sweeps across, letting what is behind show through: a mask six times as wide as the layer, see-through
             // only in its middle, moves from left of the layer to right of it. Masking keeps the layer's own shape and covers its
-            // children too.
+            // children too; the extra width still covers a layer that grows during playback (a longer text sequence item).
             let width = layer.bounds.width
             let band = CAGradientLayer()
             band.actions = DesignRenderer.noActions
@@ -132,8 +142,8 @@ final class LayerAnimationPlayer {
             band.endPoint = CGPoint(x: 1, y: 0.5)
             let solid = CGColor(gray: 0, alpha: 1), faint = CGColor(gray: 0, alpha: 0.45)
             band.colors = [solid, solid, faint, solid, solid]
-            band.locations = [0, 0.43, 0.5, 0.57, 1]
-            band.bounds = CGRect(x: 0, y: 0, width: width * 3, height: layer.bounds.height)
+            band.locations = [0, 0.465, 0.5, 0.535, 1]
+            band.bounds = CGRect(x: 0, y: 0, width: width * 6, height: layer.bounds.height)
             band.position = CGPoint(x: -0.3 * width, y: layer.bounds.height / 2)
             layer.mask = band
             mask = band

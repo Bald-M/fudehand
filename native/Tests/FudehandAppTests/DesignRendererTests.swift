@@ -209,3 +209,13 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     #expect(bytes[20 * image.bytesPerRow + 96 * image.samplesPerPixel] == 255)
     #expect(bytes[76 * image.bytesPerRow + 96 * image.samplesPerPixel + 2] == 255)
 }
+
+@Test @MainActor func snapshotsShowAnimatedLayersStill() throws {
+    var frame = sample()[0]
+    let still = try DesignRenderer.snapshotPNG(frame, scale: 1)
+    frame.animation = LayerAnimation(type: .fadeIn)
+    frame.children[0].animation = LayerAnimation(type: .spin)
+    frame.children[0].text?.sequence = TextSequence(items: ["3", "2", "1"])
+    // Snapshots never play: the same pixels as without animation, with the text's own content.
+    #expect(try DesignRenderer.snapshotPNG(frame, scale: 1) == still)
+}
