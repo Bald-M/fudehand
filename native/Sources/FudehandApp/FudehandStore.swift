@@ -236,9 +236,14 @@ final class FudehandStore: ObservableObject {
         }
     }
 
-    /// Swaps an icon layer's icon, keeping its position, size, and color.
+    /// Swaps an icon layer's icon, keeping its position, size, and color. A layer still named after the old icon is renamed
+    /// after the new one; a name the person chose stays.
     func replaceIcon(_ id: String, with name: String) {
-        updateNode(id, "Replace Icon") { $0.icon?.name = name }
+        updateNode(id, "Replace Icon") { node in
+            let shortName = { (full: String) in IconLibrary.parse(full)?.name ?? full }
+            if let old = node.icon?.name, node.name == shortName(old) { node.name = shortName(name) }
+            node.icon?.name = name
+        }
     }
 
     /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.

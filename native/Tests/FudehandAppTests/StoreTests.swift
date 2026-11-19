@@ -579,13 +579,28 @@ private func temporaryFile() -> URL {
 
 @Test @MainActor func replacingAnIconKeepsFrameAndColor() throws {
     let store = makeStore()
-    var node = DesignNode(id: "i", type: .icon, x: 10, y: 20, width: 40, height: 40)
+    var node = DesignNode(id: "i", type: .icon, name: "not.a.real.symbol", x: 10, y: 20, width: 40, height: 40)
     let color = try DesignColor(hex: "#336699")
     node.icon = DesignIcon(name: "sf/not.a.real.symbol", color: color)
-    try store.perform("Add Icon") { try $0.insert(node, parent: nil, index: nil) }
+    var custom = node
+    custom.id = "c"
+    custom.name = "Back"
+    try store.perform("Add Icons") {
+        try $0.insert(node, parent: nil, index: nil)
+        try $0.insert(custom, parent: nil, index: nil)
+    }
     store.replaceIcon("i", with: "material-outlined/home")
     let replaced = try #require(store.editor.document.node("i"))
     #expect(replaced.frame == Rect(x: 10, y: 20, width: 40, height: 40))
     #expect(replaced.icon == DesignIcon(name: "material-outlined/home", color: color))
+    // A name still taken from the old icon follows the new one, in the same undo step.
+    #expect(replaced.name == "home")
     #expect(store.editor.undoName == "Replace Icon")
+    store.undo()
+    #expect(store.editor.document.node("i")?.name == "not.a.real.symbol")
+    #expect(store.editor.document.node("i")?.icon?.name == "sf/not.a.real.symbol")
+    // A name the person chose stays.
+    store.replaceIcon("c", with: "lucide/house")
+    #expect(store.editor.document.node("c")?.name == "Back")
+    #expect(store.editor.document.node("c")?.icon?.name == "lucide/house")
 }

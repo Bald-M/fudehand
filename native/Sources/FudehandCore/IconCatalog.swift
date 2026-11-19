@@ -104,10 +104,23 @@ public final class IconCatalog: @unchecked Sendable {
     }
 
     /// What the icon picker shows for one library: every icon sorted by name when the query is blank, otherwise all `search`
-    /// results in that library.
+    /// results in that library. A blank SF Symbols listing puts the localized variants (`0.circle.ar`, `character.ja`, …) after
+    /// the base names, so it does not open on a wall of numerals in other scripts.
     public func listing(_ query: String, library: IconLibrary) -> [String] {
         guard Self.normalized(query).isEmpty else { return search(query, library: library, limit: .max) }
-        return names(library).sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { "\(library.rawValue)/\($0)" }
+        let sorted = names(library).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let ordered = library == .sf ? sorted.filter { !Self.isLocalizedSymbol($0) } + sorted.filter(Self.isLocalizedSymbol) : sorted
+        return ordered.map { "\(library.rawValue)/\($0)" }
+    }
+
+    /// Locale suffixes SF Symbols uses for variants drawn in another script or direction.
+    private static let symbolLocales: Set<Substring> = [
+        "ar", "bn", "el", "gu", "he", "hi", "ja", "km", "kn", "ko", "ml", "mni", "mr", "my", "or", "pa", "ru", "rtl", "sat", "si",
+        "ta", "te", "th", "zh",
+    ]
+
+    static func isLocalizedSymbol(_ name: String) -> Bool {
+        name.split(separator: ".").dropFirst().last.map(symbolLocales.contains) ?? false
     }
 
     /// Lowercased, with `-`, `_`, `.`, and runs of whitespace turned into single spaces.

@@ -36,6 +36,8 @@ struct IconPicker: View {
     @State private var materialStyle: IconLibrary
     @State private var query = ""
     @State private var listing: Listing?
+    /// Whether the grid has been shown once; the first time, it scrolls to the current icon.
+    @State private var shownOnce = false
     @FocusState private var searchFocused: Bool
 
     init(current: String?, choose: @escaping (String) -> Void) {
@@ -116,14 +118,21 @@ struct IconPicker: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVGrid(columns: Self.columns, spacing: 4) {
-                    ForEach(results, id: \.self) { name in
-                        IconCell(name: name, selected: name == current) {
-                            choose(name)
-                            dismiss()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVGrid(columns: Self.columns, spacing: 4) {
+                        ForEach(results, id: \.self) { name in
+                            IconCell(name: name, selected: name == current) {
+                                choose(name)
+                                dismiss()
+                            }
                         }
                     }
+                }
+                .onAppear {
+                    guard !shownOnce else { return }
+                    shownOnce = true
+                    if let current, results.contains(current) { proxy.scrollTo(current, anchor: .center) }
                 }
             }
             .id(library)

@@ -107,3 +107,11 @@ private let catalog = IconCatalog(symbolExists: { ["house", "house.fill", "heart
     #expect(IconCatalog(symbolNames: { ["b", "a"] }).listing("", library: .sf) == ["sf/a", "sf/b"])
     #expect(IconCatalog().listing("", library: .sf).isEmpty)
 }
+
+@Test func sfListingPutsLocalizedVariantsAfterTheBaseNames() {
+    let catalog = IconCatalog(symbolNames: { ["0.circle.ar", "0.circle", "a.rtl", "character.ja", "house", "textformat.el", "arrow.up"] })
+    #expect(catalog.listing("", library: .sf)
+        == ["sf/0.circle", "sf/arrow.up", "sf/house", "sf/0.circle.ar", "sf/a.rtl", "sf/character.ja", "sf/textformat.el"])
+    // Search results keep them in rank order.
+    #expect(catalog.listing("0 circle", library: .sf) == ["sf/0.circle", "sf/0.circle.ar"])
+}
