@@ -28,6 +28,7 @@ final class DesignRenderer {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
                 if layer is TextLayer { layer.setNeedsDisplay() }
                 (layer as? ImageLayer)?.rasterize(force: true)
+                (layer as? IconLayer)?.rasterize(force: true)
             }
             CATransaction.commit()
         }
@@ -106,9 +107,11 @@ final class DesignRenderer {
         case .ellipse: layer = CAShapeLayer()
         case .text: layer = TextLayer()
         case .image: layer = ImageLayer()
+        case .icon: layer = IconLayer()
         default: layer = CALayer()
         }
-        layer.anchorPoint = .zero
+        // Centered, so a played animation rotates and scales a layer about its center (see `LayerAnimationPlayer`).
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         layer.actions = noActions
         layer.contentsScale = scale
         return layer
@@ -127,9 +130,9 @@ final class DesignRenderer {
     }
 
     static func apply(_ node: DesignNode, to layer: CALayer, previous: DesignNode?, scale: CGFloat) {
-        layer.position = CGPoint(x: node.x, y: node.y)
+        layer.position = CGPoint(x: node.x + node.width / 2, y: node.y + node.height / 2)
         layer.bounds = CGRect(x: 0, y: 0, width: node.width, height: node.height)
-        if node.type == .text || node.type == .image { layer.contentsScale = rasterScale(scale, for: layer.bounds.size) }
+        if node.type == .text || node.type == .image || node.type == .icon { layer.contentsScale = rasterScale(scale, for: layer.bounds.size) }
         layer.isHidden = !node.visible
         layer.opacity = Float(node.opacity)
         let stroke = node.stroke.flatMap { $0.width > 0 ? $0 : nil }
@@ -151,6 +154,7 @@ final class DesignRenderer {
         if let textLayer = layer as? TextLayer, let text = node.text, text != previous?.text || node.width != previous?.width {
             textLayer.attributed = TextMetrics.attributed(text)
         }
+        if let icon = node.icon, let iconLayer = layer as? IconLayer { iconLayer.update(icon) }
         if let image = node.image {
             if let imageLayer = layer as? ImageLayer {
                 if image.data != previous?.image?.data { imageLayer.load(image.data) } else { imageLayer.rasterize(force: false) }
@@ -161,6 +165,19 @@ final class DesignRenderer {
             case .stretch: layer.contentsGravity = .resize
             }
         }
+    }
+
+    /// A vertically mirrored copy of a layer's bitmap contents, for the flipped snapshot context (see `snapshotPNG`); other contents unchanged.
+    static func flipped(_ contents: Any?) -> Any? {
+        guard let value = contents, CFGetTypeID(value as CFTypeRef) == CGImage.typeID else { return contents }
+        let image = value as! CGImage
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return contents }
+        context.translateBy(x: 0, y: CGFloat(image.height))
+        context.scaleBy(x: 1, y: -1)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage()
     }
 
     static func cgImage(_ data: Data) -> CGImage? {
@@ -208,6 +225,7 @@ final class DesignRenderer {
         renderer.root.layoutIfNeeded()
         for case let layer as TextLayer in renderer.records.values.map(\.layer) { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
         for case let layer as ImageLayer in renderer.records.values.map(\.layer) { layer.invertForSnapshot() }
+        for case let layer as IconLayer in renderer.records.values.map(\.layer) { layer.contents = flipped(layer.contents) }
         renderer.root.render(in: context)
         guard let image = context.makeImage() else { throw ControlCommandError("Snapshot failed") }
         let data = NSMutableData()
@@ -239,17 +257,7 @@ final class ImageLayer: CALayer {
     }
 
     /// Replaces the contents with a vertically mirrored copy, for the flipped snapshot context (see `snapshotPNG`).
-    @MainActor func invertForSnapshot() {
-        guard let value = contents, CFGetTypeID(value as CFTypeRef) == CGImage.typeID else { return }
-        let image = value as! CGImage
-        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
-        context.translateBy(x: 0, y: CGFloat(image.height))
-        context.scaleBy(x: 1, y: -1)
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        contents = context.makeImage()
-    }
+    @MainActor func invertForSnapshot() { contents = DesignRenderer.flipped(contents) }
 
     /// Rasterizes the SVG at the size that covers the bounds (what fill shows) × `contentsScale`. Unless forced, only when that is
     /// larger than the current raster, and then with 1.5× headroom: shrinking keeps the sharper raster, and a resize drag that

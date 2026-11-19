@@ -11,7 +11,13 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 
 **Project file (工程文件 / 專案檔)**: The file a design document is saved as, with the extension `.fudehand`; its content is public JSON with a format name (`fudehand.design`) and a format version.
 
-**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, or group. Coordinates are relative to the parent layer. An image layer holds PNG, JPEG, or SVG data; SVG is kept as source and drawn sharp at any zoom.
+**Layer (图层 / 圖層)**: A node in the design document, of type frame, rectangle, ellipse, text, image, icon, or group. Coordinates are relative to the parent layer. An image layer holds PNG, JPEG, or SVG data; SVG is kept as source and drawn sharp at any zoom.
+
+**Icon layer (图标图层 / 圖示圖層)**: A layer that shows one single-color icon from an icon library. It stores only the icon name and color; its size is the layer's width and height, and it is drawn sharp at any zoom. An icon the library does not have draws as a placeholder.
+
+**Icon library (图标库 / 圖示庫)**: A set of icons built into Fudehand, one per target platform: `sf` (SF Symbols, from the system), `material-outlined`, `material-rounded`, `material-sharp` (Material Symbols), `weui` (WeUI), and `lucide` (Lucide).
+
+**Icon name (图标名字 / 圖示名稱)**: How an icon layer names its icon: `<library>/<name>`, such as `sf/house.fill` or `material-rounded/home.fill`.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
@@ -23,11 +29,27 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
 
-**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, or *Back* (返回 / 返回) to the frame shown before. Saved on the layer in the project file.
-_Avoid_: link, hotspot, action (an interaction's *Action* is only its navigate-or-back choice)
+**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, *Back* (返回 / 返回) to the frame shown before, *Open Overlay* (打开弹层 / 打開彈出層), *Close Overlay* (关闭弹层 / 關閉彈出層), or *Toggle Visibility* (切换显示 / 切換顯示). Saved on the layer in the project file.
+_Avoid_: link, hotspot, action (an interaction's *Action* is only which of these it does)
+
+**Overlay (弹层 / 彈出層)**: A top-level frame shown over the frame on show in the prototype window — a dialog, bottom panel, or menu — placed at the center, along the bottom, or below the layer that opened it, optionally over a background color that dims the frame below. While it is open only it takes input.
+_Avoid_: modal, popup, popover
+
+**Scrolling (滚动 / 捲動)**: A frame's setting (None, Vertical, Horizontal) that lets its overflowing content scroll in the prototype window. A direct child marked *Fix position when scrolling* (滚动时固定位置 / 捲動時固定位置) stays put above the scrolled content.
+
+**State (状态 / 狀態)**: How a layer looks in the prototype window *while hovered* (悬停时 / 懸停時) and *while pressed* (按下时 / 按下時): a fill and an opacity that replace the layer's own, eased in and out.
+_Avoid_: variant (components and variants are out of scope)
+
+**Toggle Visibility (切换显示 / 切換顯示)**: The interaction that shows the hidden and hides the shown among chosen layers, for tabs, switches, checkboxes, and expand/collapse. The change lasts only for that playback; the design document is not changed.
 
 **Transition (转场 / 轉場)**: How the prototype window moves from one frame to the next: None, Dissolve (淡入淡出), Push Left/Right/Up/Down (向左/右/上/下推入), or Bottom Sheet (底部弹出 / 底部彈出), with a duration and an easing. Back plays it in reverse.
-_Avoid_: animation (reserved for a layer's own animation, #151)
+_Avoid_: animation (reserved for a layer's own animation)
+
+**Animation (动画 / 動畫)**: A layer's motion during prototype playback, started when its frame appears: an *Entrance* (入场 / 進場) — Fade In (淡入), Slide In (滑入), Scale In (缩放进入 / 縮放進入) — or a *Loop* (循环 / 循環) — Spin (旋转 / 旋轉), Pulse (脉冲 / 脈衝), Shimmer (流光 / 流光). Appearance only: it never changes the design document, and the canvas and snapshots show the layer still.
+_Avoid_: effect, motion, transition (the move between frames)
+
+**Text sequence (文字序列 / 文字序列)**: A text layer's list of texts shown one after another at a fixed interval during playback, looping or stopping on the last one — the look of a countdown. It triggers nothing; the layer's own text is what editing shows.
+_Avoid_: timer, countdown (it does not count real time)
 
 **Prototype window (原型窗口 / 原型視窗)**: The separate window opened by *Play Prototype (播放原型)* that plays the prototype at the frames' actual size; clicks there trigger interactions instead of selecting layers.
 _Avoid_: preview mode, present mode
@@ -70,9 +92,15 @@ _Avoid_: session (the App's `ChatSession` is the object that owns the conversati
 **Next-message prediction (下一条消息预测 / 下一則訊息預測)**: The message the Agent harness predicts the user will send next, shown as the placeholder of the empty chat input after a reply ends; Tab puts it in the input. It is not part of the conversation.
 _Avoid_: autocomplete, completion (nothing is completed while typing), suggestion chips
 
+**Slash command (快捷指令 / 快捷指令)**: A command typed in the chat input, starting with `/` and chosen from the command menu: `/plan`, `/goal`, `/new`, `/clear`, `/compact`, `/model`. It acts on the chat panel and is never sent to the model.
+
+**Plan mode (计划模式 / 計畫模式)**: A conversation mode, entered with `/plan`, in which the Agent can only read the design document and replies with a plan; the plan is carried out after the user confirms it with *Run Plan*.
+
+**Goal mode (目标模式 / 目標模式)**: A conversation mode, entered with `/goal`, in which the next message is a goal the Agent keeps working on until it reports it done or the reply is stopped.
+
 **Context ring (上下文圆环 / 上下文圓環)**: The ring in the chat input showing how much of the model's context window the conversation takes up.
 
-**Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, by sending `/compact`. The conversation's messages stay in the chat panel.
+**Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, with the `/compact` slash command. The conversation's messages stay in the chat panel.
 _Avoid_: compress, summarize (the summary is what compacting produces)
 
 **Style library (风格库 / 風格庫)**: The reference files in `styles/` that the Agent reads with `style_list` and `style_read` when the user names a style or asks for a design like a known product. Adapted from third-party analyses of public websites (VoltAgent/awesome-design-md), not official brand systems; not part of the design document.

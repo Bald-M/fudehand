@@ -68,8 +68,8 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Feature | Tool |
 |---|---|
 | Read the document overview, the layer tree, one layer | `design_get_state`, `design_get_document`, `design_get_node` |
-| Create layers (frame, rectangle, ellipse, text, image, group), insert an image | `design_create_node` |
-| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, clip content, interaction | `design_update_node` |
+| Create layers (frame, rectangle, ellipse, text, image, icon, group), insert an image | `design_create_node` |
+| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, icon name and color, clip content, interaction, scrolling, fixed position when scrolling, hover and pressed states, animation, text sequence | `design_update_node` |
 | Rename, show/hide, lock a layer | `design_update_node` |
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
@@ -78,6 +78,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |
 | Snapshot a layer as PNG | `design_snapshot` |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |
+| Search the built-in icon libraries | `design_search_icons` (people search in a panel that comes later; the Agent tool ships first) |
 
 ### Canvas and windows
 
@@ -91,6 +92,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Show or hide the inspector, switch its tab | Missing |
 | Expand or collapse layers in the layers panel | Missing |
 | Play the prototype, play from the start, close the prototype window | Missing |
+| Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | Missing |
 | List, open, remove, clear recent files | Missing |
 | List templates, create a document from a template | Missing |

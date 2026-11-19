@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import FudehandApp
@@ -183,4 +184,22 @@ private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", 
     #expect(model.entries[.deepseek]?.status == .connected)
     #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
     #expect(try String(contentsOf: target, encoding: .utf8).contains("serverName: fudehand"))
+}
+
+@Test @MainActor func everyConnectorHasAnIconTheSystemCanDraw() throws {
+    for connector in AgentConnector.allCases {
+        let image = try #require(ConnectorIcon.image(for: connector), "\(connector)")
+        #expect(image.size == NSSize(width: 24, height: 24))
+        // Drawn into a bitmap, the icon must cover part of it, but not all of it (a broken path draws nothing or a stray fill).
+        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 48, pixelsHigh: 48, bitsPerSample: 8, samplesPerPixel: 4,
+                                                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(x: 0, y: 0, width: 48, height: 48))
+        NSGraphicsContext.restoreGraphicsState()
+        var painted = 0
+        for x in 0..<48 { for y in 0..<48 where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { painted += 1 } }
+        #expect(painted > 48 * 48 / 10, "\(connector)")
+        #expect(painted < 48 * 48, "\(connector)")
+    }
 }

@@ -18,6 +18,7 @@ export async function buildNativeApp({ configuration = 'release' } = {}) {
   await copyFile(join(root, 'native', 'Resources', 'AppIcon.icns'), join(contents, 'Resources', 'AppIcon.icns'))
   await copyTemplates(join(contents, 'Resources', 'Templates'))
   await copyLocalizations(join(contents, 'Resources'))
+  await copyIcons(join(contents, 'Resources', 'Icons'))
   // Local build metadata: the chat panel starts the source workspace's Agent harness with this Node.
   await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
   await runCommand('codesign', ['--force', '--deep', '--sign', '-', app])
@@ -33,6 +34,14 @@ async function copyTemplates(target) {
   for (const name of await readdir(source)) {
     if (name.toLowerCase().endsWith('.fudehand')) await copyFile(join(source, name), join(target, name))
   }
+}
+
+// The bundled icon libraries and their licenses (see scripts/build-icons.mjs); IconCatalog reads them from here.
+async function copyIcons(target) {
+  const source = join(root, 'native', 'Sources', 'FudehandCore', 'Resources', 'Icons')
+  await rm(target, { recursive: true, force: true })
+  await mkdir(target, { recursive: true })
+  for (const name of await readdir(source)) await copyFile(join(source, name), join(target, name))
 }
 
 // UI string tables: the App reads them from its own bundle, and their presence tells AppKit which languages

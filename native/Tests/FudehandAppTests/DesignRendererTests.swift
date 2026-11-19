@@ -37,7 +37,9 @@ import Testing
     nodes.removeLast()
     renderer.sync(nodes)
     #expect(renderer.layer(for: "f") === frameLayer)
-    #expect(frameLayer?.position == CGPoint(x: 40, y: 0))
+    #expect(frameLayer?.frame.origin == CGPoint(x: 40, y: 0))
+    // Layers are anchored at their center, so animations rotate and scale them in place.
+    #expect(frameLayer?.anchorPoint == CGPoint(x: 0.5, y: 0.5) && frameLayer?.position == CGPoint(x: 140, y: 50))
     #expect(renderer.layer(for: "e")?.isHidden == true)
     #expect(renderer.layer(for: "r") == nil && renderer.layerCount == 3)
     // The stacking order follows the array order.
@@ -206,4 +208,14 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     let bytes = try #require(image.bitmapData)
     #expect(bytes[20 * image.bytesPerRow + 96 * image.samplesPerPixel] == 255)
     #expect(bytes[76 * image.bytesPerRow + 96 * image.samplesPerPixel + 2] == 255)
+}
+
+@Test @MainActor func snapshotsShowAnimatedLayersStill() throws {
+    var frame = sample()[0]
+    let still = try DesignRenderer.snapshotPNG(frame, scale: 1)
+    frame.animation = LayerAnimation(type: .fadeIn)
+    frame.children[0].animation = LayerAnimation(type: .spin)
+    frame.children[0].text?.sequence = TextSequence(items: ["3", "2", "1"])
+    // Snapshots never play: the same pixels as without animation, with the text's own content.
+    #expect(try DesignRenderer.snapshotPNG(frame, scale: 1) == still)
 }

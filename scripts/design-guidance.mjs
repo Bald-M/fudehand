@@ -10,25 +10,27 @@
  * counterpart in a static design document were removed; the process was turned into five numbered steps in which the
  * Agent states its assumption and carries on instead of confirming with the client; the quality floor was rewritten;
  * the whole text was shortened; the white-with-indigo look was added to the generic looks and copy in the user's
- * language to the quality floor, both from trying the guidance in the App; the rule for the style library (#115) was added
- * and the wording tightened to keep the text under the limit.
+ * language to the quality floor, both from trying the guidance in the App; built-in icons were added to the quality floor,
+ * with a few sentences tightened to make room; the rule for the style library (#115) was added and
+ * the wording tightened again to stay under the limit.
  */
 export const designGuidance = `## Design guidance
 
-For a new or redone screen, follow this; for a small edit, keep the existing style. Where the user's request sets a visual direction (colors, fonts, a reference), follow it exactly: the user's own words take precedence over this. For a named style or product look, use its values from style_list and style_read, or say there is none; never apply one unasked.
+This is for a new or redone screen; keep small edits in the existing style. Follow any visual direction the user sets (colors, fonts, a reference) exactly: the user's own words take precedence. For a named style or product look, use style_list then style_read, or say none exists; never apply one unasked.
 
 Process:
-1. Ground it. If the request does not name the product, audience, and the screen's main job, pick one concrete answer, state that assumption in your reply, and carry on without waiting.
+1. Ground it. If the request leaves the product, audience, or the screen's main job open, pick one, state the assumption in your reply, and carry on without waiting.
 2. Plan. In your reply, before creating layers: 4–6 named hex colors; macOS font families and roles; a one-line layout concept with its alignment; what makes this screen unlike another product's.
-3. Review. Whatever you would also produce for any similar request is a default, not a choice: revise it and say what changed.
-4. Build. In that reply, create each screen with one design_create_node call with nested children.
-5. Critique. Look at the result (design_snapshot if you see images, else the layers), remove decoration that doesn't serve the request, and fix what is off.
+3. Review. Whatever you'd produce for similar requests is a default, not a choice: revise it and say what changed.
+4. Build. In that reply, build each screen in one design_create_node call with nested children.
+5. Critique. Check the result (design_snapshot or layers), remove decoration that doesn't serve the request, and fix what's off.
 
 Quality floor, met without announcing it:
-- Real copy in the user's language that fits the subject: never Lorem ipsum or placeholders such as "Title"; a button says what pressing it does.
+- Real copy in the user's language that fits the subject: never Lorem ipsum or placeholders like "Title"; a button says what it does.
+- Real icons (design_search_icons), not shapes or letters: sf for Apple, material-* for Android, weui for WeChat mini programs, lucide for web; one library per screen.
 - At most two font families and a clear type scale.
-- Readable contrast between text and background; colors that belong together.
-- Consistent spacing and alignment, structured with auto layout.
+- Readable text contrast; colors that belong together.
+- Consistent spacing and alignment, with auto layout.
 - Boldness in one place; everything else quiet.
 
-Generic looks to avoid unless asked: white with an indigo, blue, or purple accent in the system font; cream with a serif headline and a terracotta accent; near-black with one acid-green or vermilion accent; a newspaper layout with hairline rules; identical rounded cards, one corner radius everywhere; an all-caps label above every heading; arrows on buttons; numbered markers on content that is not a sequence.`
+Generic looks to avoid unless asked: white with an indigo/blue/purple accent in the system font; cream with a serif headline and a terracotta accent; near-black with one acid-green or vermilion accent; a newspaper layout with hairline rules; identical rounded cards, one corner radius everywhere; an all-caps label above every heading; arrows on buttons; numbered markers on content that isn't a sequence.`

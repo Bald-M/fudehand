@@ -50,12 +50,14 @@ public struct DesignText: Hashable, Sendable {
     /// Line height multiple; nil means the font's default line height.
     public var lineHeight: Double?
     public var autoResize: TextAutoResize
+    /// Contents prototype playback shows in turn instead of `content`; editing and snapshots show `content`.
+    public var sequence: TextSequence?
 
     public init(content: String, fontSize: Double = 16, fontWeight: Int = 400, fontFamily: String? = nil,
                 color: DesignColor = .black, align: TextAlign = .left, lineHeight: Double? = nil,
-                autoResize: TextAutoResize = .widthAndHeight) {
+                autoResize: TextAutoResize = .widthAndHeight, sequence: TextSequence? = nil) {
         self.content = content; self.fontSize = fontSize; self.fontWeight = fontWeight; self.fontFamily = fontFamily
-        self.color = color; self.align = align; self.lineHeight = lineHeight; self.autoResize = autoResize
+        self.color = color; self.align = align; self.lineHeight = lineHeight; self.autoResize = autoResize; self.sequence = sequence
     }
 }
 
@@ -66,6 +68,25 @@ public struct DesignImage: Equatable, Sendable {
     public var data: Data
     public var fit: ImageFit
     public init(data: Data, fit: ImageFit = .fill) { self.data = data; self.fit = fit }
+}
+
+/// A built-in icon library. An icon is addressed as `<library>/<name>`, e.g. `sf/house.fill` or `material-rounded/home.fill`.
+public enum IconLibrary: String, Sendable, CaseIterable {
+    case sf, materialOutlined = "material-outlined", materialRounded = "material-rounded", materialSharp = "material-sharp", weui, lucide
+
+    /// Splits `<library>/<name>`; nil when the library is unknown or either part is empty.
+    public static func parse(_ fullName: String) -> (library: IconLibrary, name: String)? {
+        guard let slash = fullName.firstIndex(of: "/"), let library = IconLibrary(rawValue: String(fullName[..<slash])) else { return nil }
+        let name = String(fullName[fullName.index(after: slash)...])
+        return name.isEmpty ? nil : (library, name)
+    }
+}
+
+/// An icon layer's content: only the icon's name and color are stored; its artwork comes from the icon library when drawn.
+public struct DesignIcon: Equatable, Sendable {
+    public var name: String
+    public var color: DesignColor
+    public init(name: String, color: DesignColor = .black) { self.name = name; self.color = color }
 }
 
 public struct EdgeInsets: Equatable, Sendable {
@@ -120,15 +141,52 @@ public struct PrototypeTransition: Equatable, Sendable {
     public static let maximumDuration = 10.0
 }
 
-/// A layer's click interaction in a prototype: go to a top-level frame, or back to the frame shown before it.
+/// Where an overlay is placed over the frame on show: centered, along the bottom edge, or just below the layer that opened it.
+public enum OverlayPosition: String, Sendable, CaseIterable { case center, bottom, belowTrigger = "below-trigger" }
+
+/// How an overlay opens: where it sits, the color drawn between it and the frame below (nil draws none), and whether a click
+/// outside it closes it.
+public struct OverlaySettings: Equatable, Sendable {
+    public var position: OverlayPosition
+    public var background: DesignColor?
+    public var closeOnOutsideClick: Bool
+    public init(position: OverlayPosition = .center, background: DesignColor? = nil, closeOnOutsideClick: Bool = true) {
+        self.position = position; self.background = background; self.closeOnOutsideClick = closeOnOutsideClick
+    }
+}
+
+/// A layer's click interaction in a prototype: go to a top-level frame, or back to the frame shown before it; open a top-level
+/// frame as an overlay over the frame on show, or close the topmost overlay; or show the hidden and hide the shown among some layers.
 /// Going back replays, in reverse, the transition that arrived at the current frame.
 public enum DesignInteraction: Equatable, Sendable {
     case navigate(destination: String, transition: PrototypeTransition)
     case back
+    case openOverlay(destination: String, overlay: OverlaySettings, transition: PrototypeTransition)
+    case closeOverlay
+    case toggleVisibility(targets: [String])
+}
+
+/// The direction a frame's content scrolls in prototype playback when it overflows the frame.
+public enum ScrollDirection: String, Sendable, CaseIterable { case none, vertical, horizontal }
+
+/// The look a layer takes on in one state during prototype playback; nil fields keep the layer's own value.
+public struct LayerStyle: Equatable, Sendable {
+    public var fill: DesignColor?
+    public var opacity: Double?
+    public init(fill: DesignColor? = nil, opacity: Double? = nil) { self.fill = fill; self.opacity = opacity }
+}
+
+/// How a layer looks while the pointer is over it and while it is pressed during prototype playback.
+public struct LayerStates: Equatable, Sendable {
+    public var hover: LayerStyle?
+    public var pressed: LayerStyle?
+    public init(hover: LayerStyle? = nil, pressed: LayerStyle? = nil) { self.hover = hover; self.pressed = pressed }
+    /// Seconds a layer takes to change into and out of a state.
+    public static let transitionDuration = 0.15
 }
 
 public enum NodeType: String, Sendable, CaseIterable {
-    case frame, rectangle, ellipse, text, image, group
+    case frame, rectangle, ellipse, text, image, icon, group
 
     /// The default name of a new layer.
     public var title: String {
@@ -138,6 +196,7 @@ public enum NodeType: String, Sendable, CaseIterable {
         case .ellipse: return L("Ellipse")
         case .text: return L("Text")
         case .image: return L("Image")
+        case .icon: return L("Icon")
         case .group: return L("Group")
         }
     }
@@ -165,8 +224,15 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var sizing = Sizing.fixed
     public var text: DesignText?
     public var image: DesignImage?
+    public var icon: DesignIcon?
     public var layout: AutoLayout?
     public var interaction: DesignInteraction?
+    /// Frames only.
+    public var scroll = ScrollDirection.none
+    /// Stays in place, above the scrolled content, when its parent frame scrolls.
+    public var fixedOnScroll = false
+    public var states: LayerStates?
+    public var animation: LayerAnimation?
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -186,8 +252,9 @@ public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
-    /// 2 added layer interactions; version 1 files open unchanged and are written as version 2.
-    public static let formatVersion = 2
+    /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
+    /// toggles, 5 icon layers; older files open unchanged and are written as the current version.
+    public static let formatVersion = 5
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]

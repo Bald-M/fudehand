@@ -85,7 +85,7 @@ private func temporaryFile() -> URL {
     #expect(saved["dirty"] as? Bool == false && saved["file"] as? String == url.path)
     let expected = store.editor.document
     let text = try String(contentsOf: url, encoding: .utf8)
-    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 2"))
+    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : \(DesignDocument.formatVersion)"))
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "ellipse"])))
     #expect(await failure(store, .newDocument(discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
@@ -381,6 +381,55 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("button")?.interaction == nil)
 }
 
+@Test @MainActor func agentSetsInScreenInteractions() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "home", "type": "frame", "scroll": "vertical",
+        "children": [["id": "bar", "type": "rectangle", "fixedOnScroll": true], ["id": "tab", "type": "rectangle"], ["id": "panel", "type": "rectangle"]],
+    ])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "menu", "type": "frame"])))
+    let updated = try await control(store, .updateNode("tab", changes: JSONObject([
+        "states": ["pressed": ["opacity": 0.5]],
+        "interaction": ["action": "open-overlay", "destination": "menu", "position": "bottom", "background": "#00000066"],
+    ])))
+    #expect((updated["states"] as? [String: Any])?["pressed"] != nil)
+    let tab = try #require(store.editor.document.node("tab"))
+    #expect(tab.states == LayerStates(pressed: LayerStyle(opacity: 0.5)))
+    let scrim = try DesignColor(hex: "#00000066")
+    #expect(tab.interaction == .openOverlay(destination: "menu", overlay: OverlaySettings(position: .bottom, background: scrim), transition: PrototypeTransition()))
+    #expect(store.editor.document.node("home")?.scroll == .vertical && store.editor.document.node("bar")?.fixedOnScroll == true)
+    _ = try await control(store, .updateNode("tab", changes: JSONObject(["interaction": ["action": "toggle-visibility", "targets": ["panel"]]])))
+    #expect(await failure(store, .updateNode("tab", changes: JSONObject(["interaction": ["action": "toggle-visibility", "targets": ["nope"]]])))
+            == "Layer tab: interaction.targets includes nope, which is not a layer")
+    #expect(await failure(store, .updateNode("tab", changes: JSONObject(["scroll": "vertical"]))) == "Layer tab: rectangle does not support scroll")
+}
+
+@Test @MainActor func agentAndPanelSetTheSameAnimationsAndSequences() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "screen", "type": "frame", "children": [["id": "spinner", "type": "ellipse"], ["id": "count", "type": "text", "text": ["content": "60"]]],
+    ])))
+    let updated = try await control(store, .updateNode("spinner", changes: JSONObject(["animation": ["type": "spin", "duration": 0.8]])))
+    #expect((updated["animation"] as? [String: Any])?["repeat"] as? String == "infinite")
+    var spin = LayerAnimation(type: .spin)
+    spin.duration = 0.8
+    #expect(store.editor.document.node("spinner")?.animation == spin)
+    _ = try await control(store, .updateNode("count", changes: JSONObject(["text": ["sequence": ["items": ["3", "2", "1"], "loop": true]]])))
+    #expect(store.editor.document.node("count")?.text?.sequence == TextSequence(items: ["3", "2", "1"], loop: true))
+    // The text itself, which the canvas and snapshots show, is unchanged.
+    #expect(store.editor.document.node("count")?.text?.content == "60")
+
+    // The properties panel goes through the same edit path and the same undo history.
+    store.updateNode("spinner", "Change Animation") { $0.animation = LayerAnimation(type: .pulse) }
+    #expect(store.editor.document.node("spinner")?.animation == LayerAnimation(type: .pulse))
+    store.undo()
+    #expect(store.editor.document.node("spinner")?.animation == spin)
+    store.undo()
+    #expect(store.editor.document.node("count")?.text?.sequence == nil)
+    #expect(await failure(store, .updateNode("spinner", changes: JSONObject(["animation": ["type": "spin", "from": "left"]])))
+            == "Layer spinner: unsupported field animation.from")
+}
+
 @Test @MainActor func playbackStartsFromTheSelectedFrame() async throws {
     let store = makeStore()
     #expect(store.prototypeStart == nil)
@@ -408,4 +457,95 @@ private func temporaryFile() -> URL {
     #expect(selectionChanges == 2)
     #expect(storeChanges == 0)
     _ = observers
+}
+
+// MARK: Icon layers
+
+@Test @MainActor func createIconLayer() async throws {
+    let store = makeStore()
+    let created = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    let node = try #require(created["node"] as? [String: Any])
+    #expect(node["width"] as? Double == 24 && node["height"] as? Double == 24)
+    #expect(node["icon"] as? [String: String] == ["name": "lucide/house", "color": "#000000"])
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "s", "type": "icon", "width": 40, "icon": ["name": "sf/house.fill"]])))
+    #expect(store.editor.document.node("s")?.width == 40 && store.editor.document.node("s")?.height == 24)
+}
+
+@Test @MainActor func unknownIconIsRejectedWithSuggestions() async throws {
+    let store = makeStore()
+    let message = await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "icon", "icon": ["name": "lucide/hous"]])))
+    #expect(message?.hasPrefix("Unknown icon lucide/hous; similar: lucide/house") == true)
+    #expect(store.editor.document.nodes.isEmpty && !store.canUndo)
+    #expect(await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "icon", "icon": ["name": "weui/zzzzzzzzzzzzzzzzzzzz"]])))?
+        .hasPrefix("Unknown icon weui/zzzzzzzzzzzzzzzzzzzz; similar: weui/") == true)
+}
+
+@Test @MainActor func unknownNestedIconCreatesNothing() async throws {
+    let store = makeStore()
+    let message = await failure(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "children": [["type": "icon", "icon": ["name": "lucide/house"]],
+                                                  ["type": "group", "children": [["type": "icon", "icon": ["name": "material-sharp/nope-nope"]]]]],
+    ])))
+    #expect(message?.hasPrefix("Unknown icon material-sharp/nope-nope") == true)
+    #expect(store.editor.document.nodes.isEmpty)
+}
+
+@Test @MainActor func updateToUnknownIconIsRejected() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    #expect(await failure(store, .updateNode("i", changes: JSONObject(["icon": ["name": "sf/not.a.real.symbol"]])))?
+        .hasPrefix("Unknown icon sf/not.a.real.symbol") == true)
+    #expect(store.editor.document.node("i")?.icon?.name == "lucide/house")
+    _ = try await control(store, .updateNode("i", changes: JSONObject(["icon": ["name": "material-outlined/home", "color": "#FF0000"]])))
+    let red = try DesignColor(hex: "#FF0000")
+    #expect(store.editor.document.node("i")?.icon == DesignIcon(name: "material-outlined/home", color: red))
+}
+
+@Test @MainActor func updatingOtherFieldsOfUnknownIconIsAllowed() async throws {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var node = DesignNode(id: "i", type: .icon, width: 24, height: 24)
+    node.icon = DesignIcon(name: "sf/not.a.real.symbol")
+    try DesignDocument(nodes: [node]).encoded().write(to: url)
+    try store.open(url)
+    _ = try await control(store, .updateNode("i", changes: JSONObject(["x": 12, "icon": ["color": "#336699"]])))
+    #expect(store.editor.document.node("i")?.x == 12)
+    #expect(store.editor.document.node("i")?.icon?.name == "sf/not.a.real.symbol")
+}
+
+@Test @MainActor func searchIconsReturnsNames() async throws {
+    let store = makeStore()
+    let result = try await control(store, .searchIcons(query: "house", library: .lucide, limit: 3))
+    let icons = try #require(result["icons"] as? [String])
+    #expect(icons.count == 3 && icons.first == "lucide/house")
+    let symbols = try await control(store, .searchIcons(query: "house.fill", library: .sf, limit: 50))
+    #expect((symbols["icons"] as? [String])?.first == "sf/house.fill")
+}
+
+@Test @MainActor func iconSnapshotViaControl() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "width": 48, "height": 48, "fill": "#FFFFFF",
+        "children": [["type": "icon", "width": 48, "height": 48, "icon": ["name": "material-outlined/home", "color": "#FF0000"]]],
+    ])))
+    let shot = try await control(store, .nodeSnapshot("f", scale: 1))
+    let encoded = try #require(shot["data"] as? String)
+    let png = try #require(Data(base64Encoded: encoded))
+    let image = try #require(NSBitmapImageRep(data: png))
+    let bytes = try #require(image.bitmapData)
+    // The roof's peak at the top center is red.
+    #expect(bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel] == 255 && bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel + 1] == 0)
+}
+
+@Test @MainActor func iconColorChangeIsOneUndoStep() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    let red = try DesignColor(hex: "#FF0000"), blue = try DesignColor(hex: "#0000FF")
+    // The properties panel's color well sends a stream of changes while dragging; they coalesce into one step.
+    store.updateNode("i", "Change Icon Color", coalescing: "icon.color") { $0.icon?.color = red }
+    store.updateNode("i", "Change Icon Color", coalescing: "icon.color") { $0.icon?.color = blue }
+    #expect(store.editor.document.node("i")?.icon?.color == blue)
+    store.undo()
+    #expect(store.editor.document.node("i")?.icon?.color == .black)
 }

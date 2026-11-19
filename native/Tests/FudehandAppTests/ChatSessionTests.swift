@@ -918,6 +918,43 @@ private func askingHarness() throws -> (root: URL, received: () throws -> [[Stri
     #expect(history.load(relaunched.conversationID)?.entries.last?.text == "resumed: 4 entries")
 }
 
+@Test @MainActor func aPlanReplysQuestionIsStillAnsweredInPlanModeAfterARelaunchOrReopenedTab() async throws {
+    let harness = try askingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    let session = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    session.mode = .plan
+    session.send("Add a bottom navigation", root: harness.root, runtime: nil)
+    try await waiting(session)
+    #expect(history.load(session.conversationID)?.replyMode == .plan)
+    await session.shutdown()
+
+    // After a relaunch the answer still cannot edit the document: it continues the plan, which is then ready to run.
+    let relaunched = ChatSession(defaults: defaults, readKey: { _ in nil }, history: history)
+    #expect(relaunched.mode == .plan)
+    relaunched.answer("4 entries", root: harness.root, runtime: nil)
+    try await settle(relaunched)
+    #expect(relaunched.planReady)
+    // Once nothing waits, the mode is no longer saved.
+    #expect(history.load(relaunched.conversationID)?.replyMode == nil)
+
+    // The same after closing the tab and reopening the conversation from the history.
+    relaunched.send("Fewer entries", root: harness.root, runtime: nil)
+    try await waiting(relaunched)
+    let id = relaunched.conversationID
+    relaunched.close(id)
+    relaunched.open(id)
+    #expect(relaunched.mode == .plan)
+    relaunched.answer("3 entries", root: harness.root, runtime: nil)
+    try await settle(relaunched)
+    await relaunched.shutdown()
+
+    let answers = try harness.received().filter { $0["type"] as? String == "answer" }
+    #expect(answers.map { $0["mode"] as? String } == ["plan", "plan"])
+}
+
 @Test @MainActor func closingATabKeepsItsQuestionOpen() async throws {
     let harness = try askingHarness()
     defer { try? FileManager.default.removeItem(at: harness.root) }
@@ -932,6 +969,129 @@ private func askingHarness() throws -> (root: URL, received: () throws -> [[Stri
     session.open(id)
     #expect(session.transcript.waiting)
     await session.shutdown()
+}
+
+// MARK: Slash commands and modes
+
+@Test @MainActor func chatPlanModeIsSentWithEachMessageUntilThePlanIsRun() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .plan
+    #expect(!session.planReady)
+    session.send("A login screen", root: harness.root, runtime: nil)
+    #expect(!session.planReady)
+    try await settle(session)
+    // The reply is the plan: the mode stays on, and the plan can be run.
+    #expect(session.mode == .plan && session.planReady)
+    session.runPlan(root: harness.root, runtime: nil)
+    #expect(session.mode == nil && !session.planReady)
+    try await settle(session)
+    #expect(session.transcript.entries.map(\.text) == ["A login screen", "ok", "Carry out the plan.", "ok"])
+    await session.shutdown()
+
+    let received = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect(received.map { $0["mode"] as? String } == ["plan", nil])
+}
+
+@Test @MainActor func chatLeavingPlanModeWithdrawsThePlan() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .plan
+    session.send("A login screen", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.mode = nil
+    #expect(!session.planReady)
+    session.runPlan(root: harness.root, runtime: nil)
+    #expect(!session.transcript.busy && session.transcript.entries.count == 2)
+    await session.shutdown()
+}
+
+@Test @MainActor func chatGoalModeEndsWithTheReplyAndBelongsToItsConversation() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .goal
+    session.send("Finish the page", root: harness.root, runtime: nil)
+    #expect(session.mode == .goal)
+    let first = session.conversationID
+    session.newConversation()
+    #expect(session.mode == nil)
+    session.select(first)
+    try await settle(session)
+    #expect(session.mode == nil)
+    session.send("Thanks", root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let received = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect(received.map { $0["mode"] as? String } == ["goal", nil])
+}
+
+@Test @MainActor func chatClearingAConversationEmptiesItInPlace() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let history = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: history.directory) }
+    let session = temporarySession(history: history)
+    session.mode = .plan
+    session.send("A login screen", root: harness.root, runtime: nil)
+    try await settle(session)
+    let id = session.conversationID
+    #expect(session.conversations.count == 1)
+    session.clearConversation()
+    #expect(session.conversationID == id && session.tabs.count == 1)
+    #expect(session.transcript.entries.isEmpty && session.conversations.isEmpty)
+    #expect(session.mode == nil && !session.planReady)
+
+    // The harness is told the conversation starts over.
+    session.send("Again", root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+    let received = try harness.received()
+    #expect((received.last { $0["type"] as? String == "load" }?["messages"] as? [[String: String]]) == [])
+    #expect(received.last?["text"] as? String == "Again")
+
+}
+
+@Test @MainActor func chatClearingStopsARunningReply() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.send("Hello", root: harness.root, runtime: nil)
+    let pid = try #require(try await received(harness, count: 2).last?["pid"] as? Int)
+    #expect(session.transcript.busy)
+    session.clearConversation()
+    #expect(!session.transcript.busy && session.transcript.entries.isEmpty)
+    // The harness is gone, and the reply it was about to send does not land in the emptied conversation.
+    #expect(try await exited([Int32(pid)]))
+    try await Task.sleep(nanoseconds: 500_000_000)
+    #expect(session.transcript.entries.isEmpty)
+    await session.shutdown()
+}
+
+@Test @MainActor func chatACommandRunDuringAReplyAppliesToTheNextMessage() async throws {
+    let harness = try slowHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    // Plan mode chosen while an ordinary reply runs: that reply is not a plan.
+    session.send("Make it blue", root: harness.root, runtime: nil)
+    session.mode = .plan
+    try await settle(session)
+    #expect(session.mode == .plan && !session.planReady)
+    // Goal mode chosen while the plan is being made: it is still on for the goal that follows.
+    session.send("A login screen", root: harness.root, runtime: nil)
+    session.mode = .goal
+    try await settle(session)
+    #expect(session.mode == .goal && !session.planReady)
+    session.send("Finish the page", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.mode == nil)
+    await session.shutdown()
+
+    let sent = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect(sent.map { $0["mode"] as? String } == [nil, "plan", "goal"])
 }
 
 @Test @MainActor func contextWindowFollowsTheModelOfTheSelectedConversation() {
@@ -1011,4 +1171,43 @@ private func compactingHarness() throws -> (root: URL, received: () throws -> [[
     #expect(received.map { $0["type"] as? String } == ["load", "user", "compact", "load", "user", "load", "compact"])
     #expect((received[3]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."]])
     #expect((received[5]["messages"] as? [[String: String]]) == [["role": "summary", "text": "All blue."], ["role": "user", "text": "Which color?"], ["role": "assistant", "text": "ok"]])
+}
+
+@Test @MainActor func chatRegeneratingTheReplyToAGoalWorksOnTheGoalAgain() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .goal
+    session.send("Finish the page", root: harness.root, runtime: nil)
+    try await settle(session)
+    #expect(session.mode == nil)
+    session.regenerate(root: harness.root, runtime: nil)
+    #expect(session.mode == .goal)
+    try await settle(session)
+    #expect(session.mode == nil)
+    // An ordinary reply is regenerated as one.
+    session.send("Thanks", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.regenerate(root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let sent = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect(sent.map { $0["mode"] as? String } == ["goal", "goal", nil, nil])
+}
+
+@Test @MainActor func chatRunningAPlanSendsTheSelectedLayers() async throws {
+    let harness = try recordingHarness()
+    defer { try? FileManager.default.removeItem(at: harness.root) }
+    let session = temporarySession()
+    session.mode = .plan
+    session.send("Make it blue", root: harness.root, runtime: nil)
+    try await settle(session)
+    session.runPlan(context: [ChatContext(id: "n1", name: "Hero", type: "frame")], root: harness.root, runtime: nil)
+    try await settle(session)
+    await session.shutdown()
+
+    let sent = try harness.received().filter { $0["type"] as? String == "user" }
+    #expect((sent.last?["context"] as? [[String: String]]) == [["id": "n1", "name": "Hero", "type": "frame"]])
+    #expect(session.transcript.entries.last { $0.kind == .user }?.context.map(\.name) == ["Hero"])
 }
