@@ -54,7 +54,7 @@ private let prototype = """
     let old = try decode(#"{"format":"fudehand.design","version":1,"nodes":[{"id":"a","type":"frame"}]}"#)
     #expect(old.nodes[0].interaction == nil)
     let text = String(decoding: try old.encoded(), as: UTF8.self)
-    #expect(text.contains("\"version\" : 3"))
+    #expect(text.contains("\"version\" : \(DesignDocument.formatVersion)"))
 }
 
 @Test func validatesInteractionFields() {

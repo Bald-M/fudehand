@@ -70,6 +70,25 @@ public struct DesignImage: Equatable, Sendable {
     public init(data: Data, fit: ImageFit = .fill) { self.data = data; self.fit = fit }
 }
 
+/// A built-in icon library. An icon is addressed as `<library>/<name>`, e.g. `sf/house.fill` or `material-rounded/home.fill`.
+public enum IconLibrary: String, Sendable, CaseIterable {
+    case sf, materialOutlined = "material-outlined", materialRounded = "material-rounded", materialSharp = "material-sharp", weui, lucide
+
+    /// Splits `<library>/<name>`; nil when the library is unknown or either part is empty.
+    public static func parse(_ fullName: String) -> (library: IconLibrary, name: String)? {
+        guard let slash = fullName.firstIndex(of: "/"), let library = IconLibrary(rawValue: String(fullName[..<slash])) else { return nil }
+        let name = String(fullName[fullName.index(after: slash)...])
+        return name.isEmpty ? nil : (library, name)
+    }
+}
+
+/// An icon layer's content: only the icon's name and color are stored; its artwork comes from the icon library when drawn.
+public struct DesignIcon: Equatable, Sendable {
+    public var name: String
+    public var color: DesignColor
+    public init(name: String, color: DesignColor = .black) { self.name = name; self.color = color }
+}
+
 public struct EdgeInsets: Equatable, Sendable {
     public var top: Double, right: Double, bottom: Double, left: Double
     public init(top: Double = 0, right: Double = 0, bottom: Double = 0, left: Double = 0) {
@@ -130,7 +149,7 @@ public enum DesignInteraction: Equatable, Sendable {
 }
 
 public enum NodeType: String, Sendable, CaseIterable {
-    case frame, rectangle, ellipse, text, image, group
+    case frame, rectangle, ellipse, text, image, icon, group
 
     /// The default name of a new layer.
     public var title: String {
@@ -140,6 +159,7 @@ public enum NodeType: String, Sendable, CaseIterable {
         case .ellipse: return L("Ellipse")
         case .text: return L("Text")
         case .image: return L("Image")
+        case .icon: return L("Icon")
         case .group: return L("Group")
         }
     }
@@ -167,6 +187,7 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var sizing = Sizing.fixed
     public var text: DesignText?
     public var image: DesignImage?
+    public var icon: DesignIcon?
     public var layout: AutoLayout?
     public var interaction: DesignInteraction?
     public var animation: LayerAnimation?
@@ -189,8 +210,8 @@ public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
-    /// 2 added layer interactions, 3 layer animations and text sequences; older files open unchanged and are written as the current version.
-    public static let formatVersion = 3
+    /// 2 added layer interactions, 3 layer animations and text sequences, 4 icon layers; older files open unchanged and are written as the current version.
+    public static let formatVersion = 4
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]

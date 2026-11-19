@@ -51,6 +51,7 @@
 "Ellipse" = "椭圆";
 "Text" = "文字";
 "Image" = "图片";
+"Icon" = "图标";
 "Group" = "分组";
 "Move" = "移动";
 "Hand" = "抓手";

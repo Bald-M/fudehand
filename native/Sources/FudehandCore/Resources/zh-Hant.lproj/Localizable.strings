@@ -51,6 +51,7 @@
 "Ellipse" = "橢圓";
 "Text" = "文字";
 "Image" = "圖片";
+"Icon" = "圖示";
 "Group" = "群組";
 "Move" = "移動";
 "Hand" = "手形工具";

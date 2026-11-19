@@ -85,7 +85,7 @@ private func temporaryFile() -> URL {
     #expect(saved["dirty"] as? Bool == false && saved["file"] as? String == url.path)
     let expected = store.editor.document
     let text = try String(contentsOf: url, encoding: .utf8)
-    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 3"))
+    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : \(DesignDocument.formatVersion)"))
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "ellipse"])))
     #expect(await failure(store, .newDocument(discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")

@@ -51,6 +51,7 @@
 "Ellipse" = "Ellipse";
 "Text" = "Text";
 "Image" = "Image";
+"Icon" = "Icon";
 "Group" = "Group";
 "Move" = "Move";
 "Hand" = "Hand";
