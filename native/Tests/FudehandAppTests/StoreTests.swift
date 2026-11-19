@@ -435,3 +435,82 @@ private func temporaryFile() -> URL {
     #expect(storeChanges == 0)
     _ = observers
 }
+
+// MARK: Icon layers
+
+@Test @MainActor func createIconLayer() async throws {
+    let store = makeStore()
+    let created = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    let node = try #require(created["node"] as? [String: Any])
+    #expect(node["width"] as? Double == 24 && node["height"] as? Double == 24)
+    #expect(node["icon"] as? [String: String] == ["name": "lucide/house", "color": "#000000"])
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "s", "type": "icon", "width": 40, "icon": ["name": "sf/house.fill"]])))
+    #expect(store.editor.document.node("s")?.width == 40 && store.editor.document.node("s")?.height == 24)
+}
+
+@Test @MainActor func unknownIconIsRejectedWithSuggestions() async throws {
+    let store = makeStore()
+    let message = await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "icon", "icon": ["name": "lucide/hous"]])))
+    #expect(message?.hasPrefix("Unknown icon lucide/hous; similar: lucide/house") == true)
+    #expect(store.editor.document.nodes.isEmpty && !store.canUndo)
+    #expect(await failure(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "icon", "icon": ["name": "weui/zzzzzzzzzzzzzzzzzzzz"]])))?
+        .hasPrefix("Unknown icon weui/zzzzzzzzzzzzzzzzzzzz; similar: weui/") == true)
+}
+
+@Test @MainActor func unknownNestedIconCreatesNothing() async throws {
+    let store = makeStore()
+    let message = await failure(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "children": [["type": "icon", "icon": ["name": "lucide/house"]],
+                                                  ["type": "group", "children": [["type": "icon", "icon": ["name": "material-sharp/nope-nope"]]]]],
+    ])))
+    #expect(message?.hasPrefix("Unknown icon material-sharp/nope-nope") == true)
+    #expect(store.editor.document.nodes.isEmpty)
+}
+
+@Test @MainActor func updateToUnknownIconIsRejected() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    #expect(await failure(store, .updateNode("i", changes: JSONObject(["icon": ["name": "sf/not.a.real.symbol"]])))?
+        .hasPrefix("Unknown icon sf/not.a.real.symbol") == true)
+    #expect(store.editor.document.node("i")?.icon?.name == "lucide/house")
+    _ = try await control(store, .updateNode("i", changes: JSONObject(["icon": ["name": "material-outlined/home", "color": "#FF0000"]])))
+    let red = try DesignColor(hex: "#FF0000")
+    #expect(store.editor.document.node("i")?.icon == DesignIcon(name: "material-outlined/home", color: red))
+}
+
+@Test @MainActor func updatingOtherFieldsOfUnknownIconIsAllowed() async throws {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var node = DesignNode(id: "i", type: .icon, width: 24, height: 24)
+    node.icon = DesignIcon(name: "sf/not.a.real.symbol")
+    try DesignDocument(nodes: [node]).encoded().write(to: url)
+    try store.open(url)
+    _ = try await control(store, .updateNode("i", changes: JSONObject(["x": 12, "icon": ["color": "#336699"]])))
+    #expect(store.editor.document.node("i")?.x == 12)
+    #expect(store.editor.document.node("i")?.icon?.name == "sf/not.a.real.symbol")
+}
+
+@Test @MainActor func searchIconsReturnsNames() async throws {
+    let store = makeStore()
+    let result = try await control(store, .searchIcons(query: "house", library: .lucide, limit: 3))
+    let icons = try #require(result["icons"] as? [String])
+    #expect(icons.count == 3 && icons.first == "lucide/house")
+    let symbols = try await control(store, .searchIcons(query: "house.fill", library: .sf, limit: 50))
+    #expect((symbols["icons"] as? [String])?.first == "sf/house.fill")
+}
+
+@Test @MainActor func iconSnapshotViaControl() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "width": 48, "height": 48, "fill": "#FFFFFF",
+        "children": [["type": "icon", "width": 48, "height": 48, "icon": ["name": "material-outlined/home", "color": "#FF0000"]]],
+    ])))
+    let shot = try await control(store, .nodeSnapshot("f", scale: 1))
+    let encoded = try #require(shot["data"] as? String)
+    let png = try #require(Data(base64Encoded: encoded))
+    let image = try #require(NSBitmapImageRep(data: png))
+    let bytes = try #require(image.bitmapData)
+    // The roof's peak at the top center is red.
+    #expect(bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel] == 255 && bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel + 1] == 0)
+}
