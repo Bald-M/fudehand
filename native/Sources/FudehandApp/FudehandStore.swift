@@ -93,6 +93,7 @@ final class FudehandStore: ObservableObject {
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
     init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
         self.defaults = defaults
+        SystemSymbols.install()
         fontLibrary = FontLibrary(directory: fontDirectory)
         fontFamilies = fontLibrary.families()
         self.chatRoot = chatRoot
