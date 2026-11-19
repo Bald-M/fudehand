@@ -182,6 +182,8 @@ describe('Design guidance', () => {
     expect(designGuidance).toMatch(/Lorem ipsum/)
     expect(designGuidance).toMatch(/At most two font families/)
     expect(designGuidance).toMatch(/user's own words take precedence/)
+    // Real icons instead of stand-ins, from the library of the prototype's platform.
+    for (const word of ['design_search_icons', 'sf', 'material-', 'weui', 'lucide']) expect(designGuidance).toContain(word)
     expect(designGuidance).not.toMatch(/\bCSS\b|selector|animation|motion|hover|keyboard|focus ring|responsive|breakpoint/i)
     // MCP clients such as Claude Code cut a server's instructions off at about 2,048 characters.
     expect(designGuidance.length).toBeLessThan(2000)
