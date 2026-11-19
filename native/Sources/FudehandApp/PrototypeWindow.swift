@@ -83,6 +83,8 @@ final class PrototypeStageView: NSView {
     private var pressedResponder: String?
     /// The layer showing states under the pointer when the button went down.
     private var pressedStyled: String?
+    /// The button went down outside the topmost overlay.
+    private var pressedOutside = false
     /// The layers drawn in their hover and pressed states.
     private var hovered: String?
     private var pressed: String?
@@ -198,6 +200,7 @@ final class PrototypeStageView: NSView {
         let target = target(event)
         pressedResponder = target.responder?.node.id
         pressedStyled = target.styled
+        pressedOutside = target.outside
         setStates(hovered: target.styled, pressed: target.styled)
     }
 
@@ -205,9 +208,12 @@ final class PrototypeStageView: NSView {
     override func mouseDragged(with event: NSEvent) { updateHover(event) }
 
     override func mouseUp(with event: NSEvent) {
-        let fires = pressedResponder != nil && pressedResponder == target(event).responder?.node.id
+        let released = target(event)
+        // A click fires on the layer it was pressed on, or outside the topmost overlay when it was pressed outside it too.
+        let fires = (pressedResponder != nil && pressedResponder == released.responder?.node.id) || (pressedOutside && released.outside)
         pressedResponder = nil
         pressedStyled = nil
+        pressedOutside = false
         if fires, var player, let effect = player.click(at: stagePoint(event), in: document) {
             self.player = player
             perform(effect)
@@ -220,7 +226,8 @@ final class PrototypeStageView: NSView {
         guard var player else { return }
         let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY), precise: event.hasPreciseScrollingDeltas)
         // Content follows the fingers: moving them up scrolls further into it.
-        guard player.scroll(by: Point(x: -delta.x / scale, y: -delta.y / scale), at: stagePoint(event), in: document) else { return }
+        guard player.scroll(by: Point(x: -delta.x / scale, y: -delta.y / scale), at: stagePoint(event), wheel: !event.hasPreciseScrollingDeltas,
+                            in: document) else { return }
         self.player = player
         render(shown)
         updateHover(event)
@@ -241,7 +248,7 @@ final class PrototypeStageView: NSView {
             render(shown)
             animate(overlay, opening: true)
         case .closeOverlay(let overlay):
-            // The overlay stays rendered until it has left.
+            // While it animates, the player keeps the overlay in the scene, so renders in the meantime (hover, scrolling) keep it.
             if player?.isTransitioning == true { animate(overlay, opening: false) } else { render(shown) }
         }
     }
@@ -261,10 +268,11 @@ final class PrototypeStageView: NSView {
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             guard let self, self.token == session else { return }
-            if !opening { self.render(renderer) }
             renderer.layer(for: overlay.frame)?.removeAllAnimations()
             renderer.layer(for: Prototype.scrimID(overlay.frame))?.removeAllAnimations()
             self.player?.finishTransition()
+            // Finishing drops the closing overlay from the scene.
+            if !opening { self.render(renderer) }
         }
         func animate(_ target: CALayer, _ key: String, hidden: Any, visible: Any) {
             let animation = CABasicAnimation(keyPath: key)

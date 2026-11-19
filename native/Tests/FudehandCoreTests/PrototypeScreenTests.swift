@@ -136,13 +136,16 @@ private let screens = """
 @Test func theInnermostFrameThatCanMoveScrolls() throws {
     let document = try decode(screens)
     var player = PrototypePlayer(start: "feed")
-    // A wheel's vertical delta scrolls the horizontal carousel under the pointer.
-    let scrolled = player.scroll(by: Point(x: 0, y: 50), at: Point(x: 100, y: 450), in: document)
+    // A trackpad's vertical swipe over the horizontal carousel scrolls the page around it.
+    let swiped = player.scroll(by: Point(x: 0, y: 50), at: Point(x: 100, y: 450), in: document)
+    #expect(swiped && player.scrollOffsets["feed"] == Point(x: 0, y: 50) && player.scrollOffsets["carousel"] == nil)
+    // A mouse wheel only turns vertically, so its delta scrolls the horizontal carousel under the pointer instead.
+    let scrolled = player.scroll(by: Point(x: 0, y: 50), at: Point(x: 100, y: 400), wheel: true, in: document)
     #expect(scrolled)
-    #expect(player.scrollOffsets["carousel"] == Point(x: 50, y: 0) && player.scrollOffsets["feed"] == nil)
+    #expect(player.scrollOffsets["carousel"] == Point(x: 50, y: 0) && player.scrollOffsets["feed"] == Point(x: 0, y: 50))
     // At the carousel's start, scrolling back further moves nothing; a frame that does not overflow does not scroll.
-    _ = player.scroll(by: Point(x: -50, y: 0), at: Point(x: 100, y: 450), in: document)
-    let stuck = player.scroll(by: Point(x: -10, y: 0), at: Point(x: 100, y: 450), in: document)
+    _ = player.scroll(by: Point(x: -50, y: 0), at: Point(x: 100, y: 400), in: document)
+    let stuck = player.scroll(by: Point(x: -10, y: 0), at: Point(x: 100, y: 400), in: document)
     #expect(!stuck)
     #expect(Prototype.scrollRange(of: document.nodes[3]) == Size(width: 0, height: 0))
 }
@@ -186,7 +189,7 @@ private let screens = """
     #expect(scene.map(\.id) == ["feed", "menu"])
     #expect(scene[1].x == 20 && scene[1].y == 150)
     // The frame below does not respond; a click outside closes the overlay, as this one allows.
-    #expect(player.target(at: Point(x: 30, y: 310), in: document) == PrototypePlayer.Target())
+    #expect(player.target(at: Point(x: 30, y: 310), in: document) == PrototypePlayer.Target(outside: true))
     let menu = player.overlays[0]
     #expect(player.click(at: Point(x: 30, y: 310), in: document) == .closeOverlay(menu))
     #expect(player.overlays.isEmpty)
@@ -215,6 +218,11 @@ private let screens = """
     let close = player.perform(.closeOverlay, in: document)
     #expect(close != nil)
     #expect(player.isTransitioning)
+    // While it plays its closing transition the dialog is still drawn, but no longer takes input.
+    #expect(player.scene(in: document).map(\.id) == ["feed", Prototype.scrimID("dialog"), "dialog"])
+    #expect(player.target(at: Point(x: 30, y: 210), in: document).responder?.node.id == "open-dialog")
+    player.finishTransition()
+    #expect(player.scene(in: document).map(\.id) == ["feed"])
 }
 
 @Test func navigatingFromAnOverlayClosesItFirst() throws {

@@ -10,7 +10,7 @@
 - **Playback state is separate from the document.** Scroll offsets, open overlays, and toggled visibility live in `PrototypePlayer` for one playback; hover and press live in the prototype window. `Prototype.playback` turns a frame into the tree to render and hit-test — toggles applied, scrolled content offset, fixed layers moved above it, state looks applied — so rendering and click rules see the same layers. The design document and the editing canvas never change.
 - **Overlays are top-level frames rendered into the same scene** as the frame on show, after a synthetic background rectangle, in one renderer; navigation transitions keep using the two renderers of ADR 0007. Only the topmost overlay takes input; navigating from it closes all overlays first, and Back closes the topmost one before it goes back.
 - **The scope of states is fill and opacity**, with a fixed 0.15 s ease-out. That covers buttons, rows, and cards; more properties can be added to `LayerStyle` later without a format change in meaning.
-- **Scrolling relies on the system's scroll events**: the trackpad's momentum phase gives inertia, and offsets are clamped to the content's extent (no rubber-band). The innermost scrolling frame that can still move takes the scroll, so a horizontal carousel inside a vertical page works without any scroll linkage.
+- **Scrolling relies on the system's scroll events**: the trackpad's momentum phase gives inertia, and offsets are clamped to the content's extent (no rubber-band). The innermost scrolling frame that can still move along the gesture takes the scroll, so a horizontal carousel inside a vertical page works without any scroll linkage; only a mouse wheel, which turns vertically, is mapped onto a horizontal frame.
 
 ## Rejected Alternatives
 

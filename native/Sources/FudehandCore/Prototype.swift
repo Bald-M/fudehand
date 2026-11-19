@@ -164,7 +164,11 @@ public struct PrototypePlayer: Equatable {
     public struct Target: Equatable {
         public var responder: Prototype.Hit?
         public var styled: String?
-        public init(responder: Prototype.Hit? = nil, styled: String? = nil) { self.responder = responder; self.styled = styled }
+        /// The point is outside the topmost overlay, where a click may close it.
+        public var outside: Bool
+        public init(responder: Prototype.Hit? = nil, styled: String? = nil, outside: Bool = false) {
+            self.responder = responder; self.styled = styled; self.outside = outside
+        }
     }
 
     private struct Visit: Equatable {
@@ -177,6 +181,8 @@ public struct PrototypePlayer: Equatable {
     private var history: [Visit] = []
     /// Bottom to top.
     public private(set) var overlays: [PrototypeOverlay] = []
+    /// An overlay playing its closing transition: still rendered, on top, but it no longer takes input.
+    public private(set) var closing: PrototypeOverlay?
     /// By scrolling frame id.
     public private(set) var scrollOffsets: [String: Point] = [:]
     /// Layers whose visibility a toggle changed, by id.
@@ -188,11 +194,13 @@ public struct PrototypePlayer: Equatable {
 
     // MARK: What is shown
 
-    /// The frame on show and the open overlays, each paired with its origin on the stage. Overlays whose frame was deleted are left out.
-    private func placed(in document: DesignDocument) -> [(overlay: PrototypeOverlay?, frame: DesignNode, origin: Point)] {
+    /// The frame on show and the open overlays (with the closing one when `includingClosing`), each paired with its origin on
+    /// the stage. Overlays whose frame was deleted are left out.
+    private func placed(in document: DesignDocument, includingClosing: Bool = false) -> [(overlay: PrototypeOverlay?, frame: DesignNode, origin: Point)] {
         guard let base = Prototype.frame(current, in: document) else { return [] }
         let stage = Size(width: base.width, height: base.height)
-        return [(nil, base, Point(x: 0, y: 0))] + overlays.compactMap { overlay in
+        let shown = overlays + (includingClosing ? [closing].compactMap { $0 } : [])
+        return [(nil, base, Point(x: 0, y: 0))] + shown.compactMap { overlay in
             Prototype.frame(overlay.frame, in: document).map { frame in
                 (overlay, frame, Prototype.overlayOrigin(overlay.settings.position, size: Size(width: frame.width, height: frame.height),
                                                          stage: stage, trigger: overlay.trigger))
@@ -205,9 +213,10 @@ public struct PrototypePlayer: Equatable {
     }
 
     /// The layers to render, bottom to top: the frame on show at the origin, then for each overlay its scrim (when it has a
-    /// background) covering the frame on show, and the overlay frame at its origin. All are visible whatever their own setting.
+    /// background) covering the frame on show, and the overlay frame at its origin; an overlay that is closing stays on top until
+    /// its transition ends. All are visible whatever their own setting.
     public func scene(in document: DesignDocument, styles: [String: LayerStyle] = [:]) -> [DesignNode] {
-        let placed = placed(in: document)
+        let placed = placed(in: document, includingClosing: true)
         guard let base = placed.first?.frame else { return [] }
         return placed.flatMap { item -> [DesignNode] in
             var frame = tree(item.frame, styles: styles)
@@ -231,7 +240,7 @@ public struct PrototypePlayer: Equatable {
     }
 
     public func target(at point: Point, in document: DesignDocument) -> Target {
-        let chain = hits(at: point, in: document) ?? []
+        guard let chain = hits(at: point, in: document) else { return Target(outside: true) }
         return Target(responder: chain.last { $0.node.interaction != nil }, styled: chain.last { $0.node.states != nil }?.node.id)
     }
 
@@ -293,19 +302,20 @@ public struct PrototypePlayer: Equatable {
     private mutating func closeOverlay() -> Effect? {
         guard let overlay = overlays.popLast() else { return nil }
         isTransitioning = Self.animates(overlay.transition)
+        if isTransitioning { closing = overlay }
         return .closeOverlay(overlay)
     }
 
     /// Scrolls the innermost scrolling frame under `point` that can move along `delta` (in content offset terms: positive moves
-    /// further into the content), clamped to its range. A wheel's vertical delta scrolls a horizontal frame that has no
-    /// horizontal delta. Returns whether anything moved.
-    public mutating func scroll(by delta: Point, at point: Point, in document: DesignDocument) -> Bool {
+    /// further into the content), clamped to its range. A mouse wheel (`wheel`), which only turns vertically, scrolls a
+    /// horizontal frame with its vertical delta; a trackpad's vertical swipe passes a horizontal frame by. Returns whether anything moved.
+    public mutating func scroll(by delta: Point, at point: Point, wheel: Bool = false, in document: DesignDocument) -> Bool {
         guard let chain = hits(at: point, in: document) else { return false }
         for hit in chain.reversed() where hit.node.type == .frame && hit.node.scroll != .none {
             // The hit chain holds playback copies; the range comes from the frame's own children (with toggles applied).
             guard let original = document.node(hit.node.id) else { continue }
             let range = Prototype.scrollRange(of: Prototype.playback(original, visibility: visibility))
-            let amount = hit.node.scroll == .vertical ? delta.y : (delta.x != 0 ? delta.x : delta.y)
+            let amount = hit.node.scroll == .vertical ? delta.y : (wheel && delta.x == 0 ? delta.y : delta.x)
             let old = scrollOffsets[hit.node.id] ?? Point(x: 0, y: 0)
             var next = old
             if hit.node.scroll == .vertical { next.y = min(max(old.y + amount, 0), range.height) }
@@ -331,5 +341,8 @@ public struct PrototypePlayer: Equatable {
     }
 
     /// Called when the transition of the last step or overlay has finished playing.
-    public mutating func finishTransition() { isTransitioning = false }
+    public mutating func finishTransition() {
+        isTransitioning = false
+        closing = nil
+    }
 }

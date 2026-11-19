@@ -401,8 +401,9 @@ private struct NodeInspector: View {
         case "close-overlay": return .closeOverlay
         case "navigate": return destinations.first.map { .navigate(destination: $0.id, transition: PrototypeTransition()) }
         case "open-overlay":
-            return destinations.first.map {
-                .openOverlay(destination: $0.id, overlay: OverlaySettings(background: DesignColor(r: 0, g: 0, b: 0, a: 0.4)),
+            // The frame holding the layer cannot be opened over itself.
+            return otherFrame.map {
+                .openOverlay(destination: $0, overlay: OverlaySettings(background: DesignColor(r: 0, g: 0, b: 0, a: 0.4)),
                              transition: PrototypeTransition(type: .dissolve))
             }
         default: return toggleCandidates.first.map { .toggleVisibility(targets: [$0.id]) }
@@ -455,8 +456,8 @@ private struct NodeInspector: View {
                 Text(L("Clicking this layer during playback goes to another frame or back, opens or closes an overlay, or shows and hides layers."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            stateControls(L("While hovered"), L("Add Hover State"), node.states?.hover) { $0.hover = $1 }
-            stateControls(L("While pressed"), L("Add Pressed State"), node.states?.pressed) { $0.pressed = $1 }
+            stateControls(L("While hovered"), L("Add Hover State"), node.states?.hover, key: "hover") { $0.hover = $1 }
+            stateControls(L("While pressed"), L("Add Pressed State"), node.states?.pressed, key: "pressed") { $0.pressed = $1 }
         }
     }
 
@@ -566,8 +567,10 @@ private struct NodeInspector: View {
     }
 
     @ViewBuilder
-    private func stateControls(_ title: String, _ add: String, _ style: LayerStyle?, _ set: @escaping (inout LayerStates, LayerStyle?) -> Void) -> some View {
-        let change = { (action: String, key: String?, next: LayerStyle?) in changeState(action, key, next, set) }
+    private func stateControls(_ title: String, _ add: String, _ style: LayerStyle?, key state: String,
+                               _ set: @escaping (inout LayerStates, LayerStyle?) -> Void) -> some View {
+        // Coalescing keys name the state, so hover and pressed edits stay separate undo steps.
+        let change = { (action: String, key: String?, next: LayerStyle?) in changeState(action, key.map { $0.replacingOccurrences(of: "states.", with: "states.\(state).") }, next, set) }
         if let style {
             Text(title).foregroundStyle(.secondary)
             if let fill = style.fill {
