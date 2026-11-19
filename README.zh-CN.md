@@ -202,4 +202,4 @@ pnpm version:check       # 检查各处版本号一致，不一致时列出差�
 
 Fudehand 以 [Apache-2.0 许可证](LICENSE)发布，源码托管在 [GitHub](https://github.com/Bald-M/fudehand)。App 只在你自己的机器上构建和运行，没有 CI、云同步或生产部署。
 
-`scripts/design-guidance.mjs` 中的 Agent 设计指引改写自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) 的 `frontend-design` skill（版权归 Anthropic, PBC 所有，Apache-2.0 许可）；该文件内注明了改动内容。
+`scripts/design-guidance.mjs` 中的 Agent 设计指引改写自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) 的 `frontend-design` skill（版权归 Anthropic, PBC 所有，Apache-2.0 许可）；其中的设计原则和自评清单改写自 [Trystan-SA/claude-design-system-prompt](https://github.com/Trystan-SA/claude-design-system-prompt)（Copyright (c) 2026 Trystan Sarrade，MIT 许可），该仓库是社区还原的 Claude Design 系统提示词，并非 Anthropic 官方原文。该文件内保留了 MIT 许可声明，并注明了改动内容。

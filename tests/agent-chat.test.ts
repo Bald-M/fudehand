@@ -184,11 +184,35 @@ describe('Design guidance', () => {
     expect(designGuidance).toMatch(/user's own words take precedence/)
     // Real icons instead of stand-ins, from the library of the prototype's platform.
     for (const word of ['design_search_icons', 'sf', 'material-', 'weui', 'lucide']) expect(designGuidance).toContain(word)
-    expect(designGuidance).not.toMatch(/\bCSS\b|selector|animation|motion|hover|keyboard|focus ring|responsive|breakpoint/i)
-    // MCP clients such as Claude Code cut a server's instructions off at about 2,048 characters.
-    expect(designGuidance.length).toBeLessThan(2000)
+    expect(designGuidance).not.toMatch(/\bCSS\b|\bHTML\b|oklch|text-wrap|semantic|selector|animation|motion|transition|hover|keyboard|focus ring|focus state|disabled|shadow|interaction state|responsive|breakpoint/i)
     // The Chinese range is deliberate: the guidance is written in English only.
     expect(designGuidance).not.toMatch(/[一-鿿]/)
+  })
+
+  it('keeps the guidance within its length limits, with the five-step core first', () => {
+    expect(designGuidance.length).toBeLessThanOrEqual(8000)
+    // MCP clients such as Claude Code cut a server's instructions off at about 2,048 characters: what comes before the
+    // design principles must survive that cut whole.
+    expect(designGuidance.indexOf('## Design principles')).toBeGreaterThan(0)
+    const core = designGuidance.slice(0, designGuidance.indexOf('## Design principles')).trimEnd()
+    expect(core).toMatch(/5\. Critique\./)
+    expect(core).toMatch(/Generic looks to avoid/)
+    expect(core.length).toBeLessThan(2000)
+  })
+
+  it('adds design principles and a self-review checklist adapted for the layer model', () => {
+    expect(designGuidance).toMatch(/## Design principles/)
+    expect(designGuidance).toMatch(/## Self-review checklist/)
+    expect(designGuidance.indexOf('## Design principles')).toBeLessThan(designGuidance.indexOf('## Self-review checklist'))
+    expect(designGuidance).toMatch(/one primary action/)
+    expect(designGuidance).toMatch(/spacing scale/)
+    expect(designGuidance).toMatch(/4\.5:1/)
+    expect(designGuidance).toMatch(/44×44/)
+    expect(designGuidance).toMatch(/[Gg]radients/)
+    expect(designGuidance).toMatch(/[Ee]moji/)
+    // Trying it in the App: "buttons that lead nowhere" made the Agent build each button's destination screen and run out of rounds.
+    expect(designGuidance).toMatch(/Build only the screens the user asked for/)
+    expect(designGuidance).not.toMatch(/lead nowhere/)
   })
 })
 
