@@ -85,7 +85,7 @@ private func temporaryFile() -> URL {
     #expect(saved["dirty"] as? Bool == false && saved["file"] as? String == url.path)
     let expected = store.editor.document
     let text = try String(contentsOf: url, encoding: .utf8)
-    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 2"))
+    #expect(text.contains("\"format\" : \"fudehand.design\"") && text.contains("\"version\" : 3"))
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["type": "ellipse"])))
     #expect(await failure(store, .newDocument(discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
@@ -379,6 +379,32 @@ private func temporaryFile() -> URL {
     // Undo takes the interaction away like any other edit.
     store.undo()
     #expect(store.editor.document.node("button")?.interaction == nil)
+}
+
+@Test @MainActor func agentAndPanelSetTheSameAnimationsAndSequences() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "screen", "type": "frame", "children": [["id": "spinner", "type": "ellipse"], ["id": "count", "type": "text", "text": ["content": "60"]]],
+    ])))
+    let updated = try await control(store, .updateNode("spinner", changes: JSONObject(["animation": ["type": "spin", "duration": 0.8]])))
+    #expect((updated["animation"] as? [String: Any])?["repeat"] as? String == "infinite")
+    var spin = LayerAnimation(type: .spin)
+    spin.duration = 0.8
+    #expect(store.editor.document.node("spinner")?.animation == spin)
+    _ = try await control(store, .updateNode("count", changes: JSONObject(["text": ["sequence": ["items": ["3", "2", "1"], "loop": true]]])))
+    #expect(store.editor.document.node("count")?.text?.sequence == TextSequence(items: ["3", "2", "1"], loop: true))
+    // The text itself, which the canvas and snapshots show, is unchanged.
+    #expect(store.editor.document.node("count")?.text?.content == "60")
+
+    // The properties panel goes through the same edit path and the same undo history.
+    store.updateNode("spinner", "Change Animation") { $0.animation = LayerAnimation(type: .pulse) }
+    #expect(store.editor.document.node("spinner")?.animation == LayerAnimation(type: .pulse))
+    store.undo()
+    #expect(store.editor.document.node("spinner")?.animation == spin)
+    store.undo()
+    #expect(store.editor.document.node("count")?.text?.sequence == nil)
+    #expect(await failure(store, .updateNode("spinner", changes: JSONObject(["animation": ["type": "spin", "from": "left"]])))
+            == "Layer spinner: unsupported field animation.from")
 }
 
 @Test @MainActor func playbackStartsFromTheSelectedFrame() async throws {

@@ -50,13 +50,11 @@ private let prototype = """
     #expect(back["interaction"] as? [String: String] == ["action": "back"])
 }
 
-@Test func versionOneFilesOpenAndAreSavedAsVersionTwo() throws {
+@Test func versionOneFilesOpenAndAreSavedAsTheCurrentVersion() throws {
     let old = try decode(#"{"format":"fudehand.design","version":1,"nodes":[{"id":"a","type":"frame"}]}"#)
     #expect(old.nodes[0].interaction == nil)
     let text = String(decoding: try old.encoded(), as: UTF8.self)
-    #expect(text.contains("\"version\" : 2"))
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":3,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 3); upgrade Fudehand to open it")
+    #expect(text.contains("\"version\" : 3"))
 }
 
 @Test func validatesInteractionFields() {

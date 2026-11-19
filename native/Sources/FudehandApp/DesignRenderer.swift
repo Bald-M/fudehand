@@ -108,7 +108,8 @@ final class DesignRenderer {
         case .image: layer = ImageLayer()
         default: layer = CALayer()
         }
-        layer.anchorPoint = .zero
+        // Centered, so a played animation rotates and scales a layer about its center (see `LayerAnimationPlayer`).
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         layer.actions = noActions
         layer.contentsScale = scale
         return layer
@@ -127,7 +128,7 @@ final class DesignRenderer {
     }
 
     static func apply(_ node: DesignNode, to layer: CALayer, previous: DesignNode?, scale: CGFloat) {
-        layer.position = CGPoint(x: node.x, y: node.y)
+        layer.position = CGPoint(x: node.x + node.width / 2, y: node.y + node.height / 2)
         layer.bounds = CGRect(x: 0, y: 0, width: node.width, height: node.height)
         if node.type == .text || node.type == .image { layer.contentsScale = rasterScale(scale, for: layer.bounds.size) }
         layer.isHidden = !node.visible
