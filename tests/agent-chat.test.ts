@@ -208,7 +208,7 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(model.requests[0].url).toBe('/chat/completions')
     expect(model.requests[0].headers.authorization).toBe(`Bearer ${KEY}`)
     expect(model.requests[0].body.model).toBe('deepseek-chat')
-    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toContain('design_create_node')
+    expect(model.requests[0].body.tools.map((tool: any) => tool.function.name)).toEqual(expect.arrayContaining(['design_create_node', 'style_list', 'style_read']))
     const third = model.requests[2].body.messages
     expect(third.map((message: any) => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
     expect(third[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_1' })

@@ -2,10 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { sendControl } from './control-client.mjs'
+import { styleTools } from './style-library.mjs'
 
 /**
  * The only tool implementation, shared by the MCP server and the in-App Agent harness. Every tool is forwarded through the local control channel to the running App;
  * the App is the sole owner of the design document, and field validation happens in one place only, the App (Swift).
+ * The style library tools are the exception: they read reference files and never touch the document (ADR 0008).
  */
 
 const json = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] })
@@ -127,6 +129,7 @@ export const tools = [
       ] }
     },
   },
+  ...styleTools,
 ]
 
 /** Calls a tool; any error becomes an error result carrying its message instead of being thrown. */

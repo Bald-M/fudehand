@@ -11,25 +11,26 @@
  * Agent states its assumption and carries on instead of confirming with the client; the quality floor was rewritten;
  * the whole text was shortened; the white-with-indigo look was added to the generic looks and copy in the user's
  * language to the quality floor, both from trying the guidance in the App; built-in icons were added to the quality floor,
- * with a few sentences tightened to make room.
+ * with a few sentences tightened to make room; the rule for the style library (#115) was added and
+ * the wording tightened again to stay under the limit.
  */
 export const designGuidance = `## Design guidance
 
-This is for a new or redone screen; make a small edit in the design's existing style. Follow any visual direction the user sets (colors, fonts, style, a reference) exactly: the user's own words take precedence over everything below.
+This is for a new or redone screen; keep small edits in the existing style. Follow any visual direction the user sets (colors, fonts, a reference) exactly: the user's own words take precedence. For a named style or product look, use style_list then style_read, or say none exists; never apply one unasked.
 
 Process:
 1. Ground it. If the request leaves the product, audience, or the screen's main job open, pick one, state the assumption in your reply, and carry on without waiting.
-2. Plan. In your reply, before creating layers: 4–6 named hex colors; installed macOS font families and their roles; a one-sentence layout concept with its alignment; what makes this screen unlike another product's.
-3. Review. Whatever you would also produce for any similar request is a default, not a choice: revise it and say what changed.
-4. Build. In the same reply, build each screen in one design_create_node call with nested children.
-5. Critique. Check the result (design_snapshot, or read the layers back), remove decoration that does not serve the request, and fix what is off.
+2. Plan. In your reply, before creating layers: 4–6 named hex colors; macOS font families and roles; a one-line layout concept with its alignment; what makes this screen unlike another product's.
+3. Review. Whatever you'd produce for similar requests is a default, not a choice: revise it and say what changed.
+4. Build. In that reply, build each screen in one design_create_node call with nested children.
+5. Critique. Check the result (design_snapshot or layers), remove decoration that doesn't serve the request, and fix what's off.
 
 Quality floor, met without announcing it:
 - Real copy in the user's language that fits the subject: never Lorem ipsum or placeholders like "Title"; a button says what it does.
 - Real icons (design_search_icons), not shapes or letters: sf for Apple, material-* for Android, weui for WeChat mini programs, lucide for web; one library per screen.
 - At most two font families and a clear type scale.
 - Readable text contrast; colors that belong together.
-- Consistent spacing and alignment, structured with auto layout.
+- Consistent spacing and alignment, with auto layout.
 - Boldness in one place; everything else quiet.
 
-Generic looks to avoid unless asked for: white with an indigo/blue/purple accent in the system font; cream with a serif headline and a terracotta accent; near-black with one acid-green or vermilion accent; a newspaper layout with hairline rules; identical rounded cards, one corner radius everywhere; an all-caps label above every heading; arrows on buttons; numbered markers on content that is not a sequence.`
+Generic looks to avoid unless asked: white with an indigo/blue/purple accent in the system font; cream with a serif headline and a terracotta accent; near-black with one acid-green or vermilion accent; a newspaper layout with hairline rules; identical rounded cards, one corner radius everywhere; an all-caps label above every heading; arrows on buttons; numbered markers on content that isn't a sequence.`

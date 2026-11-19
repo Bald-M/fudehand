@@ -103,6 +103,11 @@ _Avoid_: autocomplete, completion (nothing is completed while typing), suggestio
 **Compact (压缩 / 壓縮)**: Replacing the earlier messages the model sees with a summary of them, with the `/compact` slash command. The conversation's messages stay in the chat panel.
 _Avoid_: compress, summarize (the summary is what compacting produces)
 
+**Style library (风格库 / 風格庫)**: The reference files in `styles/` that the Agent reads with `style_list` and `style_read` when the user names a style or asks for a design like a known product. Adapted from third-party analyses of public websites (VoltAgent/awesome-design-md), not official brand systems; not part of the design document.
+
+**Style (风格 / 風格)**: One file in the style library: the colors, fonts (macOS substitutes), type scale, spacing, corner radius, components, and do/don't of one visual direction, written for the layer model.
+_Avoid_: theme (主题), design system (设计系统), template (模板) (a template is a bundled `.fudehand` design)
+
 **Agent harness**: The Node child process behind the chat panel (`scripts/agent-chat.mjs`) that runs the conversation loop, calls the model API, and executes tools; it starts only when a message is sent.
 
 **Model provider (模型提供方 / 模型提供者)**: The model API sources available in the chat panel: DeepSeek, Claude, and ChatGPT. DeepSeek uses an OpenAI-compatible API, Claude uses the Anthropic Messages API, and ChatGPT uses OpenAI's Responses API and needs an OpenAI API key.
