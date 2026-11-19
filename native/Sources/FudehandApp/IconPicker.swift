@@ -19,6 +19,15 @@ struct IconPicker: View {
         }
     }
 
+    /// Names listed for one library. The grid shows them only while the picker still shows that library, so a slow first load of
+    /// another library never leaves the previous one's icons on screen to be clicked.
+    struct Listing: Equatable {
+        let library: IconLibrary
+        let names: [String]
+
+        func names(for library: IconLibrary) -> [String]? { library == self.library ? names : nil }
+    }
+
     let current: String?
     let choose: (String) -> Void
 
@@ -26,8 +35,7 @@ struct IconPicker: View {
     @State private var family: Family
     @State private var materialStyle: IconLibrary
     @State private var query = ""
-    @State private var results: [String] = []
-    @State private var loaded = false
+    @State private var listing: Listing?
     @FocusState private var searchFocused: Bool
 
     init(current: String?, choose: @escaping (String) -> Void) {
@@ -87,13 +95,18 @@ struct IconPicker: View {
             let library = library, query = query
             let found = await Task.detached(priority: .userInitiated) { IconCatalog.shared.listing(query, library: library) }.value
             guard !Task.isCancelled else { return }
-            results = found
-            loaded = true
+            listing = Listing(library: library, names: found)
         }
     }
 
     @ViewBuilder private var grid: some View {
-        if loaded && results.isEmpty {
+        if let results = listing?.names(for: library) { resultsView(results) } else {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder private func resultsView(_ results: [String]) -> some View {
+        if results.isEmpty {
             VStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 24)).foregroundStyle(.tertiary)
                 Text(L("No Icons")).font(.headline)
