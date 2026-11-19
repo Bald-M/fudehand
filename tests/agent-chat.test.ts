@@ -210,6 +210,9 @@ describe('Design guidance', () => {
     expect(designGuidance).toMatch(/44×44/)
     expect(designGuidance).toMatch(/[Gg]radients/)
     expect(designGuidance).toMatch(/[Ee]moji/)
+    // Trying it in the App: "buttons that lead nowhere" made the Agent build each button's destination screen and run out of rounds.
+    expect(designGuidance).toMatch(/Build only the screens the user asked for/)
+    expect(designGuidance).not.toMatch(/lead nowhere/)
   })
 })
 

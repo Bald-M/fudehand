@@ -68,8 +68,8 @@ Generic looks to avoid unless asked: white with an indigo/blue/purple accent in 
 
 Content:
 - Every layer earns its place. Remove what answers no question the user has, what the screen is understood without, and what serves the designer rather than the user.
-- Filler to cut: made-up figures, buttons that lead nowhere, a heading, subheading, and paragraph saying the same thing, icons that repeat their label, decorative dividers and background patterns, ten list items where three would do.
-- An empty-feeling area is a layout problem: solve it with composition and space, not invented sections. Do not add sections the user did not ask for.
+- Filler to cut: made-up figures, controls the screen does not need, a heading, subheading, and paragraph saying the same thing, icons that repeat their label, decorative dividers and background patterns, ten list items where three would do.
+- An empty-feeling area is a layout problem: solve it with composition and space, not invented sections. Build only the screens the user asked for: no added sections, and no extra frames, overlays, or prototype links for where a button leads.
 
 Hierarchy and rhythm:
 - Decide what is seen first, second, and third, and signal it with size, weight, color, position, and spacing together: the main element larger, bolder, in the accent, near the top, with room around it; supporting text smaller, regular, neutral, tighter.
