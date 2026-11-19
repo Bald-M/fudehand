@@ -68,7 +68,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 |---|---|
 | Read the document overview, the layer tree, one layer | `design_get_state`, `design_get_document`, `design_get_node` |
 | Create layers (frame, rectangle, ellipse, text, image, group), insert an image | `design_create_node` |
-| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, clip content, interaction | `design_update_node` |
+| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, clip content, interaction, animation, text sequence | `design_update_node` |
 | Rename, show/hide, lock a layer | `design_update_node` |
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
@@ -90,6 +90,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Show or hide the inspector, switch its tab | Missing |
 | Expand or collapse layers in the layers panel | Missing |
 | Play the prototype, play from the start, close the prototype window | Missing |
+| Preview a layer's animation in the properties panel | Missing |
 | Show the launch window | Missing |
 | List, open, remove, clear recent files | Missing |
 | List templates, create a document from a template | Missing |

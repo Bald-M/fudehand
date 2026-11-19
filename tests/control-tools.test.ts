@@ -35,13 +35,25 @@ describe('design tools', () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['interaction', 'navigate', 'back', 'destination', 'push-left', 'sheet', 'ease-in-out'])
       expect(byName('design_create_node').description).toContain(field)
-    expect(byName('design_update_node').description).toContain('interaction is replaced whole')
+    expect(byName('design_update_node').description).toContain('interaction, animation, and text.sequence are replaced whole')
     const fake = await app(echo)
     const interaction = { action: 'navigate', destination: 'detail', transition: { type: 'push-left', duration: 0.3 } }
     await callTool('design_update_node', { id: 'a', changes: { interaction } }, { root: '/repo', socketPath: fake.socketPath })
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'update_node', args: { id: 'a', changes: { interaction } } },
     ])
+    await fake.close()
+  })
+
+  it('describes animations and text sequences and forwards them unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['animation', 'fade-in', 'slide-in', 'scale-in', 'spin', 'pulse', 'shimmer', 'delay', 'repeat', '"infinite"', 'text.sequence', 'interval', 'loop'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('interaction, animation, and text.sequence are replaced whole')
+    const fake = await app(echo)
+    const changes = { animation: { type: 'pulse', property: 'opacity', repeat: 'infinite' }, text: { sequence: { items: ['3', '2', '1'] } } }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
     await fake.close()
   })
 

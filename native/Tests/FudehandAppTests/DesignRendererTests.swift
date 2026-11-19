@@ -37,7 +37,9 @@ import Testing
     nodes.removeLast()
     renderer.sync(nodes)
     #expect(renderer.layer(for: "f") === frameLayer)
-    #expect(frameLayer?.position == CGPoint(x: 40, y: 0))
+    #expect(frameLayer?.frame.origin == CGPoint(x: 40, y: 0))
+    // Layers are anchored at their center, so animations rotate and scale them in place.
+    #expect(frameLayer?.anchorPoint == CGPoint(x: 0.5, y: 0.5) && frameLayer?.position == CGPoint(x: 140, y: 50))
     #expect(renderer.layer(for: "e")?.isHidden == true)
     #expect(renderer.layer(for: "r") == nil && renderer.layerCount == 3)
     // The stacking order follows the array order.

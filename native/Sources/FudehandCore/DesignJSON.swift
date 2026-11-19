@@ -4,8 +4,9 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "children"]
-    /// The nested objects that are merged field by field on update. `interaction` is not one of them: an update replaces it whole.
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "animation", "children"]
+    /// The nested objects that are merged field by field on update. `interaction`, `animation`, and `text.sequence` are not among
+    /// them: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -142,7 +143,7 @@ public enum DesignJSON {
         }
         if type == .text {
             guard let text = try reader.child("text") else { throw reader.fail("text layer is missing text") }
-            try text.checkKeys(["content", "fontSize", "fontWeight", "fontFamily", "color", "align", "lineHeight", "autoResize"])
+            try text.checkKeys(["content", "fontSize", "fontWeight", "fontFamily", "color", "align", "lineHeight", "autoResize", "sequence"])
             let family = try text.string("fontFamily", default: "")
             node.text = DesignText(content: try text.string("content", default: ""),
                                    fontSize: try text.number("fontSize", default: 16, min: 1),
@@ -151,7 +152,8 @@ public enum DesignJSON {
                                    color: try text.color("color", default: .black)!,
                                    align: try text.choice("align", default: .left),
                                    lineHeight: try text.optionalNumber("lineHeight", min: 0.1),
-                                   autoResize: try text.choice("autoResize", default: .widthAndHeight))
+                                   autoResize: try text.choice("autoResize", default: .widthAndHeight),
+                                   sequence: try text.child("sequence").map(sequence))
         }
         if type == .image {
             guard let image = try reader.child("image") else { throw reader.fail("image layer is missing image") }
@@ -178,6 +180,9 @@ public enum DesignJSON {
         }
         if let interaction = try reader.child("interaction") {
             node.interaction = try self.interaction(interaction)
+        }
+        if let animation = try reader.child("animation") {
+            node.animation = try self.animation(animation)
         }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
@@ -207,6 +212,45 @@ public enum DesignJSON {
         default:
             throw reader.fail("\(reader.name("action")) must be one of navigate, back; got \(action)")
         }
+    }
+
+    static func animation(_ reader: Reader) throws -> LayerAnimation {
+        let type: AnimationType = try reader.choice("type", default: .fadeIn)
+        guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
+        var keys: Set<String> = ["type", "duration", "delay", "easing", "repeat"]
+        if type == .slideIn { keys.formUnion(["from", "distance"]) }
+        if type == .pulse { keys.insert("property") }
+        try reader.checkKeys(keys)
+        var animation = LayerAnimation(type: type)
+        animation.from = try reader.choice("from", default: animation.from)
+        animation.distance = try reader.number("distance", default: animation.distance, min: 0, max: LayerAnimation.maximumDistance)
+        animation.property = try reader.choice("property", default: animation.property)
+        animation.duration = try reader.number("duration", default: animation.duration, max: LayerAnimation.maximumDuration)
+        guard animation.duration > 0 else { throw reader.fail("\(reader.name("duration")) must be greater than 0") }
+        animation.delay = try reader.number("delay", default: 0, min: 0, max: LayerAnimation.maximumDelay)
+        animation.easing = try reader.choice("easing", default: animation.easing)
+        if let count = reader.value("repeat") {
+            if count as? String == "infinite" {
+                animation.repeatCount = nil
+            } else if let number = count as? NSNumber, !isBool(number), number.doubleValue == number.doubleValue.rounded(),
+                      (1...Double(LayerAnimation.maximumRepeat)).contains(number.doubleValue) {
+                animation.repeatCount = number.intValue
+            } else {
+                throw reader.fail("\(reader.name("repeat")) must be an integer from 1 to \(LayerAnimation.maximumRepeat) or \"infinite\"")
+            }
+        }
+        return animation
+    }
+
+    static func sequence(_ reader: Reader) throws -> TextSequence {
+        try reader.checkKeys(["items", "interval", "loop"])
+        guard let raw = reader.value("items") else { throw reader.fail("missing \(reader.name("items"))") }
+        guard let items = raw as? [Any], let strings = items as? [String], (1...TextSequence.maximumItems).contains(strings.count) else {
+            throw reader.fail("\(reader.name("items")) must hold 1 to \(TextSequence.maximumItems) strings")
+        }
+        return TextSequence(items: strings,
+                            interval: try reader.number("interval", default: 1, min: TextSequence.minimumInterval, max: TextSequence.maximumInterval),
+                            loop: try reader.bool("loop", default: false))
     }
 
     static func isImage(_ data: Data) -> Bool {
@@ -252,6 +296,7 @@ public enum DesignJSON {
                                         "color": text.color.hex, "align": text.align.rawValue, "autoResize": text.autoResize.rawValue]
             if let family = text.fontFamily { value["fontFamily"] = family }
             if let lineHeight = text.lineHeight { value["lineHeight"] = lineHeight }
+            if let sequence = text.sequence { value["sequence"] = ["items": sequence.items, "interval": sequence.interval, "loop": sequence.loop] }
             object["text"] = value
         }
         if let image = node.image {
@@ -270,6 +315,13 @@ public enum DesignJSON {
                                      "transition": ["type": transition.type.rawValue, "duration": transition.duration, "easing": transition.easing.rawValue]]
         case .back: object["interaction"] = ["action": "back"]
         case nil: break
+        }
+        if let animation = node.animation {
+            var value: [String: Any] = ["type": animation.type.rawValue, "duration": animation.duration, "delay": animation.delay,
+                                        "easing": animation.easing.rawValue, "repeat": animation.repeatCount.map { $0 as Any } ?? "infinite"]
+            if animation.type == .slideIn { value["from"] = animation.from.rawValue; value["distance"] = animation.distance }
+            if animation.type == .pulse { value["property"] = animation.property.rawValue }
+            object["animation"] = value
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

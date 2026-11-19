@@ -75,6 +75,8 @@ final class PrototypeStageView: NSView {
     private let content = CALayer()
     private var shown = DesignRenderer()
     private var spare = DesignRenderer()
+    /// Each renderer's layer animations and text sequences, restarted whenever it brings a frame in.
+    private var players: [ObjectIdentifier: LayerAnimationPlayer] = [:]
     private var player: PrototypePlayer?
     private var token: Int?
     private var document = DesignDocument()
@@ -115,9 +117,32 @@ final class PrototypeStageView: NSView {
             token = request.token
             player = PrototypePlayer(start: request.start)
             spare.root.removeFromSuperlayer()
+            animations(spare).stop()
             shown.root.removeAllAnimations()
+            if let player { bringIn(shown, player.current, after: 0) }
         }
+        // Edits re-render the frame without restarting its animations.
         if let player { render(shown, player.current) }
+    }
+
+    private func animations(_ renderer: DesignRenderer) -> LayerAnimationPlayer {
+        if let existing = players[ObjectIdentifier(renderer)] { return existing }
+        let created = LayerAnimationPlayer(renderer: renderer)
+        players[ObjectIdentifier(renderer)] = created
+        return created
+    }
+
+    /// Shows frame `id` in `renderer` and starts its animations from the beginning; they begin after `wait` seconds, when the
+    /// transition bringing the frame in has finished.
+    private func bringIn(_ renderer: DesignRenderer, _ id: String, after wait: Double) {
+        let player = animations(renderer)
+        player.stop()
+        render(renderer, id)
+        player.redraw = { [weak self, unowned renderer] in self?.render(renderer, id) }
+        guard let frame = Prototype.frame(id, in: document) else { return }
+        player.start(frame, after: wait)
+        // Sequences show their first item from the start.
+        if TextSequence.hasSequences(in: frame) { render(renderer, id) }
     }
 
     private func rasterize() {
@@ -131,7 +156,7 @@ final class PrototypeStageView: NSView {
         frame.x = 0
         frame.y = 0
         frame.visible = true
-        renderer.sync([frame])
+        renderer.sync([animations(renderer).playing(frame)])
     }
 
     private func framePoint(_ event: NSEvent) -> Point {
@@ -165,13 +190,13 @@ final class PrototypeStageView: NSView {
         spare = leaving
         arriving.root.removeAllAnimations()
         arriving.root.opacity = 1
-        render(arriving, step.to)
         let transition = step.transition
+        bringIn(arriving, step.to, after: player?.isTransitioning == true ? transition.duration : 0)
         // A reversed dissolve or sheet takes the frame being left away from on top of the frame arriving.
         let leavingOnTop = step.reversed && (transition.type == .dissolve || transition.type == .sheet)
         if leavingOnTop { content.insertSublayer(arriving.root, below: leaving.root) } else { content.addSublayer(arriving.root) }
         moved(step.to)
-        guard player?.isTransitioning == true else { leaving.root.removeFromSuperlayer(); return }
+        guard player?.isTransitioning == true else { leaving.root.removeFromSuperlayer(); animations(leaving).stop(); return }
 
         let size = [step.from, step.to].compactMap { Prototype.frame($0, in: document) }
             .reduce(CGSize.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
@@ -182,7 +207,7 @@ final class PrototypeStageView: NSView {
             guard let self, self.token == session else { return }
             leaving.root.removeAllAnimations()
             arriving.root.removeAllAnimations()
-            if self.shown !== leaving { leaving.root.removeFromSuperlayer() }
+            if self.shown !== leaving { leaving.root.removeFromSuperlayer(); self.animations(leaving).stop() }
             self.player?.finishTransition()
         }
         let timing = CAMediaTimingFunction(name: Self.timing(transition.easing))
