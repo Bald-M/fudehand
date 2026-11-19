@@ -52,6 +52,8 @@
 "Text" = "文字";
 "Image" = "圖片";
 "Icon" = "圖示";
+"Icon name" = "圖示名稱";
+"Icon color" = "圖示顏色";
 "Group" = "群組";
 "Move" = "移動";
 "Hand" = "手形工具";

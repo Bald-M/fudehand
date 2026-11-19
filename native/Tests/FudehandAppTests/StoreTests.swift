@@ -514,3 +514,15 @@ private func temporaryFile() -> URL {
     // The roof's peak at the top center is red.
     #expect(bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel] == 255 && bytes[8 * image.bytesPerRow + 24 * image.samplesPerPixel + 1] == 0)
 }
+
+@Test @MainActor func iconColorChangeIsOneUndoStep() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "i", "type": "icon", "icon": ["name": "lucide/house"]])))
+    let red = try DesignColor(hex: "#FF0000"), blue = try DesignColor(hex: "#0000FF")
+    // The properties panel's color well sends a stream of changes while dragging; they coalesce into one step.
+    store.updateNode("i", "Change Icon Color", coalescing: "icon.color") { $0.icon?.color = red }
+    store.updateNode("i", "Change Icon Color", coalescing: "icon.color") { $0.icon?.color = blue }
+    #expect(store.editor.document.node("i")?.icon?.color == blue)
+    store.undo()
+    #expect(store.editor.document.node("i")?.icon?.color == .black)
+}
