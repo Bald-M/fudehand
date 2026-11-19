@@ -17,6 +17,8 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 
 **Icon library (图标库 / 圖示庫)**: A set of icons built into Fudehand, one per target platform: `sf` (SF Symbols, from the system), `material-outlined`, `material-rounded`, `material-sharp` (Material Symbols), `weui` (WeUI), and `lucide` (Lucide).
 
+**Icon picker (图标选择面板 / 圖示選擇面板)**: The popover where a person switches between icon libraries, searches icons by keyword, and chooses one: from the bottom canvas toolbar to insert an icon layer, or from the properties panel to replace the icon of the selected icon layer.
+
 **Icon name (图标名字 / 圖示名稱)**: How an icon layer names its icon: `<library>/<name>`, such as `sf/house.fill` or `material-rounded/home.fill`.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
