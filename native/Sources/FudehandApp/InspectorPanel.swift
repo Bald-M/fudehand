@@ -188,6 +188,7 @@ private struct NodeInspector: View {
     /// The text sequence's items, one per line.
     @State private var sequenceItems = ""
     @State private var previewing = false
+    @State private var replacingIcon = false
 
     private func update(_ action: String, _ key: String? = nil, _ change: @escaping (inout DesignNode) -> Void) {
         store.updateNode(node.id, action, coalescing: key) { change(&$0) }
@@ -272,6 +273,10 @@ private struct NodeInspector: View {
             Section(title: L("Icon")) {
                 LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
                 ColorRow(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
+                Button(L("Replace Icon…")) { replacingIcon = true }
+                    .popover(isPresented: $replacingIcon, arrowEdge: .leading) {
+                        IconPicker(current: icon.name) { store.replaceIcon(node.id, with: $0) }
+                    }
             }
         }
         interactionSection(node.interaction)

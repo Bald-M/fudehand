@@ -428,3 +428,14 @@
 "Shimmer" = "流光";
 "Replay" = "重新播放";
 "Animation preview" = "动画预览";
+"Insert Icon" = "插入图标";
+"Replace Icon…" = "替换图标…";
+"Icon library" = "图标库";
+"Search Icons" = "搜索图标";
+"Outlined" = "线框";
+"Rounded" = "圆角";
+"Sharp" = "锐角";
+"No Icons" = "没有图标";
+"No icons match “%@”." = "没有与“%@”匹配的图标。";
+"SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 仅限用于 Apple 平台的设计。";
+"Style" = "风格";
