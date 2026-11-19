@@ -37,7 +37,13 @@ _Avoid_: variant (components and variants are out of scope)
 **Toggle Visibility (切换显示 / 切換顯示)**: The interaction that shows the hidden and hides the shown among chosen layers, for tabs, switches, checkboxes, and expand/collapse. The change lasts only for that playback; the design document is not changed.
 
 **Transition (转场 / 轉場)**: How the prototype window moves from one frame to the next: None, Dissolve (淡入淡出), Push Left/Right/Up/Down (向左/右/上/下推入), or Bottom Sheet (底部弹出 / 底部彈出), with a duration and an easing. Back plays it in reverse.
-_Avoid_: animation (reserved for a layer's own animation, #151)
+_Avoid_: animation (reserved for a layer's own animation)
+
+**Animation (动画 / 動畫)**: A layer's motion during prototype playback, started when its frame appears: an *Entrance* (入场 / 進場) — Fade In (淡入), Slide In (滑入), Scale In (缩放进入 / 縮放進入) — or a *Loop* (循环 / 循環) — Spin (旋转 / 旋轉), Pulse (脉冲 / 脈衝), Shimmer (流光 / 流光). Appearance only: it never changes the design document, and the canvas and snapshots show the layer still.
+_Avoid_: effect, motion, transition (the move between frames)
+
+**Text sequence (文字序列 / 文字序列)**: A text layer's list of texts shown one after another at a fixed interval during playback, looping or stopping on the last one — the look of a countdown. It triggers nothing; the layer's own text is what editing shows.
+_Avoid_: timer, countdown (it does not count real time)
 
 **Prototype window (原型窗口 / 原型視窗)**: The separate window opened by *Play Prototype (播放原型)* that plays the prototype at the frames' actual size; clicks there trigger interactions instead of selecting layers.
 _Avoid_: preview mode, present mode

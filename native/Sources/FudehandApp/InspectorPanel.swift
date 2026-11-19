@@ -185,6 +185,9 @@ private struct NodeInspector: View {
     let parentLayout: AutoLayout?
     @State private var name = ""
     @State private var content = ""
+    /// The text sequence's items, one per line.
+    @State private var sequenceItems = ""
+    @State private var previewing = false
 
     private func update(_ action: String, _ key: String? = nil, _ change: @escaping (inout DesignNode) -> Void) {
         store.updateNode(node.id, action, coalescing: key) { change(&$0) }
@@ -196,7 +199,7 @@ private struct NodeInspector: View {
                 .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
                 .onAppear { name = node.name }
                 .onChange(of: node.name) { _, next in name = next }
-                .onChange(of: node.id) { name = node.name; content = node.text?.content ?? "" }
+                .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; previewing = false }
                 .accessibilityLabel(L("Layer name"))
         }
         Section(title: L("Position and Size")) {
@@ -266,6 +269,7 @@ private struct NodeInspector: View {
             }
         }
         interactionSection(node.interaction)
+        animationSection(node.animation)
     }
 
     private func sizingPicker(_ label: String, _ mode: SizingMode, _ commit: @escaping (SizingMode) -> Void) -> some View {
@@ -314,6 +318,129 @@ private struct NodeInspector: View {
                 Text(L("Fixed")).tag(TextAutoResize.none)
             }
             Button(L("Import Font…")) { store.importFontFiles() }
+            sequenceEditor(text)
+        }
+    }
+
+    @ViewBuilder private func sequenceEditor(_ text: DesignText) -> some View {
+        Divider()
+        if let sequence = text.sequence {
+            Text(L("Text Sequence")).foregroundStyle(.secondary)
+            TextEditor(text: $sequenceItems)
+                .font(.system(size: 12)).monospacedDigit().frame(minHeight: 54, maxHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
+                .onAppear { sequenceItems = sequence.items.joined(separator: "\n") }
+                .onChange(of: node.id) { sequenceItems = node.text?.sequence?.items.joined(separator: "\n") ?? "" }
+                .onChange(of: sequence.items) { _, next in if next != Self.items(sequenceItems) { sequenceItems = next.joined(separator: "\n") } }
+                .onChange(of: sequenceItems) { _, next in
+                    let items = Self.items(next)
+                    if !items.isEmpty, items != node.text?.sequence?.items {
+                        update("Change Text Sequence", "text.sequence.items") { $0.text?.sequence?.items = items }
+                    }
+                }
+                .accessibilityLabel(L("Text sequence items"))
+            Text(L("One item per line, shown in turn during playback.")).font(.caption).foregroundStyle(.secondary)
+            NumberField(label: L("Interval (s)"), value: sequence.interval, minimum: TextSequence.minimumInterval) { seconds in
+                update("Change Text Sequence") { $0.text?.sequence?.interval = min(seconds, TextSequence.maximumInterval) }
+            }
+            Toggle(L("Loop"), isOn: Binding(get: { sequence.loop }, set: { loop in update("Change Text Sequence") { $0.text?.sequence?.loop = loop } }))
+            Button(L("Remove Text Sequence")) { update("Remove Text Sequence") { $0.text?.sequence = nil } }
+        } else {
+            Button(L("Add Text Sequence")) { update("Add Text Sequence") { $0.text?.sequence = Self.defaultSequence(text.content) } }
+            Text(L("During playback, shows a list of texts in turn, such as a countdown."))
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The items typed one per line; blank lines at the end are dropped.
+    static func items(_ text: String) -> [String] {
+        var lines = text.components(separatedBy: "\n")
+        while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
+        return Array(lines.prefix(TextSequence.maximumItems))
+    }
+
+    /// A countdown to 0 when the text is a whole number up to 999, otherwise the text itself.
+    static func defaultSequence(_ content: String) -> TextSequence {
+        guard let start = Int(content.trimmingCharacters(in: .whitespaces)), (1..<TextSequence.maximumItems).contains(start) else {
+            return TextSequence(items: [content])
+        }
+        return TextSequence(items: (0...start).reversed().map(String.init))
+    }
+
+    private func animationSection(_ animation: LayerAnimation?) -> some View {
+        Section(title: L("Animation")) {
+            if let animation {
+                let change = { (edit: @escaping (inout LayerAnimation) -> Void) in
+                    update("Change Animation") { node in
+                        guard var next = node.animation else { return }
+                        edit(&next)
+                        node.animation = next
+                    }
+                }
+                Picker(L("Type|animation"), selection: Binding(get: { animation.type }, set: { type in
+                    change { var next = LayerAnimation(type: type); next.delay = $0.delay; $0 = next }
+                })) {
+                    SwiftUI.Section(L("Entrance")) { ForEach(AnimationType.allCases.filter(\.isEntrance), id: \.self) { Text(Self.animationName($0)).tag($0) } }
+                    SwiftUI.Section(L("Loop|animation")) { ForEach(AnimationType.allCases.filter { !$0.isEntrance }, id: \.self) { Text(Self.animationName($0)).tag($0) } }
+                }
+                if animation.type == .slideIn {
+                    Picker(L("From|slide in"), selection: Binding(get: { animation.from }, set: { edge in change { $0.from = edge } })) {
+                        Text(L("Left|edge")).tag(AnimationEdge.left)
+                        Text(L("Right|edge")).tag(AnimationEdge.right)
+                        Text(L("Top|edge")).tag(AnimationEdge.top)
+                        Text(L("Bottom|edge")).tag(AnimationEdge.bottom)
+                    }
+                    NumberField(label: L("Distance"), value: animation.distance, minimum: 0) { v in change { $0.distance = min(v, LayerAnimation.maximumDistance) } }
+                }
+                if animation.type == .pulse {
+                    Picker(L("Pulses"), selection: Binding(get: { animation.property }, set: { p in change { $0.property = p } })) {
+                        Text(L("Scale|pulse")).tag(PulseProperty.scale)
+                        Text(L("Opacity")).tag(PulseProperty.opacity)
+                    }
+                }
+                NumberField(label: L("Duration (s)"), value: animation.duration, minimum: 0.01) { v in change { $0.duration = min(v, LayerAnimation.maximumDuration) } }
+                NumberField(label: L("Delay (s)"), value: animation.delay, minimum: 0) { v in change { $0.delay = min(v, LayerAnimation.maximumDelay) } }
+                Picker(L("Easing"), selection: Binding(get: { animation.easing }, set: { easing in change { $0.easing = easing } })) {
+                    Text(L("Linear")).tag(TransitionEasing.linear)
+                    Text(L("Ease In")).tag(TransitionEasing.easeIn)
+                    Text(L("Ease Out")).tag(TransitionEasing.easeOut)
+                    Text(L("Ease In and Out")).tag(TransitionEasing.easeInOut)
+                }
+                HStack {
+                    Toggle(L("Repeat forever"), isOn: Binding(get: { animation.repeatCount == nil }, set: { forever in change { $0.repeatCount = forever ? nil : 1 } }))
+                    if let count = animation.repeatCount {
+                        NumberField(label: L("Times"), value: Double(count), minimum: 1) { v in
+                            change { $0.repeatCount = min(max(Int(v.rounded()), 1), LayerAnimation.maximumRepeat) }
+                        }
+                    }
+                }
+                HStack {
+                    Button(L("Preview")) { previewing = true }
+                        .popover(isPresented: $previewing, arrowEdge: .bottom) { AnimationPreview(node: node) }
+                    Button(L("Remove Animation")) { update("Remove Animation") { $0.animation = nil } }
+                }
+            } else {
+                HStack {
+                    Button(L("Add Animation")) { update("Add Animation") { $0.animation = LayerAnimation(type: .fadeIn) } }
+                    if TextSequence.hasSequences(in: node) {
+                        Button(L("Preview")) { previewing = true }
+                            .popover(isPresented: $previewing, arrowEdge: .bottom) { AnimationPreview(node: node) }
+                    }
+                }
+                Text(L("Plays when the layer's frame appears during playback: an entrance, or a loop such as a spinner."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    static func animationName(_ type: AnimationType) -> String {
+        switch type {
+        case .fadeIn: return L("Fade In")
+        case .slideIn: return L("Slide In")
+        case .scaleIn: return L("Scale In")
+        case .spin: return L("Spin")
+        case .pulse: return L("Pulse")
+        case .shimmer: return L("Shimmer")
         }
     }
 

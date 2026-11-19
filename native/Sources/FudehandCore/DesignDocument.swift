@@ -50,12 +50,14 @@ public struct DesignText: Hashable, Sendable {
     /// Line height multiple; nil means the font's default line height.
     public var lineHeight: Double?
     public var autoResize: TextAutoResize
+    /// Contents prototype playback shows in turn instead of `content`; editing and snapshots show `content`.
+    public var sequence: TextSequence?
 
     public init(content: String, fontSize: Double = 16, fontWeight: Int = 400, fontFamily: String? = nil,
                 color: DesignColor = .black, align: TextAlign = .left, lineHeight: Double? = nil,
-                autoResize: TextAutoResize = .widthAndHeight) {
+                autoResize: TextAutoResize = .widthAndHeight, sequence: TextSequence? = nil) {
         self.content = content; self.fontSize = fontSize; self.fontWeight = fontWeight; self.fontFamily = fontFamily
-        self.color = color; self.align = align; self.lineHeight = lineHeight; self.autoResize = autoResize
+        self.color = color; self.align = align; self.lineHeight = lineHeight; self.autoResize = autoResize; self.sequence = sequence
     }
 }
 
@@ -209,6 +211,7 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     /// Stays in place, above the scrolled content, when its parent frame scrolls.
     public var fixedOnScroll = false
     public var states: LayerStates?
+    public var animation: LayerAnimation?
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -228,9 +231,9 @@ public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
-    /// 2 added layer interactions; 3 added scrolling, layer states, overlays, and visibility toggles. Older files open
-    /// unchanged and are written as the current version.
-    public static let formatVersion = 3
+    /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
+    /// toggles; older files open unchanged and are written as the current version.
+    public static let formatVersion = 4
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]

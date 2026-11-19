@@ -50,15 +50,15 @@ private let prototype = """
     #expect(back["interaction"] as? [String: String] == ["action": "back"])
 }
 
-@Test func olderFilesOpenAndAreSavedAsVersionThree() throws {
-    for version in [1, 2] {
+@Test func olderFilesOpenAndAreSavedAsTheCurrentVersion() throws {
+    for version in [1, 2, 3] {
         let old = try decode(#"{"format":"fudehand.design","version":"# + "\(version)" + #","nodes":[{"id":"a","type":"frame"}]}"#)
         #expect(old.nodes[0].interaction == nil && old.nodes[0].scroll == .none && old.nodes[0].states == nil)
         let text = String(decoding: try old.encoded(), as: UTF8.self)
-        #expect(text.contains("\"version\" : 3"))
+        #expect(text.contains("\"version\" : 4"))
     }
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":4,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 4); upgrade Fudehand to open it")
+    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":5,"nodes":[]}"#) }
+            == "File was created by a newer version of Fudehand (format version 5); upgrade Fudehand to open it")
 }
 
 @Test func validatesInteractionFields() {
