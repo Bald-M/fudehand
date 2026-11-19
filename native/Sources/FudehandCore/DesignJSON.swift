@@ -4,11 +4,11 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "animation",
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
                                         "scroll", "fixedOnScroll", "states", "children"]
     /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
     /// not among them: an update replaces them whole.
-    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
+    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
     public static let maximumMagnitude = 1_000_000.0
@@ -124,6 +124,7 @@ public enum DesignJSON {
         try unsupported("scroll", type == .frame)
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
+        try unsupported("icon", type == .icon)
 
         var node = DesignNode(id: id, type: type, name: try reader.string("name", default: type.title),
                               x: try reader.number("x", default: 0), y: try reader.number("y", default: 0),
@@ -165,6 +166,17 @@ public enum DesignJSON {
                 throw reader.fail("image.data must be a base64-encoded PNG, JPEG, or SVG")
             }
             node.image = DesignImage(data: data, fit: try image.choice("fit", default: .fill))
+        }
+        if type == .icon {
+            guard let icon = try reader.child("icon") else { throw reader.fail("icon layer is missing icon") }
+            try icon.checkKeys(["name", "color"])
+            // Only the name's form is checked here: whether the icon exists depends on the icon libraries on this Mac, and a file
+            // naming an icon this Mac lacks still opens (the layer draws a placeholder).
+            let name = try icon.string("name")
+            guard IconLibrary.parse(name) != nil else {
+                throw reader.fail("icon.name must be <library>/<name> with library one of \(IconLibrary.allCases.map(\.rawValue).joined(separator: ", ")); got \(name)")
+            }
+            node.icon = DesignIcon(name: name, color: try icon.color("color", default: .black)!)
         }
         if let layout = try reader.child("layout") {
             try layout.checkKeys(["direction", "spacing", "padding", "align", "crossAlign"])
@@ -338,6 +350,7 @@ public enum DesignJSON {
             object["image"] = ["data": includeImageData ? image.data.base64EncodedString() : "<\(image.data.count) bytes>",
                                "fit": image.fit.rawValue]
         }
+        if let icon = node.icon { object["icon"] = ["name": icon.name, "color": icon.color.hex] }
         if let layout = node.layout {
             object["layout"] = ["direction": layout.direction.rawValue, "spacing": layout.spacing,
                                 "padding": ["top": layout.padding.top, "right": layout.padding.right,

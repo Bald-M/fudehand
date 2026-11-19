@@ -268,6 +268,12 @@ private struct NodeInspector: View {
                 Button(L("Replace Image…")) { replaceImage() }
             }
         }
+        if let icon = node.icon {
+            Section(title: L("Icon")) {
+                LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
+                ColorRow(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
+            }
+        }
         interactionSection(node.interaction)
         animationSection(node.animation)
     }

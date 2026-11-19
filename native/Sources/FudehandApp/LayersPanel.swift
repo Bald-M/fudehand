@@ -10,6 +10,7 @@ extension NodeType {
         case .ellipse: return "circle"
         case .text: return "t.square"
         case .image: return "photo"
+        case .icon: return "star.square"
         case .group: return "rectangle.3.group"
         }
     }

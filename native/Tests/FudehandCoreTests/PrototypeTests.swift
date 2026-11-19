@@ -51,14 +51,15 @@ private let prototype = """
 }
 
 @Test func olderFilesOpenAndAreSavedAsTheCurrentVersion() throws {
-    for version in [1, 2, 3] {
+    for version in 1..<DesignDocument.formatVersion {
         let old = try decode(#"{"format":"fudehand.design","version":"# + "\(version)" + #","nodes":[{"id":"a","type":"frame"}]}"#)
         #expect(old.nodes[0].interaction == nil && old.nodes[0].scroll == .none && old.nodes[0].states == nil)
         let text = String(decoding: try old.encoded(), as: UTF8.self)
-        #expect(text.contains("\"version\" : 4"))
+        #expect(text.contains("\"version\" : \(DesignDocument.formatVersion)"))
     }
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":5,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 5); upgrade Fudehand to open it")
+    let newer = DesignDocument.formatVersion + 1
+    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":"# + "\(newer)" + #","nodes":[]}"#) }
+            == "File was created by a newer version of Fudehand (format version \(newer)); upgrade Fudehand to open it")
 }
 
 @Test func validatesInteractionFields() {

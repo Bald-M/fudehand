@@ -21,6 +21,7 @@ public enum ControlCommand: Equatable, Sendable {
     case nodeSnapshot(String, scale: Double)
     case listFonts
     case importFont(String)
+    case searchIcons(query: String, library: IconLibrary?, limit: Int)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -176,6 +177,17 @@ public enum ControlProtocol {
             return .nodeSnapshot(try string("id"), scale: scale)
         case "list_fonts": return .listFonts
         case "import_font": return .importFont(try string("path"))
+        case "search_icons":
+            var library: IconLibrary?
+            if let name = try optionalString("library") {
+                guard let value = IconLibrary(rawValue: name) else {
+                    throw Message(text: "library must be one of \(IconLibrary.allCases.map(\.rawValue).joined(separator: ", ")); got \(name)")
+                }
+                library = value
+            }
+            let limit = try positive("limit", default: 50)
+            guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
+            return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

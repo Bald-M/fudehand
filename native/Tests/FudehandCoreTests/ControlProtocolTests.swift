@@ -40,6 +40,9 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":22,"command":"node_snapshot","args":{"id":"f","scale":1}}"#, .nodeSnapshot("f", scale: 1)),
         (#"{"id":23,"command":"list_fonts"}"#, .listFonts),
         (#"{"id":24,"command":"import_font","args":{"path":"/tmp/a.ttf"}}"#, .importFont("/tmp/a.ttf")),
+        (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
+        (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,
+         .searchIcons(query: "home", library: .materialRounded, limit: 3)),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -73,6 +76,12 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"node_snapshot","args":{"id":"f","scale":5}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"fit_all","args":[]}"#, "Invalid argument type: args"),
+        (#"{"id":1,"command":"search_icons","args":{}}"#, "Missing argument: query"),
+        (#"{"id":1,"command":"search_icons","args":{"query":"x","library":"fontawesome"}}"#,
+         "library must be one of sf, material-outlined, material-rounded, material-sharp, weui, lucide; got fontawesome"),
+        (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":0}}"#, "Invalid argument type: limit"),
+        (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":201}}"#, "Invalid argument type: limit"),
+        (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":2.5}}"#, "Invalid argument type: limit"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }
