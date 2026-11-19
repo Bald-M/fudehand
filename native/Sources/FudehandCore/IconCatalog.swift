@@ -103,6 +103,13 @@ public final class IconCatalog: @unchecked Sendable {
         return hits.prefix(limit).map(\.name)
     }
 
+    /// What the icon picker shows for one library: every icon sorted by name when the query is blank, otherwise all `search`
+    /// results in that library.
+    public func listing(_ query: String, library: IconLibrary) -> [String] {
+        guard Self.normalized(query).isEmpty else { return search(query, library: library, limit: .max) }
+        return names(library).sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { "\(library.rawValue)/\($0)" }
+    }
+
     /// Lowercased, with `-`, `_`, `.`, and runs of whitespace turned into single spaces.
     static func normalized(_ text: String) -> String {
         text.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" || $0 == "." || $0.isWhitespace }).joined(separator: " ")

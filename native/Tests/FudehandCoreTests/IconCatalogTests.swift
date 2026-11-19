@@ -88,3 +88,22 @@ private let catalog = IconCatalog(symbolExists: { ["house", "house.fill", "heart
     #expect(catalog.search("cart shopping", library: .lucide).contains("lucide/shopping-cart"))
     #expect(!catalog.search("shopping zebra", library: .lucide).contains("lucide/shopping-cart"))
 }
+
+@Test func listingWithoutAQueryIsTheWholeLibrarySorted() {
+    let all = catalog.listing("", library: .weui)
+    #expect(all.count == 27)
+    #expect(all.allSatisfy { $0.hasPrefix("weui/") })
+    #expect(all == all.sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+    #expect(catalog.listing("  ", library: .weui) == all)
+}
+
+@Test func listingWithAQuerySearchesOnlyThatLibrary() {
+    let results = catalog.listing("house", library: .lucide)
+    #expect(results.first == "lucide/house")
+    #expect(results.allSatisfy { $0.hasPrefix("lucide/") })
+}
+
+@Test func sfListingUsesTheInjectedNames() {
+    #expect(IconCatalog(symbolNames: { ["b", "a"] }).listing("", library: .sf) == ["sf/a", "sf/b"])
+    #expect(IconCatalog().listing("", library: .sf).isEmpty)
+}
