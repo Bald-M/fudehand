@@ -105,9 +105,9 @@ private func text(_ id: String, _ content: String, sequence: String? = nil) -> S
 @Test func versionTwoFilesOpenAndNewerOnesAreRefused() throws {
     let old = try decode(#"{"format":"fudehand.design","version":2,"nodes":[{"id":"a","type":"frame"}]}"#)
     #expect(old.nodes[0].animation == nil)
-    #expect(DesignDocument.formatVersion == 3)
-    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":4,"nodes":[]}"#) }
-            == "File was created by a newer version of Fudehand (format version 4); upgrade Fudehand to open it")
+    #expect(DesignDocument.formatVersion == 4)
+    #expect(message { _ = try decode(#"{"format":"fudehand.design","version":5,"nodes":[]}"#) }
+            == "File was created by a newer version of Fudehand (format version 5); upgrade Fudehand to open it")
 }
 
 @Test func aSequenceStepsAtItsIntervalAndLoopsOrStops() {

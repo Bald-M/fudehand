@@ -4,9 +4,10 @@ import ImageIO
 /// The single conversion and validation between design nodes and JSON: reading project files and the Agent creating and updating layers all go through here.
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
-                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "animation", "children"]
-    /// The nested objects that are merged field by field on update. `interaction`, `animation`, and `text.sequence` are not among
-    /// them: an update replaces them whole.
+                                        "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "layout", "interaction", "animation",
+                                        "scroll", "fixedOnScroll", "states", "children"]
+    /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
+    /// not among them: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -120,6 +121,7 @@ public enum DesignJSON {
         try unsupported("cornerRadius", type.hasCornerRadius)
         try unsupported("clipsContent", type == .frame)
         try unsupported("layout", type == .frame)
+        try unsupported("scroll", type == .frame)
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
 
@@ -181,6 +183,18 @@ public enum DesignJSON {
         if let interaction = try reader.child("interaction") {
             node.interaction = try self.interaction(interaction)
         }
+        node.scroll = try reader.choice("scroll", default: .none)
+        node.fixedOnScroll = try reader.bool("fixedOnScroll", default: false)
+        if let states = try reader.child("states") {
+            try states.checkKeys(["hover", "pressed"])
+            func style(_ key: String) throws -> LayerStyle? {
+                guard let style = try states.child(key) else { return nil }
+                try style.checkKeys(["fill", "opacity"])
+                return LayerStyle(fill: try style.color("fill"), opacity: style.value("opacity") == nil ? nil : try style.number("opacity", min: 0, max: 1))
+            }
+            let value = LayerStates(hover: try style("hover"), pressed: try style("pressed"))
+            node.states = value == LayerStates() ? nil : value
+        }
         if let animation = try reader.child("animation") {
             node.animation = try self.animation(animation)
         }
@@ -191,27 +205,48 @@ public enum DesignJSON {
         return node
     }
 
+    static let actions = ["navigate", "back", "open-overlay", "close-overlay", "toggle-visibility"]
+
     static func interaction(_ reader: Reader) throws -> DesignInteraction {
         let action = try reader.string("action")
+        func destination() throws -> String {
+            let destination = try reader.string("destination")
+            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
+            return destination
+        }
         switch action {
         case "back":
             try reader.checkKeys(["action"])
             return .back
+        case "close-overlay":
+            try reader.checkKeys(["action"])
+            return .closeOverlay
         case "navigate":
             try reader.checkKeys(["action", "destination", "transition"])
-            let destination = try reader.string("destination")
-            guard !destination.isEmpty else { throw reader.fail("\(reader.name("destination")) must be a non-empty frame id") }
-            var transition = PrototypeTransition()
-            if let value = try reader.child("transition") {
-                try value.checkKeys(["type", "duration", "easing"])
-                transition = PrototypeTransition(type: try value.choice("type", default: .none),
-                                                 duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
-                                                 easing: try value.choice("easing", default: .easeOut))
+            return .navigate(destination: try destination(), transition: try transition(reader))
+        case "open-overlay":
+            try reader.checkKeys(["action", "destination", "position", "background", "closeOnOutsideClick", "transition"])
+            let overlay = OverlaySettings(position: try reader.choice("position", default: .center), background: try reader.color("background"),
+                                          closeOnOutsideClick: try reader.bool("closeOnOutsideClick", default: true))
+            return .openOverlay(destination: try destination(), overlay: overlay, transition: try transition(reader))
+        case "toggle-visibility":
+            try reader.checkKeys(["action", "targets"])
+            guard let list = reader.value("targets") else { throw reader.fail("missing \(reader.name("targets"))") }
+            guard let targets = list as? [String], !targets.isEmpty, !targets.contains("") else {
+                throw reader.fail("\(reader.name("targets")) must be a non-empty array of layer ids")
             }
-            return .navigate(destination: destination, transition: transition)
+            return .toggleVisibility(targets: targets)
         default:
-            throw reader.fail("\(reader.name("action")) must be one of navigate, back; got \(action)")
+            throw reader.fail("\(reader.name("action")) must be one of \(actions.joined(separator: ", ")); got \(action)")
         }
+    }
+
+    static func transition(_ reader: Reader) throws -> PrototypeTransition {
+        guard let value = try reader.child("transition") else { return PrototypeTransition() }
+        try value.checkKeys(["type", "duration", "easing"])
+        return PrototypeTransition(type: try value.choice("type", default: .none),
+                                   duration: try value.number("duration", default: 0.3, min: 0, max: PrototypeTransition.maximumDuration),
+                                   easing: try value.choice("easing", default: .easeOut))
     }
 
     static func animation(_ reader: Reader) throws -> LayerAnimation {
@@ -309,12 +344,35 @@ public enum DesignJSON {
                                             "bottom": layout.padding.bottom, "left": layout.padding.left],
                                 "align": layout.align.rawValue, "crossAlign": layout.crossAlign.rawValue]
         }
+        func transition(_ value: PrototypeTransition) -> [String: Any] {
+            ["type": value.type.rawValue, "duration": value.duration, "easing": value.easing.rawValue]
+        }
         switch node.interaction {
-        case .navigate(let destination, let transition):
-            object["interaction"] = ["action": "navigate", "destination": destination,
-                                     "transition": ["type": transition.type.rawValue, "duration": transition.duration, "easing": transition.easing.rawValue]]
+        case .navigate(let destination, let value):
+            object["interaction"] = ["action": "navigate", "destination": destination, "transition": transition(value)]
         case .back: object["interaction"] = ["action": "back"]
+        case .openOverlay(let destination, let overlay, let value):
+            var interaction: [String: Any] = ["action": "open-overlay", "destination": destination, "position": overlay.position.rawValue,
+                                              "closeOnOutsideClick": overlay.closeOnOutsideClick, "transition": transition(value)]
+            if let background = overlay.background { interaction["background"] = background.hex }
+            object["interaction"] = interaction
+        case .closeOverlay: object["interaction"] = ["action": "close-overlay"]
+        case .toggleVisibility(let targets): object["interaction"] = ["action": "toggle-visibility", "targets": targets]
         case nil: break
+        }
+        if node.scroll != .none { object["scroll"] = node.scroll.rawValue }
+        if node.fixedOnScroll { object["fixedOnScroll"] = true }
+        if let states = node.states {
+            func style(_ value: LayerStyle) -> [String: Any] {
+                var style: [String: Any] = [:]
+                if let fill = value.fill { style["fill"] = fill.hex }
+                if let opacity = value.opacity { style["opacity"] = opacity }
+                return style
+            }
+            var value: [String: Any] = [:]
+            if let hover = states.hover { value["hover"] = style(hover) }
+            if let pressed = states.pressed { value["pressed"] = style(pressed) }
+            object["states"] = value
         }
         if let animation = node.animation {
             var value: [String: Any] = ["type": animation.type.rawValue, "duration": animation.duration, "delay": animation.delay,
