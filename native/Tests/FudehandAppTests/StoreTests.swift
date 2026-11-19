@@ -381,6 +381,29 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("button")?.interaction == nil)
 }
 
+@Test @MainActor func agentSetsInScreenInteractions() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "home", "type": "frame", "scroll": "vertical",
+        "children": [["id": "bar", "type": "rectangle", "fixedOnScroll": true], ["id": "tab", "type": "rectangle"], ["id": "panel", "type": "rectangle"]],
+    ])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "menu", "type": "frame"])))
+    let updated = try await control(store, .updateNode("tab", changes: JSONObject([
+        "states": ["pressed": ["opacity": 0.5]],
+        "interaction": ["action": "open-overlay", "destination": "menu", "position": "bottom", "background": "#00000066"],
+    ])))
+    #expect((updated["states"] as? [String: Any])?["pressed"] != nil)
+    let tab = try #require(store.editor.document.node("tab"))
+    #expect(tab.states == LayerStates(pressed: LayerStyle(opacity: 0.5)))
+    let scrim = try DesignColor(hex: "#00000066")
+    #expect(tab.interaction == .openOverlay(destination: "menu", overlay: OverlaySettings(position: .bottom, background: scrim), transition: PrototypeTransition()))
+    #expect(store.editor.document.node("home")?.scroll == .vertical && store.editor.document.node("bar")?.fixedOnScroll == true)
+    _ = try await control(store, .updateNode("tab", changes: JSONObject(["interaction": ["action": "toggle-visibility", "targets": ["panel"]]])))
+    #expect(await failure(store, .updateNode("tab", changes: JSONObject(["interaction": ["action": "toggle-visibility", "targets": ["nope"]]])))
+            == "Layer tab: interaction.targets includes nope, which is not a layer")
+    #expect(await failure(store, .updateNode("tab", changes: JSONObject(["scroll": "vertical"]))) == "Layer tab: rectangle does not support scroll")
+}
+
 @Test @MainActor func agentAndPanelSetTheSameAnimationsAndSequences() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([

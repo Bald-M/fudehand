@@ -147,7 +147,7 @@ A design document is a tree of layers: frames, rectangles, ellipses, text, image
 ```json
 {
   "format": "fudehand.design",
-  "version": 4,
+  "version": 5,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },

@@ -54,7 +54,7 @@ private func failure(_ body: () throws -> Void) -> String? {
 }
 
 @Test func unknownIconNameStillDecodes() throws {
-    let json = #"{"format":"fudehand.design","version":4,"nodes":[{"id":"i","type":"icon","name":"","x":0,"y":0,"width":24,"height":24,"icon":{"name":"sf/not.a.real.symbol"}}]}"#
+    let json = #"{"format":"fudehand.design","version":5,"nodes":[{"id":"i","type":"icon","name":"","x":0,"y":0,"width":24,"height":24,"icon":{"name":"sf/not.a.real.symbol"}}]}"#
     #expect(try DesignDocument.decode(Data(json.utf8)).nodes[0].icon?.name == "sf/not.a.real.symbol")
 }
 
@@ -75,8 +75,8 @@ private func failure(_ body: () throws -> Void) -> String? {
     #expect(IconLibrary.allCases.map(\.rawValue) == ["sf", "material-outlined", "material-rounded", "material-sharp", "weui", "lucide"])
 }
 
-@Test func version4IsWrittenAndVersion3Opens() throws {
-    #expect(DesignDocument.formatVersion == 4)
-    let json = #"{"format":"fudehand.design","version":3,"nodes":[{"id":"r","type":"rectangle","name":"","x":0,"y":0,"width":1,"height":1}]}"#
+@Test func version5IsWrittenAndVersion4Opens() throws {
+    #expect(DesignDocument.formatVersion == 5)
+    let json = #"{"format":"fudehand.design","version":4,"nodes":[{"id":"r","type":"rectangle","name":"","x":0,"y":0,"width":1,"height":1}]}"#
     #expect(try DesignDocument.decode(Data(json.utf8)).nodes.count == 1)
 }

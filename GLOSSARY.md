@@ -29,8 +29,18 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
 
-**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, or *Back* (返回 / 返回) to the frame shown before. Saved on the layer in the project file.
-_Avoid_: link, hotspot, action (an interaction's *Action* is only its navigate-or-back choice)
+**Interaction (交互 / 互動)**: A layer's click behavior in a prototype: *Navigate to* (跳转到 / 跳至) a top-level frame, *Back* (返回 / 返回) to the frame shown before, *Open Overlay* (打开弹层 / 打開彈出層), *Close Overlay* (关闭弹层 / 關閉彈出層), or *Toggle Visibility* (切换显示 / 切換顯示). Saved on the layer in the project file.
+_Avoid_: link, hotspot, action (an interaction's *Action* is only which of these it does)
+
+**Overlay (弹层 / 彈出層)**: A top-level frame shown over the frame on show in the prototype window — a dialog, bottom panel, or menu — placed at the center, along the bottom, or below the layer that opened it, optionally over a background color that dims the frame below. While it is open only it takes input.
+_Avoid_: modal, popup, popover
+
+**Scrolling (滚动 / 捲動)**: A frame's setting (None, Vertical, Horizontal) that lets its overflowing content scroll in the prototype window. A direct child marked *Fix position when scrolling* (滚动时固定位置 / 捲動時固定位置) stays put above the scrolled content.
+
+**State (状态 / 狀態)**: How a layer looks in the prototype window *while hovered* (悬停时 / 懸停時) and *while pressed* (按下时 / 按下時): a fill and an opacity that replace the layer's own, eased in and out.
+_Avoid_: variant (components and variants are out of scope)
+
+**Toggle Visibility (切换显示 / 切換顯示)**: The interaction that shows the hidden and hides the shown among chosen layers, for tabs, switches, checkboxes, and expand/collapse. The change lasts only for that playback; the design document is not changed.
 
 **Transition (转场 / 轉場)**: How the prototype window moves from one frame to the next: None, Dissolve (淡入淡出), Push Left/Right/Up/Down (向左/右/上/下推入), or Bottom Sheet (底部弹出 / 底部彈出), with a duration and an easing. Back plays it in reverse.
 _Avoid_: animation (reserved for a layer's own animation)

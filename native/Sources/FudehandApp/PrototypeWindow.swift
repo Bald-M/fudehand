@@ -65,8 +65,9 @@ struct PrototypeStage: NSViewRepresentable {
     }
 }
 
-/// Renders the frame on show and plays transitions. Two renderers take turns: during a transition one shows the frame being
-/// left and the other the frame arriving, which may be the same frame.
+/// Renders the frame on show with its open overlays and plays transitions. Two renderers take turns: during a transition one
+/// shows the frame being left and the other the frame arriving, which may be the same frame. Scrolling, layer states, and
+/// visibility toggles only change what is rendered; the design document is never touched.
 final class PrototypeStageView: NSView {
     var moved: (String) -> Void = { _ in }
     var scale: CGFloat = 1 {
@@ -80,7 +81,14 @@ final class PrototypeStageView: NSView {
     private var player: PrototypePlayer?
     private var token: Int?
     private var document = DesignDocument()
-    /// The layer under the pointer when the button went down; a click fires only when it comes up over the same layer.
+    /// The layer answering a click under the pointer when the button went down; a click fires only when it comes up over the same layer.
+    private var pressedResponder: String?
+    /// The layer showing states under the pointer when the button went down.
+    private var pressedStyled: String?
+    /// The button went down outside the topmost overlay.
+    private var pressedOutside = false
+    /// The layers drawn in their hover and pressed states.
+    private var hovered: String?
     private var pressed: String?
 
     override var isFlipped: Bool { true }
@@ -95,7 +103,7 @@ final class PrototypeStageView: NSView {
         content.actions = DesignRenderer.noActions
         content.addSublayer(shown.root)
         layer?.addSublayer(content)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
     }
@@ -118,6 +126,8 @@ final class PrototypeStageView: NSView {
         if token != request.token {
             token = request.token
             player = PrototypePlayer(start: request.start)
+            hovered = nil
+            pressed = nil
             spare.root.removeFromSuperlayer()
             animations(spare).stop()
             shown.root.removeAllAnimations()
@@ -125,7 +135,7 @@ final class PrototypeStageView: NSView {
         }
         // Edits re-render the frame without restarting its animations; text sequences follow them.
         if let player {
-            render(shown, player.current)
+            render(shown)
             if let frame = Prototype.frame(player.current, in: document) { animations(shown).update(frame) }
         }
     }
@@ -144,12 +154,16 @@ final class PrototypeStageView: NSView {
         // Stopping would otherwise redraw the frame this renderer showed before.
         player.redraw = {}
         player.stop()
-        render(renderer, id)
-        player.redraw = { [weak self, unowned renderer] in self?.render(renderer, id) }
+        render(renderer)
+        // Only the renderer on show follows its sequences; the one being left keeps its last look until it is removed.
+        player.redraw = { [weak self, unowned renderer] in
+            guard let self, self.shown === renderer else { return }
+            self.render(renderer)
+        }
         guard let frame = Prototype.frame(id, in: document) else { return }
         player.start(frame, after: wait)
         // Sequences show their first item from the start.
-        if TextSequence.hasSequences(in: frame) { render(renderer, id) }
+        if TextSequence.hasSequences(in: frame) { render(renderer) }
     }
 
     private func rasterize() {
@@ -158,38 +172,172 @@ final class PrototypeStageView: NSView {
         spare.contentsScale = value
     }
 
-    private func render(_ renderer: DesignRenderer, _ id: String) {
-        guard var frame = Prototype.frame(id, in: document) else { renderer.sync([]); return }
-        frame.x = 0
-        frame.y = 0
-        frame.visible = true
-        renderer.sync([animations(renderer).playing(frame)])
+    private func render(_ renderer: DesignRenderer) {
+        guard let player else { renderer.sync([]); return }
+        var styles: [String: LayerStyle] = [:]
+        for id in Set([hovered, pressed].compactMap { $0 }) {
+            if let node = document.node(id), let style = Prototype.style(of: node, hovered: id == hovered || id == pressed, pressed: id == pressed) {
+                styles[id] = style
+            }
+        }
+        var scene = player.scene(in: document, styles: styles)
+        // The frame on show runs its text sequences; overlays show their layers as designed.
+        if !scene.isEmpty { scene[0] = animations(renderer).playing(scene[0]) }
+        renderer.sync(scene)
     }
 
-    private func framePoint(_ event: NSEvent) -> Point {
+    private func stagePoint(_ event: NSEvent) -> Point {
         let point = convert(event.locationInWindow, from: nil)
         return Point(x: point.x / scale, y: point.y / scale)
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        (responder(event) == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
+    private func target(_ event: NSEvent) -> PrototypePlayer.Target {
+        player?.target(at: stagePoint(event), in: document) ?? PrototypePlayer.Target()
     }
 
-    private func responder(_ event: NSEvent) -> String? {
-        player.flatMap { Prototype.frame($0.current, in: document) }.flatMap { Prototype.responder(in: $0, at: framePoint(event)) }?.id
+    /// Draws the layers now in a state, easing those that enter or leave one from how they look now.
+    private func setStates(hovered nextHovered: String?, pressed nextPressed: String?) {
+        guard nextHovered != hovered || nextPressed != pressed else { return }
+        let changed = Set([hovered, pressed, nextHovered, nextPressed].compactMap { $0 })
+        var before: [String: (CGColor?, CGColor?, Float)] = [:]
+        for id in changed {
+            guard let layer = shown.layer(for: id) else { continue }
+            let now = layer.presentation() ?? layer
+            before[id] = (now.backgroundColor, (now as? CAShapeLayer)?.fillColor, now.opacity)
+        }
+        hovered = nextHovered
+        pressed = nextPressed
+        render(shown)
+        for (id, (background, fill, opacity)) in before {
+            guard let layer = shown.layer(for: id) else { continue }
+            func ease(_ key: String, from: Any?, to: Any?) {
+                guard let from, !CFEqual(from as CFTypeRef, (to ?? NSNull()) as CFTypeRef) else { return }
+                let animation = CABasicAnimation(keyPath: key)
+                animation.fromValue = from
+                animation.toValue = to
+                animation.duration = LayerStates.transitionDuration
+                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer.add(animation, forKey: "state.\(key)")
+            }
+            if let shape = layer as? CAShapeLayer { ease("fillColor", from: fill, to: shape.fillColor) }
+            else { ease("backgroundColor", from: background, to: layer.backgroundColor) }
+            ease("opacity", from: opacity, to: layer.opacity)
+        }
     }
 
-    override func mouseDown(with event: NSEvent) { pressed = responder(event) }
+    private func updateHover(_ event: NSEvent) {
+        let target = target(event)
+        (target.responder == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
+        setStates(hovered: target.styled, pressed: pressedStyled != nil && target.styled == pressedStyled ? pressedStyled : nil)
+    }
+
+    override func mouseMoved(with event: NSEvent) { updateHover(event) }
+
+    override func mouseExited(with event: NSEvent) { setStates(hovered: nil, pressed: nil) }
+
+    override func mouseDown(with event: NSEvent) {
+        let target = target(event)
+        pressedResponder = target.responder?.node.id
+        pressedStyled = target.styled
+        pressedOutside = target.outside
+        setStates(hovered: target.styled, pressed: target.styled)
+    }
+
+    /// The pressed state shows only while the pointer stays over the pressed layer.
+    override func mouseDragged(with event: NSEvent) { updateHover(event) }
 
     override func mouseUp(with event: NSEvent) {
-        defer { pressed = nil }
-        guard pressed != nil, pressed == responder(event), var player, let step = player.click(at: framePoint(event), in: document) else { return }
+        let released = target(event)
+        // A click fires on the layer it was pressed on, or outside the topmost overlay when it was pressed outside it too.
+        let fires = (pressedResponder != nil && pressedResponder == released.responder?.node.id) || (pressedOutside && released.outside)
+        pressedResponder = nil
+        pressedStyled = nil
+        pressedOutside = false
+        if fires, var player, let effect = player.click(at: stagePoint(event), in: document) {
+            self.player = player
+            perform(effect)
+        }
+        updateHover(event)
+    }
+
+    /// Trackpad and wheel scrolling move the scrolling frame under the pointer; the trackpad's own momentum carries on after a flick.
+    override func scrollWheel(with event: NSEvent) {
+        guard var player else { return }
+        let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY), precise: event.hasPreciseScrollingDeltas)
+        // Content follows the fingers: moving them up scrolls further into it.
+        guard player.scroll(by: Point(x: -delta.x / scale, y: -delta.y / scale), at: stagePoint(event), wheel: !event.hasPreciseScrollingDeltas,
+                            in: document) else { return }
         self.player = player
-        play(step)
+        render(shown)
+        updateHover(event)
     }
 
     /// Esc closes the window and returns to editing.
     override func cancelOperation(_ sender: Any?) { window?.performClose(sender) }
+
+    private func perform(_ effect: PrototypePlayer.Effect) {
+        switch effect {
+        case .move(let step):
+            hovered = nil
+            pressed = nil
+            play(step)
+        case .toggle:
+            render(shown)
+        case .openOverlay(let overlay):
+            render(shown)
+            animate(overlay, opening: true)
+        case .closeOverlay(let overlay):
+            // While it animates, the player keeps the overlay in the scene, so renders in the meantime (hover, scrolling) keep it.
+            if player?.isTransitioning == true { animate(overlay, opening: false) } else { render(shown) }
+        }
+    }
+
+    /// Plays an overlay's transition: the overlay comes in from (or leaves towards) the edge its transition names, or fades, and
+    /// its scrim fades. When it has finished closing, the scene is rendered without it.
+    private func animate(_ overlay: PrototypeOverlay, opening: Bool) {
+        guard player?.isTransitioning == true else { return }
+        guard let layer = shown.layer(for: overlay.frame), let stage = player.flatMap({ Prototype.frame($0.current, in: document) }) else {
+            player?.finishTransition()
+            render(shown)
+            return
+        }
+        let transition = overlay.transition
+        let renderer = shown
+        let session = token
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, self.token == session else { return }
+            renderer.layer(for: overlay.frame)?.removeAllAnimations()
+            renderer.layer(for: Prototype.scrimID(overlay.frame))?.removeAllAnimations()
+            self.player?.finishTransition()
+            // Finishing drops the closing overlay from the scene.
+            if !opening { self.render(renderer) }
+        }
+        func animate(_ target: CALayer, _ key: String, hidden: Any, visible: Any) {
+            let animation = CABasicAnimation(keyPath: key)
+            animation.fromValue = opening ? hidden : visible
+            animation.toValue = opening ? visible : hidden
+            animation.duration = transition.duration
+            animation.timingFunction = CAMediaTimingFunction(name: Self.timing(transition.easing))
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            target.add(animation, forKey: "overlay.\(key)")
+        }
+        if let scrim = shown.layer(for: Prototype.scrimID(overlay.frame)) { animate(scrim, "opacity", hidden: 0, visible: 1) }
+        // Layers are positioned by their center; "away" places the overlay just past the edge it comes in from.
+        let place = layer.position
+        let half = CGSize(width: layer.bounds.width / 2, height: layer.bounds.height / 2)
+        let away: CGPoint? = switch transition.type {
+        case .sheet, .pushUp: CGPoint(x: place.x, y: stage.height + half.height)
+        case .pushDown: CGPoint(x: place.x, y: -half.height)
+        case .pushLeft: CGPoint(x: stage.width + half.width, y: place.y)
+        case .pushRight: CGPoint(x: -half.width, y: place.y)
+        case .none, .dissolve: nil
+        }
+        if let away { animate(layer, "position", hidden: NSValue(point: away), visible: NSValue(point: place)) }
+        else { animate(layer, "opacity", hidden: 0, visible: 1) }
+        CATransaction.commit()
+    }
 
     private func play(_ step: PrototypePlayer.Step) {
         let leaving = shown, arriving = spare
