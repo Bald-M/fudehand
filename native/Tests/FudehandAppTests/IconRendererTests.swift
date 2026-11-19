@@ -107,3 +107,17 @@ private struct Pixels {
     #expect(IconCatalog.shared.exists("sf/house.fill"))
     #expect(IconCatalog.shared.search("house.fill", library: .sf).first == "sf/house.fill")
 }
+
+@Test @MainActor func sfSymbolsKeepAnOpticalMarginLikeBundledIcons() throws {
+    // A 24 × 24 layer: SF Symbols are drawn at a point size for the layer, not stretched edge to edge.
+    let (_, minus) = try raster(try iconNode("sf/minus"), scale: 1)
+    #expect(minus.columnIsClear(0) && minus.columnIsClear(23))
+    let (_, chevron) = try raster(try iconNode("sf/chevron.right"), scale: 1)
+    let inked = (0..<24).filter { y in (0..<24).contains { chevron[$0, y][3] > 0 } }
+    #expect(inked.count < 20, "chevron spans \(inked.count) rows")
+    #expect(!inked.isEmpty)
+}
+
+@Test @MainActor func systemSymbolKeywordsComeFromTheSystem() {
+    #expect(SystemSymbols.tags()["magnifyingglass"]?.contains("search") == true)
+}

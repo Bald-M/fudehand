@@ -101,7 +101,7 @@ export const tools = [
     path('Font file path; ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), ['path'],
     async (args, root) => ({ ...args, path: absolute(args.path, root) })),
   controlTool('design_search_icons', 'search_icons',
-    'Search the built-in icon libraries by keyword (matched against icon names, and tags for Lucide) and return icon names for an icon layer. ' +
+    'Search the built-in icon libraries by keywords (matched against icon names and, for Lucide and SF Symbols, their tags; case, word order, and the separators space - _ . do not matter) and return icon names for an icon layer. ' +
     'Pick the library by the prototype\'s target platform: sf (SF Symbols) for iOS and macOS, one material-outlined/material-rounded/material-sharp style for Android, weui for a WeChat mini program, lucide for the web; keep one library and style per screen. ' +
     'Material fill variants end in .fill (material-rounded/home.fill). SF Symbols are licensed by Apple for mockups of apps on Apple platforms only.',
     {

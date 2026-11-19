@@ -68,3 +68,23 @@ private let catalog = IconCatalog(symbolExists: { ["house", "house.fill", "heart
     #expect(catalog.suggestions(for: "bogus/house").isEmpty)
     #expect(catalog.suggestions(for: "house").isEmpty)
 }
+
+@Test func sfSearchMatchesSystemKeywords() {
+    let catalog = IconCatalog(symbolExists: { _ in true }, symbolNames: { ["magnifyingglass", "gearshape", "house"] },
+                              symbolTags: { ["magnifyingglass": ["search"], "gearshape": ["general", "settings"], "house": ["home"]] })
+    #expect(catalog.search("search", library: .sf) == ["sf/magnifyingglass"])
+    #expect(catalog.search("settings", library: .sf) == ["sf/gearshape"])
+    #expect(catalog.search("home", library: .sf) == ["sf/house"])
+}
+
+@Test func multiWordQueriesMatchAnySeparator() {
+    let results = catalog.search("shopping cart", limit: 200)
+    #expect(results.contains("lucide/shopping-cart"))
+    #expect(results.contains("material-outlined/shopping_cart"))
+    #expect(catalog.search("arrow left", library: .lucide).first == "lucide/arrow-left")
+    #expect(catalog.search("Arrow_Left", library: .lucide).first == "lucide/arrow-left")
+    #expect(catalog.search("house.fill", library: .sf).first == "sf/house.fill")
+    // Every word must match, in any order.
+    #expect(catalog.search("cart shopping", library: .lucide).contains("lucide/shopping-cart"))
+    #expect(!catalog.search("shopping zebra", library: .lucide).contains("lucide/shopping-cart"))
+}

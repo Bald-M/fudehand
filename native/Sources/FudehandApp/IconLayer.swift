@@ -53,15 +53,19 @@ final class IconLayer: CALayer {
         raster = pixels
     }
 
+    /// An SF Symbol is drawn at a point size of 3/4 of the layer's shorter side (in pixels here), which leaves an optical
+    /// margin like the padded 24 × 24 artboards of the bundled libraries; it is only shrunk if it would still overflow. A
+    /// bundled icon's SVG already carries its margin and is fitted to the layer.
     private func draw(_ shape: NSImage, in context: CGContext, size: CGSize) {
         var image = shape
-        let natural = shape.size
-        guard natural.width > 0, natural.height > 0 else { return }
-        let fit = min(size.width / natural.width, size.height / natural.height)
         if icon.flatMap({ IconLibrary.parse($0.name)?.library }) == .sf,
-           let configured = shape.withSymbolConfiguration(.init(pointSize: natural.height * fit, weight: .regular)) {
+           let configured = shape.withSymbolConfiguration(.init(pointSize: min(size.width, size.height) * 0.75, weight: .regular)) {
             image = configured
         }
+        let natural = image.size
+        guard natural.width > 0, natural.height > 0 else { return }
+        let fit = image === shape ? min(size.width / natural.width, size.height / natural.height)
+                                  : min(1, size.width / natural.width, size.height / natural.height)
         let drawn = CGSize(width: natural.width * fit, height: natural.height * fit)
         let rect = CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2, width: drawn.width, height: drawn.height)
         NSGraphicsContext.saveGraphicsState()

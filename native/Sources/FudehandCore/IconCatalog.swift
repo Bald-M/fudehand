@@ -5,7 +5,7 @@ import Foundation
 /// Bundled libraries are read lazily from `<library>.json.zlib`: the App carries them in `Contents/Resources/Icons`
 /// (copied by `scripts/native-build.mjs`), and `swift test` reads them from the package's resource bundle (raw DEFLATE JSON written by
 /// `scripts/build-icons.mjs`). SF Symbols come from the system, which only the App can reach, so the App sets
-/// `symbolExists` and `symbolNames` at launch.
+/// `symbolExists`, `symbolNames`, and `symbolTags` at launch.
 public final class IconCatalog: @unchecked Sendable {
     public static let shared = IconCatalog()
 
@@ -14,13 +14,17 @@ public final class IconCatalog: @unchecked Sendable {
     private let lock = NSLock()
     private var libraries: [IconLibrary: [String: Icon]] = [:]
     private var symbolNameCache: [String]?
+    private var symbolTagCache: [String: [String]]?
     private var _symbolExists: @Sendable (String) -> Bool
     private var _symbolNames: @Sendable () -> [String]
+    private var _symbolTags: @Sendable () -> [String: [String]]
 
     public init(symbolExists: @escaping @Sendable (String) -> Bool = { _ in false },
-                symbolNames: @escaping @Sendable () -> [String] = { [] }) {
+                symbolNames: @escaping @Sendable () -> [String] = { [] },
+                symbolTags: @escaping @Sendable () -> [String: [String]] = { [:] }) {
         _symbolExists = symbolExists
         _symbolNames = symbolNames
+        _symbolTags = symbolTags
     }
 
     /// Whether the system has an SF Symbol with this name (without the `sf/` prefix).
@@ -33,6 +37,12 @@ public final class IconCatalog: @unchecked Sendable {
     public var symbolNames: @Sendable () -> [String] {
         get { lock.withLock { _symbolNames } }
         set { lock.withLock { _symbolNames = newValue; symbolNameCache = nil } }
+    }
+
+    /// Search keywords for SF Symbols by name (e.g. `magnifyingglass` → `search`); read once.
+    public var symbolTags: @Sendable () -> [String: [String]] {
+        get { lock.withLock { _symbolTags } }
+        set { lock.withLock { _symbolTags = newValue; symbolTagCache = nil } }
     }
 
     /// The SVG source of a bundled icon; nil for SF Symbols and unknown names.
@@ -60,22 +70,32 @@ public final class IconCatalog: @unchecked Sendable {
         return ranked.prefix(limit).map { "\(library.rawValue)/\($0.2)" }
     }
 
-    /// Icons whose name or tags match `query` (case-insensitive): exact name, then name prefix, then name substring,
-    /// then tag; shorter names first within each rank.
+    /// Icons whose name or tags match `query`. Case and the word separators libraries use (space, `-`, `_`, `.`) are
+    /// ignored, so `shopping cart` finds `shopping-cart`, `shopping_cart`, and `cart.shopping`-style names alike. Ranked:
+    /// exact name, name prefix, name substring, every word in the name in any order, then every word in the name or tags;
+    /// shorter names first within each rank.
     public func search(_ query: String, library: IconLibrary? = nil, limit: Int = 50) -> [String] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = Self.normalized(query)
         guard !query.isEmpty, limit > 0 else { return [] }
+        let words = query.split(separator: " ")
         var hits: [(rank: Int, name: String)] = []
         for library in library.map({ [$0] }) ?? IconLibrary.allCases {
             let icons = library == .sf ? [:] : icons(library)
+            let symbolTags = library == .sf ? self.symbolTagsCached() : [:]
             for name in names(library) {
-                let lower = name.lowercased()
+                let normal = Self.normalized(name)
                 let rank: Int
-                if lower == query { rank = 0 }
-                else if lower.hasPrefix(query) { rank = 1 }
-                else if lower.contains(query) { rank = 2 }
-                else if icons[name]?.tags.contains(where: { $0.lowercased().contains(query) }) == true { rank = 3 }
-                else { continue }
+                if normal == query { rank = 0 }
+                else if normal.hasPrefix(query) { rank = 1 }
+                else if normal.contains(query) { rank = 2 }
+                else if words.allSatisfy({ normal.contains($0) }) { rank = 3 }
+                else {
+                    let tags = (library == .sf ? symbolTags[name] : icons[name]?.tags) ?? []
+                    guard !tags.isEmpty else { continue }
+                    let text = normal + " " + tags.map(Self.normalized).joined(separator: " ")
+                    guard words.allSatisfy({ text.contains($0) }) else { continue }
+                    rank = 4
+                }
                 hits.append((rank, "\(library.rawValue)/\(name)"))
             }
         }
@@ -83,7 +103,19 @@ public final class IconCatalog: @unchecked Sendable {
         return hits.prefix(limit).map(\.name)
     }
 
+    /// Lowercased, with `-`, `_`, `.`, and runs of whitespace turned into single spaces.
+    static func normalized(_ text: String) -> String {
+        text.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" || $0 == "." || $0.isWhitespace }).joined(separator: " ")
+    }
+
     // MARK: Loading
+
+    private func symbolTagsCached() -> [String: [String]] {
+        if let cached = lock.withLock({ symbolTagCache }) { return cached }
+        let tags = symbolTags()
+        lock.withLock { symbolTagCache = tags }
+        return tags
+    }
 
     private func names(_ library: IconLibrary) -> [String] {
         guard library == .sf else { return Array(icons(library).keys) }
