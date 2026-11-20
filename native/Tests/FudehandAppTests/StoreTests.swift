@@ -442,6 +442,51 @@ private func temporaryFile() -> URL {
     #expect(store.prototypeStart == "a")
 }
 
+@Test @MainActor func agentPlaysAndClosesThePrototypeWindowLikeTheUI() async throws {
+    let store = makeStore()
+    var presented = 0, dismissed = 0
+    store.presentPrototype = { presented += 1 }
+    store.dismissPrototype = { dismissed += 1 }
+    #expect(await failure(store, .playPrototype(frame: nil)) == "The document has no top-level frame to play; add a frame first")
+    store.playPrototype()
+    #expect(store.alert == L("Add a frame to play the prototype.") && presented == 0)
+    #expect(await failure(store, .closePrototype) == "The prototype window is not open")
+    let closed = try await control(store, .getPrototypePlayback)
+    #expect(closed["open"] as? Bool == false && closed["frame"] is NSNull)
+
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "name": "Home",
+                                                                                          "children": [["id": "c", "type": "rectangle"]]])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "name": "Detail"])))
+    // Without a frame it starts where Play Prototype starts: the frame holding the selection.
+    store.setSelection(["b"])
+    let played = try await control(store, .playPrototype(frame: nil))
+    #expect(played["open"] as? Bool == true && played["frame"] as? String == "b" && played["name"] as? String == "Detail")
+    #expect(presented == 1 && store.prototypeRequest?.start == "b")
+    let firstToken = try #require(store.prototypeRequest?.token)
+    store.playPrototype()
+    #expect(store.prototypeRequest == PrototypeRequest(start: "b", token: firstToken + 1) && presented == 2)
+
+    // From a given top-level frame; layers inside a frame and missing layers are refused without opening anything.
+    #expect(try await control(store, .playPrototype(frame: "a"))["frame"] as? String == "a")
+    #expect(await failure(store, .playPrototype(frame: "c")) == "Layer c is not a top-level frame")
+    #expect(await failure(store, .playPrototype(frame: "zz")) == "Layer not found: zz")
+    #expect(store.prototypeRequest?.start == "a" && presented == 3)
+
+    // The stage reports where playback moved, redrawing only the prototype window; a deleted frame reads as null while the window stays open.
+    var storeChanges = 0, shownChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 }, store.prototypeShown.objectWillChange.sink { shownChanges += 1 }]
+    store.prototypeMoved(to: "b")
+    #expect(storeChanges == 0 && shownChanges == 1)
+    _ = observers
+    #expect(try await control(store, .getPrototypePlayback)["frame"] as? String == "b")
+    _ = try await control(store, .deleteNodes(["b"]))
+    let deleted = try await control(store, .getPrototypePlayback)
+    #expect(deleted["open"] as? Bool == true && deleted["frame"] is NSNull)
+
+    let after = try await control(store, .closePrototype)
+    #expect(after["open"] as? Bool == false && after["frame"] is NSNull && dismissed == 1)
+}
+
 /// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
 /// are not recomputed (#142).
 @Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {
@@ -678,6 +723,8 @@ private func temporaryFile() -> URL {
 
     let listed = try #require(try await control(store, .listTemplates)["templates"] as? [[String: Any]])
     #expect(listed.map { $0["name"] as? String } == ["Desktop", "Mobile"])
+    // The title is what the launch window shows; a template without a string-table entry shows its file name.
+    #expect(listed.map { $0["title"] as? String } == ["Desktop", "Mobile"])
     #expect(await failure(store, .newDocumentFromTemplate("Tablet", discard: false)) == "Template not found: Tablet; available: Desktop, Mobile")
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
@@ -735,4 +782,143 @@ private func temporaryDirectory() -> URL {
     #expect(await failure(store, .exportHTML("nope", directory: directory.path)) == "Layer not found: nope")
     let file = directory.appendingPathComponent("index.html").path
     #expect(await failure(store, .exportHTML("f", directory: file)) == "Not a directory: \(file)")
+}
+
+@Test @MainActor func focusingSeveralLayersMatchesZoomToSelection() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "x": 0, "y": 0, "width": 100, "height": 100])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "x": 2000, "y": 900, "width": 300, "height": 200])))
+    store.setSelection(["a", "b"])
+    store.zoomToSelection()
+    let expected = store.viewport
+    store.fitAll(animated: false)
+    store.setSelection([])
+    let state = try await control(store, .focusNodes(["a", "b"]))
+    #expect(store.viewport == expected)
+    #expect(store.selection.isEmpty)
+    let viewport = try #require(state["viewport"] as? [String: Double])
+    #expect(viewport["scale"] == expected.scale)
+    #expect(await failure(store, .focusNodes(["a", "missing"])) == "Layer not found: missing")
+    #expect(store.viewport == expected)
+}
+
+@Test @MainActor func agentReadsAndSetsTheEditorView() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [
+        ["id": "g", "type": "group", "children": [["id": "r", "type": "rectangle"]]],
+    ]])))
+    let initial = try #require(try await control(store, .getState)["view"] as? [String: Any])
+    #expect(initial["tool"] as? String == "move")
+    #expect(initial["inspector"] as? Bool == true)
+    #expect(initial["inspectorTab"] as? String == "design")
+    #expect(initial["collapsed"] as? [String] == [])
+
+    let result = try await control(store, .setView(ViewChange(tool: .rectangle, inspector: false, inspectorTab: .chat, collapse: ["f", "g"])))
+    #expect(store.tool == .rectangle && !store.showingInspector && store.inspectorTab == .chat)
+    #expect(store.collapsedLayers == ["f", "g"])
+    let previous = try #require(result["previous"] as? [String: Any])
+    #expect(previous["tool"] as? String == "move" && previous["inspector"] as? Bool == true)
+    #expect(previous["inspectorTab"] as? String == "design" && previous["collapsed"] as? [String] == [])
+    let view = try #require(result["view"] as? [String: Any])
+    #expect(view["tool"] as? String == "rectangle" && view["collapsed"] as? [String] == ["f", "g"])
+
+    // The layers panel's chevron calls the same store method.
+    store.setCollapsed("g", false)
+    _ = try await control(store, .setView(ViewChange(expand: ["f"])))
+    #expect(store.collapsedLayers.isEmpty)
+
+    // A bad id changes nothing, not even the valid parts of the request.
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["missing"]))) == "Layer not found: missing")
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["r"]))) == "Layer has no child layers to expand or collapse: r")
+    #expect(store.tool == .rectangle && store.collapsedLayers.isEmpty)
+
+    // Layers deleted after collapsing are not reported.
+    _ = try await control(store, .setView(ViewChange(collapse: ["g"])))
+    _ = try await control(store, .deleteNodes(["g"]))
+    #expect((try await control(store, .getState)["view"] as? [String: Any])?["collapsed"] as? [String] == [])
+
+    // Another document starts with every layer expanded, even where an id repeats.
+    _ = try await control(store, .createNode(parent: "f", index: nil, node: JSONObject(["id": "k", "type": "rectangle"])))
+    _ = try await control(store, .setView(ViewChange(collapse: ["f"])))
+    _ = try await control(store, .newDocument(discard: true))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
+    #expect(store.collapsedLayers.isEmpty)
+}
+
+// MARK: Version snapshots
+
+@MainActor private func storeWithFrame() async throws -> FudehandStore {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "home", "type": "frame", "name": "Home", "x": 100, "y": 50, "width": 120, "height": 80, "fill": "#FF0000",
+        "children": [["id": "label", "type": "rectangle", "width": 10, "height": 10]],
+    ])))
+    return store
+}
+
+@Test @MainActor func agentSavesAVersionSnapshotAsOneUndoStep() async throws {
+    let store = try await storeWithFrame()
+    let saved = try await control(store, .saveVersionSnapshot(frame: "home", note: "Before the redesign"))
+    let id = try #require(saved["id"] as? String)
+    #expect(saved["frame"] as? String == "home" && saved["frameName"] as? String == "Home" && saved["note"] as? String == "Before the redesign")
+    #expect(saved["bounds"] as? [String: Double] == ["x": 260, "y": 50, "width": 120, "height": 80])
+    #expect(saved["frameBounds"] as? [String: Double] == ["x": 100, "y": 50, "width": 120, "height": 80])
+    let node = try #require(store.editor.document.node(id))
+    #expect(store.editor.document.nodes.last?.id == id && node.type == .image)
+    // The image is the frame rendered at twice its size.
+    let data = try #require(node.image?.data)
+    let image = try #require(NSBitmapImageRep(data: data))
+    #expect(image.pixelsWide == 240 && image.pixelsHigh == 160)
+    #expect(store.editor.undoName == "Agent: Save Version Snapshot")
+    // Snapshots stay when the frame changes, and the list reads them back.
+    _ = try await control(store, .updateNode("home", changes: JSONObject(["fill": "#0000FF"])))
+    let listed = try await control(store, .listVersionSnapshots(frame: "home"))
+    #expect((listed["snapshots"] as? [[String: Any]])?.map { $0["id"] as? String } == [id])
+    store.undo()
+    store.undo()
+    #expect(store.editor.document.versionSnapshots().isEmpty)
+}
+
+@Test @MainActor func onlyFramesHaveVersionSnapshots() async throws {
+    let store = try await storeWithFrame()
+    #expect(await failure(store, .saveVersionSnapshot(frame: "label", note: ""))
+            == "Layer label is a rectangle, not a frame; only frames have version snapshots")
+    #expect(await failure(store, .saveVersionSnapshot(frame: "nope", note: "")) == "Layer not found: nope")
+    store.setSelection(["label"])
+    store.saveVersionSnapshotOfSelection()
+    #expect(store.alert == "Select one frame to save a version snapshot.")
+    #expect(store.editor.document.versionSnapshots().isEmpty)
+}
+
+@Test @MainActor func theMenuSavesTheSelectedFrameAndSelectsTheSnapshot() async throws {
+    let store = try await storeWithFrame()
+    store.setSelection(["home"])
+    store.saveVersionSnapshotOfSelection()
+    let snapshot = try #require(store.editor.document.versionSnapshots(of: "home").first)
+    #expect(store.selection == [snapshot.id] && store.editor.undoName == "Save Version Snapshot" && store.alert == nil)
+    // A second one lines up to the right of the first.
+    store.setSelection(["home"])
+    store.saveVersionSnapshotOfSelection()
+    let both = store.editor.document.versionSnapshots(of: "home")
+    #expect(both.count == 2 && both[1].x == snapshot.frame.maxX + VersionSnapshot.gap)
+}
+
+@Test @MainActor func aVersionSnapshotCanBeOverlaidOnItsFrameAndPutBack() async throws {
+    let store = try await storeWithFrame()
+    let saved = try await control(store, .saveVersionSnapshot(frame: "home", note: ""))
+    let id = try #require(saved["id"] as? String)
+    store.compareVersionSnapshot(id, overlay: true)
+    var node = try #require(store.editor.document.node(id))
+    #expect(node.x == 100 && node.y == 50 && node.opacity == 0.5 && store.editor.undoName == "Overlay Snapshot on Frame")
+    store.compareVersionSnapshot(id, overlay: false)
+    node = try #require(store.editor.document.node(id))
+    #expect(node.x == 260 && node.y == 50 && node.opacity == 1)
+    // The note is edited like any other field, by the panel or by design_update_node.
+    _ = try await control(store, .updateNode(id, changes: JSONObject(["versionSnapshot": ["note": "Old header"]])))
+    #expect(store.editor.document.node(id)?.versionSnapshot?.note == "Old header")
+    // Once the frame is gone the snapshot stays, and the list says its frame is gone.
+    _ = try await control(store, .deleteNodes(["home"]))
+    let result = try await control(store, .listVersionSnapshots(frame: nil))
+    let listed = try #require(result["snapshots"] as? [[String: Any]])
+    #expect(listed.count == 1 && listed[0]["frameName"] is NSNull && listed[0]["frameBounds"] is NSNull)
 }

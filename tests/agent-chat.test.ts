@@ -440,6 +440,19 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(await chat.exited).toBe(0)
     expect(JSON.stringify(chat.events) + chat.stderr()).not.toContain(KEY)
   })
+
+  it('masks an API key the model sets with a tool, but sends it to the App', async () => {
+    const other = 'sk-ant-other-provider-9876'
+    const app = await startApp(request => ({ ok: true, result: { provider: { id: 'anthropic', hasKey: true, keyHint: 'sk-a••••••••9876' } } }))
+    // The model repeats the key in its reply: the App still never sees it.
+    const model = await fakeModel([openaiTool('call_1', 'settings_set_api_key', { provider: 'anthropic', key: other }), openaiText(`Saved ${other}.`)])
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('Save my Claude key')
+    expect(events[0]).toMatchObject({ type: 'tool_call', name: 'settings_set_api_key', args: { provider: 'anthropic', key: '***' } })
+    expect(events.at(-2)).toMatchObject({ type: 'assistant', text: 'Saved ***.' })
+    expect(JSON.stringify(chat.events) + chat.stderr()).not.toContain(other)
+    expect(app.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'set_api_key', args: { provider: 'anthropic', key: other } }])
+  })
 })
 
 describe('Agent harness: OpenAI Responses API (Codex series)', () => {
@@ -1157,7 +1170,7 @@ describe('Agent harness: plan and goal modes', () => {
     ])
     const chat = await deepseek(model.baseUrl, app.socketPath)
     const events = await chat.ask('Remove the demo page', { mode: 'plan' })
-    expect(toolNames(model.requests[0])).toEqual(['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_snapshot', 'ask_user'])
+    expect(toolNames(model.requests[0])).toEqual(['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_list_version_snapshots', 'design_snapshot', 'ask_user'])
     expect(model.requests[0].body.messages[0].content).toMatch(/Plan mode is on/)
     expect(app.received.map(request => request.command)).toEqual(['get_state'])
     expect(events.find(event => event.type === 'tool_result' && event.name === 'design_delete_nodes'))

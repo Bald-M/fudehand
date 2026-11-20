@@ -122,7 +122,7 @@ private func specifiers(_ text: String) -> [String] {
 @Test func uiSourcesHaveNoHardCodedChineseCopy() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Sources/FudehandApp")
-    let files = ["FudehandApp", "FudehandStore", "WorkspaceView", "LaunchView", "LayersPanel", "InspectorPanel", "ChatPanel", "ChatMessages", "ChatSession",
+    let files = ["FudehandApp", "FudehandStore", "WorkspaceView", "LaunchView", "LayersPanel", "InspectorPanel", "InspectorControls", "ChatPanel", "ChatMessages", "ChatSession",
                  "Connectors", "Keychain", "CanvasView", "CanvasToolbar", "FontLibrary", "PrototypeWindow", "AnimationPreview", "IconPicker"]
     let literal = try NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*""#)
     for name in files {

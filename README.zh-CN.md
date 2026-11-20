@@ -109,8 +109,9 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 | 读取 | `design_get_state`、`design_get_document`、`design_get_node` | state 是概览：文件、选区、能否撤销，以及顶层图层摘要。 |
 | 编辑 | `design_create_node`、`design_update_node`、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo` | 每次调用是一步撤销，画布立即更新。 |
 | 文件 | `design_new_document`、`design_open_document`、`design_save_document` | 有未保存修改时，新建和打开会被拒绝，除非传 `discard: true`。 |
-| 视口 | `canvas_focus_node`、`canvas_fit_all`、`canvas_zoom` | |
+| 视口 | `canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`、`canvas_set_view` | `canvas_focus_node` 可定位一个或多个图层；`canvas_set_view` 切换画布工具、显示或隐藏检查器、在图层面板里展开或折叠图层。 |
 | 核对 | `design_snapshot` | 返回实际渲染结果的 PNG。 |
+| 导出 | `design_export_html` | 把图层写成带图片和图标的参考网页，见下文。 |
 
 几个值得知道的细节：
 
@@ -121,6 +122,17 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 - 文件路径和图片路径里的 `~` 会展开为你的主目录。
 
 工具通过 App 的控制通道与 App 通信。控制通道是一个 Unix socket，位于 `~/Library/Application Support/fudehand/control.sock`（可用 `FUDEHAND_CONTROL_SOCKET` 覆盖）。它只对当前用户开放，不监听任何网络地址。
+
+### 从原型到前端代码
+
+屏幕设计好以后，可以让 Agent 在你的前端项目里把它实现出来：
+
+1. 在前端项目中打开 Agent（Claude Code、Codex 等），并连接 `fudehand` MCP 服务器。
+2. 让它对画框调用 `design_export_html`，`directory` 用绝对路径，比如源码目录外的一个新文件夹。它会写出 `index.html`，并把图片和图标放在 `assets/` 下，同时返回 HTML 以及每个资源对应的图层。手动操作是*文件 → 导出为 HTML…*（⇧⌘E）。
+3. 让它按项目的框架和样式重写页面，把这份 HTML 当作结构、尺寸、间距、颜色和字体的参考：自动布局对应 flexbox，每个元素的 `data-layer-id` 指回对应图层，用 `design_get_node` 可以读到完整信息（比如原型交互）。
+4. 让它把自己的页面和画框的 `design_snapshot` 对比，修正差异。
+
+导出的页面只是参考，不是可直接上线的代码。原型交互不会导出，字体保留 macOS 字体族名。
 
 ### 对话面板
 

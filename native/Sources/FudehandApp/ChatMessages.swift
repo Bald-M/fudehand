@@ -390,9 +390,15 @@ private struct ToolCard: View {
         case "design_save_document": L("Save document")
         case "design_snapshot": L("Take snapshot")
         case "design_export_html": L("Export as HTML")
+        case "design_save_version_snapshot": L("Save version snapshot")
+        case "design_list_version_snapshots": L("List version snapshots")
         case "canvas_focus_node": L("Focus layer")
         case "canvas_fit_all": L("Fit All")
         case "canvas_zoom": L("Zoom canvas")
+        case "prototype_play": L("Play Prototype")
+        case "prototype_get_playback": L("Read prototype window")
+        case "prototype_close": L("Close prototype window")
+        case "canvas_set_view": L("Change view")
         default: tool
         }
     }

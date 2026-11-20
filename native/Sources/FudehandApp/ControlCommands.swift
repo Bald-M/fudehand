@@ -3,7 +3,8 @@ import Foundation
 
 /// Control-channel commands are dispatched to the store on the main thread; the result is a dictionary that can be encoded as JSON. Agent edits share the undo history with manual edits.
 extension FudehandStore {
-    func handleControl(_ command: ControlCommand) async throws -> Any {
+    /// `caller` is the chat panel conversation whose Agent sent the command; nil for any other caller.
+    func handleControl(_ command: ControlCommand, caller: UUID? = nil) async throws -> Any {
         switch command {
         case .getState:
             return controlState()
@@ -69,10 +70,21 @@ extension FudehandStore {
             }
             do { try write(to: url) } catch { throw ControlCommandError("Could not save: \(error.localizedDescription)") }
             return controlState()
-        case .focusNode(let id):
-            _ = try requireNode(id)
-            focus(id)
+        case .focusNodes(let ids):
+            for id in ids { _ = try requireNode(id) }
+            focus(ids)
             return controlState()
+        case .setView(let change):
+            for id in change.expand + change.collapse where try requireNode(id).children.isEmpty {
+                throw ControlCommandError("Layer has no child layers to expand or collapse: \(id)")
+            }
+            let previous = viewState()
+            if let tool = change.tool { self.tool = tool }
+            if let inspector = change.inspector { showingInspector = inspector }
+            if let tab = change.inspectorTab { inspectorTab = tab }
+            for id in change.expand { setCollapsed(id, false) }
+            for id in change.collapse { setCollapsed(id, true) }
+            return ["previous": previous, "view": viewState()]
         case .fitAll:
             fitAll()
             return controlState()
@@ -83,13 +95,29 @@ extension FudehandStore {
             let node = try requireNode(id)
             let png = try DesignRenderer.snapshotPNG(node, scale: scale)
             return ["id": id, "mimeType": "image/png", "data": png.base64EncodedString(), "width": node.width, "height": node.height]
+        case .saveVersionSnapshot(let frame, let note):
+            let node = try saveVersionSnapshot(of: frame, note: note, step: "Agent: Save Version Snapshot")
+            return versionSnapshotEntry(try requireNode(node.id))
+        case .listVersionSnapshots(let frame):
+            return ["snapshots": editor.document.versionSnapshots(of: frame).map(versionSnapshotEntry)]
         case .listFonts:
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):
             return ["icons": IconCatalog.shared.search(query, library: library, limit: limit)]
+        case .getInterface, .updateInterface, .getModels, .updateModelProvider, .listModels, .setAPIKey, .deleteAPIKey, .getConnectors, .setConnector:
+            return try await handleSettings(command)
         case .importFont(let path):
             do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
             catch let error as FontImportError { throw ControlCommandError(error.english) }
+        case .playPrototype(let frame):
+            try playPrototype(from: frame)
+            return prototypePlayback()
+        case .getPrototypePlayback:
+            return prototypePlayback()
+        case .closePrototype:
+            guard prototypeWindowOpen else { throw ControlCommandError("The prototype window is not open") }
+            closePrototype()
+            return prototypePlayback()
         case .showLaunchWindow:
             presentLaunch()
             return controlState()
@@ -111,7 +139,7 @@ extension FudehandStore {
             clearRecents()
             return ["removed": removed, "recents": recentsState()]
         case .listTemplates:
-            return ["templates": templates.map { ["name": $0.name] }]
+            return ["templates": templates.map { ["name": $0.name, "title": $0.title] }]
         case .newDocumentFromTemplate(let name, let discard):
             guard let template = templates.first(where: { $0.name == name }) else {
                 throw ControlCommandError("Template not found: \(name); available: "
@@ -125,6 +153,9 @@ extension FudehandStore {
             let result: DesignHTMLExport
             do { result = try exportHTML(id, to: url) } catch let error as HTMLExportError { throw ControlCommandError(error.english) }
             return ["id": id, "directory": url.path, "files": result.files.keys.sorted(), "assets": result.assets, "html": result.html]
+        case .listConversations, .getConversation, .openConversation, .newConversation, .closeConversation, .deleteConversation,
+             .clearConversation, .sendMessage, .setMode, .runPlan, .stopReply, .regenerateReply, .editLastMessage, .answerQuestion, .compactConversation:
+            return try handleChatControl(command, caller: caller)
         }
     }
 
@@ -146,6 +177,25 @@ extension FudehandStore {
             ["path": entry.path, "name": URL(fileURLWithPath: entry.path).deletingPathExtension().lastPathComponent,
              "openedAt": format.string(from: entry.openedAt), "available": entry.available]
         }
+    }
+
+    /// Whether the prototype window is open and the top-level frame it shows (null when closed, or when that frame was deleted).
+    func prototypePlayback() -> [String: Any] {
+        let frame = prototypeWindowOpen ? prototypeFrame.flatMap { Prototype.frame($0, in: editor.document) } : nil
+        return ["open": prototypeWindowOpen, "frame": frame?.id ?? NSNull(), "name": frame?.name ?? NSNull()]
+    }
+
+    /// A version snapshot as the Agent reads it: the record, where the snapshot and its frame are on the canvas (absolute
+    /// coordinates; `frameBounds` and `frameName` are null once the frame is deleted), and its opacity, for comparing the two.
+    private func versionSnapshotEntry(_ node: DesignNode) -> [String: Any] {
+        let document = editor.document
+        func bounds(_ rect: Rect?) -> Any {
+            rect.map { ["x": $0.x, "y": $0.y, "width": $0.width, "height": $0.height] as [String: Any] } ?? NSNull()
+        }
+        let snapshot = node.versionSnapshot!
+        return ["id": node.id, "name": node.name, "frame": snapshot.frame, "frameName": document.node(snapshot.frame)?.name ?? NSNull(),
+                "createdAt": snapshot.timestamp, "note": snapshot.note, "opacity": node.opacity,
+                "bounds": bounds(document.worldRect(node.id)), "frameBounds": bounds(document.worldRect(snapshot.frame))]
     }
 
     private func requireNode(_ id: String) throws -> DesignNode {
@@ -182,6 +232,7 @@ extension FudehandStore {
             "dirty": isDirty,
             "selection": selection.sorted(),
             "viewport": ["x": current.x, "y": current.y, "scale": current.scale],
+            "view": viewState(),
             "canUndo": canUndo,
             "canRedo": canRedo,
             "nodeCount": editor.document.nodeCount,
@@ -190,5 +241,11 @@ extension FudehandStore {
                  "width": node.width, "height": node.height, "children": node.children.count]
             },
         ]
+    }
+
+    /// The editor view outside the document: the canvas tool, the inspector, and the layers the layers panel collapses.
+    func viewState() -> [String: Any] {
+        ["tool": tool.rawValue, "inspector": showingInspector, "inspectorTab": inspectorTab.rawValue,
+         "collapsed": collapsedLayers.filter { editor.document.node($0) != nil }.sorted()]
     }
 }
