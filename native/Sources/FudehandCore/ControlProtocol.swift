@@ -29,6 +29,7 @@ public enum ControlCommand: Equatable, Sendable {
     case clearRecents
     case listTemplates
     case newDocumentFromTemplate(String, discard: Bool)
+    case exportHTML(String, directory: String)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -202,6 +203,7 @@ public enum ControlProtocol {
         case "clear_recents": return .clearRecents
         case "list_templates": return .listTemplates
         case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
+        case "export_html": return .exportHTML(try string("id"), directory: try string("directory"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

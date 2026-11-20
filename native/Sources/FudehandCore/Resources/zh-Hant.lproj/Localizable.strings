@@ -439,3 +439,12 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+
+"Export as HTML…" = "匯出為 HTML…";
+"Export as HTML" = "匯出為 HTML";
+"Choose an empty folder for the page and its images and icons." = "請選擇一個空資料夾，用來存放頁面及其圖片和圖示。";
+"Export" = "匯出";
+"Not a folder: %@" = "不是資料夾：%@";
+"The folder is not empty: %@" = "資料夾不是空的：%@";
+"Could not write to %@" = "無法寫入 %@";
+"No artwork for icon %@" = "圖示 %@ 沒有圖形";

@@ -27,6 +27,7 @@ describe('design tools', () => {
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'design_export_html',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
       'style_list', 'style_read',
@@ -119,6 +120,8 @@ describe('design tools', () => {
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: 'out/home' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: '/work/site/design' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
@@ -133,6 +136,8 @@ describe('design tools', () => {
       { command: 'zoom', args: { scale: 0.5 } },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
+      { command: 'export_html', args: { id: 'f', directory: '/repo/out/home' } },
+      { command: 'export_html', args: { id: 'f', directory: '/work/site/design' } },
     ])
   })
 

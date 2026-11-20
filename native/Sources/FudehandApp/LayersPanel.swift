@@ -128,6 +128,7 @@ struct LayersPanel: View {
             Button(L("Send to Back")) { reorder(node.id, toTop: false) }
             Divider()
             Button(L("Zoom to Layer")) { store.focus(node.id) }
+            Button(L("Export as HTML…")) { store.setSelection([node.id]); store.exportHTMLWithPanel() }
             Divider()
             Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }
         }

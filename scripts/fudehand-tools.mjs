@@ -129,6 +129,13 @@ export const tools = [
       ] }
     },
   },
+  controlTool('design_export_html', 'export_html',
+    'Export a layer (usually a frame) as a reference web page for implementing the design in front-end code, as File > Export as HTML… does: writes index.html (one CSS class per layer; auto layout becomes flexbox, other children are placed absolutely; each element carries data-layer-id) and its images and icons under assets/. ' +
+    'Icons are drawn through a CSS mask tinted with the icon color; SF Symbols are written as PNG, other icons as SVG. Hidden layers and prototype settings are left out, and fonts keep their macOS family names. ' +
+    'The directory is created when missing and must otherwise be empty. Returns the files written (relative to the directory), the asset file of each image and icon layer, and the HTML; the document is not changed. Adapt the result to the target project\'s framework and styles rather than copying it.',
+    { ...id, directory: { type: 'string', description: 'Directory to write into; prefer an absolute path. ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory' } },
+    ['id', 'directory'],
+    async (args, root) => ({ ...args, directory: absolute(args.directory, root) })),
   controlTool('app_show_launch_window', 'show_launch_window', 'Show the launch window (New, Recent, Templates) in front, as Window > Launch Window does; the editor window and the document stay as they are. Returns the document overview.'),
   controlTool('app_list_recents', 'list_recents', 'List the recent files shown in the launch window and File > Open Recent, newest first: path, name, openedAt (ISO 8601), and available (false when the file was deleted or moved).'),
   controlTool('app_open_recent', 'open_recent', 'Open a project file from the recent files, by its path as app_list_recents returns it. Refused when the file was deleted or moved, or when the current document has unsaved changes, unless discard is true. Returns the document overview.',

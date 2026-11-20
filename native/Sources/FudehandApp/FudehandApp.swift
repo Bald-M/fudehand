@@ -118,6 +118,10 @@ struct FudehandApp: App {
             CommandGroup(replacing: .saveItem) {
                 Button(L("Save")) { store.save() }.keyboardShortcut("s")
                 Button(L("Save As…")) { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                Button(L("Export as HTML…")) { store.exportHTMLWithPanel() }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(store.selection.count != 1)
             }
             CommandGroup(replacing: .undoRedo) {
                 Button(L("Undo")) { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")

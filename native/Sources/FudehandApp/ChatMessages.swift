@@ -389,6 +389,7 @@ private struct ToolCard: View {
         case "design_open_document": L("Open document")
         case "design_save_document": L("Save document")
         case "design_snapshot": L("Take snapshot")
+        case "design_export_html": L("Export as HTML")
         case "canvas_focus_node": L("Focus layer")
         case "canvas_fit_all": L("Fit All")
         case "canvas_zoom": L("Zoom canvas")

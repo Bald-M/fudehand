@@ -13,6 +13,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Added
 
 - Agents can use the launch window: `app_show_launch_window` brings it to the front, `app_list_recents` lists the recent files (marking those deleted or moved), `app_open_recent`, `app_remove_recent`, and `app_clear_recents` open, remove, and clear them, and `app_list_templates` and `app_new_document_from_template` create an untitled document from a template. Like `design_new_document`, opening a recent file or creating from a template refuses to drop unsaved changes unless `discard` is true, and none of these tools shows a dialog (#179).
+- *File → Export as HTML…* (⇧⌘E, also in the layers panel's context menu) writes the selected layer as a reference web page, `index.html` with its images and icons under `assets/`, into an empty folder, so an agent can implement the design in front-end code. Auto layout becomes flexbox, icons keep their color through a CSS mask, and each element carries its layer id. Agents use the new `design_export_html` tool, and the README describes the prototype-to-code workflow (#202).
 
 ## [0.0.4] - 2026-11-20
 
