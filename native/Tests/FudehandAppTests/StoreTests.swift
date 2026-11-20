@@ -604,3 +604,90 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("c")?.name == "Back")
     #expect(store.editor.document.node("c")?.icon?.name == "lucide/house")
 }
+
+@Test @MainActor func agentShowsTheLaunchWindow() async throws {
+    let store = makeStore()
+    var shown = 0
+    store.presentLaunch = { shown += 1 }
+    let result = try await control(store, .showLaunchWindow)
+    #expect(shown == 1 && result["dirty"] as? Bool == false)
+}
+
+@Test @MainActor func agentListsOpensRemovesAndClearsRecents() async throws {
+    let store = makeStore()
+    let kept = temporaryFile().resolvingSymlinksInPath(), gone = temporaryFile().resolvingSymlinksInPath()
+    _ = try await control(store, .saveDocument(gone.path))
+    _ = try await control(store, .saveDocument(kept.path))
+    try FileManager.default.removeItem(at: gone)
+
+    // The list is the same as the launch window's, newest first, marking the file that no longer exists.
+    let listed = try #require(try await control(store, .listRecents)["recents"] as? [[String: Any]])
+    #expect(listed.map { $0["path"] as? String } == [kept.path, gone.path])
+    #expect(listed.map { $0["name"] as? String } == [kept.deletingPathExtension().lastPathComponent, gone.deletingPathExtension().lastPathComponent])
+    #expect(listed.map { $0["available"] as? Bool } == [true, false])
+    #expect(store.recentEntries.map(\.available) == [true, false])
+    #expect(listed.allSatisfy { ($0["openedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } != nil })
+
+    // A missing file or a path not in the list is an error, with no alert and no change.
+    #expect(await failure(store, .openRecent(gone.path, discard: false)) == "File not found: \(gone.path) (deleted or moved); remove it from the list with app_remove_recent")
+    #expect(await failure(store, .openRecent("/nowhere.fudehand", discard: false)) == "Not a recent file: /nowhere.fudehand")
+    #expect(await failure(store, .removeRecent("/nowhere.fudehand")) == "Not a recent file: /nowhere.fudehand")
+
+    // Unsaved changes need discard, as with open_document.
+    _ = try await control(store, .newDocument(discard: false))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    #expect(await failure(store, .openRecent(kept.path, discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
+    #expect(store.editor.document.node("r") != nil && store.fileURL == nil)
+    let opened = try await control(store, .openRecent(kept.path, discard: true))
+    #expect(opened["file"] as? String == kept.path && opened["dirty"] as? Bool == false)
+    #expect(store.editor.document.node("r") == nil)
+    // Opening the current, unchanged file again only shows it.
+    var presented = 0
+    store.presentEditor = { presented += 1 }
+    _ = try await control(store, .openRecent(kept.path, discard: false))
+    #expect(presented == 1 && store.fileURL?.path == kept.path)
+
+    let removed = try await control(store, .removeRecent(gone.path))
+    #expect(removed["removed"] as? [String] == [gone.path])
+    #expect((removed["recents"] as? [[String: Any]])?.map { $0["path"] as? String } == [kept.path])
+    #expect(store.recents.items.map(\.path) == [kept.path])
+    // Another spelling of the same file (/private/var/… for /var/…) finds the entry, which is stored with symlinks resolved.
+    let unresolved = URL(fileURLWithPath: "/private" + temporaryFile().resolvingSymlinksInPath().path)
+    _ = try await control(store, .saveDocument(unresolved.path))
+    #expect(unresolved.path != unresolved.resolvingSymlinksInPath().path)
+    _ = try await control(store, .openRecent(unresolved.path, discard: false))
+    // …also once the file is gone, when its own symlinks can no longer be resolved.
+    try FileManager.default.removeItem(at: unresolved)
+    #expect(await failure(store, .openRecent(unresolved.path, discard: false))?.hasPrefix("File not found: ") == true)
+    #expect((try await control(store, .removeRecent(unresolved.path)))["removed"] as? [String] == ["/" + unresolved.pathComponents.dropFirst(2).joined(separator: "/")])
+    let cleared = try await control(store, .clearRecents)
+    #expect(cleared["removed"] as? [String] == [kept.path] && (cleared["recents"] as? [Any])?.isEmpty == true)
+    #expect(store.recents.items.isEmpty)
+}
+
+@Test @MainActor func agentCreatesAnUntitledDocumentFromATemplate() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-templates-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let template = DesignDocument(nodes: [DesignNode(id: "f", type: .frame, x: 0, y: 0, width: 390, height: 844)])
+    let templateURL = directory.appendingPathComponent("Mobile.fudehand")
+    try template.encoded().write(to: templateURL)
+    try template.encoded().write(to: directory.appendingPathComponent("Desktop.fudehand"))
+    let original = try Data(contentsOf: templateURL)
+    let store = FudehandStore(defaults: UserDefaults(suiteName: "fudehand-tests-\(UUID().uuidString)")!, templateDirectory: directory)
+
+    let listed = try #require(try await control(store, .listTemplates)["templates"] as? [[String: Any]])
+    #expect(listed.map { $0["name"] as? String } == ["Desktop", "Mobile"])
+    #expect(await failure(store, .newDocumentFromTemplate("Tablet", discard: false)) == "Template not found: Tablet; available: Desktop, Mobile")
+
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    #expect(await failure(store, .newDocumentFromTemplate("Mobile", discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
+    #expect(store.editor.document.node("r") != nil)
+
+    let created = try await control(store, .newDocumentFromTemplate("Mobile", discard: true))
+    #expect(created["file"] is NSNull && created["dirty"] as? Bool == false)
+    #expect(store.editor.document == template && store.recents.items.isEmpty)
+    // The new document is untitled: saving needs a path and never writes the template.
+    _ = try await control(store, .updateNode("f", changes: JSONObject(["width": 400])))
+    #expect(await failure(store, .saveDocument(nil)) == "The document has never been saved; provide path")
+    #expect(try Data(contentsOf: templateURL) == original)
+}

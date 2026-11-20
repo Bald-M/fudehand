@@ -43,6 +43,15 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
         (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,
          .searchIcons(query: "home", library: .materialRounded, limit: 3)),
+        (#"{"id":27,"command":"show_launch_window"}"#, .showLaunchWindow),
+        (#"{"id":28,"command":"list_recents"}"#, .listRecents),
+        (#"{"id":29,"command":"open_recent","args":{"path":"/tmp/a.fudehand"}}"#, .openRecent("/tmp/a.fudehand", discard: false)),
+        (#"{"id":30,"command":"open_recent","args":{"path":"/tmp/a.fudehand","discard":true}}"#, .openRecent("/tmp/a.fudehand", discard: true)),
+        (#"{"id":31,"command":"remove_recent","args":{"path":"/tmp/a.fudehand"}}"#, .removeRecent("/tmp/a.fudehand")),
+        (#"{"id":32,"command":"clear_recents"}"#, .clearRecents),
+        (#"{"id":33,"command":"list_templates"}"#, .listTemplates),
+        (#"{"id":34,"command":"new_document_from_template","args":{"name":"Mobile"}}"#, .newDocumentFromTemplate("Mobile", discard: false)),
+        (#"{"id":35,"command":"new_document_from_template","args":{"name":"Mobile","discard":true}}"#, .newDocumentFromTemplate("Mobile", discard: true)),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -70,6 +79,11 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "Invalid argument type: ids"),
         (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "Invalid argument type: discard"),
         (#"{"id":1,"command":"open_document","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"open_recent","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"open_recent","args":{"path":"/tmp/a.fudehand","discard":1}}"#, "Invalid argument type: discard"),
+        (#"{"id":1,"command":"remove_recent","args":{"path":""}}"#, "Invalid argument type: path"),
+        (#"{"id":1,"command":"new_document_from_template","args":{}}"#, "Missing argument: name"),
+        (#"{"id":1,"command":"new_document_from_template","args":{"name":3}}"#, "Invalid argument type: name"),
         (#"{"id":1,"command":"import_font","args":{}}"#, "Missing argument: path"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
