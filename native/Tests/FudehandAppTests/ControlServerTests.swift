@@ -67,7 +67,7 @@ private func leaveStaleSocket(_ path: String) {
     let path = temporarySocketPath()
     leaveStaleSocket(path)
     #expect(FileManager.default.fileExists(atPath: path))
-    let server = ControlServer(path: path) { command in
+    let server = ControlServer(path: path) { command, _ in
         if case .getNode(let id) = command { throw ControlCommandError("Layer not found: \(id)") }
         return ["handled": "\(command)"]
     }
@@ -90,9 +90,9 @@ private func leaveStaleSocket(_ path: String) {
 
 @Test func controlServerRefusesToStealALiveSocketAndRemovesItsFileOnStop() throws {
     let path = temporarySocketPath()
-    let first = ControlServer(path: path) { _ in [:] }
+    let first = ControlServer(path: path) { _, _ in [:] }
     try first.start()
-    let second = ControlServer(path: path) { _ in [:] }
+    let second = ControlServer(path: path) { _, _ in [:] }
     #expect(throws: ControlCommandError.self) { try second.start() }
     #expect(FileManager.default.fileExists(atPath: path))
     first.stop()
@@ -108,7 +108,7 @@ private func leaveStaleSocket(_ path: String) {
 @Test func controlServerWritesLargeResponsesCompletely() async throws {
     let path = temporarySocketPath()
     let payload = String(repeating: "a", count: 4 << 20)
-    let server = ControlServer(path: path) { _ in ["data": payload] }
+    let server = ControlServer(path: path) { _, _ in ["data": payload] }
     try server.start()
     defer { server.stop() }
     let responses = try await exchange(path, [#"{"id":1,"command":"node_snapshot","args":{"id":"x"}}"#])
@@ -119,14 +119,14 @@ private func leaveStaleSocket(_ path: String) {
     let path = temporarySocketPath()
     FileManager.default.createFile(atPath: path, contents: Data("keep".utf8))
     defer { unlink(path) }
-    let server = ControlServer(path: path) { _ in [:] }
+    let server = ControlServer(path: path) { _, _ in [:] }
     #expect(throws: ControlCommandError.self) { try server.start() }
     #expect(FileManager.default.contents(atPath: path) == Data("keep".utf8))
 }
 
 @Test func controlServerClosesOpenConnectionsOnStop() async throws {
     let path = temporarySocketPath()
-    let server = ControlServer(path: path) { _ in [:] }
+    let server = ControlServer(path: path) { _, _ in [:] }
     try server.start()
     let fd = try connectSocket(path)
     defer { close(fd) }
@@ -144,7 +144,7 @@ private func leaveStaleSocket(_ path: String) {
 
 @Test func controlServerRefusesConnectionsBeyondTheLimit() async throws {
     let path = temporarySocketPath()
-    let server = ControlServer(path: path) { _ in [:] }
+    let server = ControlServer(path: path) { _, _ in [:] }
     try server.start()
     defer { server.stop() }
     var idle: [Int32] = []
@@ -164,7 +164,7 @@ private func imageRequest(id: Int, length: Int) -> String {
 
 @Test func controlServerAcceptsARequestCarryingATenMegabyteImage() async throws {
     let path = temporarySocketPath()
-    let server = ControlServer(path: path) { command in
+    let server = ControlServer(path: path) { command, _ in
         guard case .createNode(_, _, let node) = command else { return [:] }
         return ["bytes": ((node.value["image"] as? [String: Any])?["data"] as? String)?.utf8.count ?? 0]
     }
@@ -180,7 +180,7 @@ private func imageRequest(id: Int, length: Int) -> String {
 
 @Test func controlServerRejectsAnOversizedRequestWithItsIDAndKeepsServing() async throws {
     let path = temporarySocketPath()
-    let server = ControlServer(path: path) { _ in ["handled": true] }
+    let server = ControlServer(path: path) { _, _ in ["handled": true] }
     try server.start()
     defer { server.stop() }
     let responses = try await exchange(path, [

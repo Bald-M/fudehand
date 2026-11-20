@@ -5,10 +5,10 @@ import ImageIO
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
-                                        "scroll", "fixedOnScroll", "states", "children"]
+                                        "scroll", "fixedOnScroll", "states", "versionSnapshot", "children"]
     /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
     /// not among them: an update replaces them whole.
-    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding"]
+    static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding", "versionSnapshot"]
 
     /// The upper limit on the absolute value of every numeric field.
     public static let maximumMagnitude = 1_000_000.0
@@ -125,6 +125,7 @@ public enum DesignJSON {
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
         try unsupported("icon", type == .icon)
+        try unsupported("versionSnapshot", type == .image)
 
         var node = DesignNode(id: id, type: type, name: try reader.string("name", default: type.title),
                               x: try reader.number("x", default: 0), y: try reader.number("y", default: 0),
@@ -209,6 +210,16 @@ public enum DesignJSON {
         }
         if let animation = try reader.child("animation") {
             node.animation = try self.animation(animation)
+        }
+        if let snapshot = try reader.child("versionSnapshot") {
+            try snapshot.checkKeys(["frame", "createdAt", "note"])
+            let frame = try snapshot.string("frame")
+            guard !frame.isEmpty else { throw reader.fail("\(snapshot.name("frame")) must be a non-empty frame id") }
+            let text = try snapshot.string("createdAt")
+            guard let date = VersionSnapshot.date(text) else {
+                throw reader.fail("\(snapshot.name("createdAt")) must be an ISO 8601 date and time such as 2026-11-20T09:30:00Z; got \(text)")
+            }
+            node.versionSnapshot = VersionSnapshot(frame: frame, createdAt: date, note: try snapshot.string("note", default: ""))
         }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
@@ -393,6 +404,11 @@ public enum DesignJSON {
             if animation.type == .slideIn { value["from"] = animation.from.rawValue; value["distance"] = animation.distance }
             if animation.type == .pulse { value["property"] = animation.property.rawValue }
             object["animation"] = value
+        }
+        if let snapshot = node.versionSnapshot {
+            var value: [String: Any] = ["frame": snapshot.frame, "createdAt": snapshot.timestamp]
+            if !snapshot.note.isEmpty { value["note"] = snapshot.note }
+            object["versionSnapshot"] = value
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

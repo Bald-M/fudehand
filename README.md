@@ -122,7 +122,7 @@ The MCP server uses the repository that contains the script. Append `--root <dir
 | Read | `design_get_state`, `design_get_document`, `design_get_node` | The state is an overview: file, selection, undo availability, and top-level layers. |
 | Edit | `design_create_node`, `design_update_node`, `design_delete_nodes`, `design_move_node`, `design_select`, `design_undo`, `design_redo` | Each call is one undo step and updates the canvas immediately. |
 | File | `design_new_document`, `design_open_document`, `design_save_document` | New and open are refused while there are unsaved changes, unless you pass `discard: true`. |
-| Viewport | `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom` | |
+| Viewport | `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom`, `canvas_set_view` | `canvas_focus_node` fits one layer or several; `canvas_set_view` picks the canvas tool, shows or hides the inspector, and expands or collapses layers in the layers panel. |
 | Check | `design_snapshot` | Returns a PNG of the actual rendering. |
 
 A few details worth knowing:

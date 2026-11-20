@@ -78,6 +78,9 @@
 "No project files opened yet" = "还没有打开过的工程文件";
 "Templates" = "模板";
 "No templates" = "暂无模板";
+"Mobile App" = "手机应用";
+"Web Page" = "网页";
+"Dashboard" = "仪表盘";
 "Create an untitled design document from “%@”" = "从“%@”新建未命名设计文档";
 "File deleted or moved" = "文件已删除或移动";
 "Open" = "打开";
@@ -161,17 +164,12 @@
 "Black" = "黑";
 "Auto Layout" = "自动布局";
 "Direction" = "方向";
-"Spacing" = "间距";
 "Padding" = "内边距";
 "Top" = "上";
 "Right" = "右";
 "Bottom" = "下";
 "Left" = "左";
-"Main axis" = "主轴";
-"Cross axis" = "交叉轴";
-"Start" = "起点";
 "Center" = "居中";
-"End" = "终点";
 "Space between" = "两端分布";
 "Remove Auto Layout" = "移除自动布局";
 "Add Auto Layout" = "添加自动布局";
@@ -307,6 +305,9 @@
 "Take snapshot" = "截图";
 "Focus layer" = "聚焦图层";
 "Zoom canvas" = "缩放画布";
+"Read prototype window" = "读取原型窗口";
+"Close prototype window" = "关闭原型窗口";
+"Change view" = "更改视图";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "找不到 Fudehand 源码目录，无法连接";
@@ -443,3 +444,36 @@
 "Selection color %@" = "选区颜色 %@";
 "Show all %d colors" = "显示全部 %d 种颜色";
 "Show Fewer Colors" = "收起颜色";
+
+/* Properties panel redesign (#189) */
+"%@ opacity" = "%@透明度";
+"Top left" = "左上";
+"Top center" = "顶部居中";
+"Top right" = "右上";
+"Center left" = "左侧居中";
+"Center right" = "右侧居中";
+"Bottom left" = "左下";
+"Bottom center" = "底部居中";
+"Bottom right" = "右下";
+"T|padding" = "上";
+"R|padding" = "右";
+"B|padding" = "下";
+"L|padding" = "左";
+"Hug|sizing" = "包裹";
+"Fill|sizing" = "填满";
+"Gap" = "间距";
+"Select one layer to edit its prototype settings." = "选中单个图层后可修改其原型设置。";
+"Select a layer to edit its interaction, states, scrolling, and animation here." = "选中图层后在这里修改交互、状态、滚动与动画。";
+"%@ Snapshot" = "%@ 快照";
+"Save Version Snapshot" = "保存版本快照";
+"Select one frame to save a version snapshot." = "请选中一个画框再保存版本快照。";
+"Version Snapshots" = "版本快照";
+"Version Snapshot" = "版本快照";
+"Deleted" = "已删除";
+"Saved|version snapshot time" = "保存时间";
+"Note" = "说明";
+"Snapshot note" = "快照说明";
+"Overlay on Frame" = "叠加到画框上";
+"Place Beside Frame" = "放回画框旁边";
+"Save version snapshot" = "保存版本快照";
+"List version snapshots" = "列出版本快照";

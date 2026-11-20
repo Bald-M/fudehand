@@ -39,7 +39,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 | Namespace | Covers |
 |---|---|
 | `design_*` | The design document, layers, selection, undo, the project file, fonts |
-| `canvas_*` | The viewport and the canvas tool |
+| `canvas_*` | The viewport, the canvas tool, and the editor panels around the canvas (inspector, layers panel) |
 | `prototype_*` | The prototype window |
 | `app_*` | Windows, the launch window, recent files, templates |
 | `settings_*` | UI language, appearance, model providers, API keys, MCP connectors |
@@ -49,7 +49,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 1. Tool names are `snake_case` with one of these prefixes. The control-channel command is the same name without the prefix (`design_get_node` → `get_node`). A new namespace MUST be added to this table first.
 2. Before adding a tool, check whether the behavior is a variant of an existing one; if so, add an argument instead (for example a scale argument rather than separate zoom-in and zoom-out tools).
 3. Descriptions and argument descriptions are in English, say what the tool changes and what it returns, and use the terms in `GLOSSARY.md`.
-4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead.
+4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation. A setting that applies from the next message, such as a model or key change, leaves the running reply alone and is allowed.
 
 ## 6. Tests
 
@@ -77,6 +77,8 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Undo, redo | `design_undo`, `design_redo` |
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |
 | Snapshot a layer as PNG | `design_snapshot` |
+| Save a version snapshot of a frame; list version snapshots | `design_save_version_snapshot`, `design_list_version_snapshots` |
+| Edit a version snapshot's note; overlay it on its frame or place it beside the frame | `design_update_node` (`versionSnapshot.note`; `x`, `y`, and `opacity`, using the bounds from `design_list_version_snapshots`) |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |
 | Read the selection colors of the selection or of given layers; replace one selection color | `design_list_colors`, `design_replace_color` |
 | Search the built-in icon libraries; insert or replace an icon from the icon picker | `design_search_icons`; inserting is `design_create_node` with an icon layer, replacing is `design_update_node` with `icon.name` |
@@ -87,33 +89,34 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 |---|---|
 | Zoom, zoom in/out, actual size | `canvas_zoom` |
 | Fit all | `canvas_fit_all` |
-| Zoom to a layer | `canvas_focus_node` |
-| Zoom to a multi-layer selection | Missing |
-| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | Missing |
-| Show or hide the inspector, switch its tab | Missing |
-| Expand or collapse layers in the layers panel | Missing |
-| Play the prototype, play from the start, close the prototype window | Missing |
+| Zoom to a layer, zoom to a multi-layer selection | `canvas_focus_node` (`id` or `ids`) |
+| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | `canvas_set_view` (`tool`); read in `design_get_state` (`view`) |
+| Show or hide the inspector, switch its tab (design, prototype, chat) | `canvas_set_view` (`inspector`, `inspectorTab`); read in `design_get_state` (`view`) |
+| Expand or collapse layers in the layers panel | `canvas_set_view` (`expand`, `collapse`); read in `design_get_state` (`view.collapsed`) |
+| Play the prototype, play from the start, close the prototype window | `prototype_play`, `prototype_close`; `prototype_get_playback` reads whether the window is open and the frame on show |
 | Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
-| Show the launch window | Missing |
-| List, open, remove, clear recent files | Missing |
-| List templates, create a document from a template | Missing |
+| Show the launch window | `app_show_launch_window` |
+| List, open, remove, clear recent files | `app_list_recents`, `app_open_recent`, `app_remove_recent`, `app_clear_recents` |
+| List templates, create a document from a template | `app_list_templates`, `app_new_document_from_template` |
 
 ### Settings
 
 | Feature | Tool |
 |---|---|
-| UI language | Missing |
-| Appearance (System, Light, Dark) | Missing |
-| Model provider settings: base URL, model, default model; list models | Missing |
-| Set or delete an API key; test the connection | Missing |
-| MCP connector status, connect, disconnect | Missing |
+| UI language, appearance (System, Light, Dark) | `settings_get_interface`, `settings_update_interface` |
+| Model provider settings: base URL, model, default model, the provider in use; list models | `settings_get_models`, `settings_update_model_provider`, `settings_list_models` |
+| Set or delete an API key; test the connection | `settings_set_api_key`, `settings_delete_api_key`; testing is `settings_list_models` with the saved key, as the sheet's *Test* lists the models |
+| MCP connector status, connect, disconnect | `settings_get_connectors`, `settings_set_connector` |
 
 ### Chat panel
 
 | Feature | Tool |
 |---|---|
-| List conversations, open, switch, close a conversation tab, start a new one, delete one | Missing |
-| Send a message (with context tags, `/plan`, `/goal`), stop, regenerate, edit the last message, answer a question card, `/compact` | Missing |
+| List conversations; read a conversation's messages, tool calls, and question cards | `chat_list_conversations`, `chat_get_conversation` |
+| Open or switch to a conversation, start a new one (`/new`), close a tab, delete a conversation, empty one (`/clear`) | `chat_open_conversation`, `chat_new_conversation`, `chat_close_conversation`, `chat_delete_conversation`, `chat_clear_conversation` |
+| Send a message (with context tags, `/plan`, `/goal`), leave plan or goal mode, run a plan | `chat_send_message` (`context`, `mode`), `chat_set_mode`, `chat_run_plan` |
+| Stop, regenerate, edit the last message, answer or skip a question card, `/compact` | `chat_stop_reply`, `chat_regenerate_reply`, `chat_edit_last_message`, `chat_answer_question`, `chat_compact_conversation` |
+| Choose a conversation's model (`/model`, the model menu) | Missing: tracked with the model provider settings in [Settings](#settings) |
 | Ask the user a question (question card) | `ask_user`, Agent harness only |
 
 ### Agent-only reference
