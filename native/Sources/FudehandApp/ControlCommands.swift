@@ -90,6 +90,55 @@ extension FudehandStore {
         case .importFont(let path):
             do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
             catch let error as FontImportError { throw ControlCommandError(error.english) }
+        case .showLaunchWindow:
+            presentLaunch()
+            return controlState()
+        case .listRecents:
+            return ["recents": recentsState()]
+        case .openRecent(let path, let discard):
+            let entry = try requireRecent(path)
+            guard entry.available else {
+                throw ControlCommandError("File not found: \(path) (deleted or moved); remove it from the list with app_remove_recent")
+            }
+            try openFile(URL(fileURLWithPath: entry.path)) { try requireDiscardable(discard); return true }
+            return controlState()
+        case .removeRecent(let path):
+            let entry = try requireRecent(path)
+            removeRecent(entry.path)
+            return ["removed": [entry.path], "recents": recentsState()]
+        case .clearRecents:
+            let removed = recents.items.map(\.path)
+            clearRecents()
+            return ["removed": removed, "recents": recentsState()]
+        case .listTemplates:
+            return ["templates": templates.map { ["name": $0.name] }]
+        case .newDocumentFromTemplate(let name, let discard):
+            guard let template = templates.first(where: { $0.name == name }) else {
+                throw ControlCommandError("Template not found: \(name); available: "
+                    + (templates.isEmpty ? "none" : templates.map(\.name).joined(separator: ", ")))
+            }
+            try newDocument(fromTemplate: template) { try requireDiscardable(discard); return true }
+            return controlState()
+        }
+    }
+
+    /// The entry for `path`, which may be spelled differently from the entry: entries are recorded with symlinks resolved.
+    /// A file that no longer exists cannot be resolved itself, so its directory is resolved instead.
+    private func requireRecent(_ path: String) throws -> RecentDocuments.Entry {
+        let url = URL(fileURLWithPath: path)
+        let spellings = [path, url.resolvingSymlinksInPath().path,
+                         url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).path]
+        guard let entry = recentEntries.first(where: { spellings.contains($0.path) }) else {
+            throw ControlCommandError("Not a recent file: \(path)")
+        }
+        return entry
+    }
+
+    private func recentsState() -> [[String: Any]] {
+        let format = ISO8601DateFormatter()
+        return recentEntries.map { entry in
+            ["path": entry.path, "name": URL(fileURLWithPath: entry.path).deletingPathExtension().lastPathComponent,
+             "openedAt": format.string(from: entry.openedAt), "available": entry.available]
         }
     }
 

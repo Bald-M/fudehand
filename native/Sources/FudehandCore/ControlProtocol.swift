@@ -22,6 +22,13 @@ public enum ControlCommand: Equatable, Sendable {
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    case showLaunchWindow
+    case listRecents
+    case openRecent(String, discard: Bool)
+    case removeRecent(String)
+    case clearRecents
+    case listTemplates
+    case newDocumentFromTemplate(String, discard: Bool)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -188,6 +195,13 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "show_launch_window": return .showLaunchWindow
+        case "list_recents": return .listRecents
+        case "open_recent": return .openRecent(try string("path"), discard: try flag("discard"))
+        case "remove_recent": return .removeRecent(try string("path"))
+        case "clear_recents": return .clearRecents
+        case "list_templates": return .listTemplates
+        case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

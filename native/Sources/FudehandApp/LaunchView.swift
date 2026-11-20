@@ -8,7 +8,7 @@ struct LaunchView: View {
     @State private var selection: String?
     /// The recent entries and whether each file exists; checked again when the entries change, the window appears, or any window becomes the key window.
     @State private var entries: [RecentDocuments.Entry] = []
-    private let templates = FudehandStore.bundledTemplates
+    private var templates: [FudehandStore.Template] { store.templates }
 
     var body: some View {
         HStack(spacing: 0) {
