@@ -307,6 +307,8 @@
 "Take snapshot" = "截圖";
 "Focus layer" = "聚焦圖層";
 "Zoom canvas" = "縮放畫布";
+"Read prototype window" = "讀取原型視窗";
+"Close prototype window" = "關閉原型視窗";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "找不到 Fudehand 原始碼目錄，無法連線";

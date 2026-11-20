@@ -13,17 +13,14 @@ struct PrototypeRequest: Equatable {
 /// the document as it is edited, by people or the Agent.
 struct PrototypeWindow: View {
     @ObservedObject var store: FudehandStore
-    /// The frame on show, as reported by the stage, with the token of the playback it belongs to.
-    @State private var current: (token: Int, id: String)?
 
     var body: some View {
-        let shown = store.prototypeRequest.map { request in current.flatMap { $0.token == request.token ? $0.id : nil } ?? request.start }
-        let frame = shown.flatMap { Prototype.frame($0, in: store.document) }
+        let frame = store.prototypeFrame.flatMap { Prototype.frame($0, in: store.document) }
         let scale = frame.map { Self.fitScale(Size(width: $0.width, height: $0.height)) } ?? 1
         // The stage stays in place while its frame is missing, so undoing the deletion resumes playback where it was.
         ZStack {
             if let request = store.prototypeRequest {
-                PrototypeStage(document: store.document, request: request, scale: scale) { current = (request.token, $0) }
+                PrototypeStage(document: store.document, request: request, scale: scale) { store.prototypeMoved(to: $0) }
             }
             if frame == nil {
                 VStack(spacing: 12) {
@@ -36,6 +33,8 @@ struct PrototypeWindow: View {
         }
         .frame(width: frame.map { $0.width * scale } ?? 360, height: frame.map { $0.height * scale } ?? 220)
         .navigationTitle(frame?.name ?? L("Prototype"))
+        .onAppear { store.prototypeWindowOpen = true }
+        .onDisappear { store.prototypeWindowOpen = false }
     }
 
     /// Frames larger than the screen are scaled down to fit it; smaller ones are shown at their actual size.
@@ -126,6 +125,8 @@ final class PrototypeStageView: NSView {
         if token != request.token {
             token = request.token
             player = PrototypePlayer(start: request.start)
+            // A new stage (the window reopened from the Window menu) starts the last playback over; reported after this update.
+            DispatchQueue.main.async { [moved] in moved(request.start) }
             hovered = nil
             pressed = nil
             spare.root.removeFromSuperlayer()

@@ -104,6 +104,13 @@ export const tools = [
   controlTool('canvas_focus_node', 'focus_node', 'Move and zoom the viewport to the given layer.', id),
   controlTool('canvas_fit_all', 'fit_all', 'Zoom the viewport to show all layers.'),
   controlTool('canvas_zoom', 'zoom', 'Zoom to the given scale around the center of the canvas (1 is actual size, range 0.05–4).', { scale: { type: 'number' } }),
+  controlTool('prototype_play', 'play',
+    'Open the prototype window and play the design document from a top-level frame, as Play Prototype does; playing again restarts. ' +
+    'Without frame it starts from the top-level frame holding the selection, otherwise the first top-level frame. Returns the prototype window state (see prototype_get_playback).',
+    { frame: { type: 'string', description: 'Id of the top-level frame to start from; omit to start where Play Prototype starts' } }, []),
+  controlTool('prototype_get_playback', 'get_playback',
+    'Read the prototype window state: open (whether the window is open), frame and name (the id and name of the top-level frame on show; null when the window is closed or that frame was deleted).'),
+  controlTool('prototype_close', 'close', 'Close the prototype window. Returns the prototype window state.'),
   controlTool('design_list_fonts', 'list_fonts', 'List the font families that text.fontFamily can use: those installed on this Mac (source system) and those imported into the Fudehand font library (source imported).'),
   controlTool('design_import_font', 'import_font', 'Import a font file (.ttf, .otf, or .ttc) into the Fudehand font library, which makes it available to Fudehand only, and return its font families.',
     path('Font file path; ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), ['path'],

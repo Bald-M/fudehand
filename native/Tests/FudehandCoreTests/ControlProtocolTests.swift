@@ -43,6 +43,10 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
         (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,
          .searchIcons(query: "home", library: .materialRounded, limit: 3)),
+        (#"{"id":27,"command":"play"}"#, .playPrototype(frame: nil)),
+        (#"{"id":28,"command":"play","args":{"frame":"home"}}"#, .playPrototype(frame: "home")),
+        (#"{"id":29,"command":"get_playback"}"#, .getPrototypePlayback),
+        (#"{"id":30,"command":"close"}"#, .closePrototype),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -71,6 +75,8 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "Invalid argument type: discard"),
         (#"{"id":1,"command":"open_document","args":{}}"#, "Missing argument: path"),
         (#"{"id":1,"command":"import_font","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"play","args":{"frame":3}}"#, "Invalid argument type: frame"),
+        (#"{"id":1,"command":"play","args":{"frame":""}}"#, "Invalid argument type: frame"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),

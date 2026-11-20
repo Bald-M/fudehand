@@ -442,6 +442,47 @@ private func temporaryFile() -> URL {
     #expect(store.prototypeStart == "a")
 }
 
+@Test @MainActor func agentPlaysAndClosesThePrototypeWindowLikeTheUI() async throws {
+    let store = makeStore()
+    var presented = 0, dismissed = 0
+    store.presentPrototype = { presented += 1 }
+    store.dismissPrototype = { dismissed += 1 }
+    #expect(await failure(store, .playPrototype(frame: nil)) == "The document has no top-level frame to play; add a frame first")
+    store.playPrototype()
+    #expect(store.alert == L("Add a frame to play the prototype.") && presented == 0)
+    #expect(await failure(store, .closePrototype) == "The prototype window is not open")
+    let closed = try await control(store, .getPrototypePlayback)
+    #expect(closed["open"] as? Bool == false && closed["frame"] is NSNull)
+
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "name": "Home",
+                                                                                          "children": [["id": "c", "type": "rectangle"]]])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "name": "Detail"])))
+    // Without a frame it starts where Play Prototype starts: the frame holding the selection.
+    store.setSelection(["b"])
+    let played = try await control(store, .playPrototype(frame: nil))
+    #expect(played["open"] as? Bool == true && played["frame"] as? String == "b" && played["name"] as? String == "Detail")
+    #expect(presented == 1 && store.prototypeRequest?.start == "b")
+    let firstToken = try #require(store.prototypeRequest?.token)
+    store.playPrototype()
+    #expect(store.prototypeRequest == PrototypeRequest(start: "b", token: firstToken + 1) && presented == 2)
+
+    // From a given top-level frame; layers inside a frame and missing layers are refused without opening anything.
+    #expect(try await control(store, .playPrototype(frame: "a"))["frame"] as? String == "a")
+    #expect(await failure(store, .playPrototype(frame: "c")) == "Layer c is not a top-level frame")
+    #expect(await failure(store, .playPrototype(frame: "zz")) == "Layer not found: zz")
+    #expect(store.prototypeRequest?.start == "a" && presented == 3)
+
+    // The stage reports where playback moved; a deleted frame reads as null while the window stays open.
+    store.prototypeMoved(to: "b")
+    #expect(try await control(store, .getPrototypePlayback)["frame"] as? String == "b")
+    _ = try await control(store, .deleteNodes(["b"]))
+    let deleted = try await control(store, .getPrototypePlayback)
+    #expect(deleted["open"] as? Bool == true && deleted["frame"] is NSNull)
+
+    let after = try await control(store, .closePrototype)
+    #expect(after["open"] as? Bool == false && after["frame"] is NSNull && dismissed == 1)
+}
+
 /// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
 /// are not recomputed (#142).
 @Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {

@@ -26,10 +26,26 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
       'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
+  })
+
+  it('forwards the prototype window tools and their arguments unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('prototype_play', {}, ctx)
+    await callTool('prototype_play', { frame: 'home' }, ctx)
+    await callTool('prototype_get_playback', {}, ctx)
+    await callTool('prototype_close', {}, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'play', args: {} },
+      { command: 'play', args: { frame: 'home' } },
+      { command: 'get_playback', args: {} },
+      { command: 'close', args: {} },
+    ])
+    await fake.close()
   })
 
   it('describes interactions and forwards them to the App unchanged', async () => {

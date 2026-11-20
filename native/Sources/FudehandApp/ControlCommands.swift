@@ -90,7 +90,22 @@ extension FudehandStore {
         case .importFont(let path):
             do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
             catch let error as FontImportError { throw ControlCommandError(error.english) }
+        case .playPrototype(let frame):
+            try playPrototype(from: frame)
+            return prototypePlayback()
+        case .getPrototypePlayback:
+            return prototypePlayback()
+        case .closePrototype:
+            guard prototypeWindowOpen else { throw ControlCommandError("The prototype window is not open") }
+            closePrototype()
+            return prototypePlayback()
         }
+    }
+
+    /// Whether the prototype window is open and the top-level frame it shows (null when closed, or when that frame was deleted).
+    func prototypePlayback() -> [String: Any] {
+        let frame = prototypeWindowOpen ? prototypeFrame.flatMap { Prototype.frame($0, in: editor.document) } : nil
+        return ["open": prototypeWindowOpen, "frame": frame?.id ?? NSNull(), "name": frame?.name ?? NSNull()]
     }
 
     private func requireNode(_ id: String) throws -> DesignNode {
