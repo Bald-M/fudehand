@@ -87,6 +87,12 @@ public struct ViewChange: Equatable, Sendable {
 /// The App's appearance setting; raw values are what is saved.
 public enum Appearance: String, CaseIterable, Sendable {
     case system, light, dark
+    /// All annotations, or those on one layer.
+    case listAnnotations(node: String?)
+    /// Pins a new annotation to a layer (`x` and `y` relative to the layer; nil means its center), or replies to one when `replyTo` is set.
+    case addAnnotation(node: String?, x: Double?, y: Double?, text: String, replyTo: String?)
+    case updateAnnotation(String, text: String)
+    case deleteAnnotation(String)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -273,6 +279,13 @@ public enum ControlProtocol {
             }
             return number.doubleValue
         }
+        func optionalNumber(_ key: String) throws -> Double? {
+            guard let value = args[key], !(value is NSNull) else { return nil }
+            guard let number = value as? NSNumber, !isBool(number), number.doubleValue.isFinite else {
+                throw Message(text: "Invalid argument type: \(key)")
+            }
+            return number.doubleValue
+        }
         switch name {
         case "get_state": return .getState
         case "get_document": return .getDocument
@@ -402,6 +415,17 @@ public enum ControlProtocol {
                 throw Message(text: "A layer cannot be both expanded and collapsed: \(both)")
             }
             return .setView(change)
+        case "list_annotations": return .listAnnotations(node: try optionalString("node"))
+        case "add_annotation":
+            let replyTo = try optionalString("replyTo")
+            let node = try optionalString("node")
+            if replyTo == nil, node == nil { throw Message(text: "Missing argument: node (or replyTo to reply to an annotation)") }
+            if replyTo != nil, node != nil || args["x"] != nil || args["y"] != nil {
+                throw Message(text: "A reply takes only replyTo and text; node, x, and y belong to a new annotation")
+            }
+            return .addAnnotation(node: node, x: try optionalNumber("x"), y: try optionalNumber("y"), text: try string("text"), replyTo: replyTo)
+        case "update_annotation": return .updateAnnotation(try string("id"), text: try string("text"))
+        case "delete_annotation": return .deleteAnnotation(try string("id"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

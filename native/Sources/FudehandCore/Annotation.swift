@@ -186,3 +186,17 @@ extension DesignDocument {
         }
     }
 }
+
+// MARK: Markers
+
+extension DesignIndex {
+    /// The annotations to draw on the canvas with their anchors in canvas coordinates, in the order added (later ones on top).
+    /// An annotation is hidden while its layer or one of the layer's ancestors is hidden.
+    public func annotationMarkers() -> [(annotation: DesignAnnotation, anchor: Point)] {
+        document.annotations.compactMap { annotation in
+            guard let rect = worldRect(annotation.node),
+                  ancestry(of: annotation.node).allSatisfy({ node($0)?.visible ?? false }) else { return nil }
+            return (annotation, annotation.anchor(in: rect))
+        }
+    }
+}

@@ -21,6 +21,19 @@ protocol CanvasHost: AnyObject {
     func canvasSizeChanged(_ size: CGSize)
     /// The layer under the pointer changed (nil when none).
     func canvasHover(_ id: String?)
+    /// An annotation marker was pressed.
+    func canvasToggleAnnotation(_ id: String)
+    /// The Annotate tool was clicked on a layer, at a point in canvas coordinates.
+    func canvasAnnotate(_ node: String, at point: Point)
+    /// A press elsewhere on the canvas collapses the expanded annotation.
+    func canvasCollapseAnnotation()
+}
+
+/// The annotation whose thread is expanded on the canvas: an existing one, or a new one being written that is not added until
+/// its text is submitted (`x` and `y` relative to the layer).
+enum AnnotationTarget: Equatable {
+    case thread(String)
+    case draft(node: String, x: Double, y: Double)
 }
 
 final class FudehandCanvasView: NSView {
@@ -77,6 +90,8 @@ final class FudehandCanvasView: NSView {
         }
     }
     private var lastReportedSize = CGSize.zero
+    private(set) var annotation: AnnotationTarget?
+    private var annotationPopover: NSPopover?
     var activeDisplayLink: CADisplayLink?
     var frameLog = FrameIntervalLog()
 
@@ -170,6 +185,8 @@ final class FudehandCanvasView: NSView {
     }
 
     func dispose() {
+        annotationPopover?.close()
+        annotationPopover = nil
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
@@ -240,8 +257,64 @@ final class FudehandCanvasView: NSView {
     }
 
     func refreshOverlay() {
+        var markers = index.annotationMarkers().map { (id: $0.annotation.id, count: $0.annotation.count, anchor: $0.anchor) }
+        var expanded: String?
+        switch annotation {
+        case .thread(let id): expanded = id
+        case .draft(let node, let x, let y):
+            if let rect = index.worldRect(node) {
+                let draft = DesignAnnotation(id: CanvasOverlay.draftMarker, node: node, x: x, y: y, author: .person, text: "-")
+                markers.append((id: draft.id, count: 1, anchor: draft.anchor(in: rect)))
+                expanded = draft.id
+            }
+        case nil: break
+        }
         overlay.render(viewport: liveViewport, index: index, selection: selection, hover: hover,
-                       marquee: marquee, guides: guides, handlesFor: handleTarget)
+                       marquee: marquee, guides: guides, handlesFor: handleTarget, markers: markers, expanded: expanded)
+        // The popover follows its marker while the canvas pans and zooms; AppKit throws if it is moved while not on screen.
+        if let popover = annotationPopover, popover.isShown, let rect = annotationAnchorRect(), popover.positioningRect != rect {
+            popover.positioningRect = rect
+        }
+    }
+
+    /// The screen rectangle of the expanded annotation's marker; nil when its layer is gone or hidden.
+    func annotationAnchorRect() -> NSRect? {
+        switch annotation {
+        case .thread(let id):
+            return index.annotationMarkers().first { $0.annotation.id == id }.map { CanvasOverlay.markerRect($0.anchor, viewport: liveViewport) }
+        case .draft(let node, let x, let y):
+            guard let rect = index.worldRect(node) else { return nil }
+            let draft = DesignAnnotation(id: CanvasOverlay.draftMarker, node: node, x: x, y: y, author: .person, text: "-")
+            return CanvasOverlay.markerRect(draft.anchor(in: rect), viewport: liveViewport)
+        case nil:
+            return nil
+        }
+    }
+
+    /// Expands an annotation's thread next to its marker in a popover, or collapses it (nil). `content` builds the thread view
+    /// when a different annotation is expanded.
+    func showAnnotation(_ target: AnnotationTarget?, content: () -> NSViewController) {
+        if target != annotation {
+            annotationPopover?.close()
+            annotationPopover = nil
+            annotation = target
+        }
+        guard annotation != nil, let rect = annotationAnchorRect(), window != nil else {
+            annotationPopover?.close()
+            annotationPopover = nil
+            refreshOverlay()
+            return
+        }
+        if annotationPopover == nil {
+            let popover = NSPopover()
+            // Collapsing is the canvas's job, so pressing the marker again collapses it instead of reopening it.
+            popover.behavior = .applicationDefined
+            popover.animates = !reduceMotion()
+            popover.contentViewController = content()
+            popover.show(relativeTo: rect, of: self, preferredEdge: .maxX)
+            annotationPopover = popover
+        }
+        refreshOverlay()
     }
 
     override func layout() {
@@ -280,6 +353,9 @@ final class FudehandCanvasView: NSView {
 
     /// What a press at a canvas (screen-space) point targets: a handle, a top-level frame label, or a layer.
     func hitTarget(at screen: NSPoint, deep: Bool = false) -> HitTarget {
+        for marker in index.annotationMarkers().reversed() where CanvasOverlay.markerRect(marker.anchor, viewport: liveViewport).contains(screen) {
+            return .annotation(marker.annotation.id)
+        }
         if let id = handleTarget, let rect = index.worldRect(id) {
             for handle in ResizeHandle.allCases {
                 let anchor = CanvasOverlay.screenPoint(handle, of: rect, viewport: liveViewport)
@@ -344,7 +420,12 @@ final class FudehandCanvasView: NSView {
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
         let wasBusy = !interaction.isIdle
-        let hit = hitTarget(at: screen, deep: event.modifierFlags.contains(.command))
+        // The Annotate tool pins to the deepest layer under the pointer, wherever the selection is.
+        let hit = hitTarget(at: screen, deep: tool == .annotate || event.modifierFlags.contains(.command))
+        // A press anywhere but on a marker collapses the expanded annotation; panning leaves it open.
+        var onMarker = false
+        if case .annotation = hit { onMarker = true }
+        if annotation != nil, !onMarker, button == .primary, tool != .hand, !spaceHeld { host?.canvasCollapseAnnotation() }
         let effects = interaction.pointerDown(at: point, hit: hit, button: button, modifiers: modifiers(event),
                                               clickCount: event.clickCount, context: interactionContext())
         if wasBusy { settlePan() }
@@ -396,7 +477,7 @@ final class FudehandCanvasView: NSView {
         let next: String?
         switch hitTarget(at: screenPoint(event).0, deep: event.modifierFlags.contains(.command)) {
         case .node(let id), .label(let id): next = id
-        case .handle, .empty: next = nil
+        case .handle, .empty, .annotation: next = nil
         }
         setHover(next)
     }
@@ -444,6 +525,10 @@ final class FudehandCanvasView: NSView {
                 if let child = DesignHitTest.enter(id, at: point, in: document) { report([child]) }
             case .create(let type, let rect, let clicked):
                 host?.canvasCreate(type, in: rect, clicked: clicked)
+            case .toggleAnnotation(let id):
+                host?.canvasToggleAnnotation(id)
+            case .annotate(let node, let point):
+                host?.canvasAnnotate(node, at: point)
             }
         }
     }
@@ -487,7 +572,8 @@ final class FudehandCanvasView: NSView {
 
     // MARK: Keyboard
 
-    static let toolKeys: [String: CanvasTool] = ["v": .move, "h": .hand, "f": .frame, "r": .rectangle, "o": .ellipse, "t": .text]
+    static let toolKeys: [String: CanvasTool] = ["v": .move, "h": .hand, "f": .frame, "r": .rectangle, "o": .ellipse, "t": .text,
+                                                 "c": .annotate]
 
     override func keyDown(with event: NSEvent) {
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
@@ -565,7 +651,7 @@ final class FudehandCanvasView: NSView {
 
     override func resetCursorRects() {
         let cursor: NSCursor
-        if tool == .hand || spaceHeld { cursor = .openHand } else if tool.creates != nil { cursor = .crosshair } else { return }
+        if tool == .hand || spaceHeld { cursor = .openHand } else if tool.creates != nil || tool == .annotate { cursor = .crosshair } else { return }
         // The four strips around the floating toolbar, so the pointer stays an arrow over it.
         let (b, f) = (bounds, floatingFrame)
         for rect in [CGRect(x: b.minX, y: b.minY, width: b.width, height: f.minY - b.minY),
@@ -576,7 +662,7 @@ final class FudehandCanvasView: NSView {
         }
     }
 
-    private var restingCursor: NSCursor { tool == .hand || spaceHeld ? .openHand : tool.creates != nil ? .crosshair : .arrow }
+    private var restingCursor: NSCursor { tool == .hand || spaceHeld ? .openHand : tool.creates != nil || tool == .annotate ? .crosshair : .arrow }
 
     override func keyUp(with event: NSEvent) {
         if window?.firstResponder !== self { super.keyUp(with: event); return }

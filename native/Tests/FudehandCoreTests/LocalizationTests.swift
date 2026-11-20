@@ -66,8 +66,9 @@ private func specifiers(_ text: String) -> [String] {
 }
 
 @Test func chineseTablesContainNoUntranslatedCopies() {
-    // "API key" keeps the provider's own term in every language, and "Tab" is the name printed on the key.
-    let shared: Set<String> = ["API key", "Tab"]
+    // "API key" keeps the provider's own term in every language, "Tab" is the name printed on the key, and the Chinese UI
+    // calls the Agent "Agent" as well.
+    let shared: Set<String> = ["API key", "Tab", "Agent"]
     for language in [AppLanguage.zhHans, .zhHant] {
         for (key, value) in L10n.table(language) where !shared.contains(key) {
             #expect(value != key, "\(language.rawValue): \(key)")

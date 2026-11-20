@@ -1,7 +1,8 @@
 import AppKit
 import FudehandCore
 
-/// Screen-space decorations drawn above the layers: hover, selection box, resize handles, top-level frame names, marquee selection, and snapping guides. Never receives pointer input.
+/// Screen-space decorations drawn above the layers: hover, selection box, resize handles, top-level frame names, marquee selection,
+/// snapping guides, and annotation markers. Never receives pointer input; the canvas hit-tests markers with `markerRect`.
 final class CanvasOverlay: NSView {
     override var isFlipped: Bool { true }
     private let hoverLayer = CAShapeLayer()
@@ -11,6 +12,11 @@ final class CanvasOverlay: NSView {
     private let guideLayer = CAShapeLayer()
     private let labelHost = CALayer()
     private var labels: [String: CATextLayer] = [:]
+    private let markerHost = CALayer()
+    private var markers: [String: AnnotationMarkerLayer] = [:]
+    static let markerSize = 24.0
+    /// The id the marker of an annotation being written, not yet added, is drawn under.
+    static let draftMarker = "#draft"
     static let handleSize = 7.0
     static let handleHitRadius = 6.0
     static let labelHeight = 16.0
@@ -31,6 +37,8 @@ final class CanvasOverlay: NSView {
         }
         labelHost.actions = DesignRenderer.noActions
         layer?.insertSublayer(labelHost, at: 0)
+        markerHost.actions = DesignRenderer.noActions
+        layer?.addSublayer(markerHost)
         updateColors()
     }
 
@@ -41,12 +49,15 @@ final class CanvasOverlay: NSView {
     /// Screen-space bounds of the drawn selection outlines; `.null` when nothing is selected.
     var selectionBounds: CGRect { selectionLayer.path?.boundingBoxOfPath ?? .null }
     var labelTexts: [String: String] { labels.compactMapValues { $0.string as? String } }
+    /// The drawn markers' counts by annotation id, and which one is expanded; for tests.
+    var markerCounts: [String: String] { markers.compactMapValues { $0.count.string as? String } }
+    var expandedMarker: String? { markers.first { $0.value.expanded }?.key }
 
     override func layout() {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost] { shape.frame = bounds }
+        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost, markerHost] { shape.frame = bounds }
         CATransaction.commit()
     }
 
@@ -70,6 +81,10 @@ final class CanvasOverlay: NSView {
             marqueeLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
             guideLayer.strokeColor = NSColor.systemRed.cgColor
         }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        markers.values.forEach { $0.updateColors(effectiveAppearance) }
+        CATransaction.commit()
     }
 
     static func screenRect(_ rect: Rect, viewport: Viewport) -> NSRect {
@@ -89,6 +104,12 @@ final class CanvasOverlay: NSView {
         return NSRect(x: frame.minX, y: frame.minY - labelHeight - 4, width: max(16, min(textWidth, frame.width)), height: labelHeight)
     }
 
+    /// The screen rectangle of an annotation marker: a speech bubble whose pointed bottom-left corner is the anchor.
+    static func markerRect(_ anchor: Point, viewport: Viewport) -> NSRect {
+        NSRect(x: anchor.x * viewport.scale + viewport.x, y: anchor.y * viewport.scale + viewport.y - markerSize,
+               width: markerSize, height: markerSize)
+    }
+
     /// Name widths are measured once per name: hit testing and rendering ask for every top-level frame's label on each pointer event.
     private static var labelWidths: [String: CGFloat] = [:]
 
@@ -101,7 +122,8 @@ final class CanvasOverlay: NSView {
     }
 
     func render(viewport: Viewport, index: DesignIndex, selection: Set<String>, hover: String?,
-                marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?) {
+                marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?,
+                markers: [(id: String, count: Int, anchor: Point)] = [], expanded: String? = nil) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         func outline(_ ids: [String]) -> CGPath {
@@ -137,7 +159,30 @@ final class CanvasOverlay: NSView {
         }
         guideLayer.path = guidePath
         renderLabels(document: index.document, viewport: viewport, selection: selection)
+        renderMarkers(markers, expanded: expanded, viewport: viewport)
         CATransaction.commit()
+    }
+
+    private func renderMarkers(_ items: [(id: String, count: Int, anchor: Point)], expanded: String?, viewport: Viewport) {
+        let scale = window?.backingScaleFactor ?? 2
+        var seen = Set<String>()
+        for item in items {
+            seen.insert(item.id)
+            let marker = markers[item.id] ?? {
+                let layer = AnnotationMarkerLayer()
+                markerHost.addSublayer(layer)
+                markers[item.id] = layer
+                return layer
+            }()
+            marker.frame = Self.markerRect(item.anchor, viewport: viewport)
+            marker.show(count: item.count, expanded: item.id == expanded, contentsScale: scale, appearance: effectiveAppearance)
+            // Later annotations are drawn on top, matching the order the canvas hit-tests them in.
+            markerHost.addSublayer(marker)
+        }
+        for (id, layer) in markers where !seen.contains(id) {
+            layer.removeFromSuperlayer()
+            markers[id] = nil
+        }
     }
 
     private func renderLabels(document: DesignDocument, viewport: Viewport, selection: Set<String>) {
@@ -167,6 +212,50 @@ final class CanvasOverlay: NSView {
         for (id, layer) in labels where !seen.contains(id) {
             layer.removeFromSuperlayer()
             labels[id] = nil
+        }
+    }
+}
+
+/// One annotation marker: a round speech bubble pointing at its anchor, showing how many messages its thread holds.
+final class AnnotationMarkerLayer: CALayer {
+    let count = CATextLayer()
+    private(set) var expanded = false
+
+    override init() {
+        super.init()
+        cornerRadius = CanvasOverlay.markerSize / 2
+        // The overlay is flipped, so the layer's maximum-y corner is drawn at the bottom: that one stays sharp.
+        maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        borderWidth = 2
+        shadowOpacity = 0.25
+        shadowRadius = 3
+        shadowOffset = CGSize(width: 0, height: 1)
+        count.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        count.fontSize = 11
+        count.alignmentMode = .center
+        addSublayer(count)
+    }
+
+    override init(layer: Any) { super.init(layer: layer) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(count value: Int, expanded: Bool, contentsScale scale: CGFloat, appearance: NSAppearance) {
+        let text = value > 99 ? "99+" : String(value)
+        if count.string as? String != text { count.string = text }
+        count.contentsScale = scale
+        count.frame = CGRect(x: 0, y: (bounds.height - 14) / 2, width: bounds.width, height: 14)
+        if self.expanded != expanded || backgroundColor == nil {
+            self.expanded = expanded
+            updateColors(appearance)
+        }
+    }
+
+    /// Callers disable implicit animations: the overlay draws inside a transaction without actions.
+    func updateColors(_ appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
+            backgroundColor = (expanded ? NSColor.controlAccentColor : NSColor.systemYellow).cgColor
+            count.foregroundColor = (expanded ? NSColor.white : NSColor.black).cgColor
+            borderColor = NSColor.white.cgColor
         }
     }
 }

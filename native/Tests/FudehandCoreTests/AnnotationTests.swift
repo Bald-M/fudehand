@@ -93,3 +93,13 @@ private func document() -> DesignDocument {
     }
     #expect(throws: DesignError("annotations must be an array")) { try open(#"{}"#) }
 }
+
+@Test func markersSkipHiddenLayersAndUseCanvasCoordinates() throws {
+    var doc = document()
+    try doc.addAnnotation(on: "a", x: 5, y: 6, text: "Child", author: .person)
+    try doc.addAnnotation(on: "b", x: 1, y: 1, text: "Ellipse", author: .person)
+    let markers = DesignIndex(doc).annotationMarkers()
+    #expect(markers.map(\.annotation.text) == ["Child", "Ellipse"] && markers[0].anchor == Point(x: 115, y: 76))
+    try doc.update("f") { $0.visible = false }
+    #expect(DesignIndex(doc).annotationMarkers().map(\.annotation.text) == ["Ellipse"])
+}
