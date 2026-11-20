@@ -68,6 +68,7 @@ private final class Fixture {
     let provider = try #require(saved["provider"] as? [String: Any])
     #expect(provider["hasKey"] as? Bool == true && provider["keyHint"] as? String == "sk-a••••••••9876")
     #expect((saved["previous"] as? [String: Any])?["hasKey"] as? Bool == false)
+    #expect((saved["previous"] as? [String: Any])?["inUse"] as? String == "deepseek" && saved["inUse"] as? String == "anthropic")
     #expect((saved["note"] as? String)?.contains("next message") == true)
 
     let models = try await fixture.run(.getModels)
@@ -98,7 +99,8 @@ private final class Fixture {
     let provider = try #require(changed["provider"] as? [String: Any])
     #expect(provider["inUse"] as? Bool == true && provider["model"] as? String == "gpt-x")
     let previous = try #require(changed["previous"] as? [String: Any])
-    #expect(previous["inUse"] as? Bool == false && previous["model"] as? String == "" && previous["baseUrl"] as? String == "")
+    #expect(previous["inUse"] as? String == "deepseek" && previous["model"] as? String == "" && previous["baseUrl"] as? String == "")
+    #expect(changed["inUse"] as? String == "openai")
 
     // An empty model is the provider's default model.
     _ = try await fixture.run(.updateModelProvider("openai", model: "", baseUrl: nil, use: false))
@@ -107,6 +109,7 @@ private final class Fixture {
     // Deleting the key of the provider in use falls back to the first one with a key, as the sheet does.
     let deleted = try await fixture.run(.deleteAPIKey("openai"))
     #expect(deleted["inUse"] as? String == "deepseek" && store.chat.settings.provider == "deepseek")
+    #expect((deleted["previous"] as? [String: Any])?["inUse"] as? String == "openai")
 }
 
 @Test @MainActor func settingsToolsListModelsWithTheSavedKey() async throws {
@@ -184,6 +187,7 @@ private actor FakeCodex {
     #expect((disconnected["connector"] as? [String: Any])?["status"] as? String == "disconnected")
 
     await codex.failNextAdds()
-    #expect(await fixture.failure(.setConnector(.codex, connected: true)) == "Connection failed: Error: config is read-only")
+    #expect(await fixture.failure(.setConnector(.codex, connected: true))
+            == "Connection failed: Error: config is read-only (ran: /tools/codex mcp add fudehand -- node /repo/scripts/mcp-server.mjs)")
     #expect(await fixture.failure(.setConnector(.claude, connected: true)) == "The claude command was not found; install Claude Code first")
 }

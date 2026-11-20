@@ -49,7 +49,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 1. Tool names are `snake_case` with one of these prefixes. The control-channel command is the same name without the prefix (`design_get_node` → `get_node`). A new namespace MUST be added to this table first.
 2. Before adding a tool, check whether the behavior is a variant of an existing one; if so, add an argument instead (for example a scale argument rather than separate zoom-in and zoom-out tools).
 3. Descriptions and argument descriptions are in English, say what the tool changes and what it returns, and use the terms in `GLOSSARY.md`.
-4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation.
+4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation. A setting that applies from the next message, such as a model or key change, leaves the running reply alone and is allowed.
 
 ## 6. Tests
 

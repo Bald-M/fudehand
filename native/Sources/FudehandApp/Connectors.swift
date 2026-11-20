@@ -9,7 +9,7 @@ struct CommandResult: Sendable {
 }
 
 /// What a connect or disconnect did, for the Agent tool: the command it ran or the file it changed, and why it failed, in English.
-struct ConnectorOutcome: Equatable {
+struct ConnectorOutcome {
     var command: [String]?
     var file: String?
     var error: String?
@@ -90,17 +90,22 @@ final class ConnectorsModel: ObservableObject {
         return await perform(connector, connector.removeArguments, failure: (L("Disconnect failed"), "Disconnect failed"))
     }
 
-    /// Why the connector cannot be changed now, in English; nil when it can.
-    private func unavailable(_ connector: AgentConnector) -> String? {
-        if entries[connector]?.busy != false { return "\(connector.title) is already being changed; try again when it finishes" }
-        if locate(connector) == nil { return "The \(connector.executable) command was not found; install \(connector.title) first" }
-        return nil
+    /// The connector's CLI, or why the connector cannot be changed now, in English.
+    private func available(_ connector: AgentConnector) -> Result<String, ConnectorUnavailable> {
+        if entries[connector]?.busy != false { return .failure(.init(reason: "\(connector.title) is already being changed; try again when it finishes")) }
+        guard let executable = locate(connector) else { return .failure(.init(reason: "The \(connector.executable) command was not found; install \(connector.title) first")) }
+        return .success(executable)
     }
+
+    private struct ConnectorUnavailable: Error { let reason: String }
 
     /// `failure` is the message's start, localized for the window and in English for the Agent tool.
     private func perform(_ connector: AgentConnector, _ arguments: [String], failure: (local: String, english: String)) async -> ConnectorOutcome {
-        if let reason = unavailable(connector) { return ConnectorOutcome(error: reason) }
-        guard let executable = locate(connector) else { return ConnectorOutcome() }
+        let executable: String
+        switch available(connector) {
+        case .success(let found): executable = found
+        case .failure(let unavailable): return ConnectorOutcome(error: unavailable.reason)
+        }
         entries[connector]?.busy = true
         fail(connector, nil)
         let result = await run(executable, arguments, environment)
@@ -119,7 +124,7 @@ final class ConnectorsModel: ObservableObject {
     /// Rewrites DeepSeek Harness's home patch file with `edit` (nil in: no file; nil out: delete the file), keeping the file's permissions.
     private func editDeepseekPatch(failure: (local: String, english: String), _ edit: @escaping @Sendable (String?) -> String?) async -> ConnectorOutcome {
         let connector = AgentConnector.deepseek
-        if let reason = unavailable(connector) { return ConnectorOutcome(error: reason) }
+        if case .failure(let unavailable) = available(connector) { return ConnectorOutcome(error: unavailable.reason) }
         entries[connector]?.busy = true
         fail(connector, nil)
         // Edit the file a symbolic link points at rather than replacing the link.

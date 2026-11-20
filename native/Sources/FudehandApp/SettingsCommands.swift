@@ -28,12 +28,12 @@ extension FudehandStore {
             if use, id != draft.inUse, !draft.canUse(id) {
                 throw ControlCommandError("\(providerTitle(id)) has no API key; save one with settings_set_api_key first")
             }
-            let previous = providerSettings(id)
+            let previous = providerSettings(id).merging(["inUse": chat.settings.provider]) { $1 }
             if let model { draft.setModel(model, for: id) }
             if let baseUrl { draft.setBaseUrl(baseUrl, for: id) }
             if use { draft.use(id) }
             try applyModelSettings(draft)
-            return ["provider": providerSettings(id), "previous": previous, "note": nextMessageNote]
+            return ["provider": providerSettings(id), "inUse": chat.settings.provider, "previous": previous, "note": nextMessageNote]
         case .listModels(let id, let baseUrl):
             try requireProvider(id)
             guard let root = toolsRoot else { throw ControlCommandError("Cannot find the Fudehand source directory, so the model list is unavailable") }
@@ -54,7 +54,8 @@ extension FudehandStore {
             var draft = chat.draft()
             draft.setKey(key, for: id)
             try applyModelSettings(draft)
-            return ["provider": providerSettings(id), "previous": previous, "note": nextMessageNote]
+            // Saving a key can also change the provider in use, as Save does when the one in use has no key.
+            return ["provider": providerSettings(id), "inUse": chat.settings.provider, "previous": previous, "note": nextMessageNote]
         case .deleteAPIKey(let id):
             try requireProvider(id)
             guard chat.savedKey(for: id) else { throw ControlCommandError("No API key is saved for \(providerTitle(id))") }
@@ -70,7 +71,10 @@ extension FudehandStore {
             await connectors.refresh()
             let previous = connectorState(connector)
             let outcome = connected ? await connectors.connect(connector) : await connectors.disconnect(connector)
-            if let error = outcome.error { throw ControlCommandError(error) }
+            if let error = outcome.error {
+                let ran = outcome.command.map { " (ran: \($0.joined(separator: " ")))" } ?? outcome.file.map { " (file: \($0))" } ?? ""
+                throw ControlCommandError(error + ran)
+            }
             var result: [String: Any] = ["connector": connectorState(connector), "previous": previous,
                                          "note": "\(connector.title) picks the change up in new sessions."]
             if let command = outcome.command { result["command"] = command }
@@ -104,8 +108,9 @@ extension FudehandStore {
         }
     }
 
+    /// What a key change may change: the provider's key and the provider in use.
     private func keySettings(_ id: String) -> [String: Any] {
-        ["hasKey": chat.savedKey(for: id), "keyHint": chat.keyHint(for: id) ?? NSNull()]
+        ["hasKey": chat.savedKey(for: id), "keyHint": chat.keyHint(for: id) ?? NSNull(), "inUse": chat.settings.provider]
     }
 
     /// One provider as the settings sheet shows it; the provider in use shows the selected conversation's model.
