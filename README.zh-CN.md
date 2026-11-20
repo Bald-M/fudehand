@@ -12,7 +12,7 @@
   <a href="README.md">English</a> | 简体中文
 </p>
 
-![fudehand 主界面：左侧图层面板、中间画布、右侧属性面板](docs/evidence/readme-main-light.jpg)
+![Fudehand 主界面：画布上是一个待办清单 App 页面，左侧图层面板，右侧属性面板](docs/evidence/readme-main-zh-light.jpg)
 
 Fudehand 完全运行在你自己的 Mac 上。设计稿是一份由图层组成的文档，显示在可平移、可缩放的画布上，交互参照 Figma。AI Agent 通过 MCP 或 App 内的对话面板编辑同一份文档，每次修改都立即显示在画布上。设计稿保存为 `.fudehand` 工程文件，内容是普通 JSON。
 
