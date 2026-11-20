@@ -15,6 +15,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - Starter templates: the launch window's Templates section now offers *Mobile App*, *Web Page*, and *Dashboard*, each with a *Design system* frame showing the shared [design foundations](docs/design-foundations.md) (colors, Avenir Next type scale, spacing scale, corner radii) that all three follow. Template names show in the UI language, and `app_list_templates` returns that title next to the name (#22).
 - Agents can use the launch window: `app_show_launch_window` brings it to the front, `app_list_recents` lists the recent files (marking those deleted or moved), `app_open_recent`, `app_remove_recent`, and `app_clear_recents` open, remove, and clear them, and `app_list_templates` and `app_new_document_from_template` create an untitled document from a template. Like `design_new_document`, opening a recent file or creating from a template refuses to drop unsaved changes unless `discard` is true, and none of these tools shows a dialog (#179).
 
+### Changed
+
+- The properties panel is redesigned: the inspector has *Design*, *Prototype*, and *Chat* tabs, and the prototype settings (interaction, states, scrolling, animation) move to the *Prototype* tab. The *Design* tab opens with a layer header (type, name, show/hide), puts X/Y and W/H in rows with a sizing chip (*Fixed*, *Hug*, *Fill*) inside W and H, sets auto layout alignment with a 3×3 grid plus *Space between* and *Stretch*, shows fills and strokes as swatch, hex, and opacity, and folds an empty fill or stroke into a row with `+`. Dragging the opacity icon changes the opacity (#189).
+
 ## [0.0.4] - 2026-11-20
 
 ### Summary

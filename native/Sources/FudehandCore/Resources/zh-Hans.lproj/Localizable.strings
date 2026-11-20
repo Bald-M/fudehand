@@ -164,17 +164,12 @@
 "Black" = "黑";
 "Auto Layout" = "自动布局";
 "Direction" = "方向";
-"Spacing" = "间距";
 "Padding" = "内边距";
 "Top" = "上";
 "Right" = "右";
 "Bottom" = "下";
 "Left" = "左";
-"Main axis" = "主轴";
-"Cross axis" = "交叉轴";
-"Start" = "起点";
 "Center" = "居中";
-"End" = "终点";
 "Space between" = "两端分布";
 "Remove Auto Layout" = "移除自动布局";
 "Add Auto Layout" = "添加自动布局";
@@ -444,3 +439,23 @@
 "No icons match “%@”." = "没有与“%@”匹配的图标。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 仅限用于 Apple 平台的设计。";
 "Style" = "风格";
+
+/* Properties panel redesign (#189) */
+"%@ opacity" = "%@透明度";
+"Top left" = "左上";
+"Top center" = "顶部居中";
+"Top right" = "右上";
+"Center left" = "左侧居中";
+"Center right" = "右侧居中";
+"Bottom left" = "左下";
+"Bottom center" = "底部居中";
+"Bottom right" = "右下";
+"T|padding" = "上";
+"R|padding" = "右";
+"B|padding" = "下";
+"L|padding" = "左";
+"Hug|sizing" = "包裹";
+"Fill|sizing" = "填满";
+"Gap" = "间距";
+"Select one layer to edit its prototype settings." = "选中单个图层后可修改其原型设置。";
+"Select a layer to edit its interaction, states, scrolling, and animation here." = "选中图层后在这里修改交互、状态、滚动与动画。";

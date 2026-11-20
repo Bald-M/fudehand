@@ -60,7 +60,7 @@ _Avoid_: preview mode, present mode
 
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
-**Properties panel (属性面板 / 屬性面板)**: The Design (设计) tab of the right inspector, which edits the selected layer's position, size, fill, stroke, text, and auto layout.
+**Properties panel (属性面板 / 屬性面板)**: The Design (设计) and Prototype (原型) tabs of the right inspector: the Design tab edits the selected layer's position, size, auto layout, appearance, fill, stroke, and text; the Prototype tab its interaction, states, scrolling, and animation.
 
 **Font library (字体库 / 字體庫)**: The directory `~/Library/Application Support/fudehand/Fonts` holding font files imported with *Import Font…* or `design_import_font`. Its fonts are registered for the App only, not installed on the system, and not stored in project files: a project file opened on a Mac without the font falls back to the system font.
 
