@@ -71,6 +71,7 @@ final class FudehandCanvasView: NSView {
     var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     /// The layers listed for VoiceOver, kept by id so an element stays the same object while it is focused.
     private var accessibilityElements: [String: CanvasLayerElement] = [:]
+    private var annotationElements: [String: CanvasAnnotationElement] = [:]
     var lastIndicatorUpdate: CFTimeInterval = 0
     private var interaction = CanvasInteraction()
     private(set) var hover: String?
@@ -118,7 +119,7 @@ final class FudehandCanvasView: NSView {
     }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .layoutArea }
-    override func accessibilityChildren() -> [Any]? { accessibilityLayers() }
+    override func accessibilityChildren() -> [Any]? { accessibilityLayers() + accessibilityAnnotations() }
     override func accessibilitySelectedChildren() -> [Any]? { accessibilityLayers().filter { $0.isAccessibilitySelected() } }
 
     /// Pointing at a layer (VoiceOver cursor tracking, Accessibility Inspector) finds its element: the layer itself when
@@ -126,7 +127,9 @@ final class FudehandCanvasView: NSView {
     override func accessibilityHitTest(_ point: NSPoint) -> Any? {
         guard let window else { return self }
         let local = convert(window.convertPoint(fromScreen: point), from: nil)
-        guard case .node(let id) = hitTarget(at: local) else { return self }
+        let hit = hitTarget(at: local)
+        if case .annotation(let id) = hit { return accessibilityAnnotations().first { $0.id == id } ?? self }
+        guard case .node(let id) = hit else { return self }
         let layers = accessibilityLayers()
         let listed = index.ancestry(of: id).reversed().lazy.compactMap { ancestor in layers.first { $0.id == ancestor } }.first
         return listed ?? self
@@ -147,6 +150,23 @@ final class FudehandCanvasView: NSView {
             return element
         }
         accessibilityElements = next
+        return elements
+    }
+
+    /// The annotation markers as VoiceOver buttons after the layers, read as "Annotation: <text>"; pressing one expands or
+    /// collapses its thread as a click would.
+    func accessibilityAnnotations() -> [CanvasAnnotationElement] {
+        var next: [String: CanvasAnnotationElement] = [:]
+        let elements = index.annotationMarkers().map { marker -> CanvasAnnotationElement in
+            let id = marker.annotation.id
+            let element = annotationElements[id] ?? CanvasAnnotationElement(id: id, canvas: self)
+            element.setAccessibilityLabel(L("Annotation: %@", marker.annotation.text))
+            element.setAccessibilityValue(annotation == .thread(id) ? L("Expanded") : nil)
+            element.setAccessibilityFrameInParentSpace(CanvasOverlay.markerRect(marker.anchor, viewport: liveViewport))
+            next[id] = element
+            return element
+        }
+        annotationElements = next
         return elements
     }
 
@@ -691,6 +711,28 @@ final class CanvasLayerElement: NSAccessibilityElement {
         MainActor.assumeIsolated {
             guard let canvas else { return false }
             canvas.selectFromAccessibility(id)
+            return true
+        }
+    }
+}
+
+/// An annotation marker as VoiceOver sees it; pressing it expands or collapses the thread.
+final class CanvasAnnotationElement: NSAccessibilityElement {
+    let id: String
+    private weak var canvas: FudehandCanvasView?
+
+    init(id: String, canvas: FudehandCanvasView) {
+        self.id = id
+        self.canvas = canvas
+        super.init()
+        setAccessibilityParent(canvas)
+        setAccessibilityRole(.button)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        MainActor.assumeIsolated {
+            guard let canvas else { return false }
+            canvas.host?.canvasToggleAnnotation(id)
             return true
         }
     }

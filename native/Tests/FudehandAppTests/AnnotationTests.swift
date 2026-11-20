@@ -131,3 +131,16 @@ import Testing
     try h.store.open(url)
     #expect(h.store.editor.document.annotations == [note] && h.canvas.overlay.markerCounts == [note.id: "1"])
 }
+
+@Test @MainActor func voiceOverListsMarkersAfterLayersAndPressingOneExpandsIt() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    let note = try h.store.addAnnotation(on: "b", x: 10, y: 10, text: "Too wide", by: .person)
+    let children = try #require(h.canvas.accessibilityChildren())
+    let element = try #require(children.last as? CanvasAnnotationElement)
+    #expect(children.count == 3 && element.id == note.id && element.accessibilityLabel() == "Annotation: Too wide")
+    #expect(element.accessibilityRole() == .button)
+    #expect(element.accessibilityPerformPress() && h.store.annotation == .thread(note.id))
+    #expect(h.canvas.accessibilityAnnotations().first?.accessibilityValue() as? String == "Expanded")
+    #expect(element.accessibilityPerformPress() && h.store.annotation == nil)
+}
