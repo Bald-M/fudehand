@@ -440,7 +440,19 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+"Selection Colors" = "選取範圍顏色";
+"Selection color %@" = "選取範圍顏色 %@";
+"Show all %d colors" = "顯示全部 %d 種顏色";
+"Show Fewer Colors" = "收合顏色";
 
+"Export as HTML…" = "匯出為 HTML…";
+"Export as HTML" = "匯出為 HTML";
+"Choose an empty folder for the page and its images and icons." = "請選擇一個空資料夾，用來存放頁面及其圖片和圖示。";
+"Export" = "匯出";
+"Not a folder: %@" = "不是資料夾：%@";
+"The folder is not empty: %@" = "資料夾不是空的：%@";
+"Could not write to %@" = "無法寫入 %@";
+"No artwork for icon %@" = "圖示 %@ 沒有圖形";
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@透明度";
 "Top left" = "左上";
@@ -506,3 +518,22 @@
 "Shadow color" = "陰影顏色";
 "Blur" = "模糊";
 "Spread" = "擴展";
+"Layout Guides" = "佈局輔助線";
+"Add layout guide" = "加入佈局輔助線";
+"Remove layout guide" = "移除佈局輔助線";
+"Hide layout guide" = "隱藏佈局輔助線";
+"Show layout guide" = "顯示佈局輔助線";
+"Grid|layout guide" = "格線";
+"Columns" = "欄";
+"Rows" = "列";
+"Grid %@" = "格線 %@";
+"Columns %d" = "%d 欄";
+"Rows %d" = "%d 列";
+"Type|layout guide" = "類型";
+"Size|layout guide" = "尺寸";
+"Count" = "數量";
+"Gutter" = "間距";
+"Margin" = "邊界";
+"Color" = "顏色";
+"Start" = "起點";
+"End" = "終點";

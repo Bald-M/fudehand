@@ -56,6 +56,8 @@ const NODE_GUIDE = [
   'animation (prototype animation, any layer; plays when the layer\'s frame appears in the prototype window, never on the canvas or in snapshots): {type fade-in/slide-in/scale-in (entrances) or spin/pulse/shimmer (loops), duration seconds >0–60 (one cycle for a loop; default 0.3 for entrances, 1 for spin and pulse, 1.5 for shimmer), delay seconds 0–60 (default 0), easing linear/ease-in/ease-out/ease-in-out (default ease-out for entrances, ease-in-out for pulse, linear otherwise), repeat integer 1–1000 or "infinite" (default 1 for entrances, "infinite" for loops); slide-in only: from left/right/top/bottom (default bottom) and distance pt (default 40); pulse only: property scale/opacity (default scale)}. slide-in and scale-in also fade in; spin turns clockwise about the center; shimmer sweeps a see-through band across the layer (skeleton loading). ',
   'text.sequence (text sequence, text layers): {items: array of 1–1000 strings shown in turn during playback, interval seconds 0.05–3600 (default 1), loop true/false (default false: stays on the last item)}, e.g. a countdown; text.content is what the canvas and snapshots show. ',
   'versionSnapshot (image layers that are version snapshots, made by design_save_version_snapshot): {frame <id of the frame it was taken of>, createdAt ISO 8601, note}; change the note with design_update_node. ',
+  'layoutGuides (frame): an array of layout guides drawn over the frame on the editing canvas only (never in snapshots or playback); layers moved or resized inside the frame snap to the edges of its visible columns and rows. ',
+  'Each is {type grid/columns/rows, color (default #FF00001A), visible (default true)}; a grid adds size pt (default 10); columns and rows add count integer 1–1000 (default 5), align stretch/start/center/end (default stretch), width pt (start/center/end only; a column\'s width or a row\'s height, default 60), gutter pt (default 20), and margin pt from the frame edge (default 0, ignored by center). ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
 
@@ -95,7 +97,7 @@ export const tools = [
     }, ['node'],
     async (args, root) => ({ ...args, node: await inlineImages(args.node, root) })),
   controlTool('design_update_node', 'update_node',
-    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding, versionSnapshot) are merged field by field, interaction, animation, states, effects, and text.sequence are replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction, states, scroll, or fixedOnScroll to make a layer interactive in prototype playback, and animation or text.sequence to make it move (see design_create_node for their fields).',
+    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding, versionSnapshot) are merged field by field, interaction, animation, states, effects, and text.sequence are replaced whole, and a null value clears that field; the layoutGuides array is replaced whole. id, type, and children cannot be changed. Set interaction, states, scroll, or fixedOnScroll to make a layer interactive in prototype playback, and animation or text.sequence to make it move (see design_create_node for their fields).',
     { ...id, changes: { type: 'object', description: 'Fields to change' } }, ['id', 'changes'],
     async (args, root) => ({ ...args, changes: await inlineImages(args.changes, root) })),
   controlTool('design_delete_nodes', 'delete_nodes', 'Delete layers and their child layers, as a single undo step.', ids),
@@ -142,6 +144,16 @@ export const tools = [
       library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
       limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
     }, ['query']),
+  controlTool('design_list_colors', 'list_colors',
+    'Read the selection colors: every color used by the fills, strokes, text colors, and icon colors of the given layers and all their child layers, merged by hex value, most used first. Returns ids and colors [{color, count}].',
+    { ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' } }, []),
+  controlTool('design_replace_color', 'replace_color',
+    'Replace a selection color: every fill, stroke, text color, and icon color of the given layers and their child layers that uses from becomes to, as a single undo step. Fails, changing nothing, when no layer there uses from. Returns replaced (how many properties changed) and the new selection colors.',
+    {
+      from: { type: 'string', description: 'The color to replace, #RRGGBB or #RRGGBBAA (as returned by design_list_colors)' },
+      to: { type: 'string', description: 'The new color, #RRGGBB or #RRGGBBAA' },
+      ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' },
+    }, ['from', 'to']),
   controlTool('design_save_version_snapshot', 'save_version_snapshot',
     'Save a version snapshot of a frame, as one undo step: the frame as it looks now, rendered into a read-only top-level image layer placed to the right of the frame and of its earlier snapshots, top-aligned with it. ' +
     'Use it before changing a frame substantially so the old and new versions can be compared side by side, or overlaid by moving the snapshot to the frame\'s position (frameBounds) and lowering its opacity with design_update_node. ' +
@@ -179,6 +191,13 @@ export const tools = [
       ] }
     },
   },
+  controlTool('design_export_html', 'export_html',
+    'Export a layer (usually a frame) as a reference web page for implementing the design in front-end code, as File > Export as HTML… does: writes index.html (one CSS class per layer; auto layout becomes flexbox, other children are placed absolutely; each element carries data-layer-id) and its images and icons under assets/. ' +
+    'Icons are drawn through a CSS mask tinted with the icon color; SF Symbols are written as PNG, other icons as SVG. Hidden layers and prototype settings are left out, and fonts keep their macOS family names. ' +
+    'The directory is created when missing and must otherwise be empty. Returns the files written (relative to the directory), the asset file of each image and icon layer, and the HTML; the document is not changed. Adapt the result to the target project\'s framework and styles rather than copying it.',
+    { ...id, directory: { type: 'string', description: 'Directory to write into; prefer an absolute path. ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory' } },
+    ['id', 'directory'],
+    async (args, root) => ({ ...args, directory: absolute(args.directory, root) })),
   controlTool('app_show_launch_window', 'show_launch_window', 'Show the launch window (New, Recent, Templates) in front, as Window > Launch Window does; the editor window and the document stay as they are. Returns the document overview.'),
   controlTool('app_list_recents', 'list_recents', 'List the recent files shown in the launch window and File > Open Recent, newest first: path, name, openedAt (ISO 8601), and available (false when the file was deleted or moved).'),
   controlTool('app_open_recent', 'open_recent', 'Open a project file from the recent files, by its path as app_list_recents returns it. Refused when the file was deleted or moved, or when the current document has unsaved changes, unless discard is true. Returns the document overview.',

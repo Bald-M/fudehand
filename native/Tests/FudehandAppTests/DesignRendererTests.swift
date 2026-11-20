@@ -219,3 +219,13 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     // Snapshots never play: the same pixels as without animation, with the text's own content.
     #expect(try DesignRenderer.snapshotPNG(frame, scale: 1) == still)
 }
+
+@Test @MainActor func snapshotsLeaveOutLayoutGuides() throws {
+    var frame = DesignNode(id: "f", type: .frame, width: 120, height: 80)
+    frame.fill = .white
+    let plain = try DesignRenderer.snapshotPNG(frame, scale: 1)
+    var guide = LayoutGuide(type: .columns)
+    guide.color = DesignColor(r: 1, g: 0, b: 0)
+    frame.layoutGuides = [guide, LayoutGuide(type: .grid)]
+    #expect(try DesignRenderer.snapshotPNG(frame, scale: 1) == plain)
+}

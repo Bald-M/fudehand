@@ -82,7 +82,8 @@ public struct InteractionContext {
     public var rects: [String: Rect]
     /// The candidate layers for marquee selection (top-level layers).
     public var marqueeCandidates: Set<String>
-    /// The rectangles the current selection can snap to while dragged (sibling layers and the parent layer).
+    /// The rectangles the current selection snaps to while moved or resized: sibling layers, the parent layer, and the edges of
+    /// the parent frame's visible columns and rows.
     public var snapTargets: [Rect]
     /// The layers that can be moved by dragging (not in auto layout, not locked).
     public var movable: Set<String>
@@ -226,10 +227,16 @@ public struct CanvasInteraction {
             let started = resizing.started
             resizing.started = true
             state = .resizing(resizing)
-            let rect = Self.resized(resizing.start, handle: resizing.handle,
-                                    by: Point(x: (point.x - resizing.origin.x) / context.viewport.scale,
-                                              y: (point.y - resizing.origin.y) / context.viewport.scale))
-            return (started ? [] : [.beginGesture("Resize")]) + [.resize(resizing.id, rect)]
+            let scale = context.viewport.scale
+            var rect = Self.resized(resizing.start, handle: resizing.handle,
+                                    by: Point(x: (point.x - resizing.origin.x) / scale, y: (point.y - resizing.origin.y) / scale))
+            var guides: [Guide] = []
+            if !modifiers.contains(.control) {
+                let snapped = Snapping.snapEdges(rect, handle: resizing.handle, to: context.snapTargets, threshold: Self.snapThreshold / scale)
+                rect = snapped.rect
+                guides = snapped.guides
+            }
+            return (started ? [] : [.beginGesture("Resize")]) + [.resize(resizing.id, rect), .guides(guides)]
         case .marquee(let origin, let base):
             let world = Rect.spanning(CanvasGeometry.screenToWorld(origin, viewport: context.viewport),
                                       CanvasGeometry.screenToWorld(point, viewport: context.viewport))
@@ -251,7 +258,7 @@ public struct CanvasInteraction {
         defer { state = .idle }
         switch state {
         case .moving: return [.endGesture, .guides([])]
-        case .resizing(let resizing): return resizing.started ? [.endGesture] : []
+        case .resizing(let resizing): return resizing.started ? [.endGesture, .guides([])] : []
         case .marquee, .creating: return [.marquee(nil)]
         default: return []
         }
@@ -269,7 +276,7 @@ public struct CanvasInteraction {
         case .moving:
             return [.endGesture, .guides([])]
         case .resizing(let resizing):
-            return resizing.started ? [.endGesture] : []
+            return resizing.started ? [.endGesture, .guides([])] : []
         case .creating(let type, let origin):
             let start = CanvasGeometry.screenToWorld(origin, viewport: context.viewport)
             let dx = point.x - origin.x, dy = point.y - origin.y

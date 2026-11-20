@@ -22,7 +22,7 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 **Icon name (图标名字 / 圖示名稱)**: How an icon layer names its icon: `<library>/<name>`, such as `sf/house.fill` or `material-rounded/home.fill`.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
-**Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
+**Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, auto layout, and layout guides. A top-level frame usually represents a screen, and the canvas shows a name label above it.
 _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
@@ -34,6 +34,9 @@ _Avoid_: version history, backup (a snapshot never restores the frame), snapshot
 _Avoid_: filter, style (a reusable named effect is out of scope)
 
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
+
+**Layout guide (布局辅助线 / 佈局輔助線)**: A grid, columns, or rows drawn over a frame on the editing canvas, with its own color, that can be shown or hidden. Layers moved or resized inside the frame snap to the edges of its visible columns and rows. Layout guides are saved with the frame but never appear in snapshots or prototype playback.
+_Avoid_: snapping guide (吸附参考线, the red lines shown while dragging), ruler guide (标尺参考线, canvas-wide; out of scope)
 
 **Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
 
@@ -70,6 +73,8 @@ _Avoid_: comment (评论) (suggests a multi-user review workflow, which annotati
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
 **Properties panel (属性面板 / 屬性面板)**: The Design (设计) and Prototype (原型) tabs of the right inspector: the Design tab edits the selected layer's position, size, auto layout, appearance, fill, stroke, and text; the Prototype tab its interaction, states, scrolling, and animation.
+
+**Selection colors (选区颜色 / 選取範圍顏色)**: The section of the properties panel listing every color the selected layers and all their child layers use — fills, strokes, text colors, and icon colors — merged by hex value and ordered by how often each is used. Changing one replaces it everywhere in the selection as one undo step. Agents read and replace them with `design_list_colors` and `design_replace_color`.
 
 **Font library (字体库 / 字體庫)**: The directory `~/Library/Application Support/fudehand/Fonts` holding font files imported with *Import Font…* or `design_import_font`. Its fonts are registered for the App only, not installed on the system, and not stored in project files: a project file opened on a Mac without the font falls back to the system font.
 

@@ -784,8 +784,7 @@ private struct ChatSettingsSheet: View {
         let hasKey = draft.hasKey(id)
         let model = trimmed(draft.providers[id]?.model ?? "")
         return HStack(spacing: 8) {
-            Image(systemName: hasKey ? "circle.fill" : "circle").font(.caption2)
-                .foregroundStyle(hasKey ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary)).accessibilityHidden(true)
+            providerIcon(id, hasKey: hasKey)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title(id))
                 Text(hasKey ? (model.isEmpty ? chat.defaultModel(for: id) ?? L("Default model") : model) : L("No API key"))
@@ -795,6 +794,23 @@ private struct ChatSettingsSheet: View {
             if id == draft.inUse { inUseTag }
         }
         .padding(.vertical, 2)
+    }
+
+    /// The provider's icon with a status dot on its corner, as in the "MCP Connectors" window: green with an API key, gray without. The
+    /// text beside it says the same, so VoiceOver skips it.
+    private func providerIcon(_ id: String, hasKey: Bool) -> some View {
+        Group {
+            if let image = ConnectorIcon.image(forProvider: id) {
+                Image(nsImage: image).renderingMode(image.isTemplate ? .template : .original).resizable().interpolation(.high)
+            } else { Color.clear }
+        }
+        .frame(width: 22, height: 22)
+        .overlay(alignment: .bottomTrailing) {
+            Circle().fill(hasKey ? Color.green : Color.gray).frame(width: 8, height: 8)
+                .overlay(Circle().strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5).padding(-1.5))
+                .offset(x: 3, y: 3)
+        }
+        .accessibilityHidden(true)
     }
 
     private var inUseTag: some View {

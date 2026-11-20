@@ -440,7 +440,19 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+"Selection Colors" = "Selection Colors";
+"Selection color %@" = "Selection color %@";
+"Show all %d colors" = "Show all %d colors";
+"Show Fewer Colors" = "Show Fewer Colors";
 
+"Export as HTML…" = "Export as HTML…";
+"Export as HTML" = "Export as HTML";
+"Choose an empty folder for the page and its images and icons." = "Choose an empty folder for the page and its images and icons.";
+"Export" = "Export";
+"Not a folder: %@" = "Not a folder: %@";
+"The folder is not empty: %@" = "The folder is not empty: %@";
+"Could not write to %@" = "Could not write to %@";
+"No artwork for icon %@" = "No artwork for icon %@";
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@ opacity";
 "Top left" = "Top left";
@@ -506,3 +518,22 @@
 "Shadow color" = "Shadow color";
 "Blur" = "Blur";
 "Spread" = "Spread";
+"Layout Guides" = "Layout Guides";
+"Add layout guide" = "Add layout guide";
+"Remove layout guide" = "Remove layout guide";
+"Hide layout guide" = "Hide layout guide";
+"Show layout guide" = "Show layout guide";
+"Grid|layout guide" = "Grid";
+"Columns" = "Columns";
+"Rows" = "Rows";
+"Grid %@" = "Grid %@";
+"Columns %d" = "Columns %d";
+"Rows %d" = "Rows %d";
+"Type|layout guide" = "Type";
+"Size|layout guide" = "Size";
+"Count" = "Count";
+"Gutter" = "Gutter";
+"Margin" = "Margin";
+"Color" = "Color";
+"Start" = "Start";
+"End" = "End";

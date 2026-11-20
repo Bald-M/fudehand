@@ -26,8 +26,8 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_save_version_snapshot', 'design_list_version_snapshots',
-      'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
+      'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
       'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
@@ -103,6 +103,18 @@ describe('design tools', () => {
     await fake.close()
   })
 
+  it('describes frame layout guides and forwards them unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['layoutGuides', 'grid', 'columns', 'rows', 'gutter', 'margin', 'stretch', 'visible'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('layoutGuides array is replaced whole')
+    const fake = await app(echo)
+    const changes = { layoutGuides: [{ type: 'columns', count: 12, gutter: 24, margin: 32 }, { type: 'grid', size: 8, visible: false }] }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
+    await fake.close()
+  })
+
   it('describes animations and text sequences and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['animation', 'fade-in', 'slide-in', 'scale-in', 'spin', 'pulse', 'shimmer', 'delay', 'repeat', '"infinite"', 'text.sequence', 'interval', 'loop'])
@@ -131,6 +143,27 @@ describe('design tools', () => {
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'search_icons', args: { query: 'home' } },
       { command: 'search_icons', args: { query: 'home', library: 'lucide', limit: 5 } },
+    ])
+  })
+
+  it('lists and replaces selection colors through the App', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string, inputSchema: any }[]).find(tool => tool.name === name)!
+    expect(byName('design_list_colors').inputSchema.required).toEqual([])
+    expect(byName('design_replace_color').inputSchema.required).toEqual(['from', 'to'])
+    for (const field of ['fill', 'stroke', 'text color', 'icon color', 'child layers'])
+      expect(byName('design_list_colors').description).toContain(field)
+    expect(byName('design_replace_color').description).toContain('single undo step')
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_list_colors', {}, ctx)
+    await callTool('design_list_colors', { ids: ['f'] }, ctx)
+    await callTool('design_replace_color', { from: '#FF0000', to: '#00FF00' }, ctx)
+    await callTool('design_replace_color', { from: '#FF0000', to: '#00FF00', ids: ['a', 'b'] }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'list_colors', args: {} },
+      { command: 'list_colors', args: { ids: ['f'] } },
+      { command: 'replace_color', args: { from: '#FF0000', to: '#00FF00' } },
+      { command: 'replace_color', args: { from: '#FF0000', to: '#00FF00', ids: ['a', 'b'] } },
     ])
   })
 
@@ -179,6 +212,8 @@ describe('design tools', () => {
     await callTool('canvas_set_view', { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] }, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: 'out/home' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: '/work/site/design' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
@@ -196,6 +231,8 @@ describe('design tools', () => {
       { command: 'set_view', args: { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] } },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
+      { command: 'export_html', args: { id: 'f', directory: '/repo/out/home' } },
+      { command: 'export_html', args: { id: 'f', directory: '/work/site/design' } },
     ])
   })
 

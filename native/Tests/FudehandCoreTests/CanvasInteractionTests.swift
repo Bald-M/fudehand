@@ -133,12 +133,27 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     let ctx = context(selection: ["a"])
     #expect(down(&machine, 0, 0, hit: .handle("a", .bottomRight), context: ctx) == [])
     #expect(machine.pointerDragged(to: Point(x: 10, y: 20), modifiers: [], context: ctx)
-            == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884))])
-    #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx) == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844))])
-    #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture])
+            == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884)), .guides([])])
+    #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx)
+            == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844)), .guides([])])
+    #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture, .guides([])])
     // Clicking a handle without dragging produces no edit.
     _ = down(&machine, 0, 0, hit: .handle("a", .left), context: ctx)
     #expect(machine.pointerUp(at: Point(x: 0, y: 0), context: ctx) == [])
+}
+
+@Test func resizeSnapsDraggedEdgesUnlessControlIsHeld() {
+    var machine = CanvasInteraction()
+    let ctx = context(selection: ["a"])
+    _ = down(&machine, 0, 0, hit: .handle("a", .bottomRight), context: ctx)
+    // The right edge lands at 464, within 12 canvas units (6 screen points at 0.5×) of b's left edge at 470.
+    let effects = machine.pointerDragged(to: Point(x: 37, y: 0), modifiers: [], context: ctx)
+    #expect(effects.contains(.resize("a", Rect(x: 0, y: 0, width: 470, height: 844))))
+    #expect(guides(effects) == [Guide(axis: .vertical, position: 470, start: 0, end: 900)])
+    let free = machine.pointerDragged(to: Point(x: 37, y: 0), modifiers: [.control], context: ctx)
+    #expect(free.contains(.resize("a", Rect(x: 0, y: 0, width: 464, height: 844))))
+    #expect(guides(free) == [])
+    #expect(machine.cancel() == [.endGesture, .guides([])])
 }
 
 @Test func resizeClampsAndMovesOppositeEdges() {

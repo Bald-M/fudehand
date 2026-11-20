@@ -478,3 +478,90 @@ final class CanvasHarness {
     try scroll(at: NSPoint(x: 380, y: 300))
     #expect(h.canvas.liveViewport != Viewport(x: 0, y: 100, scale: 1))
 }
+
+// MARK: Layout guides
+
+/// Frame a with one 100-point column from 160 to 260.
+@MainActor private func columnHarness(visible: Bool = true) throws -> CanvasHarness {
+    var document = CanvasHarness.document()
+    var column = LayoutGuide(type: .columns)
+    column.count = 1; column.align = .start; column.width = 100; column.margin = 160; column.visible = visible
+    try document.update("a") { $0.layoutGuides = [column] }
+    return CanvasHarness(document: document)
+}
+
+@Test @MainActor func movingSnapsToTheParentFramesColumnEdges() throws {
+    let h = try columnHarness()
+    defer { h.dispose() }
+    // The card lands at x 157, 3 points from the column's left edge at 160.
+    h.drag(from: NSPoint(x: 70, y: 145), to: NSPoint(x: 207, y: 145))
+    #expect(h.node("card")?.x == 160)
+}
+
+@Test @MainActor func hiddenColumnsDoNotSnap() throws {
+    let h = try columnHarness(visible: false)
+    defer { h.dispose() }
+    h.drag(from: NSPoint(x: 70, y: 145), to: NSPoint(x: 207, y: 145))
+    #expect(h.node("card")?.x == 157)
+}
+
+@Test @MainActor func resizingSnapsToTheParentFramesColumnEdges() throws {
+    let h = try columnHarness()
+    defer { h.dispose() }
+    h.click(NSPoint(x: 70, y: 145))
+    #expect(h.store.selection == ["card"])
+    // The card's right edge (120 at 100%) is dragged to 158, 2 points from the column's left edge.
+    h.drag(from: NSPoint(x: 120, y: 170), to: NSPoint(x: 158, y: 170))
+    #expect(h.node("card")?.width == 140)
+    #expect(h.store.editor.undoName == "Resize")
+}
+
+@Test @MainActor func overlayDrawsVisibleGuidesOfVisibleFrames() throws {
+    let h = try columnHarness()
+    defer { h.dispose() }
+    #expect(h.canvas.overlay.layoutGuidePaths.map(\.boundingBoxOfPath) == [CGRect(x: 160, y: 100, width: 100, height: 300)])
+    h.store.updateNode("a", "Hide Layout Guide") { $0.layoutGuides[0].visible = false }
+    #expect(h.canvas.overlay.layoutGuidePaths.isEmpty)
+    h.store.undo()
+    #expect(h.canvas.overlay.layoutGuidePaths.count == 1)
+    h.store.updateNode("a", "Hide Layer") { $0.visible = false }
+    #expect(h.canvas.overlay.layoutGuidePaths.isEmpty)
+}
+
+@Test @MainActor func gridGuidesKeepOnePointLinesAndHideWhenDense() throws {
+    var document = CanvasHarness.document()
+    var grid = LayoutGuide(type: .grid)
+    grid.size = 100
+    try document.update("a") { $0.layoutGuides = [grid] }
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    // A 400×300 frame has vertical lines at 100, 200, 300 and horizontal lines at 100, 200, each across the frame.
+    #expect(h.canvas.overlay.layoutGuideLineWidths == [1])
+    #expect(h.canvas.overlay.layoutGuidePaths.first?.boundingBoxOfPath == CGRect(x: 0, y: 100, width: 400, height: 300))
+    h.request(Viewport(x: 0, y: 100, scale: 2))
+    #expect(h.canvas.overlay.layoutGuideLineWidths == [1])
+    h.request(Viewport(x: 0, y: 100, scale: 0.03))
+    #expect(h.canvas.overlay.layoutGuidePaths.isEmpty)
+}
+
+@Test @MainActor func layersInAGroupSnapToTheEnclosingFramesColumns() throws {
+    var document = CanvasHarness.document()
+    var column = LayoutGuide(type: .columns)
+    column.count = 1; column.align = .start; column.width = 100; column.margin = 160
+    try document.update("a") { frame in
+        frame.layoutGuides = [column]
+        var group = DesignNode(id: "group", type: .group, x: 20, y: 20, width: 100, height: 50)
+        var inner = frame.children[0]
+        inner.x = 0; inner.y = 0
+        group.children = [inner]
+        frame.children = [group]
+    }
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    h.click(NSPoint(x: 70, y: 145))
+    h.click(NSPoint(x: 70, y: 145), clicks: 2)
+    #expect(h.store.selection == ["card"])
+    // The card lands at canvas x 157, 3 points from the column's left edge at 160.
+    h.drag(from: NSPoint(x: 70, y: 145), to: NSPoint(x: 207, y: 145))
+    #expect(h.store.editor.document.worldRect("card")?.x == 160)
+}

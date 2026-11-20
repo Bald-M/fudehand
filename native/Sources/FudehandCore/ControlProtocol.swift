@@ -24,6 +24,9 @@ public enum ControlCommand: Equatable, Sendable {
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    /// Selection colors of the given layers, or of the selection when `ids` is nil.
+    case listColors(ids: [String]?)
+    case replaceColor(from: DesignColor, to: DesignColor, ids: [String]?)
     /// Opens the prototype window from `frame` (a top-level frame), or, when nil, where Play Prototype starts.
     case playPrototype(frame: String?)
     case getPrototypePlayback
@@ -35,6 +38,7 @@ public enum ControlCommand: Equatable, Sendable {
     case clearRecents
     case listTemplates
     case newDocumentFromTemplate(String, discard: Bool)
+    case exportHTML(String, directory: String)
     // Chat panel conversations. A nil conversation means the selected one.
     case listConversations
     case getConversation(UUID?)
@@ -279,6 +283,20 @@ public enum ControlProtocol {
             }
             return number.doubleValue
         }
+        func color(_ key: String) throws -> DesignColor {
+            let hex = try string(key)
+            do { return try DesignColor(hex: hex) } catch let error as DesignError { throw Message(text: "\(key): \(error.message)") }
+        }
+        /// Layer ids that default to the selection when omitted; an explicit empty list names no layers and is rejected.
+        func layers() throws -> [String]? {
+            switch args["ids"] {
+            case nil, is NSNull: return nil
+            default:
+                let ids = try strings("ids")
+                guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+                return ids
+            }
+        }
         func optionalNumber(_ key: String) throws -> Double? {
             guard let value = args[key], !(value is NSNull) else { return nil }
             guard let number = value as? NSNumber, !isBool(number), number.doubleValue.isFinite else {
@@ -342,6 +360,8 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "list_colors": return .listColors(ids: try layers())
+        case "replace_color": return .replaceColor(from: try color("from"), to: try color("to"), ids: try layers())
         case "play": return .playPrototype(frame: try optionalString("frame"))
         case "get_playback": return .getPrototypePlayback
         case "close": return .closePrototype
@@ -352,6 +372,7 @@ public enum ControlProtocol {
         case "clear_recents": return .clearRecents
         case "list_templates": return .listTemplates
         case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
+        case "export_html": return .exportHTML(try string("id"), directory: try string("directory"))
         case "list_conversations": return .listConversations
         case "get_conversation": return .getConversation(try optionalConversation())
         case "open_conversation": return .openConversation(try conversation())

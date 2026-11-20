@@ -111,6 +111,7 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 | 文件 | `design_new_document`、`design_open_document`、`design_save_document` | 有未保存修改时，新建和打开会被拒绝，除非传 `discard: true`。 |
 | 视口 | `canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`、`canvas_set_view` | `canvas_focus_node` 可定位一个或多个图层；`canvas_set_view` 切换画布工具、显示或隐藏检查器、在图层面板里展开或折叠图层。 |
 | 核对 | `design_snapshot` | 返回实际渲染结果的 PNG。 |
+| 导出 | `design_export_html` | 把图层写成带图片和图标的参考网页，见下文。 |
 
 几个值得知道的细节：
 
@@ -121,6 +122,17 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 - 文件路径和图片路径里的 `~` 会展开为你的主目录。
 
 工具通过 App 的控制通道与 App 通信。控制通道是一个 Unix socket，位于 `~/Library/Application Support/fudehand/control.sock`（可用 `FUDEHAND_CONTROL_SOCKET` 覆盖）。它只对当前用户开放，不监听任何网络地址。
+
+### 从原型到前端代码
+
+屏幕设计好以后，可以让 Agent 在你的前端项目里把它实现出来：
+
+1. 在前端项目中打开 Agent（Claude Code、Codex 等），并连接 `fudehand` MCP 服务器。
+2. 让它对画框调用 `design_export_html`，`directory` 用绝对路径，比如源码目录外的一个新文件夹。它会写出 `index.html`，并把图片和图标放在 `assets/` 下，同时返回 HTML 以及每个资源对应的图层。手动操作是*文件 → 导出为 HTML…*（⇧⌘E）。
+3. 让它按项目的框架和样式重写页面，把这份 HTML 当作结构、尺寸、间距、颜色和字体的参考：自动布局对应 flexbox，每个元素的 `data-layer-id` 指回对应图层，用 `design_get_node` 可以读到完整信息（比如原型交互）。
+4. 让它把自己的页面和画框的 `design_snapshot` 对比，修正差异。
+
+导出的页面只是参考，不是可直接上线的代码。原型交互不会导出，字体保留 macOS 字体族名。
 
 ### 对话面板
 
@@ -144,12 +156,12 @@ API key 只保存在本机钥匙串里（服务名 `fudehand.agent`）。App 通
 
 用“文件”菜单的“保存”（⌘S）和“另存为…”（⇧⌘S）把设计稿存为 `.fudehand` 工程文件，用“打开…”（⌘O）或“打开最近”重新打开。App 注册了 `.fudehand` 文件类型，所以在 Finder 里双击文件、把文件拖到 Dock 图标上，或选择“打开方式”，都会用 Fudehand 打开。当前文档有未保存修改时，App 会先询问是否保存。
 
-设计文档是一棵图层树，包含画框、矩形、椭圆、文字、图片和分组。图层有填充、描边、圆角、透明度、显示/隐藏和锁定；画框还可以使用自动布局。工程文件是带格式版本号的 JSON：
+设计文档是一棵图层树，包含画框、矩形、椭圆、文字、图片和分组。图层有填充、描边、圆角、透明度、显示/隐藏和锁定；画框还可以使用自动布局和布局辅助线（网格、列、行）。工程文件是带格式版本号的 JSON：
 
 ```json
 {
   "format": "fudehand.design",
-  "version": 1,
+  "version": 8,
   "nodes": [
     { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },

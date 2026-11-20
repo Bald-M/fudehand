@@ -46,7 +46,7 @@ const maximumGoalRounds = 64
 const maximumGoalReminders = 3
 
 /** The tools plan mode offers: the ones that only read the design document. A tool not listed here cannot run before the plan is confirmed. */
-const readingTools = ['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_snapshot', 'design_list_version_snapshots']
+const readingTools = ['design_get_state', 'design_get_document', 'design_get_node', 'design_search_icons', 'design_list_colors', 'design_snapshot', 'design_list_version_snapshots']
 
 const planNote = 'Plan mode is on. Do not change the design document: only the tools that read it are available. Read what you need, then reply with a short numbered plan of the steps you would take, and ask the user to confirm it. You carry the plan out only after the user confirms.'
 const planRefusal = 'Plan mode: the design document cannot be changed until the user confirms the plan.'

@@ -61,6 +61,28 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("t")?.text?.fontSize == 16)
 }
 
+@Test @MainActor func agentAndPanelEditLayoutGuidesAsOneUndoStepEach() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame"])))
+    // The panel's + adds a grid; the Agent then sees it and replaces the list.
+    store.updateNode("f", "Add Layout Guide") { $0.layoutGuides.append(LayoutGuide(type: .grid)) }
+    let node = try await control(store, .getNode("f"))
+    #expect((node["layoutGuides"] as? [[String: Any]])?.first?["type"] as? String == "grid")
+    _ = try await control(store, .updateNode("f", changes: JSONObject(["layoutGuides": [["type": "columns", "count": 12], ["type": "rows", "visible": false]]])))
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.updateNode("f", "Show Layout Guide") { $0.layoutGuides[1].visible = true }
+    store.updateNode("f", "Remove Layout Guide") { $0.layoutGuides.remove(at: 0) }
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides[1].visible == false)
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.grid])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.isEmpty == true)
+}
+
 @Test @MainActor func invalidAgentCommandsChangeNothing() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "e", "type": "ellipse"])))
@@ -102,9 +124,9 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     _ = try await control(store, .saveDocument(temporaryFile().path))
     let bad = temporaryFile()
-    try Data(#"{"format":"fudehand.design","version":9,"nodes":[]}"#.utf8).write(to: bad)
+    try Data(#"{"format":"fudehand.design","version":10,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 9); upgrade Fudehand to open it")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 10); upgrade Fudehand to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 
@@ -595,6 +617,61 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("i")?.icon?.color == .black)
 }
 
+/// A frame (red fill) with a red rectangle, a text layer in red, and a blue icon; a red rectangle outside it.
+@MainActor private func selectionColorStore() async throws -> FudehandStore {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "fill": "#FF0000",
+        "children": [["id": "r", "type": "rectangle", "fill": "#FF0000", "stroke": ["color": "#0000FF", "width": 1]],
+                     ["id": "t", "type": "text", "text": ["content": "Hi", "color": "#FF0000"]],
+                     ["id": "i", "type": "icon", "icon": ["name": "lucide/house", "color": "#0000FF"]]],
+    ])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "o", "type": "rectangle", "fill": "#FF0000"])))
+    return store
+}
+
+private func colorList(_ result: [String: Any]) -> [String] {
+    (result["colors"] as? [[String: Any]] ?? []).map { "\($0["color"] as? String ?? "?")×\($0["count"] as? Int ?? -1)" }
+}
+
+@Test @MainActor func agentListsSelectionColorsOfTheSelectionOrOfNamedLayers() async throws {
+    let store = try await selectionColorStore()
+    #expect(await failure(store, .listColors(ids: nil)) == "Nothing is selected; select layers or pass ids")
+    #expect(await failure(store, .listColors(ids: ["missing"])) == "Layer not found: missing")
+    store.setSelection(["f"])
+    let selected = try await control(store, .listColors(ids: nil))
+    #expect(selected["ids"] as? [String] == ["f"] && colorList(selected) == ["#FF0000×3", "#0000FF×2"])
+    #expect(colorList(try await control(store, .listColors(ids: ["t", "o"]))) == ["#FF0000×2"])
+}
+
+@Test @MainActor func agentReplacesASelectionColorLikeThePanelAsOneUndoStep() async throws {
+    let store = try await selectionColorStore()
+    let red = try DesignColor(hex: "#FF0000"), green = try DesignColor(hex: "#00FF00"), blue = try DesignColor(hex: "#0000FF")
+    store.setSelection(["f"])
+    let result = try await control(store, .replaceColor(from: red, to: green, ids: nil))
+    #expect(result["replaced"] as? Int == 3 && colorList(result) == ["#00FF00×3", "#0000FF×2"])
+    let document = store.editor.document
+    #expect(document.node("f")?.fill == green && document.node("r")?.fill == green && document.node("t")?.text?.color == green)
+    #expect(document.node("o")?.fill == red && document.node("r")?.stroke?.color == blue)
+    #expect(store.editor.undoName == "Agent: Replace Color")
+    store.undo()
+    #expect(store.editor.document.node("f")?.fill == red && store.editor.document.node("t")?.text?.color == red)
+
+    // The panel calls the same store method with the uses of the swatch it opened; a color well's stream of changes
+    // coalesces into one step, and passing through red does not pick up the layers that are red.
+    let blues = SelectionColors.uses(of: blue, under: ["f"], in: store.editor.document)
+    let revision = store.editor.revision
+    try store.setColor(red, at: blues, coalescing: "f.selectionColor.#0000FF")
+    try store.setColor(green, at: blues, coalescing: "f.selectionColor.#0000FF")
+    #expect(store.editor.undoName == "Change Selection Color" && store.editor.revision == revision + 2)
+    #expect(store.editor.document.node("i")?.icon?.color == green && store.editor.document.node("f")?.fill == red)
+    store.undo()
+    #expect(store.editor.document.node("i")?.icon?.color == blue && store.editor.document.node("r")?.stroke?.color == blue)
+
+    #expect(await failure(store, .replaceColor(from: green, to: red, ids: ["o"])) == "None of these layers or their child layers uses #00FF00")
+    #expect(store.editor.document.node("o")?.fill == red)
+}
+
 @Test @MainActor func insertingAnIconAddsOneSelectedLayerAtTheViewportCenter() throws {
     let store = makeStore()
     store.insertIcon("lucide/house")
@@ -738,6 +815,50 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .updateNode("f", changes: JSONObject(["width": 400])))
     #expect(await failure(store, .saveDocument(nil)) == "The document has never been saved; provide path")
     #expect(try Data(contentsOf: templateURL) == original)
+}
+
+private func temporaryDirectory() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-export-\(UUID().uuidString)")
+}
+
+@Test @MainActor func exportsALayerAsHTMLWithItsAssets() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "name": "Home", "width": 200, "height": 100, "layout": ["direction": "horizontal"],
+        "children": [["id": "i", "type": "icon", "name": "Search", "icon": ["name": "lucide/search"]],
+                     ["id": "s", "type": "icon", "name": "Gear", "icon": ["name": "sf/gearshape"]]],
+    ])))
+    let directory = temporaryDirectory().appendingPathComponent("nested")
+    defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+    let document = store.editor.document
+    let result = try await control(store, .exportHTML("f", directory: directory.path))
+    #expect(store.editor.document == document)
+    #expect(result["directory"] as? String == directory.path)
+    #expect(result["files"] as? [String] == ["assets/icons/lucide-search.svg", "assets/icons/sf-gearshape.png", "index.html"])
+    #expect(result["assets"] as? [String: String] == ["i": "assets/icons/lucide-search.svg", "s": "assets/icons/sf-gearshape.png"])
+    let html = try String(contentsOf: directory.appendingPathComponent("index.html"), encoding: .utf8)
+    #expect(result["html"] as? String == html)
+    #expect(html.contains(#"data-layer-id="f""#))
+    // The menu's path, the same store method, gives the same files.
+    let again = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: again) }
+    #expect(try store.exportHTML("f", to: again).files.keys.sorted() == result["files"] as? [String])
+    let symbol = try Data(contentsOf: directory.appendingPathComponent("assets/icons/sf-gearshape.png"))
+    #expect(NSBitmapImageRep(data: symbol)?.pixelsWide == 256)
+}
+
+@Test @MainActor func exportRefusesANonEmptyDirectoryAndUnknownLayers() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame"])))
+    let directory = temporaryDirectory()
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("keep".utf8).write(to: directory.appendingPathComponent("index.html"))
+    #expect(await failure(store, .exportHTML("f", directory: directory.path)) == "Directory is not empty: \(directory.path)")
+    #expect(try String(contentsOf: directory.appendingPathComponent("index.html"), encoding: .utf8) == "keep")
+    #expect(await failure(store, .exportHTML("nope", directory: directory.path)) == "Layer not found: nope")
+    let file = directory.appendingPathComponent("index.html").path
+    #expect(await failure(store, .exportHTML("f", directory: file)) == "Not a directory: \(file)")
 }
 
 @Test @MainActor func focusingSeveralLayersMatchesZoomToSelection() async throws {

@@ -28,6 +28,11 @@ enum TextMetrics {
         return .systemFont(ofSize: size, weight: fontWeight)
     }
 
+    /// The font's own line height, which `lineHeightMultiple` multiplies.
+    static func naturalLineHeight(_ text: DesignText) -> Double? {
+        Double(NSLayoutManager().defaultLineHeight(for: font(text)))
+    }
+
     static func attributed(_ text: DesignText) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = text.align == .center ? .center : text.align == .right ? .right : .left
