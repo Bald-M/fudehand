@@ -78,6 +78,9 @@
 "No project files opened yet" = "No project files opened yet";
 "Templates" = "Templates";
 "No templates" = "No templates";
+"Mobile App" = "Mobile App";
+"Web Page" = "Web Page";
+"Dashboard" = "Dashboard";
 "Create an untitled design document from “%@”" = "Create an untitled design document from “%@”";
 "File deleted or moved" = "File deleted or moved";
 "Open" = "Open";
@@ -161,17 +164,12 @@
 "Black" = "Black";
 "Auto Layout" = "Auto Layout";
 "Direction" = "Direction";
-"Spacing" = "Spacing";
 "Padding" = "Padding";
 "Top" = "Top";
 "Right" = "Right";
 "Bottom" = "Bottom";
 "Left" = "Left";
-"Main axis" = "Main axis";
-"Cross axis" = "Cross axis";
-"Start" = "Start";
 "Center" = "Centre";
-"End" = "End";
 "Space between" = "Space between";
 "Remove Auto Layout" = "Remove Auto Layout";
 "Add Auto Layout" = "Add Auto Layout";
@@ -307,6 +305,9 @@
 "Take snapshot" = "Take snapshot";
 "Focus layer" = "Focus layer";
 "Zoom canvas" = "Zoom canvas";
+"Read prototype window" = "Read prototype window";
+"Close prototype window" = "Close prototype window";
+"Change view" = "Change view";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "Cannot find the Fudehand source directory, so it cannot connect";
@@ -439,6 +440,26 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+
+/* Properties panel redesign (#189) */
+"%@ opacity" = "%@ opacity";
+"Top left" = "Top left";
+"Top center" = "Top centre";
+"Top right" = "Top right";
+"Center left" = "Centre left";
+"Center right" = "Centre right";
+"Bottom left" = "Bottom left";
+"Bottom center" = "Bottom centre";
+"Bottom right" = "Bottom right";
+"T|padding" = "T";
+"R|padding" = "R";
+"B|padding" = "B";
+"L|padding" = "L";
+"Hug|sizing" = "Hug";
+"Fill|sizing" = "Fill";
+"Gap" = "Gap";
+"Select one layer to edit its prototype settings." = "Select one layer to edit its prototype settings.";
+"Select a layer to edit its interaction, states, scrolling, and animation here." = "Select a layer to edit its interaction, states, scrolling, and animation here.";
 "Layout Guides" = "Layout Guides";
 "Add layout guide" = "Add layout guide";
 "Remove layout guide" = "Remove layout guide";
@@ -456,3 +477,5 @@
 "Gutter" = "Gutter";
 "Margin" = "Margin";
 "Color" = "Colour";
+"Start" = "Start";
+"End" = "End";

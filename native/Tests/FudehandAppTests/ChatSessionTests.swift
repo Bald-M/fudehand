@@ -132,27 +132,6 @@ private let repository = URL(fileURLWithPath: #filePath)
     #expect(missing == .failure(ModelListError(message: "No API key configured")))
 }
 
-@Test @MainActor func chatSettingsChangeDuringAReplyEndsTheReply() async throws {
-    let session = ChatSession(defaults: UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!, readKey: { _ in nil })
-    session.send("Hello", root: repository, runtime: nil)
-    #expect(session.transcript.busy)
-    session.settings = ChatSettings(provider: "openai", model: "", baseUrl: "")
-    #expect(!session.transcript.busy)
-    #expect(session.transcript.entries.map(\.text) == ["Hello", "Reply stopped"])
-
-    // The panel is usable again: a new message reaches a fresh harness, and the transcript can be cleared.
-    session.send("Try again", root: repository, runtime: nil)
-    #expect(session.transcript.busy)
-    session.keyUpdated(provider: "openai", saved: false)
-    #expect(!session.transcript.busy)
-    session.send("Third time", root: repository, runtime: nil)
-    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
-    #expect(session.transcript.entries.last?.text == "No API key configured")
-    session.deleteConversation()
-    #expect(session.transcript.entries.isEmpty)
-    await session.shutdown()
-}
-
 @Test @MainActor func chatKeyFlagIsClearedWhenTheKeychainNoLongerHasTheKey() async throws {
     let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
     let session = ChatSession(defaults: defaults, readKey: { _ in nil })
@@ -298,7 +277,7 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     #expect(session.stored("openai") == ChatSettings(provider: "openai", model: "gpt-x", baseUrl: "https://example.test/v1"))
     session.store(ChatSettings(provider: "deepseek", model: "deepseek-reasoner", baseUrl: ""))
     #expect(session.settings.model == "deepseek-reasoner")
-    #expect(!session.transcript.busy) // Changing the provider in use restarts the harness.
+    #expect(session.transcript.busy) // The running reply finishes; the change applies from the next message.
     await session.shutdown()
 }
 
@@ -339,7 +318,27 @@ private func recordingHarness() throws -> (root: URL, received: () throws -> [[S
     try session.apply(draft.changes())
     #expect(keychain == ["openai": "sk-openai-2222-3333"])
     #expect(session.settings == ChatSettings(provider: "openai", model: "gpt-x", baseUrl: ""))
-    #expect(session.hasKey && !session.transcript.busy)
+    #expect(session.hasKey && session.transcript.busy) // The running reply finishes; the change applies from the next message.
+    await session.shutdown()
+}
+
+@Test @MainActor func aSettingsChangeDuringAReplyAppliesFromTheNextMessage() async throws {
+    let defaults = UserDefaults(suiteName: "fudehand-chat-\(UUID().uuidString)")!
+    var keychain: [String: String] = [:]
+    let session = ChatSession(defaults: defaults, readKey: { keychain[$0] }, writeKey: { keychain[$1] = $0 }, deleteKey: { keychain[$0] = nil })
+    session.settings = ChatSettings(provider: "deepseek", model: "", baseUrl: "http://127.0.0.1:9")
+    session.send("Hello", root: repository, runtime: nil)
+    keychain["deepseek"] = "sk-deepseek-0000-1111"
+    session.keyUpdated(provider: "deepseek", saved: true, key: "sk-deepseek-0000-1111")
+    #expect(session.transcript.busy)
+    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
+    // The reply ran to its end in the harness started without a key, rather than being stopped.
+    #expect(session.transcript.entries.last?.text == "No API key configured")
+    session.send("Again", root: repository, runtime: nil)
+    for _ in 0..<100 where session.transcript.busy { try await Task.sleep(nanoseconds: 100_000_000) }
+    // The next message runs in a new harness that has the key.
+    #expect(!session.transcript.busy)
+    #expect(session.transcript.entries.last?.text != "No API key configured")
     await session.shutdown()
 }
 
@@ -551,11 +550,11 @@ private func exited(_ pids: [Int32]) async throws -> Bool {
     session.select(first)
     session.send("hang", root: harness.root, runtime: nil)
 
-    // Only the conversations using a provider are restarted when its key changes.
+    // A key change never cuts a running reply short, for the provider it uses or another one: it applies from the next message.
     session.keyUpdated(provider: "anthropic", saved: false)
     #expect(session.transcript.busy)
     session.keyUpdated(provider: "openai", saved: true)
-    #expect(!session.transcript.busy)
+    #expect(session.transcript.busy)
     // The model chosen last is the one the next launch starts with.
     #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).settings == claude)
     await session.shutdown()

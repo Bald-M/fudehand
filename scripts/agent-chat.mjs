@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
-import { callTool, tools } from './fudehand-tools.mjs'
+import { callTool, secretArguments, tools } from './fudehand-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 import { designGuidance } from './design-guidance.mjs'
 
@@ -31,12 +31,14 @@ import { designGuidance } from './design-guidance.mjs'
  * `mode` applies to that one message. In plan mode the model gets only the tools that read the design document and replies with a plan;
  * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, over more rounds than an
  * ordinary reply gets, until it calls goal_done, whose summary is sent as the reply's last assistant text.
- * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
+ * The provider, model, baseUrl, and API key are passed only through environment variables, as is FUDEHAND_CONVERSATION, the id of the
+ * conversation the harness serves, which every tool call names as its caller; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default,windows} or {type:'error',message}, then exits.
  */
 
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
-const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
+// `conversation` names the conversation this harness serves, so the App refuses tool calls that would stop, delete, or reconfigure it.
+const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)), conversation: process.env.FUDEHAND_CONVERSATION || undefined }
 const apiKey = process.env.FUDEHAND_API_KEY ?? ''
 const maximumRounds = 16
 const maximumGoalRounds = 64
@@ -77,9 +79,22 @@ const system = [
   `\n${designGuidance}`,
 ].filter(Boolean).join('\n')
 
-/** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */
+/** The keys to keep out of what the App shows and saves: this harness's own, and any the model sets with a tool. */
+const secrets = new Set(apiKey ? [apiKey] : [])
+
+/** Remembers the secret arguments of a tool call (an API key being set), so neither the call nor later text shows them. */
+function rememberSecrets(name, args) {
+  for (const key of secretArguments[name] ?? []) {
+    const value = args?.[key]
+    if (typeof value === 'string' && value.trim()) { secrets.add(value); secrets.add(value.trim()) }
+  }
+}
+
+/** Strips the keys from any text sent to the App, so they never appear in the UI or logs. */
 function redact(text) {
-  return apiKey ? String(text).split(apiKey).join('***') : String(text)
+  let result = String(text)
+  for (const secret of secrets) result = result.split(secret).join('***')
+  return result
 }
 
 function emit(event) {
@@ -277,6 +292,7 @@ async function reply(text, controller, mode) {
           log.push({ role: 'tool', id: call.id, name: call.name, text: 'Goal mode ended.' })
           continue
         }
+        rememberSecrets(call.name, call.args)
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] }
           : plan && !readingTools.includes(call.name) ? { isError: true, content: [{ type: 'text', text: planRefusal }] }

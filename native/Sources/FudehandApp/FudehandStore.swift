@@ -11,8 +11,6 @@ struct WorkspaceLocation: Decodable {
     let path: String?
 }
 
-enum InspectorTab: String, CaseIterable { case design, chat }
-
 /// App state: the sole owner of the design document and the undo history; the canvas, the panels, and the control channel all modify the document through it.
 @MainActor
 final class FudehandStore: ObservableObject {
@@ -34,6 +32,8 @@ final class FudehandStore: ObservableObject {
     private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
     @Published var inspectorTab: InspectorTab = .design
     @Published var showingInspector = true
+    /// The layers the layers panel shows collapsed; every other layer with child layers is expanded.
+    @Published private(set) var collapsedLayers: Set<String> = []
     @Published var alert: String?
     @Published var theme: String {
         didSet { defaults.set(theme, forKey: "native.theme") }
@@ -52,8 +52,8 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var fontFamilies: [FontFamily]
     let zoomIndicator = ZoomIndicator()
     let chat: ChatSession
-    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
-    private(set) var toolsRoot: URL?
+    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here. Set by `bootstrap()`, or by a test.
+    var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
     /// The model of the "MCP Connectors" window; the window may open before the main window, so the source location is read on demand.
     private(set) lazy var connectors: ConnectorsModel = {
@@ -86,13 +86,29 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var prototypeRequest: PrototypeRequest?
     /// Shows the prototype window; registered the same way as `presentEditor`.
     var presentPrototype: () -> Void = {}
+    /// Closes the prototype window; registered the same way.
+    var dismissPrototype: () -> Void = {}
+    /// The frame the prototype window has on show, as reported by its stage; it may since have been deleted.
+    let prototypeShown = PrototypeShown()
+    var prototypeFrame: String? { prototypeShown.frame }
+    /// Whether the prototype window is open; set by the window as it appears and disappears.
+    var prototypeWindowOpen = false
+    /// Shows the launch window, as Window › Launch Window does; registered the same way as `presentEditor`.
+    var presentLaunch: () -> Void = {}
+    /// The templates offered in the launch window.
+    let templates: [Template]
 
     /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
     private let chatRoot: URL?
 
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
-    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
+    /// `templateDirectory` holds the templates; by default the ones bundled with the App. `chat` and `connectors`
+    /// replace the real ones (the chat session with its Keychain, the Agents' configuration) in tests.
+    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil,
+         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates"), chat: ChatSession? = nil,
+         connectors: ConnectorsModel? = nil) {
         self.defaults = defaults
+        templates = Self.templates(in: templateDirectory)
         SystemSymbols.install()
         fontLibrary = FontLibrary(directory: fontDirectory)
         fontFamilies = fontLibrary.families()
@@ -100,11 +116,12 @@ final class FudehandStore: ObservableObject {
         // The App starts on an untitled document. What an earlier one left behind was never saved with a file: drop it.
         let unsaved = chatRoot.map { ChatHistory.unsaved(root: $0) }
         unsaved?.remove()
-        chat = ChatSession(history: unsaved)
+        self.chat = chat ?? ChatSession(history: unsaved)
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
         language = AppLanguage.saved(in: defaults)
         recents = RecentDocuments(data: defaults.data(forKey: Self.recentsKey))
+        if let connectors { self.connectors = connectors }
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
@@ -259,9 +276,30 @@ final class FudehandStore: ObservableObject {
     var prototypeStart: String? { Prototype.startFrame(in: editor.document, selection: selection) }
 
     func playPrototype() {
-        guard let start = prototypeStart else { alert = L("Add a frame to play the prototype."); return }
+        do { try playPrototype(from: nil) } catch { alert = L("Add a frame to play the prototype.") }
+    }
+
+    /// Opens the prototype window and plays from top-level frame `frame`, or from `prototypeStart` when nil; playing again
+    /// restarts. Throws, in English, when there is no such frame to play.
+    func playPrototype(from frame: String?) throws {
+        guard let start = frame ?? prototypeStart else { throw ControlCommandError("The document has no top-level frame to play; add a frame first") }
+        guard Prototype.frame(start, in: editor.document) != nil else {
+            throw ControlCommandError(editor.document.node(start) == nil ? "Layer not found: \(start)" : "Layer \(start) is not a top-level frame")
+        }
         prototypeRequest = PrototypeRequest(start: start, token: (prototypeRequest?.token ?? 0) + 1)
+        prototypeShown.frame = start
+        prototypeWindowOpen = true
         presentPrototype()
+    }
+
+    /// The prototype window's stage moved to frame `id`.
+    func prototypeMoved(to id: String) {
+        if prototypeShown.frame != id { prototypeShown.frame = id }
+    }
+
+    func closePrototype() {
+        prototypeWindowOpen = false
+        dismissPrototype()
     }
 
     // MARK: Fonts
@@ -305,15 +343,23 @@ final class FudehandStore: ObservableObject {
         request(rects.isEmpty ? Viewport() : CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 64), animated: animated)
     }
 
-    func focus(_ id: String) {
-        guard let rect = editor.document.worldRect(id) else { return }
-        request(CanvasGeometry.fitRects([rect], size: canvasExtent, padding: 40), animated: true)
+    func focus(_ id: String) { focus([id]) }
+
+    /// Moves and zooms the viewport to fit the given layers.
+    func focus(_ ids: [String]) {
+        let rects = ids.compactMap { editor.document.worldRect($0) }
+        guard !rects.isEmpty else { return }
+        request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
     }
 
     func zoomToSelection() {
-        let rects = selection.compactMap { editor.document.worldRect($0) }
-        guard !rects.isEmpty else { fitAll(); return }
-        request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
+        guard !selection.isEmpty else { fitAll(); return }
+        focus(Array(selection))
+    }
+
+    /// Collapses or expands a layer's child layers in the layers panel.
+    func setCollapsed(_ id: String, _ collapsed: Bool) {
+        if collapsed { collapsedLayers.insert(id) } else { collapsedLayers.remove(id) }
     }
 
     func zoom(_ scale: Double) {
@@ -376,6 +422,7 @@ final class FudehandStore: ObservableObject {
         canvas?.releaseHeldInput()
         editor.replace(next)
         inGesture = false
+        collapsedLayers = []
         chat.show(chatHistory(for: url), fresh: url == nil)
         fileURL = url
         savedRevision = editor.revision
@@ -429,11 +476,9 @@ final class FudehandStore: ObservableObject {
         let url: URL
         var id: URL { url }
         var name: String { url.deletingPathExtension().lastPathComponent }
-    }
-
-    /// The App's bundled templates: the `.fudehand` files copied to `Contents/Resources/Templates/` at build time.
-    static var bundledTemplates: [Template] {
-        templates(in: Bundle.main.resourceURL?.appendingPathComponent("Templates"))
+        /// The file name (US English) is the string-table key, so bundled templates show in the UI language;
+        /// a template without an entry shows its file name.
+        var title: String { L(name) }
     }
 
     static func templates(in directory: URL?) -> [Template] {
@@ -446,8 +491,13 @@ final class FudehandStore: ObservableObject {
 
     /// New from a template: produces an untitled document not associated with the template file, asking for a location on save.
     func newDocument(fromTemplate template: Template) {
-        guard confirmDiscard() else { return }
-        do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
+        do { try newDocument(fromTemplate: template, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+    }
+
+    /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
+    func newDocument(fromTemplate template: Template, discarding: () throws -> Bool) throws {
+        guard try discarding() else { return }
+        try openTemplate(template.url)
     }
 
     func openTemplate(_ url: URL) throws {
@@ -491,10 +541,16 @@ final class FudehandStore: ObservableObject {
 
     /// A project file passed by a Finder double-click or "Open With": asks first when there are unsaved changes, and shows the reason when it cannot be opened.
     func openFromSystem(_ url: URL) {
+        do { try openFile(url, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+    }
+
+    /// Opens a project file from Finder or the recent files. The current file with no unsaved changes is only shown again; otherwise
+    /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
+    func openFile(_ url: URL, discarding: () throws -> Bool) throws {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
-        guard confirmDiscard() else { return }
-        do { try open(url) } catch { alert = error.localizedDescription }
+        guard try discarding() else { return }
+        try open(url)
     }
 
     func shutdown() async { await chat.shutdown() }
@@ -508,6 +564,11 @@ final class LayerHover: ObservableObject {
 /// Kept out of the store's published state so a selection change redraws only the layer rows and the inspector that observe it.
 final class LayerSelection: ObservableObject {
     @Published fileprivate(set) var ids: Set<String> = []
+}
+
+/// Kept out of the store's published state so moving through the prototype redraws only the prototype window.
+final class PrototypeShown: ObservableObject {
+    @Published fileprivate(set) var frame: String?
 }
 
 // MARK: Canvas

@@ -392,6 +392,10 @@ private struct ToolCard: View {
         case "canvas_focus_node": L("Focus layer")
         case "canvas_fit_all": L("Fit All")
         case "canvas_zoom": L("Zoom canvas")
+        case "prototype_play": L("Play Prototype")
+        case "prototype_get_playback": L("Read prototype window")
+        case "prototype_close": L("Close prototype window")
+        case "canvas_set_view": L("Change view")
         default: tool
         }
     }

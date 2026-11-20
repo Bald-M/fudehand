@@ -464,6 +464,51 @@ private func temporaryFile() -> URL {
     #expect(store.prototypeStart == "a")
 }
 
+@Test @MainActor func agentPlaysAndClosesThePrototypeWindowLikeTheUI() async throws {
+    let store = makeStore()
+    var presented = 0, dismissed = 0
+    store.presentPrototype = { presented += 1 }
+    store.dismissPrototype = { dismissed += 1 }
+    #expect(await failure(store, .playPrototype(frame: nil)) == "The document has no top-level frame to play; add a frame first")
+    store.playPrototype()
+    #expect(store.alert == L("Add a frame to play the prototype.") && presented == 0)
+    #expect(await failure(store, .closePrototype) == "The prototype window is not open")
+    let closed = try await control(store, .getPrototypePlayback)
+    #expect(closed["open"] as? Bool == false && closed["frame"] is NSNull)
+
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "name": "Home",
+                                                                                          "children": [["id": "c", "type": "rectangle"]]])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "name": "Detail"])))
+    // Without a frame it starts where Play Prototype starts: the frame holding the selection.
+    store.setSelection(["b"])
+    let played = try await control(store, .playPrototype(frame: nil))
+    #expect(played["open"] as? Bool == true && played["frame"] as? String == "b" && played["name"] as? String == "Detail")
+    #expect(presented == 1 && store.prototypeRequest?.start == "b")
+    let firstToken = try #require(store.prototypeRequest?.token)
+    store.playPrototype()
+    #expect(store.prototypeRequest == PrototypeRequest(start: "b", token: firstToken + 1) && presented == 2)
+
+    // From a given top-level frame; layers inside a frame and missing layers are refused without opening anything.
+    #expect(try await control(store, .playPrototype(frame: "a"))["frame"] as? String == "a")
+    #expect(await failure(store, .playPrototype(frame: "c")) == "Layer c is not a top-level frame")
+    #expect(await failure(store, .playPrototype(frame: "zz")) == "Layer not found: zz")
+    #expect(store.prototypeRequest?.start == "a" && presented == 3)
+
+    // The stage reports where playback moved, redrawing only the prototype window; a deleted frame reads as null while the window stays open.
+    var storeChanges = 0, shownChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 }, store.prototypeShown.objectWillChange.sink { shownChanges += 1 }]
+    store.prototypeMoved(to: "b")
+    #expect(storeChanges == 0 && shownChanges == 1)
+    _ = observers
+    #expect(try await control(store, .getPrototypePlayback)["frame"] as? String == "b")
+    _ = try await control(store, .deleteNodes(["b"]))
+    let deleted = try await control(store, .getPrototypePlayback)
+    #expect(deleted["open"] as? Bool == true && deleted["frame"] is NSNull)
+
+    let after = try await control(store, .closePrototype)
+    #expect(after["open"] as? Bool == false && after["frame"] is NSNull && dismissed == 1)
+}
+
 /// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
 /// are not recomputed (#142).
 @Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {
@@ -625,4 +670,155 @@ private func temporaryFile() -> URL {
     store.replaceIcon("c", with: "lucide/house")
     #expect(store.editor.document.node("c")?.name == "Back")
     #expect(store.editor.document.node("c")?.icon?.name == "lucide/house")
+}
+
+@Test @MainActor func agentShowsTheLaunchWindow() async throws {
+    let store = makeStore()
+    var shown = 0
+    store.presentLaunch = { shown += 1 }
+    let result = try await control(store, .showLaunchWindow)
+    #expect(shown == 1 && result["dirty"] as? Bool == false)
+}
+
+@Test @MainActor func agentListsOpensRemovesAndClearsRecents() async throws {
+    let store = makeStore()
+    let kept = temporaryFile().resolvingSymlinksInPath(), gone = temporaryFile().resolvingSymlinksInPath()
+    _ = try await control(store, .saveDocument(gone.path))
+    _ = try await control(store, .saveDocument(kept.path))
+    try FileManager.default.removeItem(at: gone)
+
+    // The list is the same as the launch window's, newest first, marking the file that no longer exists.
+    let listed = try #require(try await control(store, .listRecents)["recents"] as? [[String: Any]])
+    #expect(listed.map { $0["path"] as? String } == [kept.path, gone.path])
+    #expect(listed.map { $0["name"] as? String } == [kept.deletingPathExtension().lastPathComponent, gone.deletingPathExtension().lastPathComponent])
+    #expect(listed.map { $0["available"] as? Bool } == [true, false])
+    #expect(store.recentEntries.map(\.available) == [true, false])
+    #expect(listed.allSatisfy { ($0["openedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } != nil })
+
+    // A missing file or a path not in the list is an error, with no alert and no change.
+    #expect(await failure(store, .openRecent(gone.path, discard: false)) == "File not found: \(gone.path) (deleted or moved); remove it from the list with app_remove_recent")
+    #expect(await failure(store, .openRecent("/nowhere.fudehand", discard: false)) == "Not a recent file: /nowhere.fudehand")
+    #expect(await failure(store, .removeRecent("/nowhere.fudehand")) == "Not a recent file: /nowhere.fudehand")
+    #expect(store.alert == nil && store.recents.items.map(\.path) == [kept.path, gone.path] && store.fileURL == kept)
+
+    // Unsaved changes need discard, as with open_document.
+    _ = try await control(store, .newDocument(discard: false))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    #expect(await failure(store, .openRecent(kept.path, discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
+    #expect(store.editor.document.node("r") != nil && store.fileURL == nil && store.alert == nil)
+    let opened = try await control(store, .openRecent(kept.path, discard: true))
+    #expect(opened["file"] as? String == kept.path && opened["dirty"] as? Bool == false)
+    #expect(store.editor.document.node("r") == nil)
+    // Opening the current, unchanged file again only shows it.
+    var presented = 0
+    store.presentEditor = { presented += 1 }
+    _ = try await control(store, .openRecent(kept.path, discard: false))
+    #expect(presented == 1 && store.fileURL?.path == kept.path)
+
+    let removed = try await control(store, .removeRecent(gone.path))
+    #expect(removed["removed"] as? [String] == [gone.path])
+    #expect((removed["recents"] as? [[String: Any]])?.map { $0["path"] as? String } == [kept.path])
+    #expect(store.recents.items.map(\.path) == [kept.path])
+    // Another spelling of the same file (/private/var/… for /var/…) finds the entry, which is stored with symlinks resolved.
+    let unresolved = URL(fileURLWithPath: "/private" + temporaryFile().resolvingSymlinksInPath().path)
+    _ = try await control(store, .saveDocument(unresolved.path))
+    #expect(unresolved.path != unresolved.resolvingSymlinksInPath().path)
+    _ = try await control(store, .openRecent(unresolved.path, discard: false))
+    // …also once the file is gone, when its own symlinks can no longer be resolved.
+    try FileManager.default.removeItem(at: unresolved)
+    #expect(await failure(store, .openRecent(unresolved.path, discard: false))?.hasPrefix("File not found: ") == true)
+    #expect((try await control(store, .removeRecent(unresolved.path)))["removed"] as? [String] == ["/" + unresolved.pathComponents.dropFirst(2).joined(separator: "/")])
+    let cleared = try await control(store, .clearRecents)
+    #expect(cleared["removed"] as? [String] == [kept.path] && (cleared["recents"] as? [Any])?.isEmpty == true)
+    #expect(store.recents.items.isEmpty)
+}
+
+@Test @MainActor func agentCreatesAnUntitledDocumentFromATemplate() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-templates-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let template = DesignDocument(nodes: [DesignNode(id: "f", type: .frame, x: 0, y: 0, width: 390, height: 844)])
+    let templateURL = directory.appendingPathComponent("Mobile.fudehand")
+    try template.encoded().write(to: templateURL)
+    try template.encoded().write(to: directory.appendingPathComponent("Desktop.fudehand"))
+    let original = try Data(contentsOf: templateURL)
+    let store = FudehandStore(defaults: UserDefaults(suiteName: "fudehand-tests-\(UUID().uuidString)")!, templateDirectory: directory)
+
+    let listed = try #require(try await control(store, .listTemplates)["templates"] as? [[String: Any]])
+    #expect(listed.map { $0["name"] as? String } == ["Desktop", "Mobile"])
+    // The title is what the launch window shows; a template without a string-table entry shows its file name.
+    #expect(listed.map { $0["title"] as? String } == ["Desktop", "Mobile"])
+    #expect(await failure(store, .newDocumentFromTemplate("Tablet", discard: false)) == "Template not found: Tablet; available: Desktop, Mobile")
+
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    #expect(await failure(store, .newDocumentFromTemplate("Mobile", discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
+    #expect(store.editor.document.node("r") != nil && store.alert == nil)
+
+    let created = try await control(store, .newDocumentFromTemplate("Mobile", discard: true))
+    #expect(created["file"] is NSNull && created["dirty"] as? Bool == false)
+    #expect(store.editor.document == template && store.recents.items.isEmpty)
+    // The new document is untitled: saving needs a path and never writes the template.
+    _ = try await control(store, .updateNode("f", changes: JSONObject(["width": 400])))
+    #expect(await failure(store, .saveDocument(nil)) == "The document has never been saved; provide path")
+    #expect(try Data(contentsOf: templateURL) == original)
+}
+
+@Test @MainActor func focusingSeveralLayersMatchesZoomToSelection() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "x": 0, "y": 0, "width": 100, "height": 100])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "x": 2000, "y": 900, "width": 300, "height": 200])))
+    store.setSelection(["a", "b"])
+    store.zoomToSelection()
+    let expected = store.viewport
+    store.fitAll(animated: false)
+    store.setSelection([])
+    let state = try await control(store, .focusNodes(["a", "b"]))
+    #expect(store.viewport == expected)
+    #expect(store.selection.isEmpty)
+    let viewport = try #require(state["viewport"] as? [String: Double])
+    #expect(viewport["scale"] == expected.scale)
+    #expect(await failure(store, .focusNodes(["a", "missing"])) == "Layer not found: missing")
+    #expect(store.viewport == expected)
+}
+
+@Test @MainActor func agentReadsAndSetsTheEditorView() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [
+        ["id": "g", "type": "group", "children": [["id": "r", "type": "rectangle"]]],
+    ]])))
+    let initial = try #require(try await control(store, .getState)["view"] as? [String: Any])
+    #expect(initial["tool"] as? String == "move")
+    #expect(initial["inspector"] as? Bool == true)
+    #expect(initial["inspectorTab"] as? String == "design")
+    #expect(initial["collapsed"] as? [String] == [])
+
+    let result = try await control(store, .setView(ViewChange(tool: .rectangle, inspector: false, inspectorTab: .chat, collapse: ["f", "g"])))
+    #expect(store.tool == .rectangle && !store.showingInspector && store.inspectorTab == .chat)
+    #expect(store.collapsedLayers == ["f", "g"])
+    let previous = try #require(result["previous"] as? [String: Any])
+    #expect(previous["tool"] as? String == "move" && previous["inspector"] as? Bool == true)
+    #expect(previous["inspectorTab"] as? String == "design" && previous["collapsed"] as? [String] == [])
+    let view = try #require(result["view"] as? [String: Any])
+    #expect(view["tool"] as? String == "rectangle" && view["collapsed"] as? [String] == ["f", "g"])
+
+    // The layers panel's chevron calls the same store method.
+    store.setCollapsed("g", false)
+    _ = try await control(store, .setView(ViewChange(expand: ["f"])))
+    #expect(store.collapsedLayers.isEmpty)
+
+    // A bad id changes nothing, not even the valid parts of the request.
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["missing"]))) == "Layer not found: missing")
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["r"]))) == "Layer has no child layers to expand or collapse: r")
+    #expect(store.tool == .rectangle && store.collapsedLayers.isEmpty)
+
+    // Layers deleted after collapsing are not reported.
+    _ = try await control(store, .setView(ViewChange(collapse: ["g"])))
+    _ = try await control(store, .deleteNodes(["g"]))
+    #expect((try await control(store, .getState)["view"] as? [String: Any])?["collapsed"] as? [String] == [])
+
+    // Another document starts with every layer expanded, even where an id repeats.
+    _ = try await control(store, .createNode(parent: "f", index: nil, node: JSONObject(["id": "k", "type": "rectangle"])))
+    _ = try await control(store, .setView(ViewChange(collapse: ["f"])))
+    _ = try await control(store, .newDocument(discard: true))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
+    #expect(store.collapsedLayers.isEmpty)
 }
