@@ -117,6 +117,16 @@ export const tools = [
       library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
       limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
     }, ['query']),
+  controlTool('design_list_colors', 'list_colors',
+    'Read the selection colors: every color used by the fills, strokes, text colors, and icon colors of the given layers and all their child layers, merged by hex value, most used first. Returns ids and colors [{color, count}].',
+    { ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' } }, []),
+  controlTool('design_replace_color', 'replace_color',
+    'Replace a selection color: every fill, stroke, text color, and icon color of the given layers and their child layers that uses from becomes to, as a single undo step. Fails, changing nothing, when no layer there uses from. Returns replaced (how many properties changed) and the new selection colors.',
+    {
+      from: { type: 'string', description: 'The color to replace, #RRGGBB or #RRGGBBAA (as returned by design_list_colors)' },
+      to: { type: 'string', description: 'The new color, #RRGGBB or #RRGGBBAA' },
+      ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' },
+    }, ['from', 'to']),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',

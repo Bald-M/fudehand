@@ -43,6 +43,12 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
         (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,
          .searchIcons(query: "home", library: .materialRounded, limit: 3)),
+        (#"{"id":27,"command":"list_colors"}"#, .listColors(ids: nil)),
+        (#"{"id":28,"command":"list_colors","args":{"ids":["f"]}}"#, .listColors(ids: ["f"])),
+        (##"{"id":29,"command":"replace_color","args":{"from":"#FF0000","to":"#0000ff80"}}"##,
+         .replaceColor(from: DesignColor(r: 1, g: 0, b: 0), to: try DesignColor(hex: "#0000FF80"), ids: nil)),
+        (##"{"id":30,"command":"replace_color","args":{"from":"#FF0000","to":"#000000","ids":["a","b"]}}"##,
+         .replaceColor(from: DesignColor(r: 1, g: 0, b: 0), to: .black, ids: ["a", "b"])),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -82,6 +88,12 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":0}}"#, "Invalid argument type: limit"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":201}}"#, "Invalid argument type: limit"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":2.5}}"#, "Invalid argument type: limit"),
+        (#"{"id":1,"command":"list_colors","args":{"ids":[]}}"#, "Invalid argument type: ids"),
+        (#"{"id":1,"command":"list_colors","args":{"ids":"f"}}"#, "Invalid argument type: ids"),
+        (##"{"id":1,"command":"replace_color","args":{"to":"#000000"}}"##, "Missing argument: from"),
+        (##"{"id":1,"command":"replace_color","args":{"from":"#000000"}}"##, "Missing argument: to"),
+        (##"{"id":1,"command":"replace_color","args":{"from":"red","to":"#000000"}}"##, "from: Color must be #RRGGBB or #RRGGBBAA: red"),
+        (##"{"id":1,"command":"replace_color","args":{"from":"#000000","to":"#12345"}}"##, "to: Color must be #RRGGBB or #RRGGBBAA: #12345"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }

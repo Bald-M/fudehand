@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- Selection colors: the properties panel gains a *Selection Colors* section listing every color the selected layers and all their child layers use — fills, strokes, text colors, and icon colors — merged and ordered by how often each is used, with a *+N* tile that shows the rest. Changing a color replaces it everywhere in the selection as one undo step. Agents read and replace them with `design_list_colors` and `design_replace_color` (#191).
+
 ## [0.0.4] - 2026-11-20
 
 ### Summary

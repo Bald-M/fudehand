@@ -78,6 +78,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |
 | Snapshot a layer as PNG | `design_snapshot` |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |
+| Read the selection colors of the selection or of given layers; replace one selection color | `design_list_colors`, `design_replace_color` |
 | Search the built-in icon libraries; insert or replace an icon from the icon picker | `design_search_icons`; inserting is `design_create_node` with an icon layer, replacing is `design_update_node` with `icon.name` |
 
 ### Canvas and windows

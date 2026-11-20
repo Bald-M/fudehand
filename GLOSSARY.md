@@ -62,6 +62,8 @@ _Avoid_: preview mode, present mode
 
 **Properties panel (属性面板 / 屬性面板)**: The Design (设计) tab of the right inspector, which edits the selected layer's position, size, fill, stroke, text, and auto layout.
 
+**Selection colors (选区颜色 / 選取範圍顏色)**: The section of the properties panel listing every color the selected layers and all their child layers use — fills, strokes, text colors, and icon colors — merged by hex value and ordered by how often each is used. Changing one replaces it everywhere in the selection as one undo step. Agents read and replace them with `design_list_colors` and `design_replace_color`.
+
 **Font library (字体库 / 字體庫)**: The directory `~/Library/Application Support/fudehand/Fonts` holding font files imported with *Import Font…* or `design_import_font`. Its fonts are registered for the App only, not installed on the system, and not stored in project files: a project file opened on a Mac without the font falls back to the system font.
 
 **MCP server**: A local tool process (`scripts/mcp-server.mjs`) that external AI agents (Claude Code, Codex, DeepSeek Harness, and others) start on demand; it forwards design tools to the running App.

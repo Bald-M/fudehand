@@ -439,3 +439,7 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+"Selection Colors" = "Selection Colors";
+"Selection color %@" = "Selection color %@";
+"Show all %d colors" = "Show all %d colors";
+"Show Fewer Colors" = "Show Fewer Colors";

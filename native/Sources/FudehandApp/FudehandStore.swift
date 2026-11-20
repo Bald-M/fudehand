@@ -246,6 +246,15 @@ final class FudehandStore: ObservableObject {
         }
     }
 
+    /// Changes a selection color: sets `color` on the given uses (the fills, strokes, text colors, and icon colors that held
+    /// one color of the selection) as one undo step, and returns how many properties changed.
+    @discardableResult
+    func setColor(_ color: DesignColor, at uses: [ColorUse], _ name: String = "Change Selection Color", coalescing: String? = nil) throws -> Int {
+        var changed = 0
+        try perform(name, coalescing: coalescing) { changed = SelectionColors.set(color, at: uses, in: &$0) }
+        return changed
+    }
+
     /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.
     private func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
         if selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame { return (id, 0, 0) }

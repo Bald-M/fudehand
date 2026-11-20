@@ -52,6 +52,7 @@ private struct DesignInspector: View {
                             }
                         }
                     }
+                    SelectionColorsSection(store: store, ids: selection.ids)
                 } else {
                     Section(title: L("Document")) {
                         LabeledContent(L("Name"), value: store.title)
@@ -179,6 +180,66 @@ private struct ColorRow: View {
     }
 }
 
+/// Selection colors: every color the selected layers and their child layers use, most used first, as swatches; past the
+/// first row a "+N" tile shows the rest. Clicking a swatch opens one editor below them, so only one color well exists
+/// (a color well per swatch made selecting a frame several times slower in large documents).
+private struct SelectionColorsSection: View {
+    @ObservedObject var store: FudehandStore
+    let ids: Set<String>
+    @State private var expanded = false
+    /// The swatch being edited: the uses that held its color when it was opened. Only they are written, so dragging the
+    /// color through another selection color's value does not pick up that color's layers.
+    @State private var editing: (hex: String, uses: [ColorUse])?
+    private static let collapsedLimit = 7
+
+    var body: some View {
+        let colors = SelectionColors.collect(ids, in: store.document)
+        let editedColor = editing.flatMap { edit in edit.uses.lazy.compactMap { SelectionColors.color(of: $0, in: store.document) }.first }
+        Group {
+            if !colors.isEmpty {
+                let overflow = !expanded && colors.count > Self.collapsedLimit
+                let shown = overflow ? Array(colors.prefix(Self.collapsedLimit - 1)) : colors
+                Section(title: L("Selection Colors")) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 24, maximum: 24), spacing: 6)], alignment: .leading, spacing: 6) {
+                        ForEach(shown, id: \.color.hex) { usage in swatch(usage, selected: usage.color.hex == editedColor?.hex) }
+                        if overflow {
+                            Button { expanded = true } label: {
+                                Text(verbatim: "+\(colors.count - shown.count)").monospacedDigit().frame(width: 24, height: 24).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .help(L("Show all %d colors", colors.count)).accessibilityLabel(L("Show all %d colors", colors.count))
+                        }
+                    }
+                    if expanded && colors.count > Self.collapsedLimit {
+                        Button(L("Show Fewer Colors")) { expanded = false }.buttonStyle(.link)
+                    }
+                    if let editing, let editedColor {
+                        ColorRow(label: L("Selection color %@", editedColor.hex), color: editedColor) { color in
+                            try? store.setColor(color, at: editing.uses, coalescing: "\(ids.sorted().joined(separator: ",")).selectionColor.\(editing.hex)")
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: ids) { expanded = false; editing = nil }
+    }
+
+    private func swatch(_ usage: SelectionColor, selected: Bool) -> some View {
+        Button {
+            let hex = usage.color.hex
+            editing = editing?.hex == hex ? nil : (hex, SelectionColors.uses(of: usage.color, under: ids, in: store.editor.document))
+        } label: {
+            RoundedRectangle(cornerRadius: 4).fill(usage.color.swiftUI).frame(width: 24, height: 24)
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.2)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 2).padding(-3).opacity(selected ? 1 : 0))
+        }
+        .buttonStyle(.plain)
+        .help(usage.color.hex)
+        .accessibilityLabel(L("Selection color %@", usage.color.hex))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 private struct NodeInspector: View {
     @ObservedObject var store: FudehandStore
     let node: DesignNode
@@ -257,6 +318,7 @@ private struct NodeInspector: View {
                 }
             }
         }
+        SelectionColorsSection(store: store, ids: [node.id])
         if let text = node.text { textSection(text) }
         if node.type == .frame { layoutSection(node.layout) }
         if let image = node.image {

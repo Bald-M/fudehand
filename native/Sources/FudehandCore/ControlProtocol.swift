@@ -22,6 +22,9 @@ public enum ControlCommand: Equatable, Sendable {
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    /// Selection colors of the given layers, or of the selection when `ids` is nil.
+    case listColors(ids: [String]?)
+    case replaceColor(from: DesignColor, to: DesignColor, ids: [String]?)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -151,6 +154,20 @@ public enum ControlProtocol {
             }
             return number.doubleValue
         }
+        func color(_ key: String) throws -> DesignColor {
+            let hex = try string(key)
+            do { return try DesignColor(hex: hex) } catch let error as DesignError { throw Message(text: "\(key): \(error.message)") }
+        }
+        /// Layer ids that default to the selection when omitted; an explicit empty list names no layers and is rejected.
+        func layers() throws -> [String]? {
+            switch args["ids"] {
+            case nil, is NSNull: return nil
+            default:
+                let ids = try strings("ids")
+                guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+                return ids
+            }
+        }
         switch name {
         case "get_state": return .getState
         case "get_document": return .getDocument
@@ -188,6 +205,8 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "list_colors": return .listColors(ids: try layers())
+        case "replace_color": return .replaceColor(from: try color("from"), to: try color("to"), ids: try layers())
         default: throw Message(text: "Unknown command: \(name)")
         }
     }
