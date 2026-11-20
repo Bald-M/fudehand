@@ -25,6 +25,14 @@ private func index() -> DesignIndex {
     #expect(items.first { $0.id == "a" }?.rect == Rect(x: 115, y: 75, width: 30, height: 40))
 }
 
+@Test func canvasSkipsHiddenTopLevelLayersUnlessSelected() {
+    var document = index().document
+    document.nodes[1].visible = false
+    let hidden = DesignIndex(document)
+    #expect(CanvasAccessibility.items(index: hidden, selection: []).map(\.id) == ["f"])
+    #expect(CanvasAccessibility.items(index: hidden, selection: ["b"]).map(\.id) == ["f", "b"])
+}
+
 @Test func accessibilityRectFollowsTheViewport() {
     let item = CanvasAccessibility.items(index: index(), selection: []).first!
     #expect(item.viewRect(Viewport(x: -20, y: 10, scale: 2)) == Rect(x: 180, y: 110, width: 600, height: 600))

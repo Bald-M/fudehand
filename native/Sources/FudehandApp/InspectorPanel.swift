@@ -319,9 +319,9 @@ private struct NodeInspector: View {
             }
             ColorRow(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
             Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
-                Image(systemName: "text.alignleft").tag(TextAlign.left)
-                Image(systemName: "text.aligncenter").tag(TextAlign.center)
-                Image(systemName: "text.alignright").tag(TextAlign.right)
+                Image(systemName: "text.alignleft").accessibilityLabel(L("Left")).tag(TextAlign.left)
+                Image(systemName: "text.aligncenter").accessibilityLabel(L("Center")).tag(TextAlign.center)
+                Image(systemName: "text.alignright").accessibilityLabel(L("Right")).tag(TextAlign.right)
             }.pickerStyle(.segmented)
             Picker(L("Sizing"), selection: Binding(get: { text.autoResize }, set: { v in update("Change Text Sizing") { $0.text?.autoResize = v } })) {
                 Text(L("Auto width and height")).tag(TextAutoResize.widthAndHeight)
@@ -463,8 +463,8 @@ private struct NodeInspector: View {
         Section(title: L("Auto Layout")) {
             if let layout {
                 Picker(L("Direction"), selection: Binding(get: { layout.direction }, set: { v in update("Change Layout Direction") { $0.layout?.direction = v } })) {
-                    Image(systemName: "arrow.down").tag(LayoutDirection.vertical)
-                    Image(systemName: "arrow.right").tag(LayoutDirection.horizontal)
+                    Image(systemName: "arrow.down").accessibilityLabel(L("Vertical")).tag(LayoutDirection.vertical)
+                    Image(systemName: "arrow.right").accessibilityLabel(L("Horizontal")).tag(LayoutDirection.horizontal)
                 }.pickerStyle(.segmented)
                 NumberField(label: L("Spacing"), value: layout.spacing) { v in update("Change Spacing") { $0.layout?.spacing = v } }
                 Text(L("Padding")).foregroundStyle(.secondary)

@@ -869,7 +869,7 @@ private struct ChatSettingsSheet: View {
                 }
             }
         } label: {
-            Image(systemName: "chevron.up.chevron.down").iconHitTarget()
+            Image(systemName: "chevron.up.chevron.down")
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .help(L("Choose model")).accessibilityLabel(L("Choose model"))

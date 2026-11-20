@@ -106,6 +106,17 @@ final class FudehandCanvasView: NSView {
     override func accessibilityChildren() -> [Any]? { accessibilityLayers() }
     override func accessibilitySelectedChildren() -> [Any]? { accessibilityLayers().filter { $0.isAccessibilitySelected() } }
 
+    /// Pointing at a layer (VoiceOver cursor tracking, Accessibility Inspector) finds its element: the layer itself when
+    /// it is listed, otherwise its top-level layer.
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        guard let window else { return self }
+        let local = convert(window.convertPoint(fromScreen: point), from: nil)
+        guard case .node(let id) = hitTarget(at: local) else { return self }
+        let layers = accessibilityLayers()
+        let listed = index.ancestry(of: id).reversed().lazy.compactMap { ancestor in layers.first { $0.id == ancestor } }.first
+        return listed ?? self
+    }
+
     /// The top-level layers and the selection as VoiceOver elements, positioned for the live viewport.
     func accessibilityLayers() -> [CanvasLayerElement] {
         let items = CanvasAccessibility.items(index: index, selection: selection)
@@ -190,7 +201,10 @@ final class FudehandCanvasView: NSView {
     func show(_ next: DesignIndex) {
         index = next
         renderer.sync(next.document.nodes)
-        if !selection.allSatisfy(next.contains) { selection = selection.filter(next.contains) }
+        if !selection.allSatisfy(next.contains) {
+            selection = selection.filter(next.contains)
+            NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
+        }
         if let hover, !next.contains(hover) { self.hover = nil; host?.canvasHover(nil) }
         refreshOverlay()
     }
@@ -521,6 +535,14 @@ final class FudehandCanvasView: NSView {
         refreshOverlay()
     }
 
+    /// VoiceOver pressed a layer element: select it as a click would.
+    func selectFromAccessibility(_ id: String) {
+        guard index.contains(id) else { return }
+        commitPendingZoom()
+        report([id])
+        NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
+    }
+
     /// Esc selects the parent layer, or clears the selection at the top level.
     private func selectParent() {
         report(Set(selection.compactMap { document.parentID(of: $0) ?? nil }))
@@ -582,7 +604,7 @@ final class CanvasLayerElement: NSAccessibilityElement {
     override func accessibilityPerformPress() -> Bool {
         MainActor.assumeIsolated {
             guard let canvas else { return false }
-            canvas.host?.canvasSelect([id])
+            canvas.selectFromAccessibility(id)
             return true
         }
     }

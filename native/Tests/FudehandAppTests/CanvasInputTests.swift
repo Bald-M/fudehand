@@ -365,7 +365,13 @@ final class CanvasHarness {
     #expect(selected.map(\.id) == ["card"] && selected[0].accessibilityRoleDescription() == "Rectangle")
 
     #expect(layers[1].accessibilityPerformPress())
-    #expect(h.store.selection == ["b"])
+    #expect(h.store.selection == ["b"] && h.canvas.selection == ["b"])
+    #expect(h.canvas.handleTarget == "b")
+
+    // Pointing inside the frame's child finds the frame, which is listed; pointing at empty canvas finds the canvas.
+    let screen = { (p: NSPoint) in h.window.convertPoint(toScreen: h.canvas.convert(p, to: nil)) }
+    #expect((h.canvas.accessibilityHitTest(screen(NSPoint(x: 50, y: 140))) as? CanvasLayerElement)?.id == "a")
+    #expect(h.canvas.accessibilityHitTest(screen(NSPoint(x: 500, y: 600))) as? FudehandCanvasView === h.canvas)
 }
 
 @Test @MainActor func pinchWithoutAnEndSettlesAfterIdle() async throws {

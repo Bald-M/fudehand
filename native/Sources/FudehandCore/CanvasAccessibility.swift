@@ -19,7 +19,8 @@ public struct CanvasAccessibilityItem: Equatable {
 }
 
 public enum CanvasAccessibility {
-    /// The top-level layers in document order, followed by any selected nested layers in tree order.
+    /// The visible top-level layers in document order, followed by any selected nested layers in tree order. A selected
+    /// layer is listed even when hidden.
     public static func items(index: DesignIndex, selection: Set<String>) -> [CanvasAccessibilityItem] {
         var items: [CanvasAccessibilityItem] = []
         func add(_ node: DesignNode) {
@@ -27,7 +28,7 @@ public enum CanvasAccessibility {
             items.append(CanvasAccessibilityItem(id: node.id, name: node.name, type: node.type, rect: rect,
                                                  selected: selection.contains(node.id)))
         }
-        index.document.nodes.forEach(add)
+        index.document.nodes.filter { $0.visible || selection.contains($0.id) }.forEach(add)
         guard !selection.isEmpty else { return items }
         func visit(_ nodes: [DesignNode]) {
             for node in nodes {

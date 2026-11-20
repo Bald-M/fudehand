@@ -60,15 +60,19 @@ private func iconButtons() throws -> [IconButton] {
     }
 }
 
-/// Icon-only buttons and menus are at least 16×16 points to click (#174): `iconHitTarget()` or an explicit frame. Toolbar items
-/// (`WorkspaceView`) are sized by the system.
+/// Icon-only buttons are at least 16×16 points to click (#174): `iconHitTarget()` or an explicit frame on the label. Menus
+/// (`.menuStyle`) are drawn by AppKit at its own size, which a SwiftUI frame does not change, and toolbar items
+/// (`WorkspaceView`) are sized by the system, so neither is checked here.
 @Test func everyIconOnlyButtonHasAClickTargetOfAtLeastSixteenPoints() throws {
     let frame = try NSRegularExpression(pattern: #"\.frame\(width: (\d+), height: (\d+)\)"#)
-    for button in try iconButtons() where button.file != "WorkspaceView.swift" {
-        let label = button.label as NSString
-        let framed = frame.matches(in: button.label, range: NSRange(location: 0, length: label.length)).contains { match in
-            Int(label.substring(with: match.range(at: 1)))! >= 16 && Int(label.substring(with: match.range(at: 2)))! >= 16
+    func framed(_ text: String) -> Bool {
+        let ns = text as NSString
+        return frame.matches(in: text, range: NSRange(location: 0, length: ns.length)).contains { match in
+            Int(ns.substring(with: match.range(at: 1)))! >= 16 && Int(ns.substring(with: match.range(at: 2)))! >= 16
         }
-        #expect(button.label.contains(".iconHitTarget()") || framed, "\(button.file):\(button.line) has a click target under 16×16")
+    }
+    for button in try iconButtons() where button.file != "WorkspaceView.swift" && !button.modifiers.contains(".menuStyle(") {
+        let sized = button.label.contains(".iconHitTarget()") || framed(button.label)
+        #expect(sized, "\(button.file):\(button.line) has a click target under 16×16")
     }
 }

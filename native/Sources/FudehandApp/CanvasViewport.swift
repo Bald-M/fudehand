@@ -88,6 +88,8 @@ extension FudehandCanvasView {
         updateIndicator(force: true)
         updateContentsScale()
         host?.canvasViewportSettled(liveViewport)
+        // The layers' VoiceOver frames moved.
+        NSAccessibility.post(element: self, notification: .layoutChanged)
     }
 
     /// Wheel events have no end marker, so a pause settles the viewport.
@@ -121,6 +123,7 @@ extension FudehandCanvasView {
             applyViewport()
             updateIndicator(force: true)
             updateContentsScale()
+            NSAccessibility.post(element: self, notification: .layoutChanged)
         }
     }
 
