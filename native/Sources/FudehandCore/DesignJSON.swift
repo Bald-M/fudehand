@@ -321,7 +321,8 @@ public enum DesignJSON {
         guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
         let type: EffectType = try reader.choice("type", default: .dropShadow)
         try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"]
-                             : type == .noise ? ["type", "visible", "color", "size", "density", "seed"] : ["type", "visible", "radius"])
+                             : type == .noise ? ["type", "visible", "color", "size", "density", "seed"]
+                             : type == .texture ? ["type", "visible", "image", "size", "opacity", "blend"] : ["type", "visible", "radius"])
         var effect = DesignEffect(type: type)
         effect.visible = try reader.bool("visible", default: true)
         if type == .noise {
@@ -329,6 +330,19 @@ public enum DesignJSON {
             effect.size = try reader.number("size", default: effect.size, min: DesignEffect.noiseSizes.lowerBound, max: DesignEffect.noiseSizes.upperBound)
             effect.density = try reader.number("density", default: effect.density, min: 0, max: 1)
             effect.seed = try reader.integer("seed", default: Double(effect.seed), min: 0)
+            return effect
+        }
+        if type == .texture {
+            guard let image = try reader.child("image") else { throw reader.fail("\(reader.path) texture is missing image") }
+            try image.checkKeys(["data"])
+            guard let data = Data(base64Encoded: try image.string("data"), options: .ignoreUnknownCharacters), isImage(data) else {
+                throw reader.fail("\(image.name("data")) must be a base64-encoded PNG, JPEG, or SVG")
+            }
+            effect.texture = data
+            effect.size = try reader.number("size", default: effect.size, min: DesignEffect.textureSizes.lowerBound,
+                                            max: DesignEffect.textureSizes.upperBound)
+            effect.opacity = try reader.number("opacity", default: effect.opacity, min: 0, max: 1)
+            effect.blend = try reader.choice("blend", default: effect.blend)
             return effect
         }
         effect.radius = try reader.number("radius", default: effect.radius, min: 0, max: DesignEffect.maximumRadius)
@@ -491,6 +505,10 @@ public enum DesignJSON {
                 if !effect.visible { value["visible"] = false }
                 if effect.type == .noise {
                     value["color"] = effect.color.hex; value["size"] = effect.size; value["density"] = effect.density; value["seed"] = effect.seed
+                } else if effect.type == .texture {
+                    let data = effect.texture ?? Data()
+                    value["image"] = ["data": includeImageData ? data.base64EncodedString() : "<\(data.count) bytes>"]
+                    value["size"] = effect.size; value["opacity"] = effect.opacity; value["blend"] = effect.blend.rawValue
                 } else {
                     value["radius"] = effect.radius
                 }
@@ -516,6 +534,18 @@ public enum DesignJSON {
         }
         var object = self.object(node, includeImageData: true, includeChildren: false)
         merge(changes, into: &object)
+        // Effects are replaced whole, and the Agent reads a texture's image as "<N bytes>" (see `object`), so a texture sent back
+        // with that placeholder, at the place in the list where the same texture is, keeps its image.
+        if var effects = object["effects"] as? [[String: Any]] {
+            for index in effects.indices where index < node.effects.count {
+                guard node.effects[index].type == .texture, let current = node.effects[index].texture,
+                      effects[index]["type"] as? String == EffectType.texture.rawValue,
+                      var image = effects[index]["image"] as? [String: Any], image["data"] as? String == "<\(current.count) bytes>" else { continue }
+                image["data"] = current.base64EncodedString()
+                effects[index]["image"] = image
+            }
+            object["effects"] = effects
+        }
         var next = try self.node(from: object)
         next.children = node.children
         node = next

@@ -519,6 +519,15 @@
 "Size|noise" = "Size";
 "Density" = "Density";
 "Seed" = "Seed";
+"Texture" = "Texture";
+"Tile size" = "Tile size";
+"Size|texture" = "Size";
+"Blend" = "Blend";
+"Normal|blend" = "Normal";
+"Multiply" = "Multiply";
+"Screen|blend" = "Screen";
+"Overlay|blend" = "Overlay";
+"Soft Light" = "Soft Light";
 "Move Up" = "Move Up";
 "Move Down" = "Move Down";
 "Shadow color" = "Shadow color";

@@ -179,3 +179,60 @@ private func card(_ effects: [DesignEffect], type: NodeType = .rectangle) -> Des
     #expect(grains.sublayers?.count == 1 && grains.sublayers?.first?.contents != nil)
     #expect(content.sublayers?.last === renderer.layer(for: "child"))
 }
+
+/// An 8 × 8 PNG: a black 4 × 4 square at the top left, white elsewhere.
+private func checker() throws -> Data {
+    let context = try #require(CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setFillColor(.white)
+    context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+    context.setFillColor(.black)
+    // Bottom-left origin: the top-left quarter starts at y = 4.
+    context.fill(CGRect(x: 0, y: 4, width: 4, height: 4))
+    let data = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+    #expect(CGImageDestinationFinalize(destination))
+    return data as Data
+}
+
+@Test @MainActor func textureRepeatsItsImageFromTheTopLeftCorner() throws {
+    // 8 pt tiles, one image pixel per point: black in each tile's top-left 4 pt square.
+    let image = try snapshot(stage(card([DesignEffect(type: .texture, size: 8, texture: try checker())])))
+    for (x, y) in [(42, 42), (50, 42), (42, 50), (106, 90)] { #expect(pixel(image, x, y)[0] < 20, "(\(x), \(y))") }
+    for (x, y) in [(46, 42), (42, 46), (54, 54)] { #expect(pixel(image, x, y)[0] > 235, "(\(x), \(y))") }
+}
+
+@Test @MainActor func textureOpacityAndBlendApplyAgainstTheFill() throws {
+    // Half-transparent black over the red fill gives dark red.
+    let faded = try snapshot(stage(card([DesignEffect(type: .texture, size: 8, texture: try checker(), opacity: 0.5)])))
+    #expect(abs(pixel(faded, 42, 42)[0] - 128) < 6 && pixel(faded, 42, 42)[1] < 6)
+    // Multiplied, white leaves the red fill as it is and black turns it black.
+    let multiplied = try snapshot(stage(card([DesignEffect(type: .texture, size: 8, texture: try checker(), blend: .multiply)])))
+    #expect(pixel(multiplied, 46, 42)[0] > 245 && pixel(multiplied, 46, 42)[1] < 10)
+    #expect(pixel(multiplied, 42, 42)[0] < 10)
+}
+
+@Test @MainActor func smallTexturesRepeatAsFewLargeBlocks() throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 1000, height: 600)
+    frame.effects = [DesignEffect(type: .texture, size: 4, texture: try checker())]
+    renderer.sync([frame])
+    let tiles = try #require(renderer.contentLayer(for: "f")?.sublayers?.first)
+    // 4 pt tiles in 256 pt blocks: 4 × 3 blocks rather than 250 × 150 tiles.
+    #expect(tiles.sublayers?.count == 12)
+}
+
+@Test @MainActor func textureBlendWorksOnAnEllipseClippedByItsMask() throws {
+    // An ellipse clips with a mask rather than masksToBounds; the blend must still apply against its fill.
+    var round = card([DesignEffect(type: .texture, size: 8, texture: try checker(), blend: .multiply)], type: .ellipse)
+    round.width = 60
+    round.height = 60
+    let image = try snapshot(stage(round))
+    // Near the center: 26 pt into the ellipse on both axes is in a tile's black square (24–28), multiplied to black; 30 pt
+    // across is in the tile's white part, which leaves the red fill as it is. The bounding box's corner stays untouched.
+    #expect(pixel(image, 66, 66)[0] < 10)
+    #expect(pixel(image, 70, 66)[0] > 245 && pixel(image, 70, 66)[1] < 10)
+    #expect(pixel(image, 41, 41) == [255, 255, 255, 255])
+}

@@ -519,6 +519,15 @@
 "Size|noise" = "大小";
 "Density" = "密度";
 "Seed" = "种子";
+"Texture" = "纹理";
+"Tile size" = "贴图大小";
+"Size|texture" = "大小";
+"Blend" = "混合";
+"Normal|blend" = "正常";
+"Multiply" = "正片叠底";
+"Screen|blend" = "滤色";
+"Overlay|blend" = "叠加";
+"Soft Light" = "柔光";
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Shadow color" = "阴影颜色";
