@@ -4,7 +4,7 @@
 
 ## Decisions
 
-- **Annotations are stored in the project file, beside the layer tree.** `DesignDocument` gains `annotations`, written as a top-level `annotations` array in the `.fudehand` JSON and left out when empty. The format moves to version 6; versions 1–5 open with no annotations. Each annotation has `id`, `node` (the layer it is pinned to), `x` and `y` relative to the layer's top-left corner in pt, `author` (`person` or `agent`), `text`, and `replies` (`id`, `author`, `text`). `DesignAnnotation.from` validates them when a file opens, and a file whose annotation names a missing layer or repeats an id is refused with the reason, like other malformed files.
+- **Annotations are stored in the project file, beside the layer tree.** `DesignDocument` gains `annotations`, written as a top-level `annotations` array in the `.fudehand` JSON and left out when empty. The format moves to version 7; versions 1–6 open with no annotations. Each annotation has `id`, `node` (the layer it is pinned to), `x` and `y` relative to the layer's top-left corner in pt, `author` (`person` or `agent`), `text`, and `replies` (`id`, `author`, `text`). `DesignAnnotation.from` validates them when a file opens, and a file whose annotation names a missing layer or repeats an id is refused with the reason, like other malformed files.
 - **Annotations are not layers.** They are drawn by `CanvasOverlay` above everything else, so they never appear in the layers panel, in `design_get_document`, or in `design_snapshot`, and they are hit-tested before resize handles and layers.
 - **The anchor is relative to the layer.** An annotation follows its layer when the layer moves, is reparented, or the canvas pans and zooms. When the layer shrinks, the marker is kept inside the layer's rectangle; the stored point does not change, so growing the layer back restores it.
 - **Deleting a layer deletes the annotations on it and on its descendants, in the same undo step.** `DesignEditor` drops annotations whose layer no longer exists after every edit, so every path that removes layers (delete, ungroup, and whatever comes later) is covered in one place, and undo brings them back with the layer. A hidden layer's annotations are hidden with it.
@@ -23,4 +23,4 @@
 ## Consequences
 
 - Moving a marker to another point or layer, resolving threads, assignment, rich text, attachments, multi-user sync, and exporting annotations are out of scope (#19 non-goals); an Agent that needs to move a note deletes it and adds it again.
-- The format version is 6; an older Fudehand refuses a file that contains annotations with the usual "created by a newer version" message.
+- The format version is 7; an older Fudehand refuses a file that contains annotations with the usual "created by a newer version" message.

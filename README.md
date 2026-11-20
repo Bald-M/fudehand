@@ -164,7 +164,7 @@ A design document is a tree of layers: frames, rectangles, ellipses, text, image
 ```json
 {
   "format": "fudehand.design",
-  "version": 6,
+  "version": 7,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },
@@ -177,7 +177,7 @@ A design document is a tree of layers: frames, rectangles, ellipses, text, image
 }
 ```
 
-Coordinates are relative to the parent layer. Array order is stacking order, with later items on top. Annotations — notes pinned to a point inside a layer — are saved in an optional top-level `annotations` array ([ADR 0010](docs/adr/0010-annotations-in-the-design-document.md)). The saved geometry is the result after auto layout. For every field and validation rule, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md).
+Coordinates are relative to the parent layer. Array order is stacking order, with later items on top. Annotations — notes pinned to a point inside a layer — are saved in an optional top-level `annotations` array ([ADR 0011](docs/adr/0011-annotations-in-the-design-document.md)). The saved geometry is the result after auto layout. For every field and validation rule, see the [design document spec](docs/superpowers/specs/2026-11-17-native-design-document-design.md) and [ADR 0006](docs/adr/0006-native-design-document.md).
 
 Fudehand does not import or export Figma files.
 

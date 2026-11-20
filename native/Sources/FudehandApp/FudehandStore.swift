@@ -189,6 +189,8 @@ final class FudehandStore: ObservableObject {
 
     func attach(_ canvas: FudehandCanvasView) {
         self.canvas = canvas
+        // A new canvas (the editor window reopened) starts with every thread collapsed.
+        if annotation != nil { annotation = nil }
         canvas.show(index)
         canvas.setSelection(selection)
     }

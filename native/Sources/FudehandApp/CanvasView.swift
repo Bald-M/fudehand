@@ -277,7 +277,8 @@ final class FudehandCanvasView: NSView {
     }
 
     func refreshOverlay() {
-        var markers = index.annotationMarkers().map { (id: $0.annotation.id, count: $0.annotation.count, anchor: $0.anchor) }
+        let visible = index.annotationMarkers()
+        var markers = visible.map { (id: $0.annotation.id, count: $0.annotation.count, anchor: $0.anchor) }
         var expanded: String?
         switch annotation {
         case .thread(let id): expanded = id
@@ -292,16 +293,16 @@ final class FudehandCanvasView: NSView {
         overlay.render(viewport: liveViewport, index: index, selection: selection, hover: hover,
                        marquee: marquee, guides: guides, handlesFor: handleTarget, markers: markers, expanded: expanded)
         // The popover follows its marker while the canvas pans and zooms; AppKit throws if it is moved while not on screen.
-        if let popover = annotationPopover, popover.isShown, let rect = annotationAnchorRect(), popover.positioningRect != rect {
+        if let popover = annotationPopover, popover.isShown, let rect = annotationAnchorRect(visible), popover.positioningRect != rect {
             popover.positioningRect = rect
         }
     }
 
     /// The screen rectangle of the expanded annotation's marker; nil when its layer is gone or hidden.
-    func annotationAnchorRect() -> NSRect? {
+    func annotationAnchorRect(_ markers: [(annotation: DesignAnnotation, anchor: Point)]? = nil) -> NSRect? {
         switch annotation {
         case .thread(let id):
-            return index.annotationMarkers().first { $0.annotation.id == id }.map { CanvasOverlay.markerRect($0.anchor, viewport: liveViewport) }
+            return (markers ?? index.annotationMarkers()).first { $0.annotation.id == id }.map { CanvasOverlay.markerRect($0.anchor, viewport: liveViewport) }
         case .draft(let node, let x, let y):
             guard let rect = index.worldRect(node) else { return nil }
             let draft = DesignAnnotation(id: CanvasOverlay.draftMarker, node: node, x: x, y: y, author: .person, text: "-")
@@ -606,7 +607,8 @@ final class FudehandCanvasView: NSView {
         } else {
             switch event.keyCode {
             case 49: action = { self.spaceHeld = true }
-            case 53: action = { self.selectParent() }
+            // Esc collapses an expanded annotation first, and otherwise selects the parent layer.
+            case 53: action = { if self.annotation != nil { self.host?.canvasCollapseAnnotation() } else { self.selectParent() } }
             case 36 where flags.isEmpty: action = { self.selectChildren() }
             case 51, 117:
                 guard flags.isEmpty, !selection.isEmpty, interaction.isIdle else { super.keyDown(with: event); return }

@@ -419,11 +419,12 @@ public enum ControlProtocol {
         case "add_annotation":
             let replyTo = try optionalString("replyTo")
             let node = try optionalString("node")
+            let x = try optionalNumber("x"), y = try optionalNumber("y")
             if replyTo == nil, node == nil { throw Message(text: "Missing argument: node (or replyTo to reply to an annotation)") }
-            if replyTo != nil, node != nil || args["x"] != nil || args["y"] != nil {
+            if replyTo != nil, node != nil || x != nil || y != nil {
                 throw Message(text: "A reply takes only replyTo and text; node, x, and y belong to a new annotation")
             }
-            return .addAnnotation(node: node, x: try optionalNumber("x"), y: try optionalNumber("y"), text: try string("text"), replyTo: replyTo)
+            return .addAnnotation(node: node, x: x, y: y, text: try string("text"), replyTo: replyTo)
         case "update_annotation": return .updateAnnotation(try string("id"), text: try string("text"))
         case "delete_annotation": return .deleteAnnotation(try string("id"))
         default: throw Message(text: "Unknown command: \(name)")

@@ -200,6 +200,8 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
         #expect(machine.pointerDragged(to: Point(x: 80, y: 80), modifiers: [], context: context(selection: ["a"], tool: tool)) == [])
         #expect(machine.pointerUp(at: Point(x: 80, y: 80), context: context(selection: ["a"], tool: tool)) == [])
     }
+    var double = CanvasInteraction()
+    #expect(down(&double, 10, 10, hit: .annotation("n"), clickCount: 2, context: context()) == [])
     // Panning still wins: Space, the hand tool, and the middle button pan over a marker.
     var machine = CanvasInteraction()
     #expect(down(&machine, 10, 10, hit: .annotation("n"), context: context(spaceHeld: true)) == [])

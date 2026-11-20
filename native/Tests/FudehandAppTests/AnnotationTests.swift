@@ -144,3 +144,46 @@ import Testing
     #expect(h.canvas.accessibilityAnnotations().first?.accessibilityValue() as? String == "Expanded")
     #expect(element.accessibilityPerformPress() && h.store.annotation == nil)
 }
+
+@Test @MainActor func threadsCollapseWhenTheirMarkerGoesAway() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    let note = try h.store.addAnnotation(on: "card", x: 1, y: 1, text: "Hide me", by: .person)
+    h.store.expandAnnotation(.thread(note.id))
+    h.store.edit("Hide") { try $0.update("a") { $0.visible = false } }
+    #expect(h.store.annotation == nil && h.canvas.annotation == nil)
+    h.store.undo()
+    h.store.expandAnnotation(.thread(note.id))
+    h.store.undo()
+    #expect(h.store.editor.document.annotations.isEmpty && h.store.annotation == nil)
+    h.store.expandAnnotation(.draft(node: "card", x: 1, y: 1))
+    h.store.edit("Hide") { try $0.update("card") { $0.visible = false } }
+    #expect(h.store.annotation == nil)
+}
+
+@Test @MainActor func escCollapsesBeforeSelectingTheParentAndDoubleClickKeepsItOpen() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    let note = try h.store.addAnnotation(on: "b", x: 10, y: 10, text: "Esc", by: .person)
+    h.store.setSelection(["card"])
+    let point = try marker(h, note.id)
+    h.click(point)
+    h.send(.leftMouseDown, at: point, clicks: 2)
+    h.send(.leftMouseUp, at: point, clicks: 2)
+    #expect(h.store.annotation == .thread(note.id))
+    try h.key(53)
+    #expect(h.store.annotation == nil && h.store.selection == ["card"])
+    try h.key(53)
+    #expect(h.store.selection == ["a"])
+}
+
+@Test @MainActor func aNewCanvasStartsCollapsed() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    let note = try h.store.addAnnotation(on: "b", x: 10, y: 10, text: "Reopen", by: .person)
+    h.store.expandAnnotation(.thread(note.id))
+    let canvas = FudehandCanvasView(frame: h.window.contentLayoutRect)
+    defer { canvas.dispose() }
+    h.store.attach(canvas)
+    #expect(h.store.annotation == nil && canvas.annotation == nil)
+}

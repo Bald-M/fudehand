@@ -260,7 +260,7 @@ public struct DesignDocument: Equatable, Sendable {
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
-    /// Notes pinned to layers, in the order they were added (ADR 0010).
+    /// Notes pinned to layers, in the order they were added (ADR 0011).
     public var annotations: [DesignAnnotation]
     public init(nodes: [DesignNode] = [], annotations: [DesignAnnotation] = []) { self.nodes = nodes; self.annotations = annotations }
 

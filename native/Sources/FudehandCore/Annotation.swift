@@ -15,7 +15,7 @@ public struct AnnotationReply: Equatable, Sendable, Identifiable {
 
 /// A plain-text note pinned to a point inside a layer, with its replies. It is not a layer: it is drawn above the canvas,
 /// never in the layers panel or in snapshots. `x` and `y` are relative to the layer's top-left corner, so the annotation follows
-/// the layer when it moves; the canvas keeps the marker inside the layer when the layer shrinks (ADR 0010).
+/// the layer when it moves; the canvas keeps the marker inside the layer when the layer shrinks (ADR 0011).
 public struct DesignAnnotation: Equatable, Sendable, Identifiable {
     public var id: String
     /// The id of the layer it is pinned to.

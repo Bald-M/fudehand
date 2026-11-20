@@ -160,7 +160,8 @@ public struct CanvasInteraction {
         }
         if case .annotation(let id) = hit {
             state = .idle
-            return [.toggleAnnotation(id)]
+            // The second press of a double-click would collapse what the first one expanded.
+            return clickCount > 1 ? [] : [.toggleAnnotation(id)]
         }
         if let type = context.tool.creates {
             state = .creating(type, origin: point)

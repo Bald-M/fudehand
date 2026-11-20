@@ -89,6 +89,8 @@ private func object(_ data: Data) throws -> [String: Any] {
          .addAnnotation(node: "f", x: 12.5, y: 0, text: "Why?", replyTo: nil)),
         (#"{"id":31,"command":"add_annotation","args":{"replyTo":"n","text":"Because"}}"#,
          .addAnnotation(node: nil, x: nil, y: nil, text: "Because", replyTo: "n")),
+        (#"{"id":34,"command":"add_annotation","args":{"replyTo":"n","x":null,"y":null,"text":"Because"}}"#,
+         .addAnnotation(node: nil, x: nil, y: nil, text: "Because", replyTo: "n")),
         (#"{"id":32,"command":"update_annotation","args":{"id":"n","text":"Edited"}}"#, .updateAnnotation("n", text: "Edited")),
         (#"{"id":33,"command":"delete_annotation","args":{"id":"n"}}"#, .deleteAnnotation("n")),
     ]
@@ -171,6 +173,8 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"add_annotation","args":{"replyTo":"n","node":"f","text":"x"}}"#,
          "A reply takes only replyTo and text; node, x, and y belong to a new annotation"),
         (#"{"id":1,"command":"update_annotation","args":{"id":"n"}}"#, "Missing argument: text"),
+        (#"{"id":1,"command":"add_annotation","args":{"replyTo":"n","x":1,"text":"x"}}"#,
+         "A reply takes only replyTo and text; node, x, and y belong to a new annotation"),
         (#"{"id":1,"command":"delete_annotation","args":{}}"#, "Missing argument: id"),
     ]
     for (line, message) in cases {

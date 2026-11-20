@@ -3,7 +3,7 @@ import FudehandCore
 import SwiftUI
 
 /// Annotation edits. The canvas popover and the control channel both call these, so a person's and an Agent's edits are the same
-/// undo steps; an Agent's are named `Agent: …` (ADR 0010).
+/// undo steps; an Agent's are named `Agent: …` (ADR 0011).
 extension FudehandStore {
     private func stepName(_ action: String, _ author: AnnotationAuthor) -> String { author == .agent ? "Agent: \(action)" : action }
 
@@ -54,11 +54,14 @@ extension FudehandStore {
         }
     }
 
-    /// After a document change: collapses the thread whose annotation or layer is gone (deleted, undone, or another file opened).
+    /// After a document change: collapses the thread whose marker is gone (the annotation or its layer deleted, undone, or
+    /// hidden, or another file opened).
     func syncAnnotation() {
+        let index = self.index
         switch annotation {
-        case .thread(let id) where editor.document.annotations.contains(where: { $0.id == id }): canvas?.refreshOverlay()
-        case .draft(let node, _, _) where index.contains(node): canvas?.refreshOverlay()
+        case .thread(let id) where index.annotationMarkers().contains(where: { $0.annotation.id == id }): canvas?.refreshOverlay()
+        case .draft(let node, _, _) where index.contains(node) && index.ancestry(of: node).allSatisfy({ index.node($0)?.visible == true }):
+            canvas?.refreshOverlay()
         case nil: break
         default: expandAnnotation(nil)
         }

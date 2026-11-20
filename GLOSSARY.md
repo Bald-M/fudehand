@@ -59,7 +59,7 @@ _Avoid_: timer, countdown (it does not count real time)
 **Prototype window (原型窗口 / 原型視窗)**: The separate window opened by *Play Prototype (播放原型)* that plays the prototype at the frames' actual size; clicks there trigger interactions instead of selecting layers.
 _Avoid_: preview mode, present mode
 
-**Annotation (批注 / 批註)**: A plain-text note pinned to a point inside a layer, with a thread of replies, written by a person or an Agent and saved in the project file. It is drawn as a marker on the canvas but is not a layer: it is not in the layers panel or in snapshots. Deleting the layer deletes its annotations ([ADR 0010](docs/adr/0010-annotations-in-the-design-document.md)).
+**Annotation (批注 / 批註)**: A plain-text note pinned to a point inside a layer, with a thread of replies, written by a person or an Agent and saved in the project file. It is drawn as a marker on the canvas but is not a layer: it is not in the layers panel or in snapshots. Deleting the layer deletes its annotations ([ADR 0011](docs/adr/0011-annotations-in-the-design-document.md)).
 _Avoid_: comment (评论) (suggests a multi-user review workflow, which annotations are not)
 
 **Canvas (画布 / 畫布)**: The pannable, zoomable workspace that displays the design document.

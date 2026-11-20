@@ -103,3 +103,13 @@ private func document() -> DesignDocument {
     try doc.update("f") { $0.visible = false }
     #expect(DesignIndex(doc).annotationMarkers().map(\.annotation.text) == ["Ellipse"])
 }
+
+@Test func liveEditsAlsoDropAnnotationsOfRemovedLayers() throws {
+    var e = DesignEditor(document: document(), measure: fakeMeasure)
+    try e.perform("Add Annotation") { try $0.addAnnotation(on: "b", x: 0, y: 0, text: "Gone", author: .person) }
+    e.beginGesture("Live")
+    e.applyLive { try? $0.delete(["b"]) }
+    e.endGesture()
+    #expect(e.document.annotations.isEmpty)
+    #expect(e.undo() && e.document.annotations.count == 1)
+}
