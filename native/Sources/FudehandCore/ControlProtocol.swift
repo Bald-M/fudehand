@@ -65,6 +65,12 @@ public enum ControlCommand: Equatable, Sendable {
     case getConnectors
     case setConnector(AgentConnector, connected: Bool)
     case setView(ViewChange)
+    /// All annotations, or those on one layer.
+    case listAnnotations(node: String?)
+    /// Pins a new annotation to a layer (`x` and `y` relative to the layer; nil means its center), or replies to one when `replyTo` is set.
+    case addAnnotation(node: String?, x: Double?, y: Double?, text: String, replyTo: String?)
+    case updateAnnotation(String, text: String)
+    case deleteAnnotation(String)
 }
 
 /// The inspector's tabs: the properties panel, the prototype settings, and the chat panel.
@@ -87,12 +93,6 @@ public struct ViewChange: Equatable, Sendable {
 /// The App's appearance setting; raw values are what is saved.
 public enum Appearance: String, CaseIterable, Sendable {
     case system, light, dark
-    /// All annotations, or those on one layer.
-    case listAnnotations(node: String?)
-    /// Pins a new annotation to a layer (`x` and `y` relative to the layer; nil means its center), or replies to one when `replyTo` is set.
-    case addAnnotation(node: String?, x: Double?, y: Double?, text: String, replyTo: String?)
-    case updateAnnotation(String, text: String)
-    case deleteAnnotation(String)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
