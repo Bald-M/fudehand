@@ -550,11 +550,11 @@ private func exited(_ pids: [Int32]) async throws -> Bool {
     session.select(first)
     session.send("hang", root: harness.root, runtime: nil)
 
-    // Only the conversations using a provider are restarted when its key changes.
+    // A key change never cuts a running reply short, for the provider it uses or another one: it applies from the next message.
     session.keyUpdated(provider: "anthropic", saved: false)
     #expect(session.transcript.busy)
     session.keyUpdated(provider: "openai", saved: true)
-    #expect(!session.transcript.busy)
+    #expect(session.transcript.busy)
     // The model chosen last is the one the next launch starts with.
     #expect(ChatSession(defaults: defaults, readKey: { _ in nil }).settings == claude)
     await session.shutdown()
