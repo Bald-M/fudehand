@@ -632,12 +632,13 @@ private func temporaryFile() -> URL {
     #expect(await failure(store, .openRecent(gone.path, discard: false)) == "File not found: \(gone.path) (deleted or moved); remove it from the list with app_remove_recent")
     #expect(await failure(store, .openRecent("/nowhere.fudehand", discard: false)) == "Not a recent file: /nowhere.fudehand")
     #expect(await failure(store, .removeRecent("/nowhere.fudehand")) == "Not a recent file: /nowhere.fudehand")
+    #expect(store.alert == nil && store.recents.items.map(\.path) == [kept.path, gone.path] && store.fileURL == kept)
 
     // Unsaved changes need discard, as with open_document.
     _ = try await control(store, .newDocument(discard: false))
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     #expect(await failure(store, .openRecent(kept.path, discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
-    #expect(store.editor.document.node("r") != nil && store.fileURL == nil)
+    #expect(store.editor.document.node("r") != nil && store.fileURL == nil && store.alert == nil)
     let opened = try await control(store, .openRecent(kept.path, discard: true))
     #expect(opened["file"] as? String == kept.path && opened["dirty"] as? Bool == false)
     #expect(store.editor.document.node("r") == nil)
@@ -681,7 +682,7 @@ private func temporaryFile() -> URL {
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     #expect(await failure(store, .newDocumentFromTemplate("Mobile", discard: false)) == "The current document has unsaved changes; save it first, or pass discard: true to discard them")
-    #expect(store.editor.document.node("r") != nil)
+    #expect(store.editor.document.node("r") != nil && store.alert == nil)
 
     let created = try await control(store, .newDocumentFromTemplate("Mobile", discard: true))
     #expect(created["file"] is NSNull && created["dirty"] as? Bool == false)

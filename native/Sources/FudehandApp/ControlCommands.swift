@@ -117,8 +117,7 @@ extension FudehandStore {
                 throw ControlCommandError("Template not found: \(name); available: "
                     + (templates.isEmpty ? "none" : templates.map(\.name).joined(separator: ", ")))
             }
-            try requireDiscardable(discard)
-            try openTemplate(template.url)
+            try newDocument(fromTemplate: template) { try requireDiscardable(discard); return true }
             return controlState()
         }
     }

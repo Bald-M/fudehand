@@ -448,8 +448,13 @@ final class FudehandStore: ObservableObject {
 
     /// New from a template: produces an untitled document not associated with the template file, asking for a location on save.
     func newDocument(fromTemplate template: Template) {
-        guard confirmDiscard() else { return }
-        do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
+        do { try newDocument(fromTemplate: template, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+    }
+
+    /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
+    func newDocument(fromTemplate template: Template, discarding: () throws -> Bool) throws {
+        guard try discarding() else { return }
+        try openTemplate(template.url)
     }
 
     func openTemplate(_ url: URL) throws {
