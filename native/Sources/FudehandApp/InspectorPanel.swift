@@ -72,11 +72,20 @@ private struct DesignInspector: View {
 
 private struct Section<Content: View>: View {
     let title: String
+    /// An icon button at the end of the title row: its SF Symbol, accessibility label, and action.
+    var accessory: (symbol: String, label: String, action: () -> Void)? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            HStack {
+                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                if let accessory {
+                    Spacer()
+                    Button(action: accessory.action) { Image(systemName: accessory.symbol).iconHitTarget() }
+                        .buttonStyle(.borderless).help(accessory.label).accessibilityLabel(accessory.label)
+                }
+            }
             content
         }
         .font(.system(size: 12))
@@ -258,7 +267,10 @@ private struct NodeInspector: View {
             }
         }
         if let text = node.text { textSection(text) }
-        if node.type == .frame { layoutSection(node.layout) }
+        if node.type == .frame {
+            layoutSection(node.layout)
+            layoutGuidesSection(node.layoutGuides)
+        }
         if let image = node.image {
             Section(title: L("Image")) {
                 Picker(L("Scaling"), selection: Binding(get: { image.fit }, set: { v in update("Change Image Scaling") { $0.image?.fit = v } })) {
@@ -491,6 +503,22 @@ private struct NodeInspector: View {
                 Button(L("Remove Auto Layout")) { update("Remove Auto Layout") { $0.layout = nil } }
             } else {
                 Button(L("Add Auto Layout")) { update("Add Auto Layout") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
+            }
+        }
+    }
+
+    private func layoutGuidesSection(_ guides: [LayoutGuide]) -> some View {
+        Section(title: L("Layout Guides"), accessory: ("plus", L("Add layout guide"), {
+            update("Add Layout Guide") { $0.layoutGuides.append(LayoutGuide(type: .grid)) }
+        })) {
+            ForEach(Array(guides.enumerated()), id: \.offset) { index, guide in
+                LayoutGuideRow(guide: guide, change: { action, key, change in
+                    update(action, key.map { "layoutGuides.\(index).\($0)" }) { node in
+                        if node.layoutGuides.indices.contains(index) { change(&node.layoutGuides[index]) }
+                    }
+                }, remove: {
+                    update("Remove Layout Guide") { node in if node.layoutGuides.indices.contains(index) { node.layoutGuides.remove(at: index) } }
+                })
             }
         }
     }
@@ -748,5 +776,94 @@ private struct NodeInspector: View {
         panel.allowedContentTypes = [.png, .jpeg, .svg]
         guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.imageSize(data) != nil else { return }
         update("Replace Image") { $0.image?.data = data }
+    }
+}
+
+/// One layout guide in the properties panel: its type icon, a summary that opens its settings, show/hide, and remove.
+private struct LayoutGuideRow: View {
+    let guide: LayoutGuide
+    /// Applies a change as one undo step named by the first argument; the second, when given, coalesces repeated changes.
+    let change: (String, String?, @escaping (inout LayoutGuide) -> Void) -> Void
+    let remove: () -> Void
+    @State private var editing = false
+
+    static func symbol(_ type: LayoutGuideType) -> String {
+        switch type {
+        case .grid: return "grid"
+        case .columns: return "rectangle.split.3x1"
+        case .rows: return "rectangle.split.1x2"
+        }
+    }
+
+    static func typeName(_ type: LayoutGuideType) -> String {
+        switch type {
+        case .grid: return L("Grid|layout guide")
+        case .columns: return L("Columns")
+        case .rows: return L("Rows")
+        }
+    }
+
+    static func summary(_ guide: LayoutGuide) -> String {
+        switch guide.type {
+        case .grid: return L("Grid %@", NumberInput.format(guide.size))
+        case .columns: return L("Columns %d", guide.count)
+        case .rows: return L("Rows %d", guide.count)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: Self.symbol(guide.type)).foregroundStyle(.secondary).frame(width: 16).accessibilityHidden(true)
+            Button { editing = true } label: {
+                HStack(spacing: 4) {
+                    Text(Self.summary(guide)).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(guide.visible ? .primary : .secondary)
+            .popover(isPresented: $editing, arrowEdge: .leading) { editor.padding(12).frame(width: 220) }
+            Button { change(guide.visible ? "Hide Layout Guide" : "Show Layout Guide", nil) { $0.visible.toggle() } } label: {
+                Image(systemName: guide.visible ? "eye" : "eye.slash").iconHitTarget()
+            }
+            .buttonStyle(.borderless)
+            .help(guide.visible ? L("Hide layout guide") : L("Show layout guide"))
+            .accessibilityLabel(guide.visible ? L("Hide layout guide") : L("Show layout guide"))
+            Button(action: remove) { Image(systemName: "minus").iconHitTarget() }
+                .buttonStyle(.borderless).help(L("Remove layout guide")).accessibilityLabel(L("Remove layout guide"))
+        }
+    }
+
+    @ViewBuilder private var editor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker(L("Type|layout guide"), selection: Binding(get: { guide.type }, set: { v in change("Change Layout Guide", nil) { $0.type = v } })) {
+                ForEach(LayoutGuideType.allCases, id: \.self) { Text(Self.typeName($0)).tag($0) }
+            }
+            if guide.type == .grid {
+                NumberField(label: L("Size|layout guide"), value: guide.size, minimum: 1) { v in change("Change Layout Guide", nil) { $0.size = v } }
+            } else {
+                NumberField(label: L("Count"), value: Double(guide.count), minimum: 1) { v in
+                    change("Change Layout Guide", nil) { $0.count = min(LayoutGuide.maximumCount, max(1, Int(v.rounded()))) }
+                }
+                Picker(L("Alignment"), selection: Binding(get: { guide.align }, set: { v in change("Change Layout Guide", nil) { $0.align = v } })) {
+                    Text(L("Stretch")).tag(LayoutGuideAlign.stretch)
+                    Text(L("Start")).tag(LayoutGuideAlign.start)
+                    Text(L("Center")).tag(LayoutGuideAlign.center)
+                    Text(L("End")).tag(LayoutGuideAlign.end)
+                }
+                if guide.align != .stretch {
+                    NumberField(label: guide.type == .columns ? L("Width") : L("Height"), value: guide.width, minimum: 1) { v in
+                        change("Change Layout Guide", nil) { $0.width = v }
+                    }
+                }
+                NumberField(label: L("Gutter"), value: guide.gutter, minimum: 0) { v in change("Change Layout Guide", nil) { $0.gutter = v } }
+                NumberField(label: L("Margin"), value: guide.margin, minimum: 0, disabled: guide.align == .center) { v in
+                    change("Change Layout Guide", nil) { $0.margin = v }
+                }
+            }
+            ColorRow(label: L("Color"), color: guide.color) { c in change("Change Layout Guide", "color") { $0.color = c } }
+        }
+        .font(.system(size: 12))
     }
 }

@@ -51,9 +51,15 @@ Interaction follows Figma.
 **Moving and Resizing**
 
 - Drag selected layers to move them (starting after a 3pt threshold); with multiple layers selected they move together. One drag is one undo step. The position of a child layer in an auto layout frame is determined by the layout and does not follow the drag.
-- While dragging, layer edges and center lines snap when within 6 screen points of a sibling layer or the parent frame, and red guides appear; hold ⌃ while dragging to turn snapping off.
+- While dragging, layer edges and center lines snap when within 6 screen points of a sibling layer, the parent frame, or an edge of the parent frame's visible layout guide columns and rows, and red guides appear; hold ⌃ while dragging to turn snapping off. Dragging a resize handle snaps the edges it moves to the same targets, and ⌃ turns that off too.
 - With a single selection (except groups), 8 resize handles appear; dragging one changes the size and sets the sizing mode in that direction to fixed. For text, changing the width switches it to Auto Height (自动高度), and changing the height switches it to Fixed (固定).
 - Arrow keys move by 1 and Shift + arrow keys by 10, each key press being one undo step. Delete removes the selected layers.
+
+**Layout Guides**
+
+- A frame can hold any number of layout guides, drawn in the order they were added: a **grid** (lines every *size* points across the frame), **columns**, or **rows**. Columns and rows have a count, an alignment, a gutter between them, and a margin from the frame's edge: *stretch* divides the space between the margins, and *start*, *center*, and *end* keep each band's width (a row's height) and place the block at that side (center ignores the margin). Each guide has its own color (default translucent red) and can be shown or hidden.
+- The canvas overlay draws the visible guides of visible frames (with every ancestor visible), cut off by any ancestor that clips its content: columns and rows as filled bands, a grid as lines 1 screen point wide at every zoom. A grid whose lines would sit closer than 4 screen points is not drawn. Guides never appear in snapshots, thumbnails, or prototype playback.
+- The properties panel's **Layout Guides** section of a selected frame lists its guides: **+** in the title row adds a 10-point grid; each row has the guide's type icon, a summary (*Grid 10*, *Columns 5*, *Rows 5*) that opens a popover to change its type, numbers, and color, an eye button to show or hide it, and **−** to remove it. Each change is one undo step.
 
 **Creating**
 

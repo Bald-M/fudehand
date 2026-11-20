@@ -75,8 +75,7 @@ private func failure(_ body: () throws -> Void) -> String? {
     #expect(IconLibrary.allCases.map(\.rawValue) == ["sf", "material-outlined", "material-rounded", "material-sharp", "weui", "lucide"])
 }
 
-@Test func version5IsWrittenAndVersion4Opens() throws {
-    #expect(DesignDocument.formatVersion == 5)
+@Test func version4FilesOpen() throws {
     let json = #"{"format":"fudehand.design","version":4,"nodes":[{"id":"r","type":"rectangle","name":"","x":0,"y":0,"width":1,"height":1}]}"#
     #expect(try DesignDocument.decode(Data(json.utf8)).nodes.count == 1)
 }

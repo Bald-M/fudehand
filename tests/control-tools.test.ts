@@ -68,6 +68,18 @@ describe('design tools', () => {
     await fake.close()
   })
 
+  it('describes frame layout guides and forwards them unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['layoutGuides', 'grid', 'columns', 'rows', 'gutter', 'margin', 'stretch', 'visible'])
+      expect(byName('design_create_node').description).toContain(field)
+    expect(byName('design_update_node').description).toContain('layoutGuides array is replaced whole')
+    const fake = await app(echo)
+    const changes = { layoutGuides: [{ type: 'columns', count: 12, gutter: 24, margin: 32 }, { type: 'grid', size: 8, visible: false }] }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
+    await fake.close()
+  })
+
   it('describes animations and text sequences and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['animation', 'fade-in', 'slide-in', 'scale-in', 'spin', 'pulse', 'shimmer', 'delay', 'repeat', '"infinite"', 'text.sequence', 'interval', 'loop'])

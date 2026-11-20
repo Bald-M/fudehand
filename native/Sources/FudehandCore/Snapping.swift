@@ -46,6 +46,32 @@ public enum Snapping {
         return (Point(x: dx ?? 0, y: dy ?? 0), guides)
     }
 
+    /// Snaps only the edges a resize handle drags to the min/mid/max edges of `others`; the opposite edges stay put.
+    /// Returns the adjusted rectangle and the guides that show the resulting alignments.
+    public static func snapEdges(_ rect: Rect, handle: ResizeHandle, to others: [Rect], threshold: Double) -> (rect: Rect, guides: [Guide]) {
+        var left = rect.minX, right = rect.maxX, top = rect.minY, bottom = rect.maxY
+        func delta(_ edge: Double, _ edges: (Rect) -> (Double, Double, Double)) -> Double? {
+            bestDelta(edge, edge, edge, others.map(edges), threshold)
+        }
+        var vertical: Double?, horizontal: Double?
+        if handle.movesLeft, let d = delta(left, { ($0.minX, $0.midX, $0.maxX) }) { left += d; vertical = left }
+        if handle.movesRight, let d = delta(right, { ($0.minX, $0.midX, $0.maxX) }) { right += d; vertical = right }
+        if handle.movesTop, let d = delta(top, { ($0.minY, $0.midY, $0.maxY) }) { top += d; horizontal = top }
+        if handle.movesBottom, let d = delta(bottom, { ($0.minY, $0.midY, $0.maxY) }) { bottom += d; horizontal = bottom }
+        let snapped = Rect(x: left, y: top, width: right - left, height: bottom - top)
+        var guides: [Guide] = []
+        func append(_ guide: Guide) { if !guides.contains(guide) { guides.append(guide) } }
+        for other in others {
+            if let x = vertical, [other.minX, other.midX, other.maxX].contains(where: { abs($0 - x) <= tolerance }) {
+                append(Guide(axis: .vertical, position: x, start: min(snapped.minY, other.minY), end: max(snapped.maxY, other.maxY)))
+            }
+            if let y = horizontal, [other.minY, other.midY, other.maxY].contains(where: { abs($0 - y) <= tolerance }) {
+                append(Guide(axis: .horizontal, position: y, start: min(snapped.minX, other.minX), end: max(snapped.maxX, other.maxX)))
+            }
+        }
+        return (snapped, guides)
+    }
+
     /// Every (moving edge, other edge) combination, regardless of edge kind.
     private static func pairs(_ moving: [Double], _ others: [Double]) -> [(Double, Double)] {
         moving.flatMap { m in others.map { (m, $0) } }

@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- Layout guides: a frame can show a *Grid*, *Columns*, or *Rows* over its content on the canvas, each with its own color and a show/hide toggle, added and edited in the new *Layout Guides* section of the properties panel. Columns and rows stretch between margins or keep a fixed width at the start, center, or end, with a gutter between them. Layers moved or resized inside the frame snap to the edges of its visible columns and rows, and resize handles now snap like moving does (hold ⌃ to turn it off). Guides never show in snapshots, thumbnails, or prototype playback. Agents read and set `layoutGuides` through `design_get_node`, `design_create_node`, and `design_update_node`. Project files are now format version 6; older files open unchanged (#192).
+
 ## [0.0.4] - 2026-11-20
 
 ### Summary
