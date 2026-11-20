@@ -141,6 +141,8 @@ describe('design tools', () => {
       { command: 'list_colors', args: { ids: ['f'] } },
       { command: 'replace_color', args: { from: '#FF0000', to: '#00FF00' } },
       { command: 'replace_color', args: { from: '#FF0000', to: '#00FF00', ids: ['a', 'b'] } },
+    ])
+  })
 
   it('reads and writes annotations through the App', async () => {
     const byName = (name: string) => (tools as { name: string, description: string, inputSchema: any }[]).find(tool => tool.name === name)!
