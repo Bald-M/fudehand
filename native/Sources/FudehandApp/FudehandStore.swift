@@ -511,7 +511,9 @@ final class FudehandStore: ObservableObject {
         var isDirectory: ObjCBool = false
         if files.fileExists(atPath: directory.path, isDirectory: &isDirectory) {
             guard isDirectory.boolValue else { throw HTMLExportError(reason: .notADirectory, path: directory.path) }
-            let entries = (try? files.contentsOfDirectory(atPath: directory.path)) ?? []
+            guard let entries = try? files.contentsOfDirectory(atPath: directory.path) else {
+                throw HTMLExportError(reason: .unwritable, path: directory.path)
+            }
             guard entries.allSatisfy({ $0 == ".DS_Store" }) else { throw HTMLExportError(reason: .notEmpty, path: directory.path) }
         }
         var missingIcon: String?
@@ -530,7 +532,7 @@ final class FudehandStore: ObservableObject {
             for (path, data) in result.files {
                 let url = directory.appendingPathComponent(path)
                 try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: url)
+                try data.write(to: url, options: .withoutOverwriting)
             }
         } catch {
             throw HTMLExportError(reason: .unwritable, path: directory.path)

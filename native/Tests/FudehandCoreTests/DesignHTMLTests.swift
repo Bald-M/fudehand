@@ -22,6 +22,15 @@ private func rule(_ result: DesignHTMLExport, _ id: String) -> [String] {
     return html[start.upperBound..<end.lowerBound].split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
 }
 
+/// The declarations of the glyph rule (`::before`) of the icon carrying `data-layer-id="id"`.
+private func glyph(_ result: DesignHTMLExport, _ id: String) -> [String] {
+    let html = result.html
+    guard let tag = html.range(of: #"class="[^"]+" data-layer-id="\#(id)""#, options: .regularExpression) else { return [] }
+    let name = html[tag].split(separator: "\"")[1]
+    guard let start = html.range(of: ".\(name)::before { "), let end = html[start.upperBound...].range(of: " }") else { return [] }
+    return html[start.upperBound..<end.lowerBound].split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+}
+
 private func frame(_ id: String, layout: [String: Any]? = nil, children: [[String: Any]] = [], extra: [String: Any] = [:]) -> [String: Any] {
     var object: [String: Any] = ["id": id, "type": "frame", "name": id, "x": 0, "y": 0, "width": 320, "height": 200, "children": children]
     if let layout { object["layout"] = layout }
@@ -195,11 +204,50 @@ private func rect(_ id: String, _ extra: [String: Any] = [:]) -> [String: Any] {
     #expect(asked == ["lucide/house", "sf/gearshape.fill"])
     #expect(result.assets == ["i1": "assets/icons/lucide-house.svg", "i2": "assets/icons/lucide-house.svg", "i3": "assets/icons/sf-gearshape-fill.png"])
     #expect(result.files["assets/icons/sf-gearshape-fill.png"] == png)
-    let css = rule(result, "i1")
+    let css = glyph(result, "i1")
     #expect(css.contains("background-color: #0A7AFF"))
     #expect(css.contains("mask: url(assets/icons/lucide-house.svg) center / contain no-repeat"))
     #expect(css.contains("-webkit-mask: url(assets/icons/lucide-house.svg) center / contain no-repeat"))
+    #expect(css.contains("position: absolute"))
+    #expect(css.contains("inset: 0"))
+    #expect(rule(result, "i1").contains("position: absolute"))
     #expect(result.html.contains(#"<span class="home" data-layer-id="i1" role="img" aria-label="Home"></span>"#))
+}
+
+@Test func iconFillAndStrokeStayOutsideTheGlyph() throws {
+    let result = try export(frame("root", layout: ["direction": "horizontal"], children: [
+        ["id": "i", "type": "icon", "name": "i", "width": 24, "height": 24, "fill": "#EEEEEE", "stroke": ["color": "#111111", "width": 1],
+         "icon": ["name": "lucide/house"]],
+    ]))
+    let css = rule(result, "i")
+    #expect(css.contains("background: #EEEEEE"))
+    #expect(css.contains("outline: 1px solid #111111"))
+    #expect(css.contains("position: relative"))
+    #expect(!css.contains { $0.contains("mask") })
+}
+
+@Test func iconFilesOfDifferentNamesDoNotCollide() throws {
+    let result = try export(frame("root", children: [
+        ["id": "a", "type": "icon", "name": "a", "icon": ["name": "lucide/a-b"]],
+        ["id": "b", "type": "icon", "name": "b", "icon": ["name": "lucide/a.b"]],
+    ]))
+    #expect(result.assets == ["a": "assets/icons/lucide-a-b.svg", "b": "assets/icons/lucide-a-b-2.svg"])
+}
+
+@Test func flowChildrenDoNotShrink() throws {
+    let result = try export(frame("root", layout: ["direction": "horizontal"], children: [
+        rect("fixed"), rect("fills", ["sizing": ["horizontal": "fill"]]),
+    ]))
+    #expect(rule(result, "fixed").contains("flex-shrink: 0"))
+    #expect(!rule(result, "fills").contains("flex-shrink: 0"))
+}
+
+@Test func hostileFontNamesAreWrittenSafely() throws {
+    let result = try export(frame("root", children: [
+        ["id": "t", "type": "text", "name": "t", "text": ["content": "x", "fontFamily": "X</style><script>\\\n\""]],
+    ]))
+    #expect(!result.html.contains("<script>"))
+    #expect(rule(result, "t").contains(#"font-family: "X/stylescript", -apple-system, BlinkMacSystemFont, sans-serif"#))
 }
 
 @Test func missingIconArtworkIsAnError() throws {

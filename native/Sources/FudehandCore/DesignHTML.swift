@@ -64,6 +64,7 @@ public enum DesignHTML {
         var assets: [String: String] = [:]
         var usedClasses: Set<String> = []
         var iconPaths: [String: String] = [:]
+        var usedIconFiles: Set<String> = []
 
         mutating func element(_ node: DesignNode, context: Context, depth: Int) throws -> String {
             let indent = String(repeating: "  ", count: depth - 1)
@@ -90,9 +91,11 @@ public enum DesignHTML {
                 let icon = node.icon ?? DesignIcon(name: "")
                 let path = try iconPath(icon.name)
                 assets[node.id] = path
-                css.append("background-color: \(Self.color(icon.color))")
-                css.append("mask: url(\(path)) center / contain no-repeat")
-                css.append("-webkit-mask: url(\(path)) center / contain no-repeat")
+                if case .flow = context { css.insert("position: relative", at: 0) }
+                // The glyph is a pseudo-element, so the layer's own fill and stroke are not clipped to its shape.
+                let glyph = ["content: \"\"", "position: absolute", "inset: 0", "background-color: \(Self.color(icon.color))",
+                             "mask: url(\(path)) center / contain no-repeat", "-webkit-mask: url(\(path)) center / contain no-repeat"]
+                rules.insert(".\(name)::before { \(glyph.map { $0 + ";" }.joined(separator: " ")) }", at: ruleIndex + 1)
                 tag = #"\#(indent)<span \#(open) role="img" aria-label="\#(escape(node.name))"></span>"#
             case .frame, .group, .rectangle, .ellipse:
                 if let layout = node.layout, node.type == .frame { css += flex(layout) }
@@ -116,6 +119,7 @@ public enum DesignHTML {
         func size(_ node: DesignNode, context: Context) -> [String] {
             var css: [String] = []
             var keepWidth = true, keepHeight = true
+            if case .flow = context, node.type == .group { css.append("flex-shrink: 0") }
             if case .flow(let layout) = context, node.type != .group {
                 let horizontal = layout.direction == .horizontal
                 let primary = horizontal ? node.sizing.horizontal : node.sizing.vertical
@@ -123,6 +127,9 @@ public enum DesignHTML {
                 if primary == .fill {
                     css += ["flex: 1 1 0", horizontal ? "min-width: 0" : "min-height: 0"]
                     if horizontal { keepWidth = false } else { keepHeight = false }
+                } else {
+                    // Auto layout never shrinks a child that does not fill; it overflows instead.
+                    css.append("flex-shrink: 0")
                 }
                 if cross == .fill || layout.crossAlign == .stretch {
                     if cross == .fill { css.append("align-self: stretch") }
@@ -144,7 +151,7 @@ public enum DesignHTML {
 
         func appearance(_ node: DesignNode) -> [String] {
             var css: [String] = []
-            if let fill = node.fill, node.type != .icon { css.append("background: \(Self.color(fill))") }
+            if let fill = node.fill { css.append("background: \(Self.color(fill))") }
             if node.type == .ellipse { css.append("border-radius: 50%") }
             else if node.type.hasCornerRadius, node.cornerRadius > 0 { css.append("border-radius: \(Self.px(node.cornerRadius))") }
             // The canvas draws strokes inside the bounds and above the children, which an inset outline matches without moving them.
@@ -181,7 +188,9 @@ public enum DesignHTML {
 
         func textStyle(_ text: DesignText) -> [String] {
             let system = "-apple-system, BlinkMacSystemFont, sans-serif"
-            let family = text.fontFamily.map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\", \(system)" } ?? system
+            // Quotes, backslashes, angle brackets, and control characters could end the CSS string or the style element.
+            let safe = text.fontFamily.map { String($0.unicodeScalars.filter { !"\"\\<>".unicodeScalars.contains($0) && $0.properties.generalCategory != .control }) }
+            let family = safe.map { "\"\($0)\", \(system)" } ?? system
             return ["font-family: \(family)", "font-size: \(Self.px(text.fontSize))", "font-weight: \(text.fontWeight)",
                     "line-height: \(lineHeight(text))", "color: \(Self.color(text.color))",
                     "text-align: \(text.align.rawValue)", "white-space: \(text.autoResize == .widthAndHeight ? "pre" : "pre-wrap")"]
@@ -195,7 +204,10 @@ public enum DesignHTML {
         mutating func iconPath(_ name: String) throws -> String {
             if let path = iconPaths[name] { return path }
             guard let artwork = iconArtwork(name) else { throw DesignError("No artwork for icon \(name)") }
-            let path = "assets/icons/\(slug(name)).\(artwork.ext)"
+            var base = "assets/icons/\(slug(name))", counter = 2
+            while usedIconFiles.contains(base) { base = "assets/icons/\(slug(name))-\(counter)"; counter += 1 }
+            usedIconFiles.insert(base)
+            let path = "\(base).\(artwork.ext)"
             files[path] = artwork.data
             iconPaths[name] = path
             return path

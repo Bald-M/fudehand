@@ -715,6 +715,10 @@ private func temporaryDirectory() -> URL {
     let html = try String(contentsOf: directory.appendingPathComponent("index.html"), encoding: .utf8)
     #expect(result["html"] as? String == html)
     #expect(html.contains(#"data-layer-id="f""#))
+    // The menu's path, the same store method, gives the same files.
+    let again = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: again) }
+    #expect(try store.exportHTML("f", to: again).files.keys.sorted() == result["files"] as? [String])
     let symbol = try Data(contentsOf: directory.appendingPathComponent("assets/icons/sf-gearshape.png"))
     #expect(NSBitmapImageRep(data: symbol)?.pixelsWide == 256)
 }
