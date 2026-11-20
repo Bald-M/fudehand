@@ -10,8 +10,16 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-11-20
+
+### Summary
+
+This is the first release under the name Fudehand; see the breaking rename under *Changed* for what to move by hand. Designs become clickable prototypes: layers navigate between frames with transitions, frames scroll, layers react to hover and press, overlays open and close, and layers animate, all played in a prototype window. The canvas gains icon layers with four built-in icon libraries and an icon picker, SVG images, and a font menu with font import. The chat panel keeps each document's conversations, can ask you a question with options, shows its context use, compacts long conversations, predicts your next message, and adds slash commands with plan and goal modes. Agents get a style library and design principles. Selection is faster in large documents, and the canvas works with VoiceOver and Reduce Motion.
+
 ### Added
 
+- Prototype interactions: a layer can have an *On click* interaction that goes to another top-level frame (*Navigate to*) or back to the previous one (*Back*), with a *Transition* (*None*, *Dissolve*, *Push Left* / *Right* / *Up* / *Down*, or *Bottom Sheet*), duration, and easing; *Back* plays the transition it came with in reverse. Interactions are added in the new Prototype section of the properties panel and share the undo history. *Canvas → Play Prototype* (⌥⌘↩) or the ▶ toolbar button opens a prototype window that starts from the selected layer's frame (or the first frame), plays at the frame's real size, and follows edits; Esc or ⌘W closes it. Agents set `interaction` through `design_create_node` / `design_update_node`. Project files are now format version 2; older files still open (#149).
+- Chat panel: when a request is ambiguous or missing key information, the AI can pause and ask you a question with two to four options, the first marked as recommended. Pick an option, type your own answer, or choose *Skip, let AI decide*; the card then folds into the question and answer and the AI carries on. While it waits it runs no tools, the panel shows *Waiting for your answer*, and an unanswered question is saved with the conversation (#106).
 - An icon picker: the *Insert Icon* button on the bottom canvas toolbar opens a popover that switches between SF Symbols, Material Symbols (with an *Outlined* / *Rounded* / *Sharp* style menu), WeUI, and Lucide, searches by keyword, and shows the icons in a grid. Clicking an icon inserts a 24 × 24 icon layer and selects it; *Replace Icon…* in the properties panel opens the same picker to swap the icon of the selected icon layer, keeping its position, size, and color; a layer still named after the old icon takes the new icon's name, and the picker opens scrolled to the current icon. With an empty search, SF Symbols lists localized variants (such as `0.circle.ar`) after the base names (#156).
 - A style library for the Agent: when you name a style or ask for a design like a known product (for example Linear, Stripe, or Notion), the Agent reads that style's colors, fonts, type scale, spacing, and corner radius before building, and says so when the library has none. Ten styles are included, adapted from VoltAgent/awesome-design-md with macOS fonts; they are third-party analyses, not official brand systems. Both the chat panel and the MCP server get the new `style_list` and `style_read` tools.
 - Icon layers with four built-in icon libraries: SF Symbols (`sf`, drawn by the system), Material Symbols in three styles (`material-outlined`, `material-rounded`, `material-sharp`, with `.fill` variants), WeUI (`weui`), and Lucide (`lucide`). An icon layer stores only `library/name` and a color, is drawn sharp at any zoom, and shows a placeholder when this Mac does not have the icon. The layers panel lists icon layers, and the properties panel shows the icon name and changes its color. Agents search with `design_search_icons` and create icon layers through `design_create_node`; an unknown icon name is an error that lists similar names, and the design guidance tells Agents to use real icons from the library of the prototype's platform. Project files are now format version 5; older files still open (#155).
@@ -33,6 +41,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - The app icon is now an ink-wash painting: mountains receding in three ink tones under a red sun.
 - *MCP Connectors…* shows each Agent's icon (Claude, Codex, the DeepSeek whale) beside its name, with the status dot as a badge on the icon; an Agent whose CLI is not installed has a dimmed, gray icon (#153).
 - Selecting a layer is faster, most noticeably in large documents: the properties panel keeps its controls when the selection moves to another layer instead of rebuilding them, and only the layer rows on screen and the inspector redraw. On a 5,100-layer document a selection now settles in about 10 ms instead of about 40 ms. `pnpm bench:native` also measures it.
+- Accessibility: VoiceOver reads the canvas as a layout area whose items are the visible top-level layers and the selected nested layers, with name, type, position, and selection; VO-Space selects a layer as a click would, and panning, zooming, and selection changes are announced. With *Reduce Motion* on, *Fit All*, *Zoom to Layer*, focusing a frame, and the zoom buttons jump straight to the result. Icon-only buttons and menus in the chat, layers, and properties panels and the launch window have larger click targets (at least 20 × 20 points) and spoken labels, including the *Appearance* menu (#174).
 
 ### Fixed
 
@@ -167,7 +176,8 @@ The first release of ui-atlas: a native macOS AI design tool that runs locally. 
 - After the rename, the app bundle is `dist/ui-atlas.app`, the control channel lives at `~/Library/Application Support/ui-atlas/control.sock`, and the Keychain service name is `ui-atlas.agent`. A chat panel API key saved in the Keychain before the rename must be entered again (#45).
 - See the [README](README.md) for Codex approval settings for MCP tool calls (#33); see [ADR 0003](docs/adr/0003-agent-mcp.md) for the design of MCP, the control channel, and the chat panel (#27).
 
-[Unreleased]: https://github.com/Bald-M/ui-atlas/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/Bald-M/fudehand/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/Bald-M/fudehand/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/Bald-M/ui-atlas/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Bald-M/ui-atlas/releases/tag/v0.0.1
