@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
-import { callTool, tools } from './fudehand-tools.mjs'
+import { callTool, secretArguments, tools } from './fudehand-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 import { designGuidance } from './design-guidance.mjs'
 
@@ -79,9 +79,22 @@ const system = [
   `\n${designGuidance}`,
 ].filter(Boolean).join('\n')
 
-/** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */
+/** The keys to keep out of what the App shows and saves: this harness's own, and any the model sets with a tool. */
+const secrets = new Set(apiKey ? [apiKey] : [])
+
+/** Remembers the secret arguments of a tool call (an API key being set), so neither the call nor later text shows them. */
+function rememberSecrets(name, args) {
+  for (const key of secretArguments[name] ?? []) {
+    const value = args?.[key]
+    if (typeof value === 'string' && value.trim()) { secrets.add(value); secrets.add(value.trim()) }
+  }
+}
+
+/** Strips the keys from any text sent to the App, so they never appear in the UI or logs. */
 function redact(text) {
-  return apiKey ? String(text).split(apiKey).join('***') : String(text)
+  let result = String(text)
+  for (const secret of secrets) result = result.split(secret).join('***')
+  return result
 }
 
 function emit(event) {
@@ -279,6 +292,7 @@ async function reply(text, controller, mode) {
           log.push({ role: 'tool', id: call.id, name: call.name, text: 'Goal mode ended.' })
           continue
         }
+        rememberSecrets(call.name, call.args)
         emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] }
           : plan && !readingTools.includes(call.name) ? { isError: true, content: [{ type: 'text', text: planRefusal }] }

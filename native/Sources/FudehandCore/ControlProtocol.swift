@@ -53,6 +53,20 @@ public enum ControlCommand: Equatable, Sendable {
     /// A nil answer skips the question.
     case answerQuestion(UUID?, answer: String?)
     case compactConversation(UUID?)
+    case getInterface
+    case updateInterface(language: AppLanguage?, appearance: Appearance?)
+    case getModels
+    case updateModelProvider(String, model: String?, baseUrl: String?, use: Bool)
+    case listModels(String, baseUrl: String?)
+    case setAPIKey(String, key: String)
+    case deleteAPIKey(String)
+    case getConnectors
+    case setConnector(AgentConnector, connected: Bool)
+}
+
+/// The App's appearance setting; raw values are what is saved.
+public enum Appearance: String, CaseIterable, Sendable {
+    case system, light, dark
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -210,6 +224,25 @@ public enum ControlProtocol {
             }
             return mode
         }
+        /// A string that may be empty (an empty model or base URL means the default); nil when absent.
+        func optionalText(_ key: String) throws -> String? {
+            switch args[key] {
+            case nil, is NSNull: return nil
+            case let text as String: return text
+            default: throw Message(text: "Invalid argument type: \(key)")
+            }
+        }
+        func choice<T: RawRepresentable & CaseIterable>(_ key: String, _ type: T.Type) throws -> T? where T.RawValue == String {
+            guard let name = try optionalString(key) else { return nil }
+            guard let value = T(rawValue: name) else {
+                throw Message(text: "\(key) must be one of \(T.allCases.map(\.rawValue).joined(separator: ", ")); got \(name)")
+            }
+            return value
+        }
+        func required<T>(_ key: String, _ value: T?) throws -> T {
+            guard let value else { throw Message(text: "Missing argument: \(key)") }
+            return value
+        }
         func positive(_ key: String, default fallback: Double? = nil) throws -> Double {
             guard let value = args[key], !(value is NSNull) else {
                 if let fallback { return fallback }
@@ -288,6 +321,30 @@ public enum ControlProtocol {
             guard skip != (text != nil) else { throw Message(text: "Provide either text or skip: true") }
             return .answerQuestion(try optionalConversation(), answer: text)
         case "compact_conversation": return .compactConversation(try optionalConversation())
+        case "get_interface": return .getInterface
+        case "update_interface":
+            let language = try choice("language", AppLanguage.self), appearance = try choice("appearance", Appearance.self)
+            guard language != nil || appearance != nil else { throw Message(text: "Provide language, appearance, or both") }
+            return .updateInterface(language: language, appearance: appearance)
+        case "get_models": return .getModels
+        case "update_model_provider":
+            let provider = try string("provider")
+            let model = try optionalText("model"), baseUrl = try optionalText("baseUrl"), use = try flag("use")
+            guard model != nil || baseUrl != nil || use else { throw Message(text: "Provide model, baseUrl, or use") }
+            return .updateModelProvider(provider, model: model, baseUrl: baseUrl, use: use)
+        case "list_models": return .listModels(try string("provider"), baseUrl: try optionalText("baseUrl"))
+        case "set_api_key":
+            // The message never repeats the value: it may be a key.
+            guard let key = args["key"] as? String, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw Message(text: args["key"] == nil ? "Missing argument: key" : "Invalid argument type: key")
+            }
+            return .setAPIKey(try string("provider"), key: key.trimmingCharacters(in: .whitespacesAndNewlines))
+        case "delete_api_key": return .deleteAPIKey(try string("provider"))
+        case "get_connectors": return .getConnectors
+        case "set_connector":
+            let connector = try required("connector", try choice("connector", AgentConnector.self))
+            guard args["connected"] != nil, !(args["connected"] is NSNull) else { throw Message(text: "Missing argument: connected") }
+            return .setConnector(connector, connected: try flag("connected"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

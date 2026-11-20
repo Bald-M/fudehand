@@ -78,6 +78,7 @@ const openConversation = { id: { type: 'string', description: 'Conversation id f
 const context = { context: { type: 'array', items: { type: 'string' }, description: 'Ids of layers to attach as context tags, as the selected layers are in the panel; when omitted, none' } }
 const ownConversation = 'Refused for the conversation whose Agent is calling.'
 const sent = 'The reply runs on in the App: read its progress and result with chat_get_conversation.'
+const provider = { provider: { type: 'string', enum: ['deepseek', 'anthropic', 'openai'], description: 'Model provider: deepseek (DeepSeek), anthropic (Claude), or openai (ChatGPT)' } }
 
 export const tools = [
   controlTool('design_get_state', 'get_state', 'Read an overview of the design document: file, whether it has been edited, selection, viewport, whether undo is available, and a summary of top-level layers.'),
@@ -193,8 +194,45 @@ export const tools = [
   controlTool('chat_compact_conversation', 'compact_conversation',
     `Compact an open conversation, as /compact does: the Agent summarizes it and carries on from the summary, freeing context; the messages stay visible. Refused while it is replying. ${ownConversation} ${sent}`,
     conversation, []),
+  controlTool('settings_get_interface', 'get_interface', 'Read the UI language and the appearance (system, light, or dark), with the values each one accepts.'),
+  controlTool('settings_update_interface', 'update_interface',
+    'Change the UI language and/or the appearance, as the App menus do. Settings are not undoable: returns the new values and the previous ones. Items macOS itself adds to the menus change language only after Fudehand restarts.',
+    {
+      language: { type: 'string', enum: ['en-US', 'en-GB', 'zh-Hans', 'zh-Hant'], description: 'UI language' },
+      appearance: { type: 'string', enum: ['system', 'light', 'dark'], description: 'Appearance; system follows macOS' },
+    }, []),
+  controlTool('settings_get_models', 'get_models',
+    'Read the chat panel\'s model providers: for each one its base URL, model (empty means the provider\'s default model), cached model list, whether an API key is saved and its masked hint, and which provider the selected conversation uses. API keys themselves are never returned.'),
+  controlTool('settings_update_model_provider', 'update_model_provider',
+    'Change a model provider\'s base URL and/or model as the Model Settings sheet does, and optionally make it the provider the selected conversation uses (it needs a saved API key). An empty model means the provider\'s default model; an empty base URL means its official endpoint. Returns the provider and the previous values; the change applies from the next message.',
+    {
+      ...provider,
+      model: { type: 'string', description: 'Model id; empty for the provider\'s default model' },
+      baseUrl: { type: 'string', description: 'Base URL; empty for the official endpoint' },
+      use: { type: 'boolean', description: 'When true, the selected conversation uses this provider' },
+    }, ['provider']),
+  controlTool('settings_list_models', 'list_models',
+    'Fetch a provider\'s model list with its saved API key, which also tests the connection, and cache it for the model menu. Returns the models, the provider\'s default model, and the previously cached list; fails with the provider\'s error when the key or endpoint does not work.',
+    { ...provider, baseUrl: { type: 'string', description: 'Base URL to test instead of the saved one; empty for the official endpoint' } }, ['provider']),
+  controlTool('settings_set_api_key', 'set_api_key',
+    'Save a provider\'s API key in the macOS Keychain, replacing any saved one. Keys are write-only: the result shows only the masked hint (first and last 4 characters) and whether a key was saved before. Applies from the next message.',
+    { ...provider, key: { type: 'string', description: 'The API key' } }),
+  controlTool('settings_delete_api_key', 'delete_api_key',
+    'Delete a provider\'s API key from the Keychain. If the selected conversation used that provider, it switches to another provider that has a key. Returns the previous masked hint; applies from the next message.',
+    provider),
+  controlTool('settings_get_connectors', 'get_connectors',
+    'Check and read the MCP connectors: whether the Fudehand MCP server is registered with Claude Code, Codex, and DeepSeek Harness (connected, disconnected, registered to another checkout, or the Agent is not installed).'),
+  controlTool('settings_set_connector', 'set_connector',
+    'Connect or disconnect an MCP connector: register the Fudehand MCP server in that Agent\'s user-level configuration, or remove it. Returns the new and previous status and the command run or file changed; the Agent picks the change up in new sessions.',
+    {
+      connector: { type: 'string', enum: ['claude', 'codex', 'deepseek'], description: 'claude (Claude Code), codex (Codex), or deepseek (DeepSeek Harness)' },
+      connected: { type: 'boolean', description: 'true to connect, false to disconnect' },
+    }),
   ...styleTools,
 ]
+
+/** Tool arguments that hold secrets: whoever shows or records a tool call masks these. */
+export const secretArguments = { settings_set_api_key: ['key'] }
 
 /** Calls a tool; any error becomes an error result carrying its message instead of being thrown. */
 export async function callTool(name, args, ctx) {

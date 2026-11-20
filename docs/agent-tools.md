@@ -49,7 +49,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 1. Tool names are `snake_case` with one of these prefixes. The control-channel command is the same name without the prefix (`design_get_node` → `get_node`). A new namespace MUST be added to this table first.
 2. Before adding a tool, check whether the behavior is a variant of an existing one; if so, add an argument instead (for example a scale argument rather than separate zoom-in and zoom-out tools).
 3. Descriptions and argument descriptions are in English, say what the tool changes and what it returns, and use the terms in `GLOSSARY.md`.
-4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation.
+4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation. A setting that applies from the next message, such as a model or key change, leaves the running reply alone and is allowed.
 
 ## 6. Tests
 
@@ -101,11 +101,10 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 
 | Feature | Tool |
 |---|---|
-| UI language | Missing |
-| Appearance (System, Light, Dark) | Missing |
-| Model provider settings: base URL, model, default model; list models | Missing |
-| Set or delete an API key; test the connection | Missing |
-| MCP connector status, connect, disconnect | Missing |
+| UI language, appearance (System, Light, Dark) | `settings_get_interface`, `settings_update_interface` |
+| Model provider settings: base URL, model, default model, the provider in use; list models | `settings_get_models`, `settings_update_model_provider`, `settings_list_models` |
+| Set or delete an API key; test the connection | `settings_set_api_key`, `settings_delete_api_key`; testing is `settings_list_models` with the saved key, as the sheet's *Test* lists the models |
+| MCP connector status, connect, disconnect | `settings_get_connectors`, `settings_set_connector` |
 
 ### Chat panel
 
