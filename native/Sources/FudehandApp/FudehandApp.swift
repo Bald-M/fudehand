@@ -29,9 +29,9 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
     /// Starts the local control channel; a failure only affects external control, not use of the App.
     func startControl(_ store: FudehandStore) {
         guard control == nil else { return }
-        let server = ControlServer { [weak store] command in
+        let server = ControlServer { [weak store] command, caller in
             guard let store else { throw ControlCommandError("Fudehand is quitting") }
-            return try await store.handleControl(command)
+            return try await store.handleControl(command, caller: caller)
         }
         do { try server.start(); control = server }
         catch { FileHandle.standardError.write(Data("[fudehand] Control channel not started: \(error.localizedDescription)\n".utf8)) }

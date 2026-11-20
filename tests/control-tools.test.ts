@@ -29,6 +29,9 @@ describe('design tools', () => {
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
+      'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
+      'chat_delete_conversation', 'chat_clear_conversation', 'chat_send_message', 'chat_set_mode', 'chat_run_plan', 'chat_stop_reply', 'chat_regenerate_reply',
+      'chat_edit_last_message', 'chat_answer_question', 'chat_compact_conversation',
       'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
@@ -177,6 +180,48 @@ describe('design tools', () => {
     expect(byName('app_open_recent').inputSchema.required).toEqual(['path'])
     expect(byName('app_remove_recent').inputSchema.required).toEqual(['path'])
     expect(byName('app_new_document_from_template').inputSchema.required).toEqual(['name'])
+  })
+
+  it('forwards the chat tools and their arguments to the App unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    const id = '8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8'
+    const calls: [string, Record<string, unknown>, string, Record<string, unknown>][] = [
+      ['chat_list_conversations', {}, 'list_conversations', {}],
+      ['chat_get_conversation', { id }, 'get_conversation', { id }],
+      ['chat_open_conversation', { id }, 'open_conversation', { id }],
+      ['chat_new_conversation', {}, 'new_conversation', {}],
+      ['chat_close_conversation', { id }, 'close_conversation', { id }],
+      ['chat_delete_conversation', { id }, 'delete_conversation', { id }],
+      ['chat_clear_conversation', {}, 'clear_conversation', {}],
+      ['chat_send_message', { id, text: 'Make it blue', context: ['hero'], mode: 'goal' }, 'send_message', { id, text: 'Make it blue', context: ['hero'], mode: 'goal' }],
+      ['chat_set_mode', { mode: 'none' }, 'set_mode', { mode: 'none' }],
+      ['chat_run_plan', { context: ['hero'] }, 'run_plan', { context: ['hero'] }],
+      ['chat_stop_reply', { id }, 'stop_reply', { id }],
+      ['chat_regenerate_reply', {}, 'regenerate_reply', {}],
+      ['chat_edit_last_message', { text: 'Make it red', context: [] }, 'edit_last_message', { text: 'Make it red', context: [] }],
+      ['chat_answer_question', { text: 'Dark' }, 'answer_question', { text: 'Dark' }],
+      ['chat_answer_question', { skip: true }, 'answer_question', { skip: true }],
+      ['chat_compact_conversation', { id }, 'compact_conversation', { id }],
+    ]
+    for (const [name, args] of calls) expect((await callTool(name, args, ctx)).isError, name).toBeFalsy()
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual(calls.map(([, , command, args]) => ({ command, args })))
+    // Only the in-App Agent names its conversation as the caller.
+    expect(fake.received.every(request => !('caller' in request))).toBe(true)
+  })
+
+  it('names the calling conversation so the App can refuse to let it act on itself', async () => {
+    const id = '8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8'
+    const fake = await app(request => (request as { caller?: string }).caller === id && request.command === 'stop_reply'
+      ? { ok: false, error: 'A conversation cannot stop itself; this command was sent by the Agent of that conversation' } : echo(request))
+    const ctx = { root: '/repo', socketPath: fake.socketPath, conversation: id }
+    const refused = await callTool('chat_stop_reply', {}, ctx)
+    expect(refused.isError).toBe(true)
+    expect(text(refused)).toContain('cannot stop itself')
+    await callTool('design_get_state', {}, ctx)
+    expect(fake.received.map(request => (request as { caller?: string }).caller)).toEqual([id, id])
+    for (const name of ['chat_close_conversation', 'chat_delete_conversation', 'chat_send_message', 'chat_stop_reply', 'chat_set_mode'])
+      expect((tools as { name: string, description: string }[]).find(tool => tool.name === name)!.description).toContain('Refused for the conversation whose Agent is calling')
   })
 
   it('expands ~ in file and image paths to the home directory', async () => {

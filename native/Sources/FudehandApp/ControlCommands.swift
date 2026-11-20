@@ -3,7 +3,8 @@ import Foundation
 
 /// Control-channel commands are dispatched to the store on the main thread; the result is a dictionary that can be encoded as JSON. Agent edits share the undo history with manual edits.
 extension FudehandStore {
-    func handleControl(_ command: ControlCommand) async throws -> Any {
+    /// `caller` is the chat panel conversation whose Agent sent the command; nil for any other caller.
+    func handleControl(_ command: ControlCommand, caller: UUID? = nil) async throws -> Any {
         switch command {
         case .getState:
             return controlState()
@@ -128,6 +129,9 @@ extension FudehandStore {
             }
             try newDocument(fromTemplate: template) { try requireDiscardable(discard); return true }
             return controlState()
+        case .listConversations, .getConversation, .openConversation, .newConversation, .closeConversation, .deleteConversation,
+             .clearConversation, .sendMessage, .setMode, .runPlan, .stopReply, .regenerateReply, .editLastMessage, .answerQuestion, .compactConversation:
+            return try handleChatControl(command, caller: caller)
         }
     }
 

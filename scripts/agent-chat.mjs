@@ -31,12 +31,14 @@ import { designGuidance } from './design-guidance.mjs'
  * `mode` applies to that one message. In plan mode the model gets only the tools that read the design document and replies with a plan;
  * the user confirms it with an ordinary message. In goal mode the message is a goal: the model keeps working, over more rounds than an
  * ordinary reply gets, until it calls goal_done, whose summary is sent as the reply's last assistant text.
- * The provider, model, baseUrl, and API key are passed only through environment variables; exits when stdin closes.
+ * The provider, model, baseUrl, and API key are passed only through environment variables, as is FUDEHAND_CONVERSATION, the id of the
+ * conversation the harness serves, which every tool call names as its caller; exits when stdin closes.
  * With --list-models it only prints one line, {type:'models',models,default,windows} or {type:'error',message}, then exits.
  */
 
 const { values } = parseArgs({ options: { root: { type: 'string' }, 'list-models': { type: 'boolean' } } })
-const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)) }
+// `conversation` names the conversation this harness serves, so the App refuses tool calls that would stop, delete, or reconfigure it.
+const ctx = { root: values.root ? resolve(values.root) : fileURLToPath(new URL('../', import.meta.url)), conversation: process.env.FUDEHAND_CONVERSATION || undefined }
 const apiKey = process.env.FUDEHAND_API_KEY ?? ''
 const maximumRounds = 16
 const maximumGoalRounds = 64

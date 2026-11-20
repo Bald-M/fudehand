@@ -49,7 +49,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 1. Tool names are `snake_case` with one of these prefixes. The control-channel command is the same name without the prefix (`design_get_node` → `get_node`). A new namespace MUST be added to this table first.
 2. Before adding a tool, check whether the behavior is a variant of an existing one; if so, add an argument instead (for example a scale argument rather than separate zoom-in and zoom-out tools).
 3. Descriptions and argument descriptions are in English, say what the tool changes and what it returns, and use the terms in `GLOSSARY.md`.
-4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead.
+4. A tool MUST NOT stop, delete, or reconfigure the conversation that is calling it; it returns an error instead. The in-App Agent harness knows its conversation from `FUDEHAND_CONVERSATION` and sends it as the request's `caller`; the App refuses a `chat_*` command that would close, delete, clear, stop, send to, or change that conversation.
 
 ## 6. Tests
 
@@ -111,8 +111,11 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 
 | Feature | Tool |
 |---|---|
-| List conversations, open, switch, close a conversation tab, start a new one, delete one | Missing |
-| Send a message (with context tags, `/plan`, `/goal`), stop, regenerate, edit the last message, answer a question card, `/compact` | Missing |
+| List conversations; read a conversation's messages, tool calls, and question cards | `chat_list_conversations`, `chat_get_conversation` |
+| Open or switch to a conversation, start a new one (`/new`), close a tab, delete a conversation, empty one (`/clear`) | `chat_open_conversation`, `chat_new_conversation`, `chat_close_conversation`, `chat_delete_conversation`, `chat_clear_conversation` |
+| Send a message (with context tags, `/plan`, `/goal`), leave plan or goal mode, run a plan | `chat_send_message` (`context`, `mode`), `chat_set_mode`, `chat_run_plan` |
+| Stop, regenerate, edit the last message, answer or skip a question card, `/compact` | `chat_stop_reply`, `chat_regenerate_reply`, `chat_edit_last_message`, `chat_answer_question`, `chat_compact_conversation` |
+| Choose a conversation's model (`/model`, the model menu) | Missing: tracked with the model provider settings in [Settings](#settings) |
 | Ask the user a question (question card) | `ask_user`, Agent harness only |
 
 ### Agent-only reference

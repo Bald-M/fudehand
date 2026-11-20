@@ -9,8 +9,12 @@ export function defaultSocketPath(env = process.env) {
 
 let nextId = 1
 
-/** Sends one command and waits for the matching response; errors returned by the App are thrown as is. */
-export function sendControl(command, args = {}, { socketPath = defaultSocketPath(), timeoutMs = 15000 } = {}) {
+/**
+ * Sends one command and waits for the matching response; errors returned by the App are thrown as is.
+ * `caller` is the id of the chat panel conversation whose Agent sends the command, so the App can refuse to let it stop, delete,
+ * or reconfigure that conversation; it is left out for any other caller.
+ */
+export function sendControl(command, args = {}, { socketPath = defaultSocketPath(), timeoutMs = 15000, caller } = {}) {
   return new Promise((resolveResult, reject) => {
     const id = nextId++
     const socket = net.createConnection(socketPath)
@@ -30,7 +34,7 @@ export function sendControl(command, args = {}, { socketPath = defaultSocketPath
       ['ENOENT', 'ECONNREFUSED', 'ENOTSOCK'].includes(error.code) ? 'Fudehand is not running'
         : ['ECONNRESET', 'EPIPE'].includes(error.code) ? 'Fudehand closed the connection early' : error.message,
     )))
-    socket.once('connect', () => socket.write(JSON.stringify({ id, command, args }) + '\n'))
+    socket.once('connect', () => socket.write(JSON.stringify({ id, command, args, ...(caller ? { caller } : {}) }) + '\n'))
     socket.on('data', chunk => {
       const end = chunk.indexOf('\n')
       if (end < 0) { chunks.push(chunk); return }
