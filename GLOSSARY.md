@@ -22,7 +22,7 @@ _Avoid_: work (作品), project directory (项目目录) (these refer to the rem
 **Icon name (图标名字 / 圖示名稱)**: How an icon layer names its icon: `<library>/<name>`, such as `sf/house.fill` or `material-rounded/home.fill`.
 _Avoid_: element (元素), component (组件) (components mean something else and are out of scope for now)
 
-**Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
+**Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, auto layout, and layout guides. A top-level frame usually represents a screen, and the canvas shows a name label above it.
 _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
 **Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
@@ -31,6 +31,9 @@ _Avoid_: version history, backup (a snapshot never restores the frame), snapshot
 **Group (分组 / 群組)**: A layer used to organize child layers. It cannot use auto layout or be resized with handles, and its size always equals the union of its child layers. Inside an auto layout frame a group is placed like any other child layer but ignores fill container (fill) and cross-axis stretch: it keeps the size of its child layers and takes no share of the remaining space.
 
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
+
+**Layout guide (布局辅助线 / 佈局輔助線)**: A grid, columns, or rows drawn over a frame on the editing canvas, with its own color, that can be shown or hidden. Layers moved or resized inside the frame snap to the edges of its visible columns and rows. Layout guides are saved with the frame but never appear in snapshots or prototype playback.
+_Avoid_: snapping guide (吸附参考线, the red lines shown while dragging), ruler guide (标尺参考线, canvas-wide; out of scope)
 
 **Prototype (原型 / 原型)**: A design document played as clickable screens in the prototype window: its top-level frames are the screens, and layers with an interaction move between them.
 

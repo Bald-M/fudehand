@@ -4,6 +4,15 @@ import Foundation
 /// The document's own lookups (`indexPath`, `worldRect`, …) search the whole tree on every call. The canvas and the store ask
 /// about many layers on every pointer event, so they build this once per document change and read from it instead (#52).
 public struct DesignIndex {
+    /// A frame whose layout guides the canvas draws: its absolute rectangle, the part of it left visible by clipping ancestors, and
+    /// its visible guides.
+    public struct GuideFrame: Equatable {
+        public var id: String
+        public var rect: Rect
+        public var clip: Rect
+        public var guides: [LayoutGuide]
+    }
+
     private struct Entry {
         var parent: String?
         /// The position among the parent's children.
@@ -13,19 +22,30 @@ public struct DesignIndex {
 
     public let document: DesignDocument
     private let entries: [String: Entry]
+    /// Visible frames (with every ancestor visible) that have at least one visible layout guide, in depth-first order.
+    public let guideFrames: [GuideFrame]
 
     public init(_ document: DesignDocument = DesignDocument()) {
         self.document = document
         var entries: [String: Entry] = [:]
-        func visit(_ nodes: [DesignNode], parent: String?, x: Double, y: Double) {
+        var guideFrames: [GuideFrame] = []
+        /// `clip` is nil while no ancestor clips; `shown` is false below a hidden layer.
+        func visit(_ nodes: [DesignNode], parent: String?, x: Double, y: Double, clip: Rect?, shown: Bool) {
             for (position, node) in nodes.enumerated() {
                 let rect = Rect(x: x + node.x, y: y + node.y, width: node.width, height: node.height)
                 entries[node.id] = Entry(parent: parent, position: position, rect: rect)
-                visit(node.children, parent: node.id, x: rect.x, y: rect.y)
+                let visible = shown && node.visible
+                if visible, node.type == .frame {
+                    let guides = node.layoutGuides.filter(\.visible)
+                    if !guides.isEmpty { guideFrames.append(GuideFrame(id: node.id, rect: rect, clip: clip.map { $0.clamped(rect) } ?? rect, guides: guides)) }
+                }
+                let childClip = node.type == .frame && node.clipsContent ? (clip.map { $0.clamped(rect) } ?? rect) : clip
+                visit(node.children, parent: node.id, x: rect.x, y: rect.y, clip: childClip, shown: visible)
             }
         }
-        visit(document.nodes, parent: nil, x: 0, y: 0)
+        visit(document.nodes, parent: nil, x: 0, y: 0, clip: nil, shown: true)
         self.entries = entries
+        self.guideFrames = guideFrames
     }
 
     public func contains(_ id: String) -> Bool { entries[id] != nil }

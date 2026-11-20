@@ -1,8 +1,9 @@
 import AppKit
 import FudehandCore
 
-/// Screen-space decorations drawn above the layers: hover, selection box, resize handles, top-level frame names, marquee selection,
-/// snapping guides, and annotation markers. Never receives pointer input; the canvas hit-tests markers with `markerRect`.
+/// Screen-space decorations drawn above the layers: frame layout guides, hover, selection box, resize handles, top-level frame
+/// names, marquee selection, snapping guides, and annotation markers. Never receives pointer input (the canvas hit-tests markers
+/// with `markerRect`), and layout guides never appear in snapshots or playback.
 final class CanvasOverlay: NSView {
     override var isFlipped: Bool { true }
     private let hoverLayer = CAShapeLayer()
@@ -11,6 +12,12 @@ final class CanvasOverlay: NSView {
     private let marqueeLayer = CAShapeLayer()
     private let guideLayer = CAShapeLayer()
     private let labelHost = CALayer()
+    private let layoutGuideHost = CALayer()
+    /// One shape per drawn layout guide, reused across renders; the first `layoutGuideCount` are in use.
+    private var layoutGuideLayers: [CAShapeLayer] = []
+    private var layoutGuideCount = 0
+    /// A grid whose lines would sit closer than this many screen points is not drawn, so zooming out does not fill the frame.
+    static let minimumGridSpacing = 4.0
     private var labels: [String: CATextLayer] = [:]
     private let markerHost = CALayer()
     private var markers: [String: AnnotationMarkerLayer] = [:]
@@ -37,6 +44,8 @@ final class CanvasOverlay: NSView {
         }
         labelHost.actions = DesignRenderer.noActions
         layer?.insertSublayer(labelHost, at: 0)
+        layoutGuideHost.actions = DesignRenderer.noActions
+        layer?.insertSublayer(layoutGuideHost, at: 0)
         markerHost.actions = DesignRenderer.noActions
         layer?.addSublayer(markerHost)
         updateColors()
@@ -49,6 +58,10 @@ final class CanvasOverlay: NSView {
     /// Screen-space bounds of the drawn selection outlines; `.null` when nothing is selected.
     var selectionBounds: CGRect { selectionLayer.path?.boundingBoxOfPath ?? .null }
     var labelTexts: [String: String] { labels.compactMapValues { $0.string as? String } }
+    /// The screen-space paths of the layout guides drawn now, in drawing order.
+    var layoutGuidePaths: [CGPath] { layoutGuideLayers.prefix(layoutGuideCount).compactMap(\.path) }
+    /// The line widths of the grids drawn now.
+    var layoutGuideLineWidths: [CGFloat] { layoutGuideLayers.prefix(layoutGuideCount).filter { $0.strokeColor != nil }.map(\.lineWidth) }
     /// The drawn markers' counts by annotation id, and which one is expanded; for tests.
     var markerCounts: [String: String] { markers.compactMapValues { $0.count.string as? String } }
     var expandedMarker: String? { markers.first { $0.value.expanded }?.key }
@@ -57,7 +70,7 @@ final class CanvasOverlay: NSView {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost, markerHost] { shape.frame = bounds }
+        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost, layoutGuideHost, markerHost] { shape.frame = bounds }
         CATransaction.commit()
     }
 
@@ -158,9 +171,63 @@ final class CanvasOverlay: NSView {
             }
         }
         guideLayer.path = guidePath
+        renderLayoutGuides(index.guideFrames, viewport: viewport)
         renderLabels(document: index.document, viewport: viewport, selection: selection)
         renderMarkers(markers, expanded: expanded, viewport: viewport)
         CATransaction.commit()
+    }
+
+    private func renderLayoutGuides(_ frames: [DesignIndex.GuideFrame], viewport: Viewport) {
+        layoutGuideCount = 0
+        // Only the part of each frame on screen is drawn.
+        let screen = Rect(x: -viewport.x / viewport.scale, y: -viewport.y / viewport.scale,
+                          width: bounds.width / viewport.scale, height: bounds.height / viewport.scale)
+        for frame in frames {
+            let clip = frame.clip.clamped(screen)
+            guard clip.width > 0, clip.height > 0 else { continue }
+            for guide in frame.guides {
+                let path = CGMutablePath()
+                switch guide.type {
+                case .grid:
+                    guard guide.size * viewport.scale >= Self.minimumGridSpacing else { continue }
+                    for offset in guide.gridLines(length: frame.rect.width, in: (clip.minX - frame.rect.x)...(clip.maxX - frame.rect.x)) {
+                        let x = (frame.rect.x + offset) * viewport.scale + viewport.x
+                        path.move(to: CGPoint(x: x, y: clip.minY * viewport.scale + viewport.y))
+                        path.addLine(to: CGPoint(x: x, y: clip.maxY * viewport.scale + viewport.y))
+                    }
+                    for offset in guide.gridLines(length: frame.rect.height, in: (clip.minY - frame.rect.y)...(clip.maxY - frame.rect.y)) {
+                        let y = (frame.rect.y + offset) * viewport.scale + viewport.y
+                        path.move(to: CGPoint(x: clip.minX * viewport.scale + viewport.x, y: y))
+                        path.addLine(to: CGPoint(x: clip.maxX * viewport.scale + viewport.x, y: y))
+                    }
+                case .columns, .rows:
+                    for band in guide.rects(in: frame.rect) {
+                        let visible = band.clamped(clip)
+                        if visible.width > 0, visible.height > 0 { path.addRect(Self.screenRect(visible, viewport: viewport)) }
+                    }
+                }
+                guard !path.isEmpty else { continue }
+                let shape = nextLayoutGuideLayer()
+                let color = CGColor(srgbRed: guide.color.r, green: guide.color.g, blue: guide.color.b, alpha: guide.color.a)
+                shape.path = path
+                // Grid lines are stroked 1 point wide at every zoom; columns and rows are filled.
+                shape.strokeColor = guide.type == .grid ? color : nil
+                shape.fillColor = guide.type == .grid ? nil : color
+                shape.lineWidth = 1
+            }
+        }
+        for (position, shape) in layoutGuideLayers.enumerated() { shape.isHidden = position >= layoutGuideCount }
+    }
+
+    private func nextLayoutGuideLayer() -> CAShapeLayer {
+        defer { layoutGuideCount += 1 }
+        if layoutGuideCount < layoutGuideLayers.count { return layoutGuideLayers[layoutGuideCount] }
+        let shape = CAShapeLayer()
+        shape.actions = DesignRenderer.noActions
+        shape.frame = layoutGuideHost.bounds
+        layoutGuideHost.addSublayer(shape)
+        layoutGuideLayers.append(shape)
+        return shape
     }
 
     private func renderMarkers(_ items: [(id: String, count: Int, anchor: Point)], expanded: String?, viewport: Viewport) {

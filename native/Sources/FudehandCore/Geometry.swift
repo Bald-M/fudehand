@@ -53,6 +53,12 @@ public struct Rect: Equatable {
         Rect(x: x + d.x, y: y + d.y, width: width, height: height)
     }
 
+    /// The overlap of two rectangles; an empty rectangle (zero width or height) at the nearest point when they do not overlap.
+    public func clamped(_ other: Rect) -> Rect {
+        let left = max(minX, other.minX), top = max(minY, other.minY)
+        return Rect(x: left, y: top, width: max(0, min(maxX, other.maxX) - left), height: max(0, min(maxY, other.maxY) - top))
+    }
+
     public static func union(_ rects: [Rect]) -> Rect? {
         guard let first = rects.first else { return nil }
         let left = rects.reduce(first.minX) { min($0, $1.minX) }
