@@ -109,7 +109,7 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 | 读取 | `design_get_state`、`design_get_document`、`design_get_node` | state 是概览：文件、选区、能否撤销，以及顶层图层摘要。 |
 | 编辑 | `design_create_node`、`design_update_node`、`design_delete_nodes`、`design_move_node`、`design_select`、`design_undo`、`design_redo` | 每次调用是一步撤销，画布立即更新。 |
 | 文件 | `design_new_document`、`design_open_document`、`design_save_document` | 有未保存修改时，新建和打开会被拒绝，除非传 `discard: true`。 |
-| 视口 | `canvas_focus_node`、`canvas_fit_all`、`canvas_zoom` | |
+| 视口 | `canvas_focus_node`、`canvas_fit_all`、`canvas_zoom`、`canvas_set_view` | `canvas_focus_node` 可定位一个或多个图层；`canvas_set_view` 切换画布工具、显示或隐藏检查器、在图层面板里展开或折叠图层。 |
 | 核对 | `design_snapshot` | 返回实际渲染结果的 PNG。 |
 
 几个值得知道的细节：

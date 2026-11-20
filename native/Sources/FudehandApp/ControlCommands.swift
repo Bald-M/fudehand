@@ -70,10 +70,21 @@ extension FudehandStore {
             }
             do { try write(to: url) } catch { throw ControlCommandError("Could not save: \(error.localizedDescription)") }
             return controlState()
-        case .focusNode(let id):
-            _ = try requireNode(id)
-            focus(id)
+        case .focusNodes(let ids):
+            for id in ids { _ = try requireNode(id) }
+            focus(ids)
             return controlState()
+        case .setView(let change):
+            for id in change.expand + change.collapse where try requireNode(id).children.isEmpty {
+                throw ControlCommandError("Layer has no child layers to expand or collapse: \(id)")
+            }
+            let previous = viewState()
+            if let tool = change.tool { self.tool = tool }
+            if let inspector = change.inspector { showingInspector = inspector }
+            if let tab = change.inspectorTab { inspectorTab = tab }
+            for id in change.expand { setCollapsed(id, false) }
+            for id in change.collapse { setCollapsed(id, true) }
+            return ["previous": previous, "view": viewState()]
         case .fitAll:
             fitAll()
             return controlState()
@@ -197,6 +208,7 @@ extension FudehandStore {
             "dirty": isDirty,
             "selection": selection.sorted(),
             "viewport": ["x": current.x, "y": current.y, "scale": current.scale],
+            "view": viewState(),
             "canUndo": canUndo,
             "canRedo": canRedo,
             "nodeCount": editor.document.nodeCount,
@@ -205,5 +217,11 @@ extension FudehandStore {
                  "width": node.width, "height": node.height, "children": node.children.count]
             },
         ]
+    }
+
+    /// The editor view outside the document: the canvas tool, the inspector, and the layers the layers panel collapses.
+    func viewState() -> [String: Any] {
+        ["tool": tool.rawValue, "inspector": showingInspector, "inspectorTab": inspectorTab.rawValue,
+         "collapsed": collapsedLayers.filter { editor.document.node($0) != nil }.sorted()]
     }
 }

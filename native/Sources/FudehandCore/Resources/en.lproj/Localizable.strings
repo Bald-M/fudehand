@@ -307,6 +307,7 @@
 "Zoom canvas" = "Zoom canvas";
 "Read prototype window" = "Read prototype window";
 "Close prototype window" = "Close prototype window";
+"Change view" = "Change view";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "Cannot find the Fudehand source directory, so it cannot connect";

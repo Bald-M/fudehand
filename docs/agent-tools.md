@@ -39,7 +39,7 @@ The words MUST, MUST NOT, and SHOULD are used as in RFC 2119.
 | Namespace | Covers |
 |---|---|
 | `design_*` | The design document, layers, selection, undo, the project file, fonts |
-| `canvas_*` | The viewport and the canvas tool |
+| `canvas_*` | The viewport, the canvas tool, and the editor panels around the canvas (inspector, layers panel) |
 | `prototype_*` | The prototype window |
 | `app_*` | Windows, the launch window, recent files, templates |
 | `settings_*` | UI language, appearance, model providers, API keys, MCP connectors |
@@ -86,11 +86,10 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 |---|---|
 | Zoom, zoom in/out, actual size | `canvas_zoom` |
 | Fit all | `canvas_fit_all` |
-| Zoom to a layer | `canvas_focus_node` |
-| Zoom to a multi-layer selection | Missing |
-| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | Missing |
-| Show or hide the inspector, switch its tab | Missing |
-| Expand or collapse layers in the layers panel | Missing |
+| Zoom to a layer, zoom to a multi-layer selection | `canvas_focus_node` (`id` or `ids`) |
+| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | `canvas_set_view` (`tool`); read in `design_get_state` (`view`) |
+| Show or hide the inspector, switch its tab (design, prototype, chat) | `canvas_set_view` (`inspector`, `inspectorTab`); read in `design_get_state` (`view`) |
+| Expand or collapse layers in the layers panel | `canvas_set_view` (`expand`, `collapse`); read in `design_get_state` (`view.collapsed`) |
 | Play the prototype, play from the start, close the prototype window | `prototype_play`, `prototype_close`; `prototype_get_playback` reads whether the window is open and the frame on show |
 | Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | `app_show_launch_window` |
