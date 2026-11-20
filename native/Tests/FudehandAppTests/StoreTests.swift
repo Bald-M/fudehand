@@ -678,6 +678,8 @@ private func temporaryFile() -> URL {
 
     let listed = try #require(try await control(store, .listTemplates)["templates"] as? [[String: Any]])
     #expect(listed.map { $0["name"] as? String } == ["Desktop", "Mobile"])
+    // The title is what the launch window shows; a template without a string-table entry shows its file name.
+    #expect(listed.map { $0["title"] as? String } == ["Desktop", "Mobile"])
     #expect(await failure(store, .newDocumentFromTemplate("Tablet", discard: false)) == "Template not found: Tablet; available: Desktop, Mobile")
 
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))

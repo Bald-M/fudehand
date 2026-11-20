@@ -25,8 +25,8 @@ one set of design foundations give both a starting point and a convention to fol
 ## Non-goals
 
 Document-level variables or shared styles; components; a template market or a template management UI; light/dark-switching
-templates; Agent tools for templates (listed as Missing in `docs/agent-tools.md`, separate work); making the foundations a
-style-library entry (#115).
+templates; making the foundations a style-library entry (#115). The template Agent tools came with #201; this change only adds
+the localized `title` to `app_list_templates`.
 
 ## Approaches
 

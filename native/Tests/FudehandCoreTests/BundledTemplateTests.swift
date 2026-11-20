@@ -19,7 +19,7 @@ private let templateDirectory = URL(fileURLWithPath: #filePath)
 
 private func templateURLs() throws -> [URL] {
     try FileManager.default.contentsOfDirectory(at: templateDirectory, includingPropertiesForKeys: nil)
-        .filter { $0.pathExtension == DesignDocument.fileExtension }
+        .filter { $0.pathExtension.lowercased() == DesignDocument.fileExtension }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 }
 
@@ -50,6 +50,11 @@ func bundledTemplateDecodesAndFollowsTheFoundations(url: URL) throws {
             #expect(text.lineHeight == nil, "\(where_): line height is the font default")
             // Text sits in auto layout, so editing it reflows its parent instead of overlapping neighbors.
             #expect(parent?.layout != nil, "\(where_): text outside auto layout")
+            // In a column whose width is set, text keeps a width (filling the column, or a set measure) and wraps
+            // instead of growing past the column's edge.
+            if let parent, parent.layout?.direction == .vertical, parent.sizing.horizontal != .hug {
+                #expect(text.autoResize == .height && node.sizing.horizontal != .hug, "\(where_): text does not wrap")
+            }
         }
         if let layout = node.layout {
             let padding = layout.padding

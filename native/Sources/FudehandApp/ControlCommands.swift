@@ -111,7 +111,7 @@ extension FudehandStore {
             clearRecents()
             return ["removed": removed, "recents": recentsState()]
         case .listTemplates:
-            return ["templates": templates.map { ["name": $0.name] }]
+            return ["templates": templates.map { ["name": $0.name, "title": $0.title] }]
         case .newDocumentFromTemplate(let name, let discard):
             guard let template = templates.first(where: { $0.name == name }) else {
                 throw ControlCommandError("Template not found: \(name); available: "

@@ -13,9 +13,13 @@
                       "height" : 20,
                       "id" : "m-1",
                       "name" : "Thursday, 20 November",
+                      "sizing" : {
+                        "horizontal" : "fill",
+                        "vertical" : "hug"
+                      },
                       "text" : {
                         "align" : "left",
-                        "autoResize" : "width-and-height",
+                        "autoResize" : "height",
                         "color" : "#6B6874",
                         "content" : "Thursday, 20 November",
                         "fontFamily" : "Avenir Next",
@@ -23,7 +27,7 @@
                         "fontWeight" : 400
                       },
                       "type" : "text",
-                      "width" : 153,
+                      "width" : 289,
                       "x" : 0,
                       "y" : 0
                     },
@@ -31,9 +35,13 @@
                       "height" : 33,
                       "id" : "m-2",
                       "name" : "Good morning, Mia",
+                      "sizing" : {
+                        "horizontal" : "fill",
+                        "vertical" : "hug"
+                      },
                       "text" : {
                         "align" : "left",
-                        "autoResize" : "width-and-height",
+                        "autoResize" : "height",
                         "color" : "#1D1C21",
                         "content" : "Good morning, Mia",
                         "fontFamily" : "Avenir Next",
@@ -41,7 +49,7 @@
                         "fontWeight" : 600
                       },
                       "type" : "text",
-                      "width" : 217,
+                      "width" : 289,
                       "x" : 0,
                       "y" : 24
                     }
@@ -62,11 +70,11 @@
                   },
                   "name" : "Greeting",
                   "sizing" : {
-                    "horizontal" : "hug",
+                    "horizontal" : "fill",
                     "vertical" : "hug"
                   },
                   "type" : "frame",
-                  "width" : 217,
+                  "width" : 289,
                   "x" : 0,
                   "y" : 0
                 },
@@ -143,9 +151,13 @@
                   "height" : 20,
                   "id" : "m-7",
                   "name" : "Next harvest",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
                   "text" : {
                     "align" : "left",
-                    "autoResize" : "width-and-height",
+                    "autoResize" : "height",
                     "color" : "#E1EEE9",
                     "content" : "Next harvest",
                     "fontFamily" : "Avenir Next",
@@ -153,7 +165,7 @@
                     "fontWeight" : 500
                   },
                   "type" : "text",
-                  "width" : 81,
+                  "width" : 297,
                   "x" : 24,
                   "y" : 24
                 },
@@ -161,9 +173,13 @@
                   "height" : 33,
                   "id" : "m-8",
                   "name" : "Cherry tomatoes",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
                   "text" : {
                     "align" : "left",
-                    "autoResize" : "width-and-height",
+                    "autoResize" : "height",
                     "color" : "#FFFFFF",
                     "content" : "Cherry tomatoes",
                     "fontFamily" : "Avenir Next",
@@ -171,7 +187,7 @@
                     "fontWeight" : 600
                   },
                   "type" : "text",
-                  "width" : 185,
+                  "width" : 297,
                   "x" : 24,
                   "y" : 52
                 },
@@ -179,9 +195,13 @@
                   "height" : 22,
                   "id" : "m-9",
                   "name" : "Bed 4 · ready in 3 days",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
                   "text" : {
                     "align" : "left",
-                    "autoResize" : "width-and-height",
+                    "autoResize" : "height",
                     "color" : "#E1EEE9",
                     "content" : "Bed 4 · ready in 3 days",
                     "fontFamily" : "Avenir Next",
@@ -189,7 +209,7 @@
                     "fontWeight" : 400
                   },
                   "type" : "text",
-                  "width" : 165,
+                  "width" : 297,
                   "x" : 24,
                   "y" : 93
                 }
@@ -226,9 +246,13 @@
                   "height" : 28,
                   "id" : "m-11",
                   "name" : "Today's tasks",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
                   "text" : {
                     "align" : "left",
-                    "autoResize" : "width-and-height",
+                    "autoResize" : "height",
                     "color" : "#1D1C21",
                     "content" : "Today's tasks",
                     "fontFamily" : "Avenir Next",
@@ -236,7 +260,7 @@
                     "fontWeight" : 500
                   },
                   "type" : "text",
-                  "width" : 120,
+                  "width" : 345,
                   "x" : 0,
                   "y" : 0
                 },
@@ -288,9 +312,13 @@
                               "height" : 22,
                               "id" : "m-14",
                               "name" : "Water bed 2",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#1D1C21",
                                 "content" : "Water bed 2",
                                 "fontFamily" : "Avenir Next",
@@ -298,7 +326,7 @@
                                 "fontWeight" : 500
                               },
                               "type" : "text",
-                              "width" : 91,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 0
                             },
@@ -306,9 +334,13 @@
                               "height" : 20,
                               "id" : "m-15",
                               "name" : "Before 10:00",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#6B6874",
                                 "content" : "Before 10:00",
                                 "fontFamily" : "Avenir Next",
@@ -316,7 +348,7 @@
                                 "fontWeight" : 400
                               },
                               "type" : "text",
-                              "width" : 83,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 26
                             }
@@ -429,9 +461,13 @@
                               "height" : 22,
                               "id" : "m-21",
                               "name" : "Thin the carrots",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#1D1C21",
                                 "content" : "Thin the carrots",
                                 "fontFamily" : "Avenir Next",
@@ -439,7 +475,7 @@
                                 "fontWeight" : 500
                               },
                               "type" : "text",
-                              "width" : 114,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 0
                             },
@@ -447,9 +483,13 @@
                               "height" : 20,
                               "id" : "m-22",
                               "name" : "Bed 5",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#6B6874",
                                 "content" : "Bed 5",
                                 "fontFamily" : "Avenir Next",
@@ -457,7 +497,7 @@
                                 "fontWeight" : 400
                               },
                               "type" : "text",
-                              "width" : 38,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 26
                             }
@@ -570,9 +610,13 @@
                               "height" : 22,
                               "id" : "m-28",
                               "name" : "Turn the compost",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#1D1C21",
                                 "content" : "Turn the compost",
                                 "fontFamily" : "Avenir Next",
@@ -580,7 +624,7 @@
                                 "fontWeight" : 500
                               },
                               "type" : "text",
-                              "width" : 128,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 0
                             },
@@ -588,9 +632,13 @@
                               "height" : 20,
                               "id" : "m-29",
                               "name" : "About 15 minutes",
+                              "sizing" : {
+                                "horizontal" : "fill",
+                                "vertical" : "hug"
+                              },
                               "text" : {
                                 "align" : "left",
-                                "autoResize" : "width-and-height",
+                                "autoResize" : "height",
                                 "color" : "#6B6874",
                                 "content" : "About 15 minutes",
                                 "fontFamily" : "Avenir Next",
@@ -598,7 +646,7 @@
                                 "fontWeight" : 400
                               },
                               "type" : "text",
-                              "width" : 114,
+                              "width" : 233,
                               "x" : 0,
                               "y" : 26
                             }
@@ -737,6 +785,7 @@
             "spacing" : 24
           },
           "name" : "Content",
+          "scroll" : "vertical",
           "sizing" : {
             "horizontal" : "fill",
             "vertical" : "fill"
@@ -1040,9 +1089,13 @@
               "height" : 44,
               "id" : "m-155",
               "name" : "Design system",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
               "text" : {
                 "align" : "left",
-                "autoResize" : "width-and-height",
+                "autoResize" : "height",
                 "color" : "#1D1C21",
                 "content" : "Design system",
                 "fontFamily" : "Avenir Next",
@@ -1050,7 +1103,7 @@
                 "fontWeight" : 600
               },
               "type" : "text",
-              "width" : 216,
+              "width" : 648,
               "x" : 0,
               "y" : 0
             },
@@ -1066,7 +1119,7 @@
                 "align" : "left",
                 "autoResize" : "height",
                 "color" : "#6B6874",
-                "content" : "Colors, type, spacing, and corner radius shared by every starter template. Details in docs/design-foundations.md.",
+                "content" : "Colors, type, spacing, and corner radius shared by every starter template. Follow them when you add screens.",
                 "fontFamily" : "Avenir Next",
                 "fontSize" : 16,
                 "fontWeight" : 400
@@ -1107,9 +1160,13 @@
               "height" : 28,
               "id" : "m-158",
               "name" : "Colors",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
               "text" : {
                 "align" : "left",
-                "autoResize" : "width-and-height",
+                "autoResize" : "height",
                 "color" : "#1D1C21",
                 "content" : "Colors",
                 "fontFamily" : "Avenir Next",
@@ -1117,7 +1174,7 @@
                 "fontWeight" : 500
               },
               "type" : "text",
-              "width" : 60,
+              "width" : 648,
               "x" : 0,
               "y" : 0
             },
@@ -1709,9 +1766,13 @@
               "height" : 28,
               "id" : "m-161",
               "name" : "Type · Avenir Next",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
               "text" : {
                 "align" : "left",
-                "autoResize" : "width-and-height",
+                "autoResize" : "height",
                 "color" : "#1D1C21",
                 "content" : "Type · Avenir Next",
                 "fontFamily" : "Avenir Next",
@@ -1719,7 +1780,7 @@
                 "fontWeight" : 500
               },
               "type" : "text",
-              "width" : 167,
+              "width" : 648,
               "x" : 0,
               "y" : 0
             },
@@ -1733,9 +1794,13 @@
                           "height" : 17,
                           "id" : "m-79",
                           "name" : "48 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "48 · 600",
                             "fontFamily" : "Avenir Next",
@@ -1743,7 +1808,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -1823,9 +1888,13 @@
                           "height" : 17,
                           "id" : "m-83",
                           "name" : "32 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "32 · 600",
                             "fontFamily" : "Avenir Next",
@@ -1833,7 +1902,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -1913,9 +1982,13 @@
                           "height" : 17,
                           "id" : "m-87",
                           "name" : "24 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "24 · 600",
                             "fontFamily" : "Avenir Next",
@@ -1923,7 +1996,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2003,9 +2076,13 @@
                           "height" : 17,
                           "id" : "m-91",
                           "name" : "20 · 500",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "20 · 500",
                             "fontFamily" : "Avenir Next",
@@ -2013,7 +2090,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2093,9 +2170,13 @@
                           "height" : 17,
                           "id" : "m-95",
                           "name" : "16 · 400",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "16 · 400",
                             "fontFamily" : "Avenir Next",
@@ -2103,7 +2184,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2183,9 +2264,13 @@
                           "height" : 17,
                           "id" : "m-99",
                           "name" : "14 · 400",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "14 · 400",
                             "fontFamily" : "Avenir Next",
@@ -2193,7 +2278,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2273,9 +2358,13 @@
                           "height" : 17,
                           "id" : "m-103",
                           "name" : "12 · 500",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "12 · 500",
                             "fontFamily" : "Avenir Next",
@@ -2283,7 +2372,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 45,
+                          "width" : 96,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2411,9 +2500,13 @@
               "height" : 28,
               "id" : "m-164",
               "name" : "Spacing",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
               "text" : {
                 "align" : "left",
-                "autoResize" : "width-and-height",
+                "autoResize" : "height",
                 "color" : "#1D1C21",
                 "content" : "Spacing",
                 "fontFamily" : "Avenir Next",
@@ -2421,7 +2514,7 @@
                 "fontWeight" : 500
               },
               "type" : "text",
-              "width" : 75,
+              "width" : 648,
               "x" : 0,
               "y" : 0
             },
@@ -2435,9 +2528,13 @@
                           "height" : 17,
                           "id" : "m-107",
                           "name" : "4",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "4",
                             "fontFamily" : "Avenir Next",
@@ -2445,7 +2542,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 8,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2517,9 +2614,13 @@
                           "height" : 17,
                           "id" : "m-111",
                           "name" : "8",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "8",
                             "fontFamily" : "Avenir Next",
@@ -2527,7 +2628,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 8,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2599,9 +2700,13 @@
                           "height" : 17,
                           "id" : "m-115",
                           "name" : "12",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "12",
                             "fontFamily" : "Avenir Next",
@@ -2609,7 +2714,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2681,9 +2786,13 @@
                           "height" : 17,
                           "id" : "m-119",
                           "name" : "16",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "16",
                             "fontFamily" : "Avenir Next",
@@ -2691,7 +2800,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2763,9 +2872,13 @@
                           "height" : 17,
                           "id" : "m-123",
                           "name" : "24",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "24",
                             "fontFamily" : "Avenir Next",
@@ -2773,7 +2886,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2845,9 +2958,13 @@
                           "height" : 17,
                           "id" : "m-127",
                           "name" : "32",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "32",
                             "fontFamily" : "Avenir Next",
@@ -2855,7 +2972,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -2927,9 +3044,13 @@
                           "height" : 17,
                           "id" : "m-131",
                           "name" : "48",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "48",
                             "fontFamily" : "Avenir Next",
@@ -2937,7 +3058,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -3009,9 +3130,13 @@
                           "height" : 17,
                           "id" : "m-135",
                           "name" : "64",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
                           "text" : {
                             "align" : "left",
-                            "autoResize" : "width-and-height",
+                            "autoResize" : "height",
                             "color" : "#6B6874",
                             "content" : "64",
                             "fontFamily" : "Avenir Next",
@@ -3019,7 +3144,7 @@
                             "fontWeight" : 500
                           },
                           "type" : "text",
-                          "width" : 15,
+                          "width" : 32,
                           "x" : 0,
                           "y" : 0
                         }
@@ -3139,9 +3264,13 @@
               "height" : 28,
               "id" : "m-166",
               "name" : "Corner radius",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
               "text" : {
                 "align" : "left",
-                "autoResize" : "width-and-height",
+                "autoResize" : "height",
                 "color" : "#1D1C21",
                 "content" : "Corner radius",
                 "fontFamily" : "Avenir Next",
@@ -3149,7 +3278,7 @@
                 "fontWeight" : 500
               },
               "type" : "text",
-              "width" : 125,
+              "width" : 648,
               "x" : 0,
               "y" : 0
             },
