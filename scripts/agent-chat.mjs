@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createInterface } from 'node:readline'
-import { callTool, tools } from './fudehand-tools.mjs'
+import { callTool, secretArguments, tools } from './fudehand-tools.mjs'
 import { createProvider, listModels } from './agent-providers.mjs'
 import { designGuidance } from './design-guidance.mjs'
 
@@ -82,6 +82,13 @@ const system = [
 /** Strips the API key from any text sent to the App, so it never appears in the UI or logs. */
 function redact(text) {
   return apiKey ? String(text).split(apiKey).join('***') : String(text)
+}
+
+/** A tool call's arguments as the App shows and saves them: secret arguments (an API key being set) are masked. */
+function masked(name, args) {
+  const secret = secretArguments[name]
+  if (!secret || !args || typeof args !== 'object') return args
+  return Object.fromEntries(Object.entries(args).map(([key, value]) => [key, secret.includes(key) ? '***' : value]))
 }
 
 function emit(event) {
@@ -279,7 +286,7 @@ async function reply(text, controller, mode) {
           log.push({ role: 'tool', id: call.id, name: call.name, text: 'Goal mode ended.' })
           continue
         }
-        emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args })
+        emit({ type: 'tool_call', id: call.id, name: call.name, args: masked(call.name, call.args) })
         const result = call.error ? { isError: true, content: [{ type: 'text', text: call.error }] }
           : plan && !readingTools.includes(call.name) ? { isError: true, content: [{ type: 'text', text: planRefusal }] }
           : await callTool(call.name, call.args, ctx)

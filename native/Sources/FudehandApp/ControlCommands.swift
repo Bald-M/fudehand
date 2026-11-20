@@ -88,6 +88,8 @@ extension FudehandStore {
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):
             return ["icons": IconCatalog.shared.search(query, library: library, limit: limit)]
+        case .getInterface, .updateInterface, .getModels, .updateModelProvider, .listModels, .setAPIKey, .deleteAPIKey, .getConnectors, .setConnector:
+            return try await handleSettings(command)
         case .importFont(let path):
             do { return ["families": try importFonts([URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])] }
             catch let error as FontImportError { throw ControlCommandError(error.english) }

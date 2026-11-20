@@ -102,9 +102,11 @@ final class FudehandStore: ObservableObject {
     private let chatRoot: URL?
 
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
-    /// `templateDirectory` holds the templates; by default the ones bundled with the App. `chat` replaces the chat session, for tests.
+    /// `templateDirectory` holds the templates; by default the ones bundled with the App. `chat` and `connectors`
+    /// replace the real ones (the chat session with its Keychain, the Agents' configuration) in tests.
     init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil,
-         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates"), chat: ChatSession? = nil) {
+         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates"), chat: ChatSession? = nil,
+         connectors: ConnectorsModel? = nil) {
         self.defaults = defaults
         templates = Self.templates(in: templateDirectory)
         SystemSymbols.install()
@@ -119,6 +121,7 @@ final class FudehandStore: ObservableObject {
         theme = ["light", "dark"].contains(stored) ? stored : "system"
         language = AppLanguage.saved(in: defaults)
         recents = RecentDocuments(data: defaults.data(forKey: Self.recentsKey))
+        if let connectors { self.connectors = connectors }
     }
 
     var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }

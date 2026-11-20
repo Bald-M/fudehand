@@ -32,6 +32,8 @@ describe('design tools', () => {
       'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
       'chat_delete_conversation', 'chat_clear_conversation', 'chat_send_message', 'chat_set_mode', 'chat_run_plan', 'chat_stop_reply', 'chat_regenerate_reply',
       'chat_edit_last_message', 'chat_answer_question', 'chat_compact_conversation',
+      'settings_get_interface', 'settings_update_interface', 'settings_get_models', 'settings_update_model_provider',
+      'settings_list_models', 'settings_set_api_key', 'settings_delete_api_key', 'settings_get_connectors', 'settings_set_connector',
       'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
@@ -326,5 +328,35 @@ describe('design tools', () => {
     const fake = await app(() => ({ ok: true, result: { id: 'web', mimeType: 'image/png', data, width: 1440, height: 900 } }))
     const result = await callTool('design_snapshot', { id: 'web' }, { root: '/repo', socketPath: fake.socketPath })
     expect(result.content[0].data.length).toBe(data.length)
+  })
+})
+
+describe('settings tools', () => {
+  it('forwards every settings command and its arguments to the App unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    const calls: [string, Record<string, unknown>, string][] = [
+      ['settings_get_interface', {}, 'get_interface'],
+      ['settings_update_interface', { language: 'zh-Hans', appearance: 'dark' }, 'update_interface'],
+      ['settings_get_models', {}, 'get_models'],
+      ['settings_update_model_provider', { provider: 'openai', model: '', baseUrl: 'https://example.test/v1', use: true }, 'update_model_provider'],
+      ['settings_list_models', { provider: 'deepseek', baseUrl: '' }, 'list_models'],
+      ['settings_set_api_key', { provider: 'anthropic', key: 'sk-ant-0000-1111-2222' }, 'set_api_key'],
+      ['settings_delete_api_key', { provider: 'anthropic' }, 'delete_api_key'],
+      ['settings_get_connectors', {}, 'get_connectors'],
+      ['settings_set_connector', { connector: 'codex', connected: false }, 'set_connector'],
+    ]
+    for (const [name, args] of calls) {
+      const result = await callTool(name, args, ctx)
+      expect(result.isError).toBeUndefined()
+    }
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual(calls.map(([, args, command]) => ({ command, args })))
+  })
+
+  it('marks the API key as a secret argument, and only that', async () => {
+    const { secretArguments } = await import('../scripts/fudehand-tools.mjs')
+    expect(secretArguments).toEqual({ settings_set_api_key: ['key'] })
+    const tool = (tools as { name: string, inputSchema: { required: string[] } }[]).find(item => item.name === 'settings_set_api_key')!
+    expect(tool.inputSchema.required).toEqual(['provider', 'key'])
   })
 })

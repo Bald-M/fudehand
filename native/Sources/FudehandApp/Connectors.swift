@@ -8,6 +8,13 @@ struct CommandResult: Sendable {
     var error: String
 }
 
+/// What a connect or disconnect did, for the Agent tool: the command it ran or the file it changed, and why it failed, in English.
+struct ConnectorOutcome: Equatable {
+    var command: [String]?
+    var file: String?
+    var error: String?
+}
+
 /// MCP connectors: detects whether the Fudehand MCP server is registered in the user-level configuration of Claude Code / Codex / DeepSeek Harness, and connects or disconnects it (through the CLI for Claude Code and Codex, by editing the home patch file for DeepSeek Harness).
 @MainActor
 final class ConnectorsModel: ObservableObject {
@@ -18,6 +25,8 @@ final class ConnectorsModel: ObservableObject {
         var status: ConnectorStatus?
         var busy = false
         var error: String?
+        /// `error` in English, for the Agent tools.
+        var englishError: String?
     }
 
     @Published private(set) var entries: [AgentConnector: Entry] = Dictionary(uniqueKeysWithValues: AgentConnector.allCases.map { ($0, Entry()) })
@@ -55,48 +64,64 @@ final class ConnectorsModel: ObservableObject {
 
     func refresh() async {
         for connector in AgentConnector.allCases where entries[connector]?.busy == false {
-            entries[connector]?.error = nil
+            fail(connector, nil)
             await refresh(connector)
         }
     }
 
-    func connect(_ connector: AgentConnector) async {
-        guard let script else { entries[connector]?.error = L("Cannot find the Fudehand source directory, so it cannot connect"); return }
+    @discardableResult
+    func connect(_ connector: AgentConnector) async -> ConnectorOutcome {
+        guard let script else {
+            fail(connector, (L("Cannot find the Fudehand source directory, so it cannot connect"), "Cannot find the Fudehand source directory, so it cannot connect"))
+            return ConnectorOutcome(error: entries[connector]?.englishError)
+        }
         if connector == .deepseek {
             let node = node
-            await editDeepseekPatch(failure: L("Connection failed")) { AgentConnector.deepseekConnecting(patch: $0, node: node, script: script) }
-            return
+            return await editDeepseekPatch(failure: (L("Connection failed"), "Connection failed")) { AgentConnector.deepseekConnecting(patch: $0, node: node, script: script) }
         }
-        await perform(connector, connector.addArguments(script: script), failure: L("Connection failed"))
+        return await perform(connector, connector.addArguments(script: script), failure: (L("Connection failed"), "Connection failed"))
     }
 
-    func disconnect(_ connector: AgentConnector) async {
+    @discardableResult
+    func disconnect(_ connector: AgentConnector) async -> ConnectorOutcome {
         if connector == .deepseek {
-            await editDeepseekPatch(failure: L("Disconnect failed")) { $0.flatMap(AgentConnector.deepseekDisconnecting) }
-            return
+            return await editDeepseekPatch(failure: (L("Disconnect failed"), "Disconnect failed")) { $0.flatMap(AgentConnector.deepseekDisconnecting) }
         }
-        await perform(connector, connector.removeArguments, failure: L("Disconnect failed"))
+        return await perform(connector, connector.removeArguments, failure: (L("Disconnect failed"), "Disconnect failed"))
     }
 
-    private func perform(_ connector: AgentConnector, _ arguments: [String], failure: String) async {
-        guard entries[connector]?.busy == false, let executable = locate(connector) else { return }
+    /// Why the connector cannot be changed now, in English; nil when it can.
+    private func unavailable(_ connector: AgentConnector) -> String? {
+        if entries[connector]?.busy != false { return "\(connector.title) is already being changed; try again when it finishes" }
+        if locate(connector) == nil { return "The \(connector.executable) command was not found; install \(connector.title) first" }
+        return nil
+    }
+
+    /// `failure` is the message's start, localized for the window and in English for the Agent tool.
+    private func perform(_ connector: AgentConnector, _ arguments: [String], failure: (local: String, english: String)) async -> ConnectorOutcome {
+        if let reason = unavailable(connector) { return ConnectorOutcome(error: reason) }
+        guard let executable = locate(connector) else { return ConnectorOutcome() }
         entries[connector]?.busy = true
-        entries[connector]?.error = nil
+        fail(connector, nil)
         let result = await run(executable, arguments, environment)
+        var outcome = ConnectorOutcome(command: [executable] + arguments)
         if result.exitCode != 0 {
             let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
-            entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
+            fail(connector, detail.isEmpty ? (L("%1$@ (%2$d)", failure.local, result.exitCode), "\(failure.english) (\(result.exitCode))")
+                                           : (L("%1$@: %2$@", failure.local, detail), "\(failure.english): \(detail)"))
+            outcome.error = entries[connector]?.englishError
         }
         await refresh(connector)
         entries[connector]?.busy = false
+        return outcome
     }
 
     /// Rewrites DeepSeek Harness's home patch file with `edit` (nil in: no file; nil out: delete the file), keeping the file's permissions.
-    private func editDeepseekPatch(failure: String, _ edit: @escaping @Sendable (String?) -> String?) async {
+    private func editDeepseekPatch(failure: (local: String, english: String), _ edit: @escaping @Sendable (String?) -> String?) async -> ConnectorOutcome {
         let connector = AgentConnector.deepseek
-        guard entries[connector]?.busy == false, locate(connector) != nil else { return }
+        if let reason = unavailable(connector) { return ConnectorOutcome(error: reason) }
         entries[connector]?.busy = true
-        entries[connector]?.error = nil
+        fail(connector, nil)
         // Edit the file a symbolic link points at rather than replacing the link.
         let file = deepseekPatch.resolvingSymlinksInPath()
         let error: String? = await Task.detached {
@@ -115,9 +140,14 @@ final class ConnectorsModel: ObservableObject {
                 return nil
             } catch { return error.localizedDescription }
         }.value
-        if let error { entries[connector]?.error = L("%1$@: %2$@", failure, error) }
+        var outcome = ConnectorOutcome(file: file.path)
+        if let error {
+            fail(connector, (L("%1$@: %2$@", failure.local, error), "\(failure.english): \(error)"))
+            outcome.error = entries[connector]?.englishError
+        }
         await refresh(connector)
         entries[connector]?.busy = false
+        return outcome
     }
 
     private func refresh(_ connector: AgentConnector) async {
@@ -134,14 +164,21 @@ final class ConnectorsModel: ObservableObject {
             // When not registered, codex reports "No MCP server named"; other failures (such as a corrupted configuration file) must be shown rather than only showing not connected.
             if result.exitCode != 0, !result.error.contains("No MCP server named"), entries[connector]?.error == nil {
                 let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
-                let failure = L("Could not check the connection status")
-                entries[connector]?.error = detail.isEmpty ? L("%1$@ (%2$d)", failure, result.exitCode) : L("%1$@: %2$@", failure, detail)
+                let failure = L("Could not check the connection status"), english = "Could not check the connection status"
+                fail(connector, detail.isEmpty ? (L("%1$@ (%2$d)", failure, result.exitCode), "\(english) (\(result.exitCode))")
+                                               : (L("%1$@: %2$@", failure, detail), "\(english): \(detail)"))
             }
         case .deepseek:
             let file = deepseekPatch
             let patch = await Task.detached { try? String(contentsOf: file, encoding: .utf8) }.value
             entries[connector]?.status = AgentConnector.deepseekStatus(patch: patch, script: script)
         }
+    }
+
+    /// Records the connector's error, localized for the window and in English for the Agent tools; nil clears it.
+    private func fail(_ connector: AgentConnector, _ message: (local: String, english: String)?) {
+        entries[connector]?.error = message?.local
+        entries[connector]?.englishError = message?.english
     }
 
     private func locate(_ connector: AgentConnector) -> String? {

@@ -440,6 +440,17 @@ describe('Agent harness: OpenAI-compatible API (DeepSeek / OpenAI)', () => {
     expect(await chat.exited).toBe(0)
     expect(JSON.stringify(chat.events) + chat.stderr()).not.toContain(KEY)
   })
+
+  it('masks an API key the model sets with a tool, but sends it to the App', async () => {
+    const other = 'sk-ant-other-provider-9876'
+    const app = await startApp(request => ({ ok: true, result: { provider: { id: 'anthropic', hasKey: true, keyHint: 'sk-a••••••••9876' } } }))
+    const model = await fakeModel([openaiTool('call_1', 'settings_set_api_key', { provider: 'anthropic', key: other }), openaiText('Saved.')])
+    const chat = await startHarness({ FUDEHAND_PROVIDER: 'deepseek', FUDEHAND_BASE_URL: model.baseUrl, FUDEHAND_API_KEY: KEY, FUDEHAND_CONTROL_SOCKET: app.socketPath })
+    const events = await chat.ask('Save my Claude key')
+    expect(events[0]).toMatchObject({ type: 'tool_call', name: 'settings_set_api_key', args: { provider: 'anthropic', key: '***' } })
+    expect(JSON.stringify(events) + chat.stderr()).not.toContain(other)
+    expect(app.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'set_api_key', args: { provider: 'anthropic', key: other } }])
+  })
 })
 
 describe('Agent harness: OpenAI Responses API (Codex series)', () => {
