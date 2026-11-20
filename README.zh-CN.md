@@ -149,7 +149,7 @@ API key 只保存在本机钥匙串里（服务名 `fudehand.agent`）。App 通
 ```json
 {
   "format": "fudehand.design",
-  "version": 6,
+  "version": 7,
   "nodes": [
     { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },

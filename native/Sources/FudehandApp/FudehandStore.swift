@@ -263,6 +263,53 @@ final class FudehandStore: ObservableObject {
         }
     }
 
+    // MARK: Version snapshots
+
+    /// Saves a version snapshot of a frame: renders the frame as it looks now into a read-only top-level image layer placed beside
+    /// it, as one undo step named `step`. The menu, the properties panel, and the Agent all save through here.
+    @discardableResult
+    func saveVersionSnapshot(of frameID: String, note: String = "", step: String = "Save Version Snapshot") throws -> DesignNode {
+        let document = editor.document
+        guard let frame = document.node(frameID) else { throw DesignError("Layer not found: \(frameID)") }
+        guard frame.type == .frame else {
+            throw DesignError("Layer \(frameID) is a \(frame.type.rawValue), not a frame; only frames have version snapshots")
+        }
+        // The longest side is capped at the canvas's bitmap limit, so a very large frame is rendered at a lower scale.
+        let scale = min(VersionSnapshot.scale, VersionSnapshot.maximumPixels / max(frame.width, frame.height, 1))
+        let png = try DesignRenderer.snapshotPNG(frame, scale: scale)
+        let id = DesignDocument.newID(existing: document.allIDs())
+        guard let node = VersionSnapshot.layer(id: id, of: frame, png: png, in: document, note: note) else {
+            throw DesignError("Layer not found: \(frameID)")
+        }
+        try perform(step) { try $0.insert(node, parent: nil, index: nil) }
+        return node
+    }
+
+    /// Saves a version snapshot of the one selected frame and selects the snapshot, so its note can be written next.
+    func saveVersionSnapshotOfSelection() {
+        guard selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame else {
+            alert = L("Select one frame to save a version snapshot.")
+            return
+        }
+        do { setSelection([try saveVersionSnapshot(of: id).id]) } catch { alert = error.localizedDescription }
+    }
+
+    /// Lays a version snapshot over its frame at half opacity to compare the two, or puts it back beside the frame at full opacity.
+    /// Does nothing when the snapshot's frame has been deleted.
+    func compareVersionSnapshot(_ id: String, overlay: Bool) {
+        let document = editor.document
+        guard let frame = document.node(id)?.versionSnapshot?.frame, let rect = document.worldRect(frame),
+              let target = overlay ? Point(x: rect.x, y: rect.y) : VersionSnapshot.besidePosition(of: frame, excluding: id, in: document)
+        else { return }
+        // A snapshot moved into another layer keeps coordinates relative to that layer.
+        let origin = (document.parentID(of: id) ?? nil).flatMap { document.worldRect($0) }
+        updateNode(id, overlay ? "Overlay Snapshot on Frame" : "Place Snapshot Beside Frame") { node in
+            node.x = target.x - (origin?.x ?? 0)
+            node.y = target.y - (origin?.y ?? 0)
+            node.opacity = overlay ? 0.5 : 1
+        }
+    }
+
     /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.
     private func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
         if selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame { return (id, 0, 0) }

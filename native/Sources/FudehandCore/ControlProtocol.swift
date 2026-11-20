@@ -19,6 +19,8 @@ public enum ControlCommand: Equatable, Sendable {
     case fitAll
     case zoom(Double)
     case nodeSnapshot(String, scale: Double)
+    case saveVersionSnapshot(frame: String, note: String)
+    case listVersionSnapshots(frame: String?)
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
@@ -305,6 +307,15 @@ public enum ControlProtocol {
             let scale = try positive("scale", default: 2)
             guard scale <= 4 else { throw Message(text: "Invalid argument type: scale") }
             return .nodeSnapshot(try string("id"), scale: scale)
+        case "save_version_snapshot":
+            let note: String
+            switch args["note"] {
+            case nil, is NSNull: note = ""
+            case let text as String: note = text
+            default: throw Message(text: "Invalid argument type: note")
+            }
+            return .saveVersionSnapshot(frame: try string("frame"), note: note)
+        case "list_version_snapshots": return .listVersionSnapshots(frame: try optionalString("frame"))
         case "list_fonts": return .listFonts
         case "import_font": return .importFont(try string("path"))
         case "search_icons":

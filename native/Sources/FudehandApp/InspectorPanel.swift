@@ -139,6 +139,8 @@ private struct NodeInspector: View {
     @State private var sequenceItems = ""
     @State private var previewing = false
     @State private var replacingIcon = false
+    /// The draft of a version snapshot's note.
+    @State private var note = ""
 
     private func update(_ action: String, _ key: String? = nil, _ change: @escaping (inout DesignNode) -> Void) {
         store.updateNode(node.id, action, coalescing: key) { change(&$0) }
@@ -166,7 +168,7 @@ private struct NodeInspector: View {
                         .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
                         .onAppear { name = node.name }
                         .onChange(of: node.name) { _, next in name = next }
-                        .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; previewing = false }
+                        .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; note = node.versionSnapshot?.note ?? ""; previewing = false }
                         .accessibilityLabel(L("Layer name"))
                     Text(node.type.title).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
@@ -252,7 +254,8 @@ private struct NodeInspector: View {
                     Text(L("Fit|image scaling")).tag(ImageFit.fit)
                     Text(L("Stretch")).tag(ImageFit.stretch)
                 }
-                Button(L("Replace Image…")) { replaceImage() }
+                // A version snapshot's picture is what the frame looked like; replacing it would contradict its record.
+                if node.versionSnapshot == nil { Button(L("Replace Image…")) { replaceImage() } }
             }
         }
         if let icon = node.icon {
@@ -263,6 +266,48 @@ private struct NodeInspector: View {
                     .popover(isPresented: $replacingIcon, arrowEdge: .leading) {
                         IconPicker(current: icon.name) { store.replaceIcon(node.id, with: $0) }
                     }
+            }
+        }
+        if let snapshot = node.versionSnapshot { versionSnapshotSection(snapshot) }
+        if node.type == .frame { frameSnapshotsSection }
+    }
+
+    private static let snapshotTime = Date.FormatStyle.dateTime.year().month().day().hour().minute()
+
+    /// A frame's version snapshots, oldest first: choosing one selects it and brings it into view.
+    private var frameSnapshotsSection: some View {
+        InspectorSection(L("Version Snapshots")) {
+            ForEach(store.document.versionSnapshots(of: node.id)) { layer in
+                if let snapshot = layer.versionSnapshot {
+                    Button { store.setSelection([layer.id]); store.focus(layer.id) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(snapshot.createdAt, format: Self.snapshotTime)
+                            if !snapshot.note.isEmpty { Text(snapshot.note).foregroundStyle(.secondary).lineLimit(1) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Button(L("Save Version Snapshot")) { store.saveVersionSnapshotOfSelection() }
+        }
+    }
+
+    /// A version snapshot's frame, time, and note, and the switch between laying it over its frame and placing it beside.
+    private func versionSnapshotSection(_ snapshot: VersionSnapshot) -> some View {
+        let frame = store.document.worldRect(snapshot.frame)
+        let here = store.document.worldRect(node.id)
+        let overlaid = frame.map { frame in here.map { abs($0.x - frame.x) < 0.5 && abs($0.y - frame.y) < 0.5 } ?? false } ?? false
+        return InspectorSection(L("Version Snapshot")) {
+            LabeledContent(L("Frame")) { Text(store.document.node(snapshot.frame)?.name ?? L("Deleted")) }
+            LabeledContent(L("Saved|version snapshot time")) { Text(snapshot.createdAt, format: Self.snapshotTime) }
+            TextField(L("Note"), text: $note).textFieldStyle(.roundedBorder)
+                .onSubmit { update("Edit Snapshot Note") { $0.versionSnapshot?.note = note.trimmingCharacters(in: .whitespacesAndNewlines) } }
+                .onAppear { note = snapshot.note }
+                .onChange(of: snapshot.note) { _, next in note = next }
+                .accessibilityLabel(L("Snapshot note"))
+            if frame != nil {
+                Button(overlaid ? L("Place Beside Frame") : L("Overlay on Frame")) { store.compareVersionSnapshot(node.id, overlay: !overlaid) }
             }
         }
     }

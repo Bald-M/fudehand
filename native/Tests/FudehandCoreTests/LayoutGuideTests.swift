@@ -116,10 +116,10 @@ private func message(_ object: [String: Any]) -> String? {
 }
 
 @Test func filesWithoutLayoutGuidesStillOpen() throws {
-    let json = #"{"format":"fudehand.design","version":5,"nodes":[{"id":"f","type":"frame","name":"F","x":0,"y":0,"width":10,"height":10}]}"#
+    let json = #"{"format":"fudehand.design","version":6,"nodes":[{"id":"f","type":"frame","name":"F","x":0,"y":0,"width":10,"height":10}]}"#
     let document = try DesignDocument.decode(Data(json.utf8))
     #expect(document.nodes[0].layoutGuides.isEmpty)
-    #expect(DesignDocument.formatVersion == 6)
+    #expect(DesignDocument.formatVersion == 7)
 }
 
 // MARK: Index
