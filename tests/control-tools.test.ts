@@ -26,7 +26,7 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
       'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
@@ -138,6 +138,9 @@ describe('design tools', () => {
     await callTool('design_save_document', {}, ctx)
     await callTool('design_save_document', { path: '/tmp/a.fudehand' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
+    await callTool('canvas_focus_node', { id: 'a' }, ctx)
+    await callTool('canvas_focus_node', { ids: ['a', 'b'] }, ctx)
+    await callTool('canvas_set_view', { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] }, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
@@ -152,6 +155,9 @@ describe('design tools', () => {
       { command: 'save_document', args: {} },
       { command: 'save_document', args: { path: '/tmp/a.fudehand' } },
       { command: 'zoom', args: { scale: 0.5 } },
+      { command: 'focus_node', args: { id: 'a' } },
+      { command: 'focus_node', args: { ids: ['a', 'b'] } },
+      { command: 'set_view', args: { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] } },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
     ])

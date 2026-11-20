@@ -33,7 +33,7 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":15,"command":"open_document","args":{"path":"/tmp/a.fudehand"}}"#, .openDocument("/tmp/a.fudehand", discard: false)),
         (#"{"id":16,"command":"save_document"}"#, .saveDocument(nil)),
         (#"{"id":17,"command":"save_document","args":{"path":"/tmp/b.fudehand"}}"#, .saveDocument("/tmp/b.fudehand")),
-        (#"{"id":18,"command":"focus_node","args":{"id":"f"}}"#, .focusNode("f")),
+        (#"{"id":18,"command":"focus_node","args":{"id":"f"}}"#, .focusNodes(["f"])),
         (#"{"id":19,"command":"fit_all"}"#, .fitAll),
         (#"{"id":20,"command":"zoom","args":{"scale":0.5}}"#, .zoom(0.5)),
         (#"{"id":21,"command":"node_snapshot","args":{"id":"f"}}"#, .nodeSnapshot("f", scale: 2)),
@@ -71,6 +71,12 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":37,"command":"get_connectors"}"#, .getConnectors),
         (#"{"id":38,"command":"set_connector","args":{"connector":"codex","connected":false}}"#, .setConnector(.codex, connected: false)),
         (#"{"id":39,"command":"set_connector","args":{"connector":"deepseek","connected":true}}"#, .setConnector(.deepseek, connected: true)),
+        (#"{"id":40,"command":"focus_node","args":{"ids":["a","b"]}}"#, .focusNodes(["a", "b"])),
+        (#"{"id":41,"command":"set_view","args":{"tool":"hand"}}"#, .setView(ViewChange(tool: .hand))),
+        (#"{"id":42,"command":"set_view","args":{"inspector":false,"inspectorTab":"chat","expand":["a"],"collapse":["b"]}}"#,
+         .setView(ViewChange(inspector: false, inspectorTab: .chat, expand: ["a"], collapse: ["b"]))),
+        (#"{"id":43,"command":"focus_node","args":{"id":null,"ids":["a"]}}"#, .focusNodes(["a"])),
+        (#"{"id":44,"command":"set_view","args":{"tool":"text","expand":null,"collapse":null}}"#, .setView(ViewChange(tool: .text))),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -133,6 +139,15 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"set_connector","args":{"connector":"cursor","connected":true}}"#, "connector must be one of claude, codex, deepseek; got cursor"),
         (#"{"id":1,"command":"set_connector","args":{"connector":"codex"}}"#, "Missing argument: connected"),
         (#"{"id":1,"command":"set_connector","args":{"connector":"codex","connected":1}}"#, "Invalid argument type: connected"),
+        (#"{"id":1,"command":"focus_node","args":{}}"#, "Missing argument: id or ids"),
+        (#"{"id":1,"command":"focus_node","args":{"ids":[]}}"#, "Invalid argument type: ids"),
+        (#"{"id":1,"command":"focus_node","args":{"id":"a","ids":["b"]}}"#, "Pass either id or ids, not both"),
+        (#"{"id":1,"command":"set_view","args":{}}"#, "Nothing to change: pass tool, inspector, inspectorTab, expand, or collapse"),
+        (#"{"id":1,"command":"set_view","args":{"tool":"pen"}}"#, "tool must be one of move, hand, frame, rectangle, ellipse, text; got pen"),
+        (#"{"id":1,"command":"set_view","args":{"inspector":"yes"}}"#, "Invalid argument type: inspector"),
+        (#"{"id":1,"command":"set_view","args":{"inspectorTab":"layers"}}"#, "inspectorTab must be one of design, prototype, chat; got layers"),
+        (#"{"id":1,"command":"set_view","args":{"expand":"a"}}"#, "Invalid argument type: expand"),
+        (#"{"id":1,"command":"set_view","args":{"expand":["a"],"collapse":["a"]}}"#, "A layer cannot be both expanded and collapsed: a"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }

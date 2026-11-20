@@ -81,7 +81,7 @@ const sent = 'The reply runs on in the App: read its progress and result with ch
 const provider = { provider: { type: 'string', enum: ['deepseek', 'anthropic', 'openai'], description: 'Model provider: deepseek (DeepSeek), anthropic (Claude), or openai (ChatGPT)' } }
 
 export const tools = [
-  controlTool('design_get_state', 'get_state', 'Read an overview of the design document: file, whether it has been edited, selection, viewport, whether undo is available, and a summary of top-level layers.'),
+  controlTool('design_get_state', 'get_state', 'Read an overview of the design document: file, whether it has been edited, selection, viewport, the editor view (canvas tool, inspector, collapsed layers), whether undo is available, and a summary of top-level layers.'),
   controlTool('design_get_document', 'get_document', 'Read the full layer tree (image data is replaced by its byte count).'),
   controlTool('design_get_node', 'get_node', 'Read one layer and its child layers.', id),
   controlTool('design_create_node', 'create_node',
@@ -107,9 +107,19 @@ export const tools = [
     async (args, root) => ({ ...args, path: absolute(args.path, root) })),
   controlTool('design_save_document', 'save_document', 'Save the project file; when path is omitted, save to the current file.', path('Path to save as (.fudehand); ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory'), [],
     async (args, root) => args.path === undefined ? args : { ...args, path: absolute(args.path, root) }),
-  controlTool('canvas_focus_node', 'focus_node', 'Move and zoom the viewport to the given layer.', id),
+  controlTool('canvas_focus_node', 'focus_node', 'Move and zoom the viewport to fit the given layer, or several layers together (the same as Zoom to Selection). Pass id or ids. Returns the state, including the new viewport.',
+    { id: { type: 'string', description: 'Layer id' }, ids: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Several layer ids to fit together' } }, []),
   controlTool('canvas_fit_all', 'fit_all', 'Zoom the viewport to show all layers.'),
   controlTool('canvas_zoom', 'zoom', 'Zoom to the given scale around the center of the canvas (1 is actual size, range 0.05–4).', { scale: { type: 'number' } }),
+  controlTool('canvas_set_view', 'set_view',
+    'Change the editor view: the canvas tool, whether the inspector is shown and which tab it shows, and which layers the layers panel collapses. Pass only what should change. Not part of the undo history: returns the previous view and the new view. The current view is also in design_get_state (view).',
+    {
+      tool: { type: 'string', enum: ['move', 'hand', 'frame', 'rectangle', 'ellipse', 'text'], description: 'Canvas tool' },
+      inspector: { type: 'boolean', description: 'Show (true) or hide (false) the inspector' },
+      inspectorTab: { type: 'string', enum: ['design', 'prototype', 'chat'], description: 'Inspector tab: design is the properties panel, prototype the interaction settings of the selected layer, chat the chat panel' },
+      expand: { type: 'array', items: { type: 'string' }, description: 'Ids of layers with child layers to expand in the layers panel' },
+      collapse: { type: 'array', items: { type: 'string' }, description: 'Ids of layers with child layers to collapse in the layers panel' },
+    }, []),
   controlTool('prototype_play', 'play',
     'Open the prototype window and play the design document from a top-level frame, as Play Prototype does; playing again restarts. ' +
     'Without frame it starts from the top-level frame holding the selection, otherwise the first top-level frame. Returns the prototype window state (see prototype_get_playback).',

@@ -739,3 +739,64 @@ private func temporaryFile() -> URL {
     #expect(await failure(store, .saveDocument(nil)) == "The document has never been saved; provide path")
     #expect(try Data(contentsOf: templateURL) == original)
 }
+
+@Test @MainActor func focusingSeveralLayersMatchesZoomToSelection() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "x": 0, "y": 0, "width": 100, "height": 100])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "b", "type": "frame", "x": 2000, "y": 900, "width": 300, "height": 200])))
+    store.setSelection(["a", "b"])
+    store.zoomToSelection()
+    let expected = store.viewport
+    store.fitAll(animated: false)
+    store.setSelection([])
+    let state = try await control(store, .focusNodes(["a", "b"]))
+    #expect(store.viewport == expected)
+    #expect(store.selection.isEmpty)
+    let viewport = try #require(state["viewport"] as? [String: Double])
+    #expect(viewport["scale"] == expected.scale)
+    #expect(await failure(store, .focusNodes(["a", "missing"])) == "Layer not found: missing")
+    #expect(store.viewport == expected)
+}
+
+@Test @MainActor func agentReadsAndSetsTheEditorView() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [
+        ["id": "g", "type": "group", "children": [["id": "r", "type": "rectangle"]]],
+    ]])))
+    let initial = try #require(try await control(store, .getState)["view"] as? [String: Any])
+    #expect(initial["tool"] as? String == "move")
+    #expect(initial["inspector"] as? Bool == true)
+    #expect(initial["inspectorTab"] as? String == "design")
+    #expect(initial["collapsed"] as? [String] == [])
+
+    let result = try await control(store, .setView(ViewChange(tool: .rectangle, inspector: false, inspectorTab: .chat, collapse: ["f", "g"])))
+    #expect(store.tool == .rectangle && !store.showingInspector && store.inspectorTab == .chat)
+    #expect(store.collapsedLayers == ["f", "g"])
+    let previous = try #require(result["previous"] as? [String: Any])
+    #expect(previous["tool"] as? String == "move" && previous["inspector"] as? Bool == true)
+    #expect(previous["inspectorTab"] as? String == "design" && previous["collapsed"] as? [String] == [])
+    let view = try #require(result["view"] as? [String: Any])
+    #expect(view["tool"] as? String == "rectangle" && view["collapsed"] as? [String] == ["f", "g"])
+
+    // The layers panel's chevron calls the same store method.
+    store.setCollapsed("g", false)
+    _ = try await control(store, .setView(ViewChange(expand: ["f"])))
+    #expect(store.collapsedLayers.isEmpty)
+
+    // A bad id changes nothing, not even the valid parts of the request.
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["missing"]))) == "Layer not found: missing")
+    #expect(await failure(store, .setView(ViewChange(tool: .hand, collapse: ["r"]))) == "Layer has no child layers to expand or collapse: r")
+    #expect(store.tool == .rectangle && store.collapsedLayers.isEmpty)
+
+    // Layers deleted after collapsing are not reported.
+    _ = try await control(store, .setView(ViewChange(collapse: ["g"])))
+    _ = try await control(store, .deleteNodes(["g"]))
+    #expect((try await control(store, .getState)["view"] as? [String: Any])?["collapsed"] as? [String] == [])
+
+    // Another document starts with every layer expanded, even where an id repeats.
+    _ = try await control(store, .createNode(parent: "f", index: nil, node: JSONObject(["id": "k", "type": "rectangle"])))
+    _ = try await control(store, .setView(ViewChange(collapse: ["f"])))
+    _ = try await control(store, .newDocument(discard: true))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
+    #expect(store.collapsedLayers.isEmpty)
+}

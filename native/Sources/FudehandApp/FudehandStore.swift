@@ -11,8 +11,6 @@ struct WorkspaceLocation: Decodable {
     let path: String?
 }
 
-enum InspectorTab: String, CaseIterable { case design, prototype, chat }
-
 /// App state: the sole owner of the design document and the undo history; the canvas, the panels, and the control channel all modify the document through it.
 @MainActor
 final class FudehandStore: ObservableObject {
@@ -34,6 +32,8 @@ final class FudehandStore: ObservableObject {
     private(set) var viewportRequest = ViewportRequest(viewport: Viewport(), animated: false, token: 0)
     @Published var inspectorTab: InspectorTab = .design
     @Published var showingInspector = true
+    /// The layers the layers panel shows collapsed; every other layer with child layers is expanded.
+    @Published private(set) var collapsedLayers: Set<String> = []
     @Published var alert: String?
     @Published var theme: String {
         didSet { defaults.set(theme, forKey: "native.theme") }
@@ -343,15 +343,23 @@ final class FudehandStore: ObservableObject {
         request(rects.isEmpty ? Viewport() : CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 64), animated: animated)
     }
 
-    func focus(_ id: String) {
-        guard let rect = editor.document.worldRect(id) else { return }
-        request(CanvasGeometry.fitRects([rect], size: canvasExtent, padding: 40), animated: true)
+    func focus(_ id: String) { focus([id]) }
+
+    /// Moves and zooms the viewport to fit the given layers.
+    func focus(_ ids: [String]) {
+        let rects = ids.compactMap { editor.document.worldRect($0) }
+        guard !rects.isEmpty else { return }
+        request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
     }
 
     func zoomToSelection() {
-        let rects = selection.compactMap { editor.document.worldRect($0) }
-        guard !rects.isEmpty else { fitAll(); return }
-        request(CanvasGeometry.fitRects(rects, size: canvasExtent, padding: 40), animated: true)
+        guard !selection.isEmpty else { fitAll(); return }
+        focus(Array(selection))
+    }
+
+    /// Collapses or expands a layer's child layers in the layers panel.
+    func setCollapsed(_ id: String, _ collapsed: Bool) {
+        if collapsed { collapsedLayers.insert(id) } else { collapsedLayers.remove(id) }
     }
 
     func zoom(_ scale: Double) {
@@ -414,6 +422,7 @@ final class FudehandStore: ObservableObject {
         canvas?.releaseHeldInput()
         editor.replace(next)
         inGesture = false
+        collapsedLayers = []
         chat.show(chatHistory(for: url), fresh: url == nil)
         fileURL = url
         savedRevision = editor.revision

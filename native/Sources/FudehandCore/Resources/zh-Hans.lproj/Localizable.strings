@@ -307,6 +307,7 @@
 "Zoom canvas" = "缩放画布";
 "Read prototype window" = "读取原型窗口";
 "Close prototype window" = "关闭原型窗口";
+"Change view" = "更改视图";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "找不到 Fudehand 源码目录，无法连接";

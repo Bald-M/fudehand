@@ -19,7 +19,6 @@ extension NodeType {
 /// The layers panel: the hierarchy tree (upper layers first, matching the canvas stacking order), show/hide, lock, rename, kept in sync with the canvas selection.
 struct LayersPanel: View {
     @ObservedObject var store: FudehandStore
-    @State private var collapsed: Set<String> = []
     @State private var renaming: String?
     @State private var draftName = ""
     @FocusState private var renameFocused: Bool
@@ -40,7 +39,7 @@ struct LayersPanel: View {
                 var shallow = node
                 shallow.children = []
                 result.append(Row(node: shallow, hasChildren: !node.children.isEmpty, depth: depth))
-                if !collapsed.contains(node.id) { visit(node.children, depth: depth + 1) }
+                if !store.collapsedLayers.contains(node.id) { visit(node.children, depth: depth + 1) }
             }
         }
         visit(store.document.nodes, depth: 0)
@@ -80,13 +79,13 @@ struct LayersPanel: View {
         let node = row.node
         return HStack(spacing: 4) {
             Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
-            Button { toggleCollapsed(node.id) } label: {
-                Image(systemName: collapsed.contains(node.id) ? "chevron.right" : "chevron.down")
+            Button { store.setCollapsed(node.id, !store.collapsedLayers.contains(node.id)) } label: {
+                Image(systemName: store.collapsedLayers.contains(node.id) ? "chevron.right" : "chevron.down")
                     .font(.system(size: 10, weight: .semibold)).frame(width: 16, height: 20).contentShape(Rectangle())
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
             .opacity(row.hasChildren ? 1 : 0).disabled(!row.hasChildren)
-            .accessibilityLabel(collapsed.contains(node.id) ? L("Expand") : L("Collapse"))
+            .accessibilityLabel(store.collapsedLayers.contains(node.id) ? L("Expand") : L("Collapse"))
             Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
                 .font(.system(size: 11)).frame(width: 16).foregroundStyle(selected ? Color.accentColor : .secondary)
             if renaming == node.id {
@@ -135,10 +134,6 @@ struct LayersPanel: View {
         .accessibilityLabel("\(node.type.title) \(node.name)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction { store.setSelection([node.id]) }
-    }
-
-    private func toggleCollapsed(_ id: String) {
-        if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
     }
 
     /// Acts when the button goes down; the drag updates that follow the press are ignored.

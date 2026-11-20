@@ -15,7 +15,7 @@ public enum ControlCommand: Equatable, Sendable {
     case newDocument(discard: Bool)
     case openDocument(String, discard: Bool)
     case saveDocument(String?)
-    case focusNode(String)
+    case focusNodes([String])
     case fitAll
     case zoom(Double)
     case nodeSnapshot(String, scale: Double)
@@ -62,6 +62,24 @@ public enum ControlCommand: Equatable, Sendable {
     case deleteAPIKey(String)
     case getConnectors
     case setConnector(AgentConnector, connected: Bool)
+    case setView(ViewChange)
+}
+
+/// The inspector's tabs: the properties panel, the prototype settings, and the chat panel.
+public enum InspectorTab: String, CaseIterable, Sendable { case design, prototype, chat }
+
+/// A change to the editor view, outside the design document: the canvas tool, the inspector, and which layers the layers panel collapses.
+/// A nil field is left as it is.
+public struct ViewChange: Equatable, Sendable {
+    public var tool: CanvasTool?
+    public var inspector: Bool?
+    public var inspectorTab: InspectorTab?
+    public var expand: [String]
+    public var collapse: [String]
+
+    public init(tool: CanvasTool? = nil, inspector: Bool? = nil, inspectorTab: InspectorTab? = nil, expand: [String] = [], collapse: [String] = []) {
+        self.tool = tool; self.inspector = inspector; self.inspectorTab = inspectorTab; self.expand = expand; self.collapse = collapse
+    }
 }
 
 /// The App's appearance setting; raw values are what is saved.
@@ -270,7 +288,17 @@ public enum ControlProtocol {
         case "new_document": return .newDocument(discard: try flag("discard"))
         case "open_document": return .openDocument(try string("path"), discard: try flag("discard"))
         case "save_document": return .saveDocument(try optionalString("path"))
-        case "focus_node": return .focusNode(try string("id"))
+        case "focus_node":
+            let present = { (key: String) in args[key].map { !($0 is NSNull) } ?? false }
+            switch (present("id") ? args["id"] : nil, present("ids") ? args["ids"] : nil) {
+            case (nil, nil): throw Message(text: "Missing argument: id or ids")
+            case (_?, _?): throw Message(text: "Pass either id or ids, not both")
+            case (_?, nil): return .focusNodes([try string("id")])
+            case (nil, _?):
+                let ids = try strings("ids")
+                guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+                return .focusNodes(ids)
+            }
         case "fit_all": return .fitAll
         case "zoom": return .zoom(try positive("scale"))
         case "node_snapshot":
@@ -345,6 +373,24 @@ public enum ControlProtocol {
             let connector = try required("connector", try choice("connector", AgentConnector.self))
             guard args["connected"] != nil, !(args["connected"] is NSNull) else { throw Message(text: "Missing argument: connected") }
             return .setConnector(connector, connected: try flag("connected"))
+        case "set_view":
+            func choice<T: RawRepresentable & CaseIterable>(_ key: String, _ type: T.Type) throws -> T? where T.RawValue == String {
+                guard let name = try optionalString(key) else { return nil }
+                guard let value = T(rawValue: name) else {
+                    throw Message(text: "\(key) must be one of \(T.allCases.map(\.rawValue).joined(separator: ", ")); got \(name)")
+                }
+                return value
+            }
+            var change = ViewChange(tool: try choice("tool", CanvasTool.self), inspectorTab: try choice("inspectorTab", InspectorTab.self))
+            if args["inspector"] != nil, !(args["inspector"] is NSNull) { change.inspector = try flag("inspector") }
+            for key in ["expand", "collapse"] where !(args[key] == nil || args[key] is NSNull) {
+                if key == "expand" { change.expand = try strings(key) } else { change.collapse = try strings(key) }
+            }
+            guard change != ViewChange() else { throw Message(text: "Nothing to change: pass tool, inspector, inspectorTab, expand, or collapse") }
+            if let both = change.expand.first(where: change.collapse.contains) {
+                throw Message(text: "A layer cannot be both expanded and collapsed: \(both)")
+            }
+            return .setView(change)
         default: throw Message(text: "Unknown command: \(name)")
         }
     }
