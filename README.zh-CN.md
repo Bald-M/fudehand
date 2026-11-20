@@ -18,6 +18,22 @@ Fudehand 完全运行在你自己的 Mac 上。设计稿是一份由图层组成
 
 当前版本 v0.0.3，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
 
+## 演示
+
+两段录屏提的是同一个需求：一个 iPhone 待办清单 App 的首页，包含当天日期、进度概览、带复选框的任务列表和添加任务按钮。录屏已加速。
+
+### 用对话面板
+
+在编辑器右侧的*对话*标签页输入需求，模型一边回复一边在画布上搭建界面。
+
+![在对话面板输入待办清单 App 的需求，模型在画布上搭建出 iPhone 首页](docs/demo/chat-panel-todo.gif)
+
+### 用 Claude Code 通过 MCP
+
+连接 `fudehand` MCP server 后，Claude Code 在打开的文档里搭建界面，截图核对，并修正发现的问题。
+
+![Claude Code 在终端里调用 fudehand MCP 工具，Fudehand 中随之出现待办清单首页](docs/demo/claude-code-mcp-todo.gif)
+
 ## 特点
 
 - **原生画布。** SwiftUI + AppKit 应用，用 Core Animation 直接渲染图层，没有 web view，也不依赖网页服务。

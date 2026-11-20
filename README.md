@@ -18,6 +18,22 @@ Fudehand runs entirely on your own Mac. A design is a document made of layers, s
 
 The current version is v0.0.3; see the [CHANGELOG](CHANGELOG.md) for changes.
 
+## See it in action
+
+Both clips make the same request: a todo list app home screen for iPhone, with today's date, a progress summary, a task list with checkboxes, and an add-task button. They are sped up.
+
+### From the chat panel
+
+Type the request in the *Chat* tab on the right of the editor; the model builds the screen on the canvas while it replies.
+
+![Prompting the chat panel to design a todo list app; the model builds an iPhone home screen on the canvas](docs/demo/chat-panel-todo.gif)
+
+### From Claude Code over MCP
+
+With the `fudehand` MCP server connected, Claude Code builds the screen in the open document, checks a snapshot, and fixes what it finds.
+
+![Claude Code in Terminal calling the fudehand MCP tools while the todo list screen appears in Fudehand](docs/demo/claude-code-mcp-todo.gif)
+
 ## Highlights
 
 - **Native canvas.** A SwiftUI + AppKit app that renders layers directly with Core Animation. There is no web view and no web server.
