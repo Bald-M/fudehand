@@ -162,7 +162,8 @@ extension DesignDocument {
 
 // MARK: Editor
 
-/// The document and the undo history. Manual edits and Agent edits share one history; layout runs again after every edit.
+/// The document and the undo history. Manual edits and Agent edits share one history, annotations included; layout runs again after
+/// every edit, and annotations on layers an edit removed are dropped with it.
 public struct DesignEditor {
     private struct Step {
         let name: String
@@ -203,6 +204,7 @@ public struct DesignEditor {
         defer { if let open { gesture = (open, document) } }
         var next = document
         let result = try change(&next)
+        next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure)
         guard next != document else { return result }
         let now = Date()
@@ -227,6 +229,7 @@ public struct DesignEditor {
     public mutating func applyLive(_ change: (inout DesignDocument) -> Void) {
         var next = document
         change(&next)
+        next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure)
         guard next != document else { return }
         document = next

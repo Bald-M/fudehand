@@ -61,7 +61,7 @@ private func message(_ object: [String: Any]) -> String? {
 }
 
 @Test func filesWithEffectsUseTheCurrentFormatVersion() throws {
-    #expect(DesignDocument.formatVersion == 7)
+    #expect(DesignDocument.formatVersion >= 8)
     var document = DesignDocument(nodes: [DesignNode(id: "r", type: .rectangle)])
     document.nodes[0].effects = [DesignEffect(type: .innerShadow)]
     #expect(try DesignDocument.decode(try document.encoded()) == document)

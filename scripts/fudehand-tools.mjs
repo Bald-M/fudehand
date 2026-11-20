@@ -116,7 +116,7 @@ export const tools = [
   controlTool('canvas_set_view', 'set_view',
     'Change the editor view: the canvas tool, whether the inspector is shown and which tab it shows, and which layers the layers panel collapses. Pass only what should change. Not part of the undo history: returns the previous view and the new view. The current view is also in design_get_state (view).',
     {
-      tool: { type: 'string', enum: ['move', 'hand', 'frame', 'rectangle', 'ellipse', 'text'], description: 'Canvas tool' },
+      tool: { type: 'string', enum: ['move', 'hand', 'frame', 'rectangle', 'ellipse', 'text', 'annotate'], description: 'Canvas tool' },
       inspector: { type: 'boolean', description: 'Show (true) or hide (false) the inspector' },
       inspectorTab: { type: 'string', enum: ['design', 'prototype', 'chat'], description: 'Inspector tab: design is the properties panel, prototype the interaction settings of the selected layer, chat the chat panel' },
       expand: { type: 'array', items: { type: 'string' }, description: 'Ids of layers with child layers to expand in the layers panel' },
@@ -150,6 +150,23 @@ export const tools = [
   controlTool('design_list_version_snapshots', 'list_version_snapshots',
     'List the version snapshots in the document, oldest first, or only those of one frame: id, name, frame and frameName (null once the frame is deleted), createdAt, note, opacity, and the snapshot\'s and the frame\'s bounds in canvas coordinates.',
     { frame: { type: 'string', description: 'Only snapshots of this frame id' } }, []),
+  controlTool('design_list_annotations', 'list_annotations',
+    'List annotations: plain-text notes people and agents pin to a point inside a layer, each with its replies. Annotations are not layers: they are not in the layer tree or in snapshots. ' +
+    'Returns {annotations: [{id, node (layer id), x, y (relative to the layer\'s top-left corner, in pt), author person/agent, text, replies: [{id, author, text}]}]}, in the order added.',
+    { node: { type: 'string', description: 'Only the annotations on this layer; when omitted, all annotations' } }, []),
+  controlTool('design_add_annotation', 'add_annotation',
+    'Pin a new annotation to a layer, or reply to one with replyTo. Annotations are saved in the project file, follow their layer when it moves, are deleted with it, and each addition is one undo step. Returns the whole annotation with its replies.',
+    {
+      node: { type: 'string', description: 'Layer id to pin a new annotation to' },
+      x: { type: 'number', description: 'Point inside the layer, relative to its top-left corner (pt); kept inside the layer. Default: the layer\'s center' },
+      y: { type: 'number', description: 'See x' },
+      text: { type: 'string', description: 'Plain text; must not be empty' },
+      replyTo: { type: 'string', description: 'Annotation id (or the id of one of its replies) to reply to, instead of node, x, and y' },
+    }, ['text']),
+  controlTool('design_update_annotation', 'update_annotation', 'Replace the text of an annotation or a reply, as one undo step. Returns the whole annotation.',
+    { id: { type: 'string', description: 'Annotation or reply id' }, text: { type: 'string', description: 'New plain text; must not be empty' } }),
+  controlTool('design_delete_annotation', 'delete_annotation', 'Delete an annotation with all its replies, or a single reply, as one undo step.',
+    { id: { type: 'string', description: 'Annotation or reply id' } }),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',

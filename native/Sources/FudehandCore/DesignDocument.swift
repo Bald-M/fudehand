@@ -278,18 +278,20 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     }
 }
 
-/// A design document: the ordered list of top-level layers.
+/// A design document: the ordered list of top-level layers and the annotations pinned to them.
 public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
     /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
-    /// toggles, 5 icon layers, 6 version snapshots, 7 effects; older files open unchanged and are written as the current version.
-    public static let formatVersion = 7
+    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 effects; older files open unchanged and are written as the current version.
+    public static let formatVersion = 8
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
-    public init(nodes: [DesignNode] = []) { self.nodes = nodes }
+    /// Notes pinned to layers, in the order they were added (ADR 0011).
+    public var annotations: [DesignAnnotation]
+    public init(nodes: [DesignNode] = [], annotations: [DesignAnnotation] = []) { self.nodes = nodes; self.annotations = annotations }
 
     public static func decode(_ data: Data) throws -> DesignDocument {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -302,14 +304,23 @@ public struct DesignDocument: Equatable, Sendable {
             throw DesignError(L("File was created by a newer version of Fudehand (format version %d); upgrade Fudehand to open it", version.intValue))
         }
         guard let nodes = object["nodes"] as? [Any] else { throw DesignError(L("Project file is missing nodes")) }
-        let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) })
+        let annotations: [Any]
+        switch object["annotations"] {
+        case nil, is NSNull: annotations = []
+        case let list as [Any]: annotations = list
+        default: throw DesignError("annotations must be an array")
+        }
+        let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) },
+                                      annotations: try annotations.map(DesignAnnotation.from))
         try document.validateUniqueIDs()
+        try document.validateAnnotations()
         return document
     }
 
     public func encoded() throws -> Data {
-        let object: [String: Any] = ["format": Self.format, "version": Self.formatVersion,
+        var object: [String: Any] = ["format": Self.format, "version": Self.formatVersion,
                                      "nodes": nodes.map { DesignJSON.object($0, includeImageData: true) }]
+        if !annotations.isEmpty { object["annotations"] = annotations.map(\.object) }
         var data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         data.append(UInt8(ascii: "\n"))
         return data

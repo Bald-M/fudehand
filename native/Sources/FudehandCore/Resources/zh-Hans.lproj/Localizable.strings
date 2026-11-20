@@ -474,6 +474,20 @@
 "Save version snapshot" = "保存版本快照";
 "List version snapshots" = "列出版本快照";
 
+/* Annotations */
+"Annotate" = "批注";
+"Annotation" = "批注";
+"Add an annotation" = "添加批注";
+"Add" = "添加";
+"Reply" = "回复";
+"Edit" = "编辑";
+"Delete Annotation" = "删除批注";
+"Delete Reply" = "删除回复";
+"You" = "你";
+"Agent" = "Agent";
+"Annotation: %@" = "批注：%@";
+"Expanded" = "已展开";
+
 /* Effects */
 "Effects" = "效果";
 "Add Effect" = "添加效果";
