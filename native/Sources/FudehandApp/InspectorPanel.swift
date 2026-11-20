@@ -204,7 +204,10 @@ private struct NodeInspector: View {
                 }
             }
         }
-        if node.type == .frame { layoutSection(node.layout) }
+        if node.type == .frame {
+            layoutSection(node.layout)
+            layoutGuidesSection(node.layoutGuides)
+        }
         InspectorSection(L("Appearance")) {
             HStack(spacing: InspectorMetrics.gap) {
                 NumberField(label: L("Opacity"), symbol: "circle.lefthalf.filled", value: node.opacity, percent: true, scrub: 0.01) { v in
@@ -522,6 +525,22 @@ private struct NodeInspector: View {
         }
     }
 
+    private func layoutGuidesSection(_ guides: [LayoutGuide]) -> some View {
+        InspectorSection(L("Layout Guides"), accessory: {
+            AddButton(label: L("Add layout guide")) { update("Add Layout Guide") { $0.layoutGuides.append(LayoutGuide(type: .grid)) } }
+        }) {
+            ForEach(Array(guides.enumerated()), id: \.offset) { index, guide in
+                LayoutGuideRow(guide: guide, change: { action, key, change in
+                    update(action, key.map { "layoutGuides.\(index).\($0)" }) { node in
+                        if node.layoutGuides.indices.contains(index) { change(&node.layoutGuides[index]) }
+                    }
+                }, remove: {
+                    update("Remove Layout Guide") { node in if node.layoutGuides.indices.contains(index) { node.layoutGuides.remove(at: index) } }
+                })
+            }
+        }
+    }
+
     /// The top-level frames an interaction can go to; the frame holding this layer comes last, since going to it is rarely meant.
     private var destinations: [DesignNode] {
         let own = store.document.ancestry(of: node.id).first
@@ -774,5 +793,94 @@ private struct NodeInspector: View {
         panel.allowedContentTypes = [.png, .jpeg, .svg]
         guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.imageSize(data) != nil else { return }
         update("Replace Image") { $0.image?.data = data }
+    }
+}
+
+/// One layout guide in the properties panel: its type icon, a summary that opens its settings, show/hide, and remove.
+private struct LayoutGuideRow: View {
+    let guide: LayoutGuide
+    /// Applies a change as one undo step named by the first argument; the second, when given, coalesces repeated changes.
+    let change: (String, String?, @escaping (inout LayoutGuide) -> Void) -> Void
+    let remove: () -> Void
+    @State private var editing = false
+
+    static func symbol(_ type: LayoutGuideType) -> String {
+        switch type {
+        case .grid: return "grid"
+        case .columns: return "rectangle.split.3x1"
+        case .rows: return "rectangle.split.1x2"
+        }
+    }
+
+    static func typeName(_ type: LayoutGuideType) -> String {
+        switch type {
+        case .grid: return L("Grid|layout guide")
+        case .columns: return L("Columns")
+        case .rows: return L("Rows")
+        }
+    }
+
+    static func summary(_ guide: LayoutGuide) -> String {
+        switch guide.type {
+        case .grid: return L("Grid %@", NumberInput.format(guide.size))
+        case .columns: return L("Columns %d", guide.count)
+        case .rows: return L("Rows %d", guide.count)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: InspectorMetrics.gap) {
+            Button { editing = true } label: {
+                FieldBox {
+                    Image(systemName: Self.symbol(guide.type)).font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 14)
+                    Text(Self.summary(guide)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(guide.visible ? .primary : .secondary)
+            .popover(isPresented: $editing, arrowEdge: .leading) { editor.padding(12).frame(width: 220) }
+            Button { change(guide.visible ? "Hide Layout Guide" : "Show Layout Guide", nil) { $0.visible.toggle() } } label: {
+                Image(systemName: guide.visible ? "eye" : "eye.slash").font(.system(size: 11)).iconHitTarget()
+            }
+            .buttonStyle(.borderless)
+            .help(guide.visible ? L("Hide layout guide") : L("Show layout guide"))
+            .accessibilityLabel(guide.visible ? L("Hide layout guide") : L("Show layout guide"))
+            RemoveButton(label: L("Remove layout guide"), action: remove)
+        }
+    }
+
+    @ViewBuilder private var editor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker(L("Type|layout guide"), selection: Binding(get: { guide.type }, set: { v in change("Change Layout Guide", nil) { $0.type = v } })) {
+                ForEach(LayoutGuideType.allCases, id: \.self) { Text(Self.typeName($0)).tag($0) }
+            }
+            if guide.type == .grid {
+                NumberField(label: L("Size|layout guide"), value: guide.size, minimum: 1) { v in change("Change Layout Guide", nil) { $0.size = v } }
+            } else {
+                NumberField(label: L("Count"), value: Double(guide.count), minimum: 1) { v in
+                    change("Change Layout Guide", nil) { $0.count = min(LayoutGuide.maximumCount, max(1, Int(v.rounded()))) }
+                }
+                Picker(L("Alignment"), selection: Binding(get: { guide.align }, set: { v in change("Change Layout Guide", nil) { $0.align = v } })) {
+                    Text(L("Stretch")).tag(LayoutGuideAlign.stretch)
+                    Text(L("Start")).tag(LayoutGuideAlign.start)
+                    Text(L("Center")).tag(LayoutGuideAlign.center)
+                    Text(L("End")).tag(LayoutGuideAlign.end)
+                }
+                if guide.align != .stretch {
+                    NumberField(label: guide.type == .columns ? L("Width") : L("Height"), value: guide.width, minimum: 1) { v in
+                        change("Change Layout Guide", nil) { $0.width = v }
+                    }
+                }
+                NumberField(label: L("Gutter"), value: guide.gutter, minimum: 0) { v in change("Change Layout Guide", nil) { $0.gutter = v } }
+                NumberField(label: L("Margin"), value: guide.margin, minimum: 0, disabled: guide.align == .center) { v in
+                    change("Change Layout Guide", nil) { $0.margin = v }
+                }
+            }
+            ColorField(label: L("Color"), color: guide.color) { c in change("Change Layout Guide", "color") { $0.color = c } }
+        }
+        .font(.system(size: 12))
     }
 }

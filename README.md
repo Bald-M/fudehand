@@ -159,12 +159,12 @@ The API key is stored only in your local Keychain (service name `fudehand.agent`
 
 *File → Save* (⌘S) and *Save As…* (⇧⌘S) write a design to a `.fudehand` project file; *Open…* (⌘O) and *Open Recent* reopen it. The App registers the `.fudehand` file type, so double-clicking a file in Finder, dragging it onto the Dock icon, or choosing *Open With* opens it in Fudehand. If the current document has unsaved changes, the App asks whether to save them first.
 
-A design document is a tree of layers: frames, rectangles, ellipses, text, images, icons, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout. A project file is JSON with a format version number:
+A design document is a tree of layers: frames, rectangles, ellipses, text, images, icons, and groups. Layers have fill, stroke, corner radius, opacity, visibility, and lock; frames can also use auto layout and layout guides (grid, columns, rows). A project file is JSON with a format version number:
 
 ```json
 {
   "format": "fudehand.design",
-  "version": 7,
+  "version": 8,
   "nodes": [
     { "id": "home", "type": "frame", "name": "Home", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },

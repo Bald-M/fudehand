@@ -5,9 +5,9 @@ import ImageIO
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
-                                        "scroll", "fixedOnScroll", "states", "versionSnapshot", "children"]
+                                        "scroll", "fixedOnScroll", "states", "versionSnapshot", "layoutGuides", "children"]
     /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
-    /// not among them: an update replaces them whole.
+    /// not among them, nor is the `layoutGuides` array: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding", "versionSnapshot"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -122,6 +122,7 @@ public enum DesignJSON {
         try unsupported("clipsContent", type == .frame)
         try unsupported("layout", type == .frame)
         try unsupported("scroll", type == .frame)
+        try unsupported("layoutGuides", type == .frame)
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
         try unsupported("icon", type == .icon)
@@ -221,6 +222,12 @@ public enum DesignJSON {
             }
             node.versionSnapshot = VersionSnapshot(frame: frame, createdAt: date, note: try snapshot.string("note", default: ""))
         }
+        if let guides = reader.value("layoutGuides") {
+            guard let list = guides as? [[String: Any]] else { throw reader.fail("layoutGuides must be an array of objects") }
+            node.layoutGuides = try list.enumerated().map { index, object in
+                try layoutGuide(Reader(object: object, owner: id, path: "layoutGuides[\(index)]"))
+            }
+        }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
@@ -309,6 +316,40 @@ public enum DesignJSON {
         return TextSequence(items: strings,
                             interval: try reader.number("interval", default: 1, min: TextSequence.minimumInterval, max: TextSequence.maximumInterval),
                             loop: try reader.bool("loop", default: false))
+    }
+
+    static func layoutGuide(_ reader: Reader) throws -> LayoutGuide {
+        guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
+        var guide = LayoutGuide(type: try reader.choice("type", default: .grid))
+        if guide.type == .grid {
+            try reader.checkKeys(["type", "size", "color", "visible"])
+            guide.size = try reader.number("size", default: guide.size, min: 1)
+        } else {
+            try reader.checkKeys(["type", "count", "align", "width", "gutter", "margin", "color", "visible"])
+            guide.count = try reader.integer("count", default: Double(guide.count), min: 1, max: Double(LayoutGuide.maximumCount))
+            guide.align = try reader.choice("align", default: guide.align)
+            if guide.align == .stretch, reader.value("width") != nil {
+                throw reader.fail("\(reader.name("width")) only applies when align is start, center, or end")
+            }
+            guide.width = try reader.number("width", default: guide.width, min: 1)
+            guide.gutter = try reader.number("gutter", default: guide.gutter, min: 0)
+            guide.margin = try reader.number("margin", default: guide.margin, min: 0)
+        }
+        guide.color = try reader.color("color", default: guide.color)!
+        guide.visible = try reader.bool("visible", default: true)
+        return guide
+    }
+
+    static func layoutGuideObject(_ guide: LayoutGuide) -> [String: Any] {
+        var object: [String: Any] = ["type": guide.type.rawValue, "color": guide.color.hex, "visible": guide.visible]
+        if guide.type == .grid {
+            object["size"] = guide.size
+        } else {
+            object["count"] = guide.count; object["align"] = guide.align.rawValue
+            object["gutter"] = guide.gutter; object["margin"] = guide.margin
+            if guide.align != .stretch { object["width"] = guide.width }
+        }
+        return object
     }
 
     static func isImage(_ data: Data) -> Bool {
@@ -410,6 +451,7 @@ public enum DesignJSON {
             if !snapshot.note.isEmpty { value["note"] = snapshot.note }
             object["versionSnapshot"] = value
         }
+        if !node.layoutGuides.isEmpty { object["layoutGuides"] = node.layoutGuides.map(layoutGuideObject) }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }
         }

@@ -66,7 +66,7 @@ private func document() -> DesignDocument {
     let note = try doc.addAnnotation(on: "a", x: 12.5, y: 8, text: "Line one\nLine two", author: .person)
     try doc.replyToAnnotation(note.id, text: "Done", author: .agent)
     let data = try doc.encoded()
-    #expect(String(decoding: data, as: UTF8.self).contains("\"version\" : 7"))
+    #expect(String(decoding: data, as: UTF8.self).contains("\"version\" : \(DesignDocument.formatVersion)"))
     #expect(try DesignDocument.decode(data) == doc)
     #expect(!String(decoding: try document().encoded(), as: UTF8.self).contains("annotations"))
 }

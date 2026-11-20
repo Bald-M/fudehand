@@ -61,6 +61,28 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("t")?.text?.fontSize == 16)
 }
 
+@Test @MainActor func agentAndPanelEditLayoutGuidesAsOneUndoStepEach() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame"])))
+    // The panel's + adds a grid; the Agent then sees it and replaces the list.
+    store.updateNode("f", "Add Layout Guide") { $0.layoutGuides.append(LayoutGuide(type: .grid)) }
+    let node = try await control(store, .getNode("f"))
+    #expect((node["layoutGuides"] as? [[String: Any]])?.first?["type"] as? String == "grid")
+    _ = try await control(store, .updateNode("f", changes: JSONObject(["layoutGuides": [["type": "columns", "count": 12], ["type": "rows", "visible": false]]])))
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.updateNode("f", "Show Layout Guide") { $0.layoutGuides[1].visible = true }
+    store.updateNode("f", "Remove Layout Guide") { $0.layoutGuides.remove(at: 0) }
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides[1].visible == false)
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.grid])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.isEmpty == true)
+}
+
 @Test @MainActor func invalidAgentCommandsChangeNothing() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "e", "type": "ellipse"])))

@@ -235,6 +235,8 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var animation: LayerAnimation?
     /// Image layers only: set when the layer is a version snapshot of a frame.
     public var versionSnapshot: VersionSnapshot?
+    /// Frames only: grids, columns, and rows drawn over the frame on the editing canvas, in the order they were added.
+    public var layoutGuides: [LayoutGuide] = []
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -255,8 +257,9 @@ public struct DesignDocument: Equatable, Sendable {
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
     /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
-    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations; older files open unchanged and are written as the current version.
-    public static let formatVersion = 7
+    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 frame layout guides; older files open unchanged and are written as
+    /// the current version.
+    public static let formatVersion = 8
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
