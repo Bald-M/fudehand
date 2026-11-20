@@ -223,3 +223,16 @@ private func checker() throws -> Data {
     // 4 pt tiles in 256 pt blocks: 4 × 3 blocks rather than 250 × 150 tiles.
     #expect(tiles.sublayers?.count == 12)
 }
+
+@Test @MainActor func textureBlendWorksOnAnEllipseClippedByItsMask() throws {
+    // An ellipse clips with a mask rather than masksToBounds; the blend must still apply against its fill.
+    var round = card([DesignEffect(type: .texture, size: 8, texture: try checker(), blend: .multiply)], type: .ellipse)
+    round.width = 60
+    round.height = 60
+    let image = try snapshot(stage(round))
+    // Near the center: 26 pt into the ellipse on both axes is in a tile's black square (24–28), multiplied to black; 30 pt
+    // across is in the tile's white part, which leaves the red fill as it is. The bounding box's corner stays untouched.
+    #expect(pixel(image, 66, 66)[0] < 10)
+    #expect(pixel(image, 70, 66)[0] > 245 && pixel(image, 70, 66)[1] < 10)
+    #expect(pixel(image, 41, 41) == [255, 255, 255, 255])
+}

@@ -54,3 +54,19 @@ private let svg = Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="8" heigh
     for type in [NodeType.frame, .rectangle, .ellipse] { #expect(EffectType.texture.supports(type)) }
     for type in [NodeType.text, .image, .icon, .group] { #expect(!EffectType.texture.supports(type)) }
 }
+
+@Test func anUpdateCanSendATextureBackAsItsByteCount() throws {
+    // design_get_node shows a texture's image as "<N bytes>"; effects are replaced whole, so an Agent changing another effect
+    // sends the texture back with that placeholder, and it keeps its image.
+    var target = try node(["effects": [["type": "drop-shadow"], ["type": "texture", "image": ["data": svg.base64EncodedString()]]]])
+    let shown = try #require(DesignJSON.object(target, includeImageData: false)["effects"] as? [[String: Any]])
+    var changed = shown
+    changed[0]["y"] = 12
+    changed[1]["size"] = 16
+    try DesignJSON.apply(["effects": changed], to: &target)
+    #expect(target.effects[0].y == 12)
+    #expect(target.effects[1].texture == svg && target.effects[1].size == 16)
+    // The placeholder only stands for the texture at the same place in the list.
+    let moved = [shown[1], shown[0]]
+    #expect(throws: DesignError.self) { try DesignJSON.apply(["effects": moved], to: &target) }
+}

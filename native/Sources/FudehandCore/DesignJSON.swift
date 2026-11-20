@@ -534,6 +534,18 @@ public enum DesignJSON {
         }
         var object = self.object(node, includeImageData: true, includeChildren: false)
         merge(changes, into: &object)
+        // Effects are replaced whole, and the Agent reads a texture's image as "<N bytes>" (see `object`), so a texture sent back
+        // with that placeholder, at the place in the list where the same texture is, keeps its image.
+        if var effects = object["effects"] as? [[String: Any]] {
+            for index in effects.indices where index < node.effects.count {
+                guard node.effects[index].type == .texture, let current = node.effects[index].texture,
+                      effects[index]["type"] as? String == EffectType.texture.rawValue,
+                      var image = effects[index]["image"] as? [String: Any], image["data"] as? String == "<\(current.count) bytes>" else { continue }
+                image["data"] = current.base64EncodedString()
+                effects[index]["image"] = image
+            }
+            object["effects"] = effects
+        }
         var next = try self.node(from: object)
         next.children = node.children
         node = next

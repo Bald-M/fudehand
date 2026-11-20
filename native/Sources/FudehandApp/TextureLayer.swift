@@ -50,12 +50,13 @@ enum TextureLayer {
     private static var blocks: [Key: Block] = [:]
 
     /// The tile repeated into a block, made once per image and tile width. A bitmap keeps its own pixel density (an SVG is
-    /// rasterized at 3 pixels per point), within `maximumPixels`.
+    /// rasterized at 3 pixels per point), lowered so neither side of the block passes `maximumPixels`.
     static func block(_ data: Data, width: Double) -> Block? {
         let key = Key(data: data, width: width)
         if let cached = blocks[key] { return cached }
         let bitmap = DesignRenderer.cgImage(data)
-        guard let natural = bitmap.map({ CGSize(width: $0.width, height: $0.height) }) ?? DesignRenderer.svgImage(data)?.size,
+        let svg = bitmap == nil ? DesignRenderer.svgImage(data) : nil
+        guard let natural = bitmap.map({ CGSize(width: $0.width, height: $0.height) }) ?? svg?.size,
               natural.width > 0, natural.height > 0 else { return nil }
         let tile = CGSize(width: width, height: width * natural.height / natural.width)
         let across = ceil(minimumBlock / tile.width), down = ceil(minimumBlock / tile.height)
@@ -63,8 +64,8 @@ enum TextureLayer {
         guard across * down <= 16_384 else { return nil }
         let size = CGSize(width: tile.width * across, height: tile.height * down)
         let wanted = bitmap.map { CGFloat($0.width) / tile.width } ?? 3
-        let density = max(1, min(wanted, maximumPixels / size.width, maximumPixels / size.height))
-        let pixels = (width: Int((size.width * density).rounded(.up)), height: Int((size.height * density).rounded(.up)))
+        let density = min(wanted, maximumPixels / size.width, maximumPixels / size.height)
+        let pixels = (width: max(1, Int((size.width * density).rounded(.up))), height: max(1, Int((size.height * density).rounded(.up))))
         guard let context = CGContext(data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -77,7 +78,7 @@ enum TextureLayer {
                                   width: tile.width, height: tile.height)
                 if let bitmap {
                     context.draw(bitmap, in: rect)
-                } else if let svg = DesignRenderer.svgImage(data) {
+                } else if let svg {
                     NSGraphicsContext.saveGraphicsState()
                     NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
                     svg.draw(in: rect)

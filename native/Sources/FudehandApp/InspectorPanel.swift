@@ -869,6 +869,8 @@ private struct EffectsSection: View {
     /// The effect count this view's own add or remove leads to; any other change to the count (undo, the Agent) collapses
     /// every row, since the indexes no longer name the same effects.
     @State private var expectedCount: Int?
+    /// Bumped to rebuild the type menus after choosing Texture was cancelled.
+    @State private var typeMenuRefresh = 0
     @Environment(\.inspectedLayer) private var layer
 
     var body: some View {
@@ -923,7 +925,8 @@ private struct EffectsSection: View {
             Picker(L("Effect type"), selection: Binding(get: { effect.type }, set: { type in
                 var texture: Data?
                 if type == .texture, effect.type != .texture {
-                    guard let data = Self.chooseTexture() else { return }
+                    // Cancelled: the menu already shows Texture, so it is rebuilt to show the unchanged type again.
+                    guard let data = Self.chooseTexture() else { typeMenuRefresh += 1; return }
                     texture = data
                 }
                 change { current in
@@ -937,6 +940,7 @@ private struct EffectsSection: View {
                 ForEach(types, id: \.self) { Text(Self.name($0)).tag($0) }
             }
             .labelsHidden()
+            .id(typeMenuRefresh)
             Button { change { $0.visible.toggle() } } label: {
                 Image(systemName: effect.visible ? "eye" : "eye.slash").font(.system(size: 11)).iconHitTarget()
             }
