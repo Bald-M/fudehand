@@ -17,7 +17,7 @@ final class DesignRenderer {
         var layer: CALayer
         /// The layer of the node's type: fill, stroke, text, image, or icon, and the child layers.
         let content: CALayer
-        /// Inner shadows, drawn inside `content` below the child layers.
+        /// Inner shadows and noise, drawn inside `content` below the child layers.
         var innerShadows: [CALayer] = []
         /// Background blurs, next to `layer` in the parent, just under it (see `EffectLayers.Built.backdrops`).
         var backdrops: [CALayer] = []

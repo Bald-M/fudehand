@@ -177,11 +177,17 @@ public struct LayerStyle: Equatable, Sendable {
 }
 
 public enum EffectType: String, Sendable, CaseIterable {
-    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur"
+    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise
     public var isShadow: Bool { self == .dropShadow || self == .innerShadow }
+
+    /// Whether a layer of `type` takes this effect. Noise paints over a layer's area, so only frames, rectangles, and ellipses do.
+    public func supports(_ type: NodeType) -> Bool {
+        self == .noise ? (type == .frame || type == .rectangle || type == .ellipse) : type.hasEffects
+    }
 }
 
-/// One entry in a layer's effects list. A shadow uses every field; a blur uses only `radius`. Shadows of frames, rectangles,
+/// One entry in a layer's effects list. A shadow uses color, offset, radius, and spread; a blur uses only `radius`; noise uses
+/// color, size, density, and seed (see `NoiseTile`). Shadows of frames, rectangles,
 /// ellipses, and images follow the layer's shape (spread grows or shrinks it); those of text and icons follow the glyphs and
 /// ignore spread. A drop shadow is not drawn under the layer itself, so it does not show through a see-through fill.
 public struct DesignEffect: Equatable, Sendable {
@@ -193,13 +199,23 @@ public struct DesignEffect: Equatable, Sendable {
     /// The blur radius in points; a Gaussian blur with a standard deviation of half of it.
     public var radius: Double
     public var spread: Double
+    /// Noise only: the side of a grain in points.
+    public var size: Double
+    /// Noise only: the share of grain cells drawn, 0–1.
+    public var density: Double
+    /// Noise only: picks the grain pattern; the same seed gives the same grains everywhere.
+    public var seed: Int
 
-    public init(type: EffectType, visible: Bool = true, color: DesignColor = DesignColor(r: 0, g: 0, b: 0, a: 64.0 / 255), x: Double = 0, y: Double = 4,
-                radius: Double = 4, spread: Double = 0) {
-        self.type = type; self.visible = visible; self.color = color; self.x = x; self.y = y; self.radius = radius; self.spread = spread
+    /// `color` defaults to black at 25% opacity for a shadow and 20% for noise.
+    public init(type: EffectType, visible: Bool = true, color: DesignColor? = nil, x: Double = 0, y: Double = 4,
+                radius: Double = 4, spread: Double = 0, size: Double = 1, density: Double = 0.5, seed: Int = 0) {
+        self.type = type; self.visible = visible; self.x = x; self.y = y; self.radius = radius; self.spread = spread
+        self.color = color ?? DesignColor(r: 0, g: 0, b: 0, a: type == .noise ? 51.0 / 255 : 64.0 / 255)
+        self.size = size; self.density = density; self.seed = seed
     }
 
     public static let maximumRadius = 250.0
+    public static let noiseSizes = 0.5...8.0
 }
 
 /// How a layer looks while the pointer is over it and while it is pressed during prototype playback.

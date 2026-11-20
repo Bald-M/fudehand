@@ -94,10 +94,10 @@ describe('design tools', () => {
 
   it('describes effects and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
-    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040'])
+    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033'])
       expect(byName('design_create_node').description).toContain(field)
     const fake = await app(echo)
-    const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }] }
+    const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }, { type: 'noise', size: 2, density: 0.3, seed: 7 }] }
     await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
     await fake.close()

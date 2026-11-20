@@ -513,6 +513,12 @@
 "Show effect" = "显示效果";
 "Hide effect" = "隐藏效果";
 "Remove effect" = "移除效果";
+"Noise" = "噪点";
+"Noise color" = "噪点颜色";
+"Grain size" = "颗粒大小";
+"Size|noise" = "大小";
+"Density" = "密度";
+"Seed" = "种子";
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Shadow color" = "阴影颜色";

@@ -29,29 +29,29 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
   | Perspective | `perspective` | frame | at most one |
 
   Noise, Texture, Shader, and Glass paint over a layer's area, so they need a shape to fill; text, image, and icon layers get them only if someone asks. Groups have no effects in #214, and this keeps that.
-- **A new bucket, `surface`,** holds Noise, Texture, Shader, and Glass's tint and highlight: above the fill, below inner shadows and children, each clipped to the layer's shape (corner radius, ellipse) with #214's `clip`. Within the bucket they keep list order.
-- **The format version moves to the one after #214's.** Older files open unchanged; older builds refuse newer files with their usual message.
+- **They join #214's `inner` bucket**: Noise, Texture, Shader, and Glass's tint and highlight are drawn with the inner shadows above the fill and below the children, all in list order, each clipped to the layer's shape (corner radius, ellipse) with #214's `clip`. (The first draft had a separate `surface` bucket below inner shadows; list order is simpler and lets people choose.)
+- **The format version moves past #214's once that version has been released.** #214's version 9 is not in a release yet, so effect types added before the next release stay in version 9; the first one added after a release moves the version, so older builds refuse newer files with their usual message. Older files always open unchanged.
 
 ### Noise
 
-`{ "type": "noise", "size": 1, "density": 0.5, "color": "#000000", "opacity": 0.2, "seed": 0 }`
+`{ "type": "noise", "size": 1, "density": 0.5, "color": "#00000033", "seed": 0 }`
 
-- `size`: grain size in pt, 0.5–8. `density`: share of grain cells drawn, 0–1. `color`: grain color. `opacity`: 0–1. `seed`: integer.
-- Rendering: whether a cell has a grain, and how strong it is, comes from a hash of `(seed, cell x, cell y)` in the layer's own coordinates — so grains stay put when the layer moves and are the same on every render, in every snapshot, and on another Mac. The hash and the tile pixels are computed in `FudehandCore` (testable, no AppKit); a 256×256-cell tile is made once per parameter set and scale and drawn tiled into a `surface` layer's contents. Grains are sized in points and grow when zooming in, like the rest of the design.
+- `size`: grain size in pt, 0.5–8. `density`: share of grain cells drawn, 0–1. `color`: grain color; its alpha is the strength (as for shadows, there is no separate opacity). `seed`: integer ≥ 0.
+- Rendering: whether a cell has a grain, and how strong it is, comes from a hash of `(seed, cell x, cell y)` in the layer's own coordinates — so grains stay put when the layer moves and are the same on every render, in every snapshot, and on another Mac. The hash and the tile pixels are computed in `FudehandCore` (testable, no AppKit); a 256×256-cell tile is made once per color, density, and seed and repeated from the layer's top-left corner by sublayers in the `inner` bucket that all show that one tile image, scaled without smoothing (`NoiseLayer`), so zooming never redraws it and a large layer costs no more than one small image. Grains are sized in points and grow when zooming in, like the rest of the design.
 
 ### Texture
 
 `{ "type": "texture", "image": { "data": "<base64>" }, "size": 64, "opacity": 1, "blend": "normal" }`
 
 - A tiled image over the layer's area. `image` is a PNG, JPEG, or SVG, validated like an image layer's `image`; the Agent passes `image.path` and Node reads it into base64, the same narrow exception image layers already have. `size`: tile width in pt, 4–1024, height following the image's aspect ratio. `opacity`: 0–1. `blend`: `normal`, `multiply`, `screen`, `overlay`, or `softLight`, mapped to the layer's `compositingFilter`.
-- Rendering: decoded once (SVG rasterized for the current scale, like `ImageLayer`), drawn as a tiled pattern into a `surface` layer.
+- Rendering: decoded once (SVG rasterized for the current scale, like `ImageLayer`), drawn as a tiled pattern by a layer in the `inner` bucket.
 
 ### Glass
 
 `{ "type": "glass", "radius": 20, "saturation": 1.4, "tint": "#FFFFFF33", "highlight": 0.5 }`
 
 - Frosted glass as one effect instead of a stack: `radius` is the backdrop blur, as for Background Blur (0–250); `saturation`, 0–2, boosts the backdrop's colors the way system materials do; `tint` is drawn over the blurred backdrop (its alpha is the tint strength); `highlight`, 0–1, is the opacity of a 1 pt light edge along the shape's inner top edge.
-- Rendering: a `backdrops` layer exactly like Background Blur's, with background filters `CIColorControls` (saturation) then `CIGaussianBlur`; the tint and the highlight are `surface` layers. It therefore has **the same limit as Background Blur: it only sees the layers under it in the same parent.** Glass and a Background Blur on one layer would blur twice, so `DesignJSON` refuses the pair.
+- Rendering: a `backdrops` layer exactly like Background Blur's, with background filters `CIColorControls` (saturation) then `CIGaussianBlur`; the tint and the highlight are `inner` layers. It therefore has **the same limit as Background Blur: it only sees the layers under it in the same parent.** Glass and a Background Blur on one layer would blur twice, so `DesignJSON` refuses the pair.
 - No refraction or edge distortion: that needs a displacement pass over the backdrop and is left for a later decision.
 
 ### Shader
@@ -60,7 +60,7 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
 - **Only shaders that ship with Fudehand.** `shader` names an entry of a built-in catalog; each entry declares its parameters (name, kind `number` or `color`, range, default). `DesignJSON` validates `params` against the catalog, so a file or an Agent cannot pass anything the catalog does not declare, and a file naming an unknown shader is refused like any malformed file. The first catalog has three entries — **Waves** (scale, angle, two colors), **Mesh gradient** (four corner colors), and **Halftone** (dot size, angle, color) — looks that shapes and fills cannot fake.
 - **No user-written shader code** — not in the App, not in project files, not from the Agent. Arbitrary GPU code from a file or a model can hang the GPU or the window server, cannot be checked before it runs, and turns opening a file into running code. Sharing shader code is already a non-goal of #193; custom code would need its own ADR (a separate process with a GPU time limit, at least).
-- **Rendering:** each catalog entry is a Metal compute function. The sources ship as strings in `FudehandApp` and are compiled at first use with `MTLDevice.makeLibrary(source:)`: the Command Line Tools have no offline `metal` compiler (so no metallib, which Core Image's Metal kernels would need), and the sources are ours. The pipeline renders into a texture, read back as a bitmap at the layer's size × raster scale (capped by `DesignRenderer.maximumRasterSide`), which a `surface` layer shows with the entry's opacity and blend. A bitmap rather than a live filter keeps the cost to one render per change instead of per composited frame. Shaders are **static**: no time input, so canvas, snapshot, and prototype match. Animated shaders would be a prototype-only option later, following ADR 0008.
+- **Rendering:** each catalog entry is a Metal compute function. The sources ship as strings in `FudehandApp` and are compiled at first use with `MTLDevice.makeLibrary(source:)`: the Command Line Tools have no offline `metal` compiler (so no metallib, which Core Image's Metal kernels would need), and the sources are ours. The pipeline renders into a texture, read back as a bitmap at the layer's size × raster scale (capped by `DesignRenderer.maximumRasterSide`), which a layer in the `inner` bucket shows with the entry's opacity and blend. A bitmap rather than a live filter keeps the cost to one render per change instead of per composited frame. Shaders are **static**: no time input, so canvas, snapshot, and prototype match. Animated shaders would be a prototype-only option later, following ADR 0008.
 - The Agent finds the catalog with a new read-only tool, `design_list_shaders` (ids, names, parameters with kinds, ranges, and defaults), because the add menu shows it to people (ADR 0007).
 
 ### 3D transform (Beta)

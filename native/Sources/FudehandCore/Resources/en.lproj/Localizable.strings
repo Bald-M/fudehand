@@ -513,6 +513,12 @@
 "Show effect" = "Show effect";
 "Hide effect" = "Hide effect";
 "Remove effect" = "Remove effect";
+"Noise" = "Noise";
+"Noise color" = "Noise color";
+"Grain size" = "Grain size";
+"Size|noise" = "Size";
+"Density" = "Density";
+"Seed" = "Seed";
 "Move Up" = "Move Up";
 "Move Down" = "Move Down";
 "Shadow color" = "Shadow color";

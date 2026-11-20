@@ -41,7 +41,7 @@ private func message(_ object: [String: Any]) -> String? {
     #expect(message(["effects": [3]]) == "Layer n: effects must be an array of objects")
     #expect(message(["effects": [["color": "#000000"]]]) == "Layer n: missing effects[0].type")
     #expect(message(["effects": [["type": "glow"]]])
-            == "Layer n: effects[0].type must be one of drop-shadow, inner-shadow, layer-blur, background-blur; got glow")
+            == "Layer n: effects[0].type must be one of drop-shadow, inner-shadow, layer-blur, background-blur, noise; got glow")
     #expect(message(["effects": [["type": "layer-blur"], ["type": "layer-blur", "x": 2]]]) == "Layer n: unsupported field effects[1].x")
     #expect(message(["effects": [["type": "drop-shadow", "radius": -1]]]) == "Layer n: effects[0].radius must not be negative")
     #expect(message(["effects": [["type": "background-blur", "radius": 251]]]) == "Layer n: effects[0].radius must not be greater than 250")
