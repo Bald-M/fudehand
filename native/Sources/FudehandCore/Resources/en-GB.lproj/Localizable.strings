@@ -440,6 +440,10 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+"Selection Colors" = "Selection Colours";
+"Selection color %@" = "Selection colour %@";
+"Show all %d colors" = "Show all %d colours";
+"Show Fewer Colors" = "Show Fewer Colours";
 
 "Export as HTML…" = "Export as HTML…";
 "Export as HTML" = "Export as HTML";
@@ -481,3 +485,36 @@
 "Place Beside Frame" = "Place Beside Frame";
 "Save version snapshot" = "Save version snapshot";
 "List version snapshots" = "List version snapshots";
+
+/* Annotations */
+"Annotate" = "Annotate";
+"Annotation" = "Annotation";
+"Add an annotation" = "Add an annotation";
+"Add" = "Add";
+"Reply" = "Reply";
+"Edit" = "Edit";
+"Delete Annotation" = "Delete Annotation";
+"Delete Reply" = "Delete Reply";
+"You" = "You";
+"Agent" = "Agent";
+"Annotation: %@" = "Annotation: %@";
+"Expanded" = "Expanded";
+"Layout Guides" = "Layout Guides";
+"Add layout guide" = "Add layout guide";
+"Remove layout guide" = "Remove layout guide";
+"Hide layout guide" = "Hide layout guide";
+"Show layout guide" = "Show layout guide";
+"Grid|layout guide" = "Grid";
+"Columns" = "Columns";
+"Rows" = "Rows";
+"Grid %@" = "Grid %@";
+"Columns %d" = "Columns %d";
+"Rows %d" = "Rows %d";
+"Type|layout guide" = "Type";
+"Size|layout guide" = "Size";
+"Count" = "Count";
+"Gutter" = "Gutter";
+"Margin" = "Margin";
+"Color" = "Colour";
+"Start" = "Start";
+"End" = "End";

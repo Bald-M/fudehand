@@ -1,7 +1,9 @@
 import AppKit
 import FudehandCore
 
-/// Screen-space decorations drawn above the layers: hover, selection box, resize handles, top-level frame names, marquee selection, and snapping guides. Never receives pointer input.
+/// Screen-space decorations drawn above the layers: frame layout guides, hover, selection box, resize handles, top-level frame
+/// names, marquee selection, snapping guides, and annotation markers. Never receives pointer input (the canvas hit-tests markers
+/// with `markerRect`), and layout guides never appear in snapshots or playback.
 final class CanvasOverlay: NSView {
     override var isFlipped: Bool { true }
     private let hoverLayer = CAShapeLayer()
@@ -10,7 +12,18 @@ final class CanvasOverlay: NSView {
     private let marqueeLayer = CAShapeLayer()
     private let guideLayer = CAShapeLayer()
     private let labelHost = CALayer()
+    private let layoutGuideHost = CALayer()
+    /// One shape per drawn layout guide, reused across renders; the first `layoutGuideCount` are in use.
+    private var layoutGuideLayers: [CAShapeLayer] = []
+    private var layoutGuideCount = 0
+    /// A grid whose lines would sit closer than this many screen points is not drawn, so zooming out does not fill the frame.
+    static let minimumGridSpacing = 4.0
     private var labels: [String: CATextLayer] = [:]
+    private let markerHost = CALayer()
+    private var markers: [String: AnnotationMarkerLayer] = [:]
+    static let markerSize = 24.0
+    /// The id the marker of an annotation being written, not yet added, is drawn under.
+    static let draftMarker = "#draft"
     static let handleSize = 7.0
     static let handleHitRadius = 6.0
     static let labelHeight = 16.0
@@ -31,6 +44,10 @@ final class CanvasOverlay: NSView {
         }
         labelHost.actions = DesignRenderer.noActions
         layer?.insertSublayer(labelHost, at: 0)
+        layoutGuideHost.actions = DesignRenderer.noActions
+        layer?.insertSublayer(layoutGuideHost, at: 0)
+        markerHost.actions = DesignRenderer.noActions
+        layer?.addSublayer(markerHost)
         updateColors()
     }
 
@@ -41,12 +58,19 @@ final class CanvasOverlay: NSView {
     /// Screen-space bounds of the drawn selection outlines; `.null` when nothing is selected.
     var selectionBounds: CGRect { selectionLayer.path?.boundingBoxOfPath ?? .null }
     var labelTexts: [String: String] { labels.compactMapValues { $0.string as? String } }
+    /// The screen-space paths of the layout guides drawn now, in drawing order.
+    var layoutGuidePaths: [CGPath] { layoutGuideLayers.prefix(layoutGuideCount).compactMap(\.path) }
+    /// The line widths of the grids drawn now.
+    var layoutGuideLineWidths: [CGFloat] { layoutGuideLayers.prefix(layoutGuideCount).filter { $0.strokeColor != nil }.map(\.lineWidth) }
+    /// The drawn markers' counts by annotation id, and which one is expanded; for tests.
+    var markerCounts: [String: String] { markers.compactMapValues { $0.count.string as? String } }
+    var expandedMarker: String? { markers.first { $0.value.expanded }?.key }
 
     override func layout() {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost] { shape.frame = bounds }
+        for shape in [hoverLayer, selectionLayer, handleLayer, marqueeLayer, guideLayer, labelHost, layoutGuideHost, markerHost] { shape.frame = bounds }
         CATransaction.commit()
     }
 
@@ -70,6 +94,10 @@ final class CanvasOverlay: NSView {
             marqueeLayer.fillColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
             guideLayer.strokeColor = NSColor.systemRed.cgColor
         }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        markers.values.forEach { $0.updateColors(effectiveAppearance) }
+        CATransaction.commit()
     }
 
     static func screenRect(_ rect: Rect, viewport: Viewport) -> NSRect {
@@ -89,6 +117,12 @@ final class CanvasOverlay: NSView {
         return NSRect(x: frame.minX, y: frame.minY - labelHeight - 4, width: max(16, min(textWidth, frame.width)), height: labelHeight)
     }
 
+    /// The screen rectangle of an annotation marker: a speech bubble whose pointed bottom-left corner is the anchor.
+    static func markerRect(_ anchor: Point, viewport: Viewport) -> NSRect {
+        NSRect(x: anchor.x * viewport.scale + viewport.x, y: anchor.y * viewport.scale + viewport.y - markerSize,
+               width: markerSize, height: markerSize)
+    }
+
     /// Name widths are measured once per name: hit testing and rendering ask for every top-level frame's label on each pointer event.
     private static var labelWidths: [String: CGFloat] = [:]
 
@@ -101,7 +135,8 @@ final class CanvasOverlay: NSView {
     }
 
     func render(viewport: Viewport, index: DesignIndex, selection: Set<String>, hover: String?,
-                marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?) {
+                marquee: Rect?, guides: [Guide], handlesFor handleTarget: String?,
+                markers: [(id: String, count: Int, anchor: Point)] = [], expanded: String? = nil) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         func outline(_ ids: [String]) -> CGPath {
@@ -136,8 +171,85 @@ final class CanvasOverlay: NSView {
             }
         }
         guideLayer.path = guidePath
+        renderLayoutGuides(index.guideFrames, viewport: viewport)
         renderLabels(document: index.document, viewport: viewport, selection: selection)
+        renderMarkers(markers, expanded: expanded, viewport: viewport)
         CATransaction.commit()
+    }
+
+    private func renderLayoutGuides(_ frames: [DesignIndex.GuideFrame], viewport: Viewport) {
+        layoutGuideCount = 0
+        // Only the part of each frame on screen is drawn.
+        let screen = Rect(x: -viewport.x / viewport.scale, y: -viewport.y / viewport.scale,
+                          width: bounds.width / viewport.scale, height: bounds.height / viewport.scale)
+        for frame in frames {
+            let clip = frame.clip.clamped(screen)
+            guard clip.width > 0, clip.height > 0 else { continue }
+            for guide in frame.guides {
+                let path = CGMutablePath()
+                switch guide.type {
+                case .grid:
+                    guard guide.size * viewport.scale >= Self.minimumGridSpacing else { continue }
+                    for offset in guide.gridLines(length: frame.rect.width, in: (clip.minX - frame.rect.x)...(clip.maxX - frame.rect.x)) {
+                        let x = (frame.rect.x + offset) * viewport.scale + viewport.x
+                        path.move(to: CGPoint(x: x, y: clip.minY * viewport.scale + viewport.y))
+                        path.addLine(to: CGPoint(x: x, y: clip.maxY * viewport.scale + viewport.y))
+                    }
+                    for offset in guide.gridLines(length: frame.rect.height, in: (clip.minY - frame.rect.y)...(clip.maxY - frame.rect.y)) {
+                        let y = (frame.rect.y + offset) * viewport.scale + viewport.y
+                        path.move(to: CGPoint(x: clip.minX * viewport.scale + viewport.x, y: y))
+                        path.addLine(to: CGPoint(x: clip.maxX * viewport.scale + viewport.x, y: y))
+                    }
+                case .columns, .rows:
+                    for band in guide.rects(in: frame.rect) {
+                        let visible = band.clamped(clip)
+                        if visible.width > 0, visible.height > 0 { path.addRect(Self.screenRect(visible, viewport: viewport)) }
+                    }
+                }
+                guard !path.isEmpty else { continue }
+                let shape = nextLayoutGuideLayer()
+                let color = CGColor(srgbRed: guide.color.r, green: guide.color.g, blue: guide.color.b, alpha: guide.color.a)
+                shape.path = path
+                // Grid lines are stroked 1 point wide at every zoom; columns and rows are filled.
+                shape.strokeColor = guide.type == .grid ? color : nil
+                shape.fillColor = guide.type == .grid ? nil : color
+                shape.lineWidth = 1
+            }
+        }
+        for (position, shape) in layoutGuideLayers.enumerated() { shape.isHidden = position >= layoutGuideCount }
+    }
+
+    private func nextLayoutGuideLayer() -> CAShapeLayer {
+        defer { layoutGuideCount += 1 }
+        if layoutGuideCount < layoutGuideLayers.count { return layoutGuideLayers[layoutGuideCount] }
+        let shape = CAShapeLayer()
+        shape.actions = DesignRenderer.noActions
+        shape.frame = layoutGuideHost.bounds
+        layoutGuideHost.addSublayer(shape)
+        layoutGuideLayers.append(shape)
+        return shape
+    }
+
+    private func renderMarkers(_ items: [(id: String, count: Int, anchor: Point)], expanded: String?, viewport: Viewport) {
+        let scale = window?.backingScaleFactor ?? 2
+        var seen = Set<String>()
+        for item in items {
+            seen.insert(item.id)
+            let marker = markers[item.id] ?? {
+                let layer = AnnotationMarkerLayer()
+                markerHost.addSublayer(layer)
+                markers[item.id] = layer
+                return layer
+            }()
+            marker.frame = Self.markerRect(item.anchor, viewport: viewport)
+            marker.show(count: item.count, expanded: item.id == expanded, contentsScale: scale, appearance: effectiveAppearance)
+            // Later annotations are drawn on top, matching the order the canvas hit-tests them in.
+            markerHost.addSublayer(marker)
+        }
+        for (id, layer) in markers where !seen.contains(id) {
+            layer.removeFromSuperlayer()
+            markers[id] = nil
+        }
     }
 
     private func renderLabels(document: DesignDocument, viewport: Viewport, selection: Set<String>) {
@@ -167,6 +279,50 @@ final class CanvasOverlay: NSView {
         for (id, layer) in labels where !seen.contains(id) {
             layer.removeFromSuperlayer()
             labels[id] = nil
+        }
+    }
+}
+
+/// One annotation marker: a round speech bubble pointing at its anchor, showing how many messages its thread holds.
+final class AnnotationMarkerLayer: CALayer {
+    let count = CATextLayer()
+    private(set) var expanded = false
+
+    override init() {
+        super.init()
+        cornerRadius = CanvasOverlay.markerSize / 2
+        // The overlay is flipped, so the layer's maximum-y corner is drawn at the bottom: that one stays sharp.
+        maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        borderWidth = 2
+        shadowOpacity = 0.25
+        shadowRadius = 3
+        shadowOffset = CGSize(width: 0, height: 1)
+        count.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        count.fontSize = 11
+        count.alignmentMode = .center
+        addSublayer(count)
+    }
+
+    override init(layer: Any) { super.init(layer: layer) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(count value: Int, expanded: Bool, contentsScale scale: CGFloat, appearance: NSAppearance) {
+        let text = value > 99 ? "99+" : String(value)
+        if count.string as? String != text { count.string = text }
+        count.contentsScale = scale
+        count.frame = CGRect(x: 0, y: (bounds.height - 14) / 2, width: bounds.width, height: 14)
+        if self.expanded != expanded || backgroundColor == nil {
+            self.expanded = expanded
+            updateColors(appearance)
+        }
+    }
+
+    /// Callers disable implicit animations: the overlay draws inside a transaction without actions.
+    func updateColors(_ appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
+            backgroundColor = (expanded ? NSColor.controlAccentColor : NSColor.systemYellow).cgColor
+            count.foregroundColor = (expanded ? NSColor.white : NSColor.black).cgColor
+            borderColor = NSColor.white.cgColor
         }
     }
 }

@@ -440,6 +440,10 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+"Selection Colors" = "選取範圍顏色";
+"Selection color %@" = "選取範圍顏色 %@";
+"Show all %d colors" = "顯示全部 %d 種顏色";
+"Show Fewer Colors" = "收合顏色";
 
 "Export as HTML…" = "匯出為 HTML…";
 "Export as HTML" = "匯出為 HTML";
@@ -481,3 +485,36 @@
 "Place Beside Frame" = "放回畫框旁邊";
 "Save version snapshot" = "儲存版本快照";
 "List version snapshots" = "列出版本快照";
+
+/* Annotations */
+"Annotate" = "批註";
+"Annotation" = "批註";
+"Add an annotation" = "新增批註";
+"Add" = "新增";
+"Reply" = "回覆";
+"Edit" = "編輯";
+"Delete Annotation" = "刪除批註";
+"Delete Reply" = "刪除回覆";
+"You" = "你";
+"Agent" = "Agent";
+"Annotation: %@" = "批註：%@";
+"Expanded" = "已展開";
+"Layout Guides" = "佈局輔助線";
+"Add layout guide" = "加入佈局輔助線";
+"Remove layout guide" = "移除佈局輔助線";
+"Hide layout guide" = "隱藏佈局輔助線";
+"Show layout guide" = "顯示佈局輔助線";
+"Grid|layout guide" = "格線";
+"Columns" = "欄";
+"Rows" = "列";
+"Grid %@" = "格線 %@";
+"Columns %d" = "%d 欄";
+"Rows %d" = "%d 列";
+"Type|layout guide" = "類型";
+"Size|layout guide" = "尺寸";
+"Count" = "數量";
+"Gutter" = "間距";
+"Margin" = "邊界";
+"Color" = "顏色";
+"Start" = "起點";
+"End" = "終點";

@@ -24,6 +24,9 @@ public enum ControlCommand: Equatable, Sendable {
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    /// Selection colors of the given layers, or of the selection when `ids` is nil.
+    case listColors(ids: [String]?)
+    case replaceColor(from: DesignColor, to: DesignColor, ids: [String]?)
     /// Opens the prototype window from `frame` (a top-level frame), or, when nil, where Play Prototype starts.
     case playPrototype(frame: String?)
     case getPrototypePlayback
@@ -66,6 +69,12 @@ public enum ControlCommand: Equatable, Sendable {
     case getConnectors
     case setConnector(AgentConnector, connected: Bool)
     case setView(ViewChange)
+    /// All annotations, or those on one layer.
+    case listAnnotations(node: String?)
+    /// Pins a new annotation to a layer (`x` and `y` relative to the layer; nil means its center), or replies to one when `replyTo` is set.
+    case addAnnotation(node: String?, x: Double?, y: Double?, text: String, replyTo: String?)
+    case updateAnnotation(String, text: String)
+    case deleteAnnotation(String)
 }
 
 /// The inspector's tabs: the properties panel, the prototype settings, and the chat panel.
@@ -274,6 +283,27 @@ public enum ControlProtocol {
             }
             return number.doubleValue
         }
+        func color(_ key: String) throws -> DesignColor {
+            let hex = try string(key)
+            do { return try DesignColor(hex: hex) } catch let error as DesignError { throw Message(text: "\(key): \(error.message)") }
+        }
+        /// Layer ids that default to the selection when omitted; an explicit empty list names no layers and is rejected.
+        func layers() throws -> [String]? {
+            switch args["ids"] {
+            case nil, is NSNull: return nil
+            default:
+                let ids = try strings("ids")
+                guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+                return ids
+            }
+        }
+        func optionalNumber(_ key: String) throws -> Double? {
+            guard let value = args[key], !(value is NSNull) else { return nil }
+            guard let number = value as? NSNumber, !isBool(number), number.doubleValue.isFinite else {
+                throw Message(text: "Invalid argument type: \(key)")
+            }
+            return number.doubleValue
+        }
         switch name {
         case "get_state": return .getState
         case "get_document": return .getDocument
@@ -330,6 +360,8 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "list_colors": return .listColors(ids: try layers())
+        case "replace_color": return .replaceColor(from: try color("from"), to: try color("to"), ids: try layers())
         case "play": return .playPrototype(frame: try optionalString("frame"))
         case "get_playback": return .getPrototypePlayback
         case "close": return .closePrototype
@@ -404,6 +436,18 @@ public enum ControlProtocol {
                 throw Message(text: "A layer cannot be both expanded and collapsed: \(both)")
             }
             return .setView(change)
+        case "list_annotations": return .listAnnotations(node: try optionalString("node"))
+        case "add_annotation":
+            let replyTo = try optionalString("replyTo")
+            let node = try optionalString("node")
+            let x = try optionalNumber("x"), y = try optionalNumber("y")
+            if replyTo == nil, node == nil { throw Message(text: "Missing argument: node (or replyTo to reply to an annotation)") }
+            if replyTo != nil, node != nil || x != nil || y != nil {
+                throw Message(text: "A reply takes only replyTo and text; node, x, and y belong to a new annotation")
+            }
+            return .addAnnotation(node: node, x: x, y: y, text: try string("text"), replyTo: replyTo)
+        case "update_annotation": return .updateAnnotation(try string("id"), text: try string("text"))
+        case "delete_annotation": return .deleteAnnotation(try string("id"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

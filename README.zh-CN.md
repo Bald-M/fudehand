@@ -156,12 +156,12 @@ API key 只保存在本机钥匙串里（服务名 `fudehand.agent`）。App 通
 
 用“文件”菜单的“保存”（⌘S）和“另存为…”（⇧⌘S）把设计稿存为 `.fudehand` 工程文件，用“打开…”（⌘O）或“打开最近”重新打开。App 注册了 `.fudehand` 文件类型，所以在 Finder 里双击文件、把文件拖到 Dock 图标上，或选择“打开方式”，都会用 Fudehand 打开。当前文档有未保存修改时，App 会先询问是否保存。
 
-设计文档是一棵图层树，包含画框、矩形、椭圆、文字、图片和分组。图层有填充、描边、圆角、透明度、显示/隐藏和锁定；画框还可以使用自动布局。工程文件是带格式版本号的 JSON：
+设计文档是一棵图层树，包含画框、矩形、椭圆、文字、图片和分组。图层有填充、描边、圆角、透明度、显示/隐藏和锁定；画框还可以使用自动布局和布局辅助线（网格、列、行）。工程文件是带格式版本号的 JSON：
 
 ```json
 {
   "format": "fudehand.design",
-  "version": 1,
+  "version": 8,
   "nodes": [
     { "id": "home", "type": "frame", "name": "首页", "x": 0, "y": 0, "width": 390, "height": 844, "fill": "#FFFFFF",
       "layout": { "direction": "vertical", "spacing": 12, "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 },

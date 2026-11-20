@@ -133,12 +133,27 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     let ctx = context(selection: ["a"])
     #expect(down(&machine, 0, 0, hit: .handle("a", .bottomRight), context: ctx) == [])
     #expect(machine.pointerDragged(to: Point(x: 10, y: 20), modifiers: [], context: ctx)
-            == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884))])
-    #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx) == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844))])
-    #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture])
+            == [.beginGesture("Resize"), .resize("a", Rect(x: 0, y: 0, width: 410, height: 884)), .guides([])])
+    #expect(machine.pointerDragged(to: Point(x: -5, y: 0), modifiers: [], context: ctx)
+            == [.resize("a", Rect(x: 0, y: 0, width: 380, height: 844)), .guides([])])
+    #expect(machine.pointerUp(at: Point(x: -5, y: 0), context: ctx) == [.endGesture, .guides([])])
     // Clicking a handle without dragging produces no edit.
     _ = down(&machine, 0, 0, hit: .handle("a", .left), context: ctx)
     #expect(machine.pointerUp(at: Point(x: 0, y: 0), context: ctx) == [])
+}
+
+@Test func resizeSnapsDraggedEdgesUnlessControlIsHeld() {
+    var machine = CanvasInteraction()
+    let ctx = context(selection: ["a"])
+    _ = down(&machine, 0, 0, hit: .handle("a", .bottomRight), context: ctx)
+    // The right edge lands at 464, within 12 canvas units (6 screen points at 0.5×) of b's left edge at 470.
+    let effects = machine.pointerDragged(to: Point(x: 37, y: 0), modifiers: [], context: ctx)
+    #expect(effects.contains(.resize("a", Rect(x: 0, y: 0, width: 470, height: 844))))
+    #expect(guides(effects) == [Guide(axis: .vertical, position: 470, start: 0, end: 900)])
+    let free = machine.pointerDragged(to: Point(x: 37, y: 0), modifiers: [.control], context: ctx)
+    #expect(free.contains(.resize("a", Rect(x: 0, y: 0, width: 464, height: 844))))
+    #expect(guides(free) == [])
+    #expect(machine.cancel() == [.endGesture, .guides([])])
 }
 
 @Test func resizeClampsAndMovesOppositeEdges() {
@@ -190,4 +205,30 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     _ = down(&machine, 10, 10, hit: .node("a"), context: ctx)
     _ = machine.pointerDragged(to: Point(x: 110, y: 10), modifiers: [.control], context: ctx)
     #expect(down(&machine, 600, 600, hit: .empty, context: ctx) == [.endGesture, .guides([]), .select([])])
+}
+
+@Test func pressingAnAnnotationMarkerTogglesItWithoutSelectingOrDragging() {
+    for tool in [CanvasTool.move, .rectangle, .annotate] {
+        var machine = CanvasInteraction()
+        #expect(down(&machine, 10, 10, hit: .annotation("n"), context: context(selection: ["a"], tool: tool)) == [.toggleAnnotation("n")])
+        #expect(machine.isIdle)
+        #expect(machine.pointerDragged(to: Point(x: 80, y: 80), modifiers: [], context: context(selection: ["a"], tool: tool)) == [])
+        #expect(machine.pointerUp(at: Point(x: 80, y: 80), context: context(selection: ["a"], tool: tool)) == [])
+    }
+    var double = CanvasInteraction()
+    #expect(down(&double, 10, 10, hit: .annotation("n"), clickCount: 2, context: context()) == [])
+    // Panning still wins: Space, the hand tool, and the middle button pan over a marker.
+    var machine = CanvasInteraction()
+    #expect(down(&machine, 10, 10, hit: .annotation("n"), context: context(spaceHeld: true)) == [])
+    #expect(!machine.isIdle)
+}
+
+@Test func annotateToolStartsAnAnnotationOnTheLayerUnderThePointer() {
+    var machine = CanvasInteraction()
+    let ctx = context(selection: ["b"], tool: .annotate)
+    #expect(down(&machine, 30, 40, hit: .node("a"), context: ctx) == [.annotate("a", Point(x: 60, y: 80))])
+    #expect(machine.isIdle)
+    #expect(down(&machine, 30, 40, hit: .empty, context: ctx) == [])
+    #expect(down(&machine, 30, 40, hit: .label("a"), context: ctx) == [])
+    #expect(machine.pointerDragged(to: Point(x: 90, y: 90), modifiers: [], context: ctx) == [])
 }

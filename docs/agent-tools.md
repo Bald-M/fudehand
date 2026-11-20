@@ -69,7 +69,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 |---|---|
 | Read the document overview, the layer tree, one layer | `design_get_state`, `design_get_document`, `design_get_node` |
 | Create layers (frame, rectangle, ellipse, text, image, icon, group), insert an image | `design_create_node` |
-| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, icon name and color, clip content, interaction, scrolling, fixed position when scrolling, hover and pressed states, animation, text sequence | `design_update_node` |
+| Edit layer properties: position, size, fill, stroke, corner radius, opacity, text, auto layout, image, icon name and color, clip content, interaction, scrolling, fixed position when scrolling, hover and pressed states, animation, text sequence, frame layout guides (grid, columns, rows) | `design_update_node` |
 | Rename, show/hide, lock a layer | `design_update_node` |
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
@@ -81,6 +81,9 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Save a version snapshot of a frame; list version snapshots | `design_save_version_snapshot`, `design_list_version_snapshots` |
 | Edit a version snapshot's note; overlay it on its frame or place it beside the frame | `design_update_node` (`versionSnapshot.note`; `x`, `y`, and `opacity`, using the bounds from `design_list_version_snapshots`) |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |
+| Read the selection colors of the selection or of given layers; replace one selection color | `design_list_colors`, `design_replace_color` |
+| List, add, reply to, edit, and delete annotations | `design_list_annotations`, `design_add_annotation` (`replyTo` for a reply), `design_update_annotation`, `design_delete_annotation` |
+| Expand or collapse an annotation's thread on the canvas | Exception: expanding only shows the thread a tool already returns with `design_list_annotations`, and changes nothing. |
 | Search the built-in icon libraries; insert or replace an icon from the icon picker | `design_search_icons`; inserting is `design_create_node` with an icon layer, replacing is `design_update_node` with `icon.name` |
 
 ### Canvas and windows
@@ -90,7 +93,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Zoom, zoom in/out, actual size | `canvas_zoom` |
 | Fit all | `canvas_fit_all` |
 | Zoom to a layer, zoom to a multi-layer selection | `canvas_focus_node` (`id` or `ids`) |
-| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | `canvas_set_view` (`tool`); read in `design_get_state` (`view`) |
+| Choose the canvas tool (move, hand, frame, rectangle, ellipse, text, annotate) | `canvas_set_view` (`tool`); read in `design_get_state` (`view`) |
 | Show or hide the inspector, switch its tab (design, prototype, chat) | `canvas_set_view` (`inspector`, `inspectorTab`); read in `design_get_state` (`view`) |
 | Expand or collapse layers in the layers panel | `canvas_set_view` (`expand`, `collapse`); read in `design_get_state` (`view.collapsed`) |
 | Play the prototype, play from the start, close the prototype window | `prototype_play`, `prototype_close`; `prototype_get_playback` reads whether the window is open and the frame on show |

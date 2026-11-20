@@ -61,6 +61,28 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("t")?.text?.fontSize == 16)
 }
 
+@Test @MainActor func agentAndPanelEditLayoutGuidesAsOneUndoStepEach() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame"])))
+    // The panel's + adds a grid; the Agent then sees it and replaces the list.
+    store.updateNode("f", "Add Layout Guide") { $0.layoutGuides.append(LayoutGuide(type: .grid)) }
+    let node = try await control(store, .getNode("f"))
+    #expect((node["layoutGuides"] as? [[String: Any]])?.first?["type"] as? String == "grid")
+    _ = try await control(store, .updateNode("f", changes: JSONObject(["layoutGuides": [["type": "columns", "count": 12], ["type": "rows", "visible": false]]])))
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.updateNode("f", "Show Layout Guide") { $0.layoutGuides[1].visible = true }
+    store.updateNode("f", "Remove Layout Guide") { $0.layoutGuides.remove(at: 0) }
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides[1].visible == false)
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.grid])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.isEmpty == true)
+}
+
 @Test @MainActor func invalidAgentCommandsChangeNothing() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "e", "type": "ellipse"])))
@@ -593,6 +615,61 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("i")?.icon?.color == blue)
     store.undo()
     #expect(store.editor.document.node("i")?.icon?.color == .black)
+}
+
+/// A frame (red fill) with a red rectangle, a text layer in red, and a blue icon; a red rectangle outside it.
+@MainActor private func selectionColorStore() async throws -> FudehandStore {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "fill": "#FF0000",
+        "children": [["id": "r", "type": "rectangle", "fill": "#FF0000", "stroke": ["color": "#0000FF", "width": 1]],
+                     ["id": "t", "type": "text", "text": ["content": "Hi", "color": "#FF0000"]],
+                     ["id": "i", "type": "icon", "icon": ["name": "lucide/house", "color": "#0000FF"]]],
+    ])))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "o", "type": "rectangle", "fill": "#FF0000"])))
+    return store
+}
+
+private func colorList(_ result: [String: Any]) -> [String] {
+    (result["colors"] as? [[String: Any]] ?? []).map { "\($0["color"] as? String ?? "?")×\($0["count"] as? Int ?? -1)" }
+}
+
+@Test @MainActor func agentListsSelectionColorsOfTheSelectionOrOfNamedLayers() async throws {
+    let store = try await selectionColorStore()
+    #expect(await failure(store, .listColors(ids: nil)) == "Nothing is selected; select layers or pass ids")
+    #expect(await failure(store, .listColors(ids: ["missing"])) == "Layer not found: missing")
+    store.setSelection(["f"])
+    let selected = try await control(store, .listColors(ids: nil))
+    #expect(selected["ids"] as? [String] == ["f"] && colorList(selected) == ["#FF0000×3", "#0000FF×2"])
+    #expect(colorList(try await control(store, .listColors(ids: ["t", "o"]))) == ["#FF0000×2"])
+}
+
+@Test @MainActor func agentReplacesASelectionColorLikeThePanelAsOneUndoStep() async throws {
+    let store = try await selectionColorStore()
+    let red = try DesignColor(hex: "#FF0000"), green = try DesignColor(hex: "#00FF00"), blue = try DesignColor(hex: "#0000FF")
+    store.setSelection(["f"])
+    let result = try await control(store, .replaceColor(from: red, to: green, ids: nil))
+    #expect(result["replaced"] as? Int == 3 && colorList(result) == ["#00FF00×3", "#0000FF×2"])
+    let document = store.editor.document
+    #expect(document.node("f")?.fill == green && document.node("r")?.fill == green && document.node("t")?.text?.color == green)
+    #expect(document.node("o")?.fill == red && document.node("r")?.stroke?.color == blue)
+    #expect(store.editor.undoName == "Agent: Replace Color")
+    store.undo()
+    #expect(store.editor.document.node("f")?.fill == red && store.editor.document.node("t")?.text?.color == red)
+
+    // The panel calls the same store method with the uses of the swatch it opened; a color well's stream of changes
+    // coalesces into one step, and passing through red does not pick up the layers that are red.
+    let blues = SelectionColors.uses(of: blue, under: ["f"], in: store.editor.document)
+    let revision = store.editor.revision
+    try store.setColor(red, at: blues, coalescing: "f.selectionColor.#0000FF")
+    try store.setColor(green, at: blues, coalescing: "f.selectionColor.#0000FF")
+    #expect(store.editor.undoName == "Change Selection Color" && store.editor.revision == revision + 2)
+    #expect(store.editor.document.node("i")?.icon?.color == green && store.editor.document.node("f")?.fill == red)
+    store.undo()
+    #expect(store.editor.document.node("i")?.icon?.color == blue && store.editor.document.node("r")?.stroke?.color == blue)
+
+    #expect(await failure(store, .replaceColor(from: green, to: red, ids: ["o"])) == "None of these layers or their child layers uses #00FF00")
+    #expect(store.editor.document.node("o")?.fill == red)
 }
 
 @Test @MainActor func insertingAnIconAddsOneSelectedLayerAtTheViewportCenter() throws {

@@ -34,8 +34,16 @@ import Testing
         }
         let idle = CanvasBenchmark.time(20) { _ in settle() }
         #expect(store.selection == [ids[1]])
+        // Selecting a whole frame also gathers the selection colors of its 50 child layers (#191).
+        let frameIDs = ["f\(frames - 1)", "f\(frames - 2)"]
+        for run in 0..<4 { store.setSelection([frameIDs[run % 2]]); settle() }
+        let selectFrame = CanvasBenchmark.time(20) { run in
+            store.setSelection([frameIDs[run % 2]])
+            settle()
+        }
 
-        print(String(format: "[bench] layers=%d selectLayer=%.2fms (idle frame %.2fms)", store.document.nodeCount, select, idle))
+        print(String(format: "[bench] layers=%d selectLayer=%.2fms selectFrame=%.2fms (idle frame %.2fms)",
+                     store.document.nodeCount, select, selectFrame, idle))
         window.contentView = nil
         window.close()
     }

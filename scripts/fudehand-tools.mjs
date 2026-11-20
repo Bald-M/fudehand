@@ -55,6 +55,8 @@ const NODE_GUIDE = [
   'animation (prototype animation, any layer; plays when the layer\'s frame appears in the prototype window, never on the canvas or in snapshots): {type fade-in/slide-in/scale-in (entrances) or spin/pulse/shimmer (loops), duration seconds >0–60 (one cycle for a loop; default 0.3 for entrances, 1 for spin and pulse, 1.5 for shimmer), delay seconds 0–60 (default 0), easing linear/ease-in/ease-out/ease-in-out (default ease-out for entrances, ease-in-out for pulse, linear otherwise), repeat integer 1–1000 or "infinite" (default 1 for entrances, "infinite" for loops); slide-in only: from left/right/top/bottom (default bottom) and distance pt (default 40); pulse only: property scale/opacity (default scale)}. slide-in and scale-in also fade in; spin turns clockwise about the center; shimmer sweeps a see-through band across the layer (skeleton loading). ',
   'text.sequence (text sequence, text layers): {items: array of 1–1000 strings shown in turn during playback, interval seconds 0.05–3600 (default 1), loop true/false (default false: stays on the last item)}, e.g. a countdown; text.content is what the canvas and snapshots show. ',
   'versionSnapshot (image layers that are version snapshots, made by design_save_version_snapshot): {frame <id of the frame it was taken of>, createdAt ISO 8601, note}; change the note with design_update_node. ',
+  'layoutGuides (frame): an array of layout guides drawn over the frame on the editing canvas only (never in snapshots or playback); layers moved or resized inside the frame snap to the edges of its visible columns and rows. ',
+  'Each is {type grid/columns/rows, color (default #FF00001A), visible (default true)}; a grid adds size pt (default 10); columns and rows add count integer 1–1000 (default 5), align stretch/start/center/end (default stretch), width pt (start/center/end only; a column\'s width or a row\'s height, default 60), gutter pt (default 20), and margin pt from the frame edge (default 0, ignored by center). ',
   'children (frame/group). Inside an auto layout frame, the layout determines the x and y of child layers.',
 ].join('')
 
@@ -94,7 +96,7 @@ export const tools = [
     }, ['node'],
     async (args, root) => ({ ...args, node: await inlineImages(args.node, root) })),
   controlTool('design_update_node', 'update_node',
-    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding, versionSnapshot) are merged field by field, interaction, animation, states, and text.sequence are replaced whole, and a null value clears that field. id, type, and children cannot be changed. Set interaction, states, scroll, or fixedOnScroll to make a layer interactive in prototype playback, and animation or text.sequence to make it move (see design_create_node for their fields).',
+    'Change some fields of a layer: nested objects (text, layout, stroke, sizing, image, padding, versionSnapshot) are merged field by field, interaction, animation, states, and text.sequence are replaced whole, and a null value clears that field; the layoutGuides array is replaced whole. id, type, and children cannot be changed. Set interaction, states, scroll, or fixedOnScroll to make a layer interactive in prototype playback, and animation or text.sequence to make it move (see design_create_node for their fields).',
     { ...id, changes: { type: 'object', description: 'Fields to change' } }, ['id', 'changes'],
     async (args, root) => ({ ...args, changes: await inlineImages(args.changes, root) })),
   controlTool('design_delete_nodes', 'delete_nodes', 'Delete layers and their child layers, as a single undo step.', ids),
@@ -115,7 +117,7 @@ export const tools = [
   controlTool('canvas_set_view', 'set_view',
     'Change the editor view: the canvas tool, whether the inspector is shown and which tab it shows, and which layers the layers panel collapses. Pass only what should change. Not part of the undo history: returns the previous view and the new view. The current view is also in design_get_state (view).',
     {
-      tool: { type: 'string', enum: ['move', 'hand', 'frame', 'rectangle', 'ellipse', 'text'], description: 'Canvas tool' },
+      tool: { type: 'string', enum: ['move', 'hand', 'frame', 'rectangle', 'ellipse', 'text', 'annotate'], description: 'Canvas tool' },
       inspector: { type: 'boolean', description: 'Show (true) or hide (false) the inspector' },
       inspectorTab: { type: 'string', enum: ['design', 'prototype', 'chat'], description: 'Inspector tab: design is the properties panel, prototype the interaction settings of the selected layer, chat the chat panel' },
       expand: { type: 'array', items: { type: 'string' }, description: 'Ids of layers with child layers to expand in the layers panel' },
@@ -141,6 +143,16 @@ export const tools = [
       library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
       limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
     }, ['query']),
+  controlTool('design_list_colors', 'list_colors',
+    'Read the selection colors: every color used by the fills, strokes, text colors, and icon colors of the given layers and all their child layers, merged by hex value, most used first. Returns ids and colors [{color, count}].',
+    { ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' } }, []),
+  controlTool('design_replace_color', 'replace_color',
+    'Replace a selection color: every fill, stroke, text color, and icon color of the given layers and their child layers that uses from becomes to, as a single undo step. Fails, changing nothing, when no layer there uses from. Returns replaced (how many properties changed) and the new selection colors.',
+    {
+      from: { type: 'string', description: 'The color to replace, #RRGGBB or #RRGGBBAA (as returned by design_list_colors)' },
+      to: { type: 'string', description: 'The new color, #RRGGBB or #RRGGBBAA' },
+      ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' },
+    }, ['from', 'to']),
   controlTool('design_save_version_snapshot', 'save_version_snapshot',
     'Save a version snapshot of a frame, as one undo step: the frame as it looks now, rendered into a read-only top-level image layer placed to the right of the frame and of its earlier snapshots, top-aligned with it. ' +
     'Use it before changing a frame substantially so the old and new versions can be compared side by side, or overlaid by moving the snapshot to the frame\'s position (frameBounds) and lowering its opacity with design_update_node. ' +
@@ -149,6 +161,23 @@ export const tools = [
   controlTool('design_list_version_snapshots', 'list_version_snapshots',
     'List the version snapshots in the document, oldest first, or only those of one frame: id, name, frame and frameName (null once the frame is deleted), createdAt, note, opacity, and the snapshot\'s and the frame\'s bounds in canvas coordinates.',
     { frame: { type: 'string', description: 'Only snapshots of this frame id' } }, []),
+  controlTool('design_list_annotations', 'list_annotations',
+    'List annotations: plain-text notes people and agents pin to a point inside a layer, each with its replies. Annotations are not layers: they are not in the layer tree or in snapshots. ' +
+    'Returns {annotations: [{id, node (layer id), x, y (relative to the layer\'s top-left corner, in pt), author person/agent, text, replies: [{id, author, text}]}]}, in the order added.',
+    { node: { type: 'string', description: 'Only the annotations on this layer; when omitted, all annotations' } }, []),
+  controlTool('design_add_annotation', 'add_annotation',
+    'Pin a new annotation to a layer, or reply to one with replyTo. Annotations are saved in the project file, follow their layer when it moves, are deleted with it, and each addition is one undo step. Returns the whole annotation with its replies.',
+    {
+      node: { type: 'string', description: 'Layer id to pin a new annotation to' },
+      x: { type: 'number', description: 'Point inside the layer, relative to its top-left corner (pt); kept inside the layer. Default: the layer\'s center' },
+      y: { type: 'number', description: 'See x' },
+      text: { type: 'string', description: 'Plain text; must not be empty' },
+      replyTo: { type: 'string', description: 'Annotation id (or the id of one of its replies) to reply to, instead of node, x, and y' },
+    }, ['text']),
+  controlTool('design_update_annotation', 'update_annotation', 'Replace the text of an annotation or a reply, as one undo step. Returns the whole annotation.',
+    { id: { type: 'string', description: 'Annotation or reply id' }, text: { type: 'string', description: 'New plain text; must not be empty' } }),
+  controlTool('design_delete_annotation', 'delete_annotation', 'Delete an annotation with all its replies, or a single reply, as one undo step.',
+    { id: { type: 'string', description: 'Annotation or reply id' } }),
   {
     name: 'design_snapshot',
     description: 'Capture a layer (usually a frame) as a PNG exactly as the App renders it, to check the result. Requires Fudehand to be running.',
