@@ -517,11 +517,11 @@ final class FudehandStore: ObservableObject {
         var missingIcon: String?
         let result: DesignHTMLExport
         do {
-            result = try DesignHTML.export(node) { name in
+            result = try DesignHTML.export(node, iconArtwork: { name in
                 let artwork = DesignHTML.bundledIcon(name) ?? MainActor.assumeIsolated { IconLayer.png(name) }.map { ($0, "png") }
                 if artwork == nil { missingIcon = name }
                 return artwork
-            }
+            }, lineHeight: TextMetrics.naturalLineHeight)
         } catch {
             if let missingIcon { throw HTMLExportError(reason: .missingIcon, path: missingIcon) }
             throw error

@@ -62,6 +62,14 @@ private func rect(_ id: String, _ extra: [String: Any] = [:]) -> [String: Any] {
     }
 }
 
+@Test func rulesListParentsFirstAndSkipZeroSpacing() throws {
+    let result = try export(frame("root", layout: ["direction": "vertical"], children: [rect("child")]))
+    let root = try #require(result.html.range(of: ".root { "))
+    let child = try #require(result.html.range(of: ".child { "))
+    #expect(root.lowerBound < child.lowerBound)
+    #expect(!rule(result, "root").contains { $0.hasPrefix("gap") || $0.hasPrefix("padding") })
+}
+
 @Test func sizingInAutoLayout() throws {
     let result = try export(frame("root", layout: ["direction": "horizontal"], children: [
         rect("fixed"),
@@ -148,6 +156,12 @@ private func rect(_ id: String, _ extra: [String: Any] = [:]) -> [String: Any] {
     #expect(label.contains("font-family: -apple-system, BlinkMacSystemFont, sans-serif"))
     #expect(label.contains("line-height: normal"))
     #expect(!label.contains { $0.hasPrefix("width") || $0.hasPrefix("height") })
+}
+
+@Test func lineHeightMultipliesTheFontsOwnLineHeight() throws {
+    let text = try node(["id": "t", "type": "text", "name": "t", "text": ["content": "Hi", "fontSize": 15, "lineHeight": 1.4]])
+    let result = try DesignHTML.export(text, iconArtwork: { _ in nil }, lineHeight: { $0.fontSize == 15 ? 20.5 : nil })
+    #expect(rule(result, "t").contains("line-height: 28.7px"))
 }
 
 @Test func imagesBecomeAssetFiles() throws {

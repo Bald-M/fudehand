@@ -19,8 +19,11 @@ public enum DesignHTML {
     /// Artwork of a bundled icon library; nil for SF Symbols, which only the App can draw.
     public static func bundledIcon(_ name: String) -> (data: Data, ext: String)? { IconCatalog.shared.svg(name).map { ($0, "svg") } }
 
-    public static func export(_ node: DesignNode, iconArtwork: @escaping IconArtwork = bundledIcon) throws -> DesignHTMLExport {
-        var writer = Writer(iconArtwork: iconArtwork)
+    /// `lineHeight` gives a text's font's own line height in points, which `text.lineHeight` multiplies on the canvas (unlike
+    /// CSS, whose unitless line-height multiplies the font size); without it, the multiple is written unitless.
+    public static func export(_ node: DesignNode, iconArtwork: @escaping IconArtwork = bundledIcon,
+                              lineHeight: @escaping (DesignText) -> Double? = { _ in nil }) throws -> DesignHTMLExport {
+        var writer = Writer(iconArtwork: iconArtwork, naturalLineHeight: lineHeight)
         let body = try writer.element(node, context: .root, depth: 1)
         let html = """
         <!doctype html>
@@ -55,6 +58,7 @@ public enum DesignHTML {
 
     struct Writer {
         let iconArtwork: IconArtwork
+        let naturalLineHeight: (DesignText) -> Double?
         var rules: [String] = []
         var files: [String: Data] = [:]
         var assets: [String: String] = [:]
@@ -64,6 +68,9 @@ public enum DesignHTML {
         mutating func element(_ node: DesignNode, context: Context, depth: Int) throws -> String {
             let indent = String(repeating: "  ", count: depth - 1)
             let name = uniqueClass(node)
+            // Reserved before the children are written, so a parent's rule comes before its children's.
+            let ruleIndex = rules.count
+            rules.append("")
             var css = position(node, context: context)
             css += size(node, context: context)
             css += appearance(node)
@@ -94,7 +101,7 @@ public enum DesignHTML {
                 tag = children.isEmpty ? "\(indent)<div \(open)></div>"
                     : "\(indent)<div \(open)>\n\(children.joined(separator: "\n"))\n\(indent)</div>"
             }
-            rules.append(".\(name) { \(css.map { $0 + ";" }.joined(separator: " ")) }")
+            rules[ruleIndex] = ".\(name) { \(css.map { $0 + ";" }.joined(separator: " ")) }"
             return tag
         }
 
@@ -165,18 +172,24 @@ public enum DesignHTML {
             case .end: items = "flex-end"
             case .stretch: items = "stretch"
             }
-            return ["display: flex", "flex-direction: \(layout.direction == .horizontal ? "row" : "column")",
-                    "gap: \(Self.px(layout.spacing))",
-                    "padding: \([padding.top, padding.right, padding.bottom, padding.left].map(Self.px).joined(separator: " "))",
-                    "justify-content: \(justify)", "align-items: \(items)"]
+            let edges = [padding.top, padding.right, padding.bottom, padding.left]
+            var css = ["display: flex", "flex-direction: \(layout.direction == .horizontal ? "row" : "column")"]
+            if layout.spacing != 0 { css.append("gap: \(Self.px(layout.spacing))") }
+            if edges.contains(where: { $0 != 0 }) { css.append("padding: \(edges.map(Self.px).joined(separator: " "))") }
+            return css + ["justify-content: \(justify)", "align-items: \(items)"]
         }
 
         func textStyle(_ text: DesignText) -> [String] {
             let system = "-apple-system, BlinkMacSystemFont, sans-serif"
             let family = text.fontFamily.map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\", \(system)" } ?? system
             return ["font-family: \(family)", "font-size: \(Self.px(text.fontSize))", "font-weight: \(text.fontWeight)",
-                    "line-height: \(text.lineHeight.map(Self.number) ?? "normal")", "color: \(Self.color(text.color))",
+                    "line-height: \(lineHeight(text))", "color: \(Self.color(text.color))",
                     "text-align: \(text.align.rawValue)", "white-space: \(text.autoResize == .widthAndHeight ? "pre" : "pre-wrap")"]
+        }
+
+        func lineHeight(_ text: DesignText) -> String {
+            guard let multiple = text.lineHeight else { return "normal" }
+            return naturalLineHeight(text).map { Self.px($0 * multiple) } ?? Self.number(multiple)
         }
 
         mutating func iconPath(_ name: String) throws -> String {
