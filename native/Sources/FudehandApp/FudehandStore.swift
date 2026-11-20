@@ -601,6 +601,58 @@ final class FudehandStore: ObservableObject {
         recordRecent(url)
     }
 
+    /// Export as HTML for the selected layer: asks for an empty folder, then writes the page and its assets there.
+    func exportHTMLWithPanel() {
+        guard selection.count == 1, let id = selection.first else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.title = L("Export as HTML")
+        panel.message = L("Choose an empty folder for the page and its images and icons.")
+        panel.prompt = L("Export")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try exportHTML(id, to: url) } catch { alert = error.localizedDescription }
+    }
+
+    /// Writes layer `id` as `index.html` and its assets into `directory`, which is created when missing and must otherwise be
+    /// empty, so an export never replaces files. The document is not changed.
+    @discardableResult
+    func exportHTML(_ id: String, to directory: URL) throws -> DesignHTMLExport {
+        guard let node = editor.document.node(id) else { throw DesignError("Layer not found: \(id)") }
+        let files = FileManager.default
+        var isDirectory: ObjCBool = false
+        if files.fileExists(atPath: directory.path, isDirectory: &isDirectory) {
+            guard isDirectory.boolValue else { throw HTMLExportError(reason: .notADirectory, path: directory.path) }
+            guard let entries = try? files.contentsOfDirectory(atPath: directory.path) else {
+                throw HTMLExportError(reason: .unwritable, path: directory.path)
+            }
+            guard entries.allSatisfy({ $0 == ".DS_Store" }) else { throw HTMLExportError(reason: .notEmpty, path: directory.path) }
+        }
+        var missingIcon: String?
+        let result: DesignHTMLExport
+        do {
+            result = try DesignHTML.export(node, iconArtwork: { name in
+                let artwork = DesignHTML.bundledIcon(name) ?? MainActor.assumeIsolated { IconLayer.png(name) }.map { ($0, "png") }
+                if artwork == nil { missingIcon = name }
+                return artwork
+            }, lineHeight: TextMetrics.naturalLineHeight)
+        } catch {
+            if let missingIcon { throw HTMLExportError(reason: .missingIcon, path: missingIcon) }
+            throw error
+        }
+        do {
+            for (path, data) in result.files {
+                let url = directory.appendingPathComponent(path)
+                try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url, options: .withoutOverwriting)
+            }
+        } catch {
+            throw HTMLExportError(reason: .unwritable, path: directory.path)
+        }
+        return result
+    }
+
     /// The uniform type identifier of project files, exported in Info.plist (extension .fudehand, conforming to public.json).
     /// The exported type must be used: a dynamic type synthesized ad hoc from the extension differs from the type the system gives the file, and the open panel would treat the file as not selectable (#50).
     static let contentTypeIdentifier = "local.fudehand.design"
@@ -745,6 +797,32 @@ extension FudehandStore: CanvasHost {
             let end = DispatchWorkItem { [weak self] in self?.fitWhenCanvasSized = false }
             endFitWhenCanvasSized = end
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: end)
+        }
+    }
+}
+
+/// Why Export as HTML wrote nothing; `localizedDescription` is for the UI, `english` for the control channel.
+struct HTMLExportError: LocalizedError, Equatable {
+    enum Reason { case notADirectory, notEmpty, unwritable, missingIcon }
+    let reason: Reason
+    /// The directory, or for `missingIcon` the icon name.
+    let path: String
+
+    var english: String {
+        switch reason {
+        case .notADirectory: return "Not a directory: \(path)"
+        case .notEmpty: return "Directory is not empty: \(path)"
+        case .unwritable: return "Could not write to \(path)"
+        case .missingIcon: return "No artwork for icon \(path)"
+        }
+    }
+
+    var errorDescription: String? {
+        switch reason {
+        case .notADirectory: return L("Not a folder: %@", path)
+        case .notEmpty: return L("The folder is not empty: %@", path)
+        case .unwritable: return L("Could not write to %@", path)
+        case .missingIcon: return L("No artwork for icon %@", path)
         }
     }
 }

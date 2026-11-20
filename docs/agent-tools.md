@@ -77,6 +77,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Undo, redo | `design_undo`, `design_redo` |
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |
 | Snapshot a layer as PNG | `design_snapshot` |
+| Export a layer as HTML with its images and icons (File > Export as HTML…, layers panel context menu) | `design_export_html` |
 | Save a version snapshot of a frame; list version snapshots | `design_save_version_snapshot`, `design_list_version_snapshots` |
 | Edit a version snapshot's note; overlay it on its frame or place it beside the frame | `design_update_node` (`versionSnapshot.note`; `x`, `y`, and `opacity`, using the bounds from `design_list_version_snapshots`) |
 | List fonts, import a font | `design_list_fonts`, `design_import_font` |

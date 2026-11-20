@@ -123,6 +123,8 @@ struct FudehandApp: App {
             CommandGroup(replacing: .saveItem) {
                 Button(L("Save")) { store.save() }.keyboardShortcut("s")
                 Button(L("Save As…")) { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                ExportHTMLMenuItem(store: store, selection: store.layerSelection)
             }
             CommandGroup(replacing: .undoRedo) {
                 Button(L("Undo")) { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")
@@ -212,5 +214,18 @@ private struct WindowActions: ViewModifier {
             store.presentLaunch = { [openWindow] in openWindow(id: FudehandApp.launchWindowID) }
             start()
         }
+    }
+}
+
+/// File > Export as HTML…, available with exactly one layer selected. It observes the selection itself: the store publishes the
+/// selection separately, so the menu would otherwise not see it change.
+private struct ExportHTMLMenuItem: View {
+    let store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+
+    var body: some View {
+        Button(L("Export as HTML…")) { store.exportHTMLWithPanel() }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(selection.ids.count != 1)
     }
 }

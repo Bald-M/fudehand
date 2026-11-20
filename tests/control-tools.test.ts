@@ -27,7 +27,7 @@ describe('design tools', () => {
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
-      'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot',
+      'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
       'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
@@ -201,6 +201,8 @@ describe('design tools', () => {
     await callTool('canvas_set_view', { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] }, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: 'out/home' }, ctx)
+    await callTool('design_export_html', { id: 'f', directory: '/work/site/design' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
@@ -218,6 +220,8 @@ describe('design tools', () => {
       { command: 'set_view', args: { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] } },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
+      { command: 'export_html', args: { id: 'f', directory: '/repo/out/home' } },
+      { command: 'export_html', args: { id: 'f', directory: '/work/site/design' } },
     ])
   })
 

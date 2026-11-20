@@ -20,6 +20,20 @@ final class IconLayer: CALayer {
         rasterize(force: true)
     }
 
+    /// An icon drawn as on the canvas, black on a transparent `side` × `side` pixel square, as PNG; nil when its library lacks it.
+    /// Used for SF Symbols in Export as HTML, which have no SVG to write.
+    @MainActor static func png(_ name: String, side: CGFloat = 256) -> Data? {
+        let layer = IconLayer()
+        layer.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        layer.contentsScale = 1
+        layer.update(DesignIcon(name: name))
+        guard !layer.isPlaceholder, let contents = layer.contents, CFGetTypeID(contents as CFTypeRef) == CGImage.typeID else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, contents as! CGImage, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
     @MainActor static func shape(_ name: String) -> NSImage? {
         if let svg = IconCatalog.shared.svg(name) { return NSImage(data: svg) }
         guard let (library, symbol) = IconLibrary.parse(name), library == .sf else { return nil }

@@ -155,6 +155,12 @@ extension FudehandStore {
             }
             try newDocument(fromTemplate: template) { try requireDiscardable(discard); return true }
             return controlState()
+        case .exportHTML(let id, let directory):
+            _ = try requireNode(id)
+            let url = URL(fileURLWithPath: (directory as NSString).expandingTildeInPath)
+            let result: DesignHTMLExport
+            do { result = try exportHTML(id, to: url) } catch let error as HTMLExportError { throw ControlCommandError(error.english) }
+            return ["id": id, "directory": url.path, "files": result.files.keys.sorted(), "assets": result.assets, "html": result.html]
         case .listConversations, .getConversation, .openConversation, .newConversation, .closeConversation, .deleteConversation,
              .clearConversation, .sendMessage, .setMode, .runPlan, .stopReply, .regenerateReply, .editLastMessage, .answerQuestion, .compactConversation:
             return try handleChatControl(command, caller: caller)

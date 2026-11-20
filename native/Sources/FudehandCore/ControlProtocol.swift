@@ -38,6 +38,7 @@ public enum ControlCommand: Equatable, Sendable {
     case clearRecents
     case listTemplates
     case newDocumentFromTemplate(String, discard: Bool)
+    case exportHTML(String, directory: String)
     // Chat panel conversations. A nil conversation means the selected one.
     case listConversations
     case getConversation(UUID?)
@@ -371,6 +372,7 @@ public enum ControlProtocol {
         case "clear_recents": return .clearRecents
         case "list_templates": return .listTemplates
         case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
+        case "export_html": return .exportHTML(try string("id"), directory: try string("directory"))
         case "list_conversations": return .listConversations
         case "get_conversation": return .getConversation(try optionalConversation())
         case "open_conversation": return .openConversation(try conversation())

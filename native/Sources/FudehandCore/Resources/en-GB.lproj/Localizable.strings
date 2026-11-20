@@ -445,6 +445,14 @@
 "Show all %d colors" = "Show all %d colours";
 "Show Fewer Colors" = "Show Fewer Colours";
 
+"Export as HTML…" = "Export as HTML…";
+"Export as HTML" = "Export as HTML";
+"Choose an empty folder for the page and its images and icons." = "Choose an empty folder for the page and its images and icons.";
+"Export" = "Export";
+"Not a folder: %@" = "Not a folder: %@";
+"The folder is not empty: %@" = "The folder is not empty: %@";
+"Could not write to %@" = "Could not write to %@";
+"No artwork for icon %@" = "No artwork for icon %@";
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@ opacity";
 "Top left" = "Top left";

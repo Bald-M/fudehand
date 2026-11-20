@@ -125,6 +125,7 @@ The MCP server uses the repository that contains the script. Append `--root <dir
 | Viewport | `canvas_focus_node`, `canvas_fit_all`, `canvas_zoom`, `canvas_set_view` | `canvas_focus_node` fits one layer or several; `canvas_set_view` picks the canvas tool, shows or hides the inspector, and expands or collapses layers in the layers panel. |
 | Annotations | `design_list_annotations`, `design_add_annotation`, `design_update_annotation`, `design_delete_annotation` | Notes pinned to a point inside a layer, with replies; not layers, and not in snapshots. |
 | Check | `design_snapshot` | Returns a PNG of the actual rendering. |
+| Export | `design_export_html` | Writes a layer as a reference web page with its images and icons; see below. |
 
 A few details worth knowing:
 
@@ -136,6 +137,17 @@ A few details worth knowing:
 - In file and image paths, `~` expands to your home directory.
 
 The tools reach the App through its control channel, a Unix socket at `~/Library/Application Support/fudehand/control.sock` (override it with `FUDEHAND_CONTROL_SOCKET`). It is open only to the current user and does not listen on any network address.
+
+### From prototype to front-end code
+
+Once a screen is designed, an agent can implement it in your front-end project:
+
+1. Open the agent (Claude Code, Codex, …) in the front-end project with the `fudehand` MCP server connected.
+2. Ask it to call `design_export_html` for the frame with an absolute `directory`, such as a new folder outside your source tree. It writes `index.html` and the images and icons under `assets/`, and returns the HTML and which asset belongs to which layer. You can do the same by hand with *File → Export as HTML…* (⇧⌘E).
+3. Have it rebuild the page in your project's framework and styles, using the HTML as a reference for structure, sizes, spacing, colors, and type: auto layout becomes flexbox, and each element's `data-layer-id` points back to its layer, which `design_get_node` reads in full (for example prototype interactions).
+4. Have it compare its page with `design_snapshot` of the frame and fix what differs.
+
+The page is a reference, not production code. Prototype interactions are not exported, and fonts keep their macOS family names.
 
 ### Chat panel
 

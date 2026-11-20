@@ -817,6 +817,50 @@ private func colorList(_ result: [String: Any]) -> [String] {
     #expect(try Data(contentsOf: templateURL) == original)
 }
 
+private func temporaryDirectory() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-export-\(UUID().uuidString)")
+}
+
+@Test @MainActor func exportsALayerAsHTMLWithItsAssets() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "f", "type": "frame", "name": "Home", "width": 200, "height": 100, "layout": ["direction": "horizontal"],
+        "children": [["id": "i", "type": "icon", "name": "Search", "icon": ["name": "lucide/search"]],
+                     ["id": "s", "type": "icon", "name": "Gear", "icon": ["name": "sf/gearshape"]]],
+    ])))
+    let directory = temporaryDirectory().appendingPathComponent("nested")
+    defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+    let document = store.editor.document
+    let result = try await control(store, .exportHTML("f", directory: directory.path))
+    #expect(store.editor.document == document)
+    #expect(result["directory"] as? String == directory.path)
+    #expect(result["files"] as? [String] == ["assets/icons/lucide-search.svg", "assets/icons/sf-gearshape.png", "index.html"])
+    #expect(result["assets"] as? [String: String] == ["i": "assets/icons/lucide-search.svg", "s": "assets/icons/sf-gearshape.png"])
+    let html = try String(contentsOf: directory.appendingPathComponent("index.html"), encoding: .utf8)
+    #expect(result["html"] as? String == html)
+    #expect(html.contains(#"data-layer-id="f""#))
+    // The menu's path, the same store method, gives the same files.
+    let again = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: again) }
+    #expect(try store.exportHTML("f", to: again).files.keys.sorted() == result["files"] as? [String])
+    let symbol = try Data(contentsOf: directory.appendingPathComponent("assets/icons/sf-gearshape.png"))
+    #expect(NSBitmapImageRep(data: symbol)?.pixelsWide == 256)
+}
+
+@Test @MainActor func exportRefusesANonEmptyDirectoryAndUnknownLayers() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame"])))
+    let directory = temporaryDirectory()
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("keep".utf8).write(to: directory.appendingPathComponent("index.html"))
+    #expect(await failure(store, .exportHTML("f", directory: directory.path)) == "Directory is not empty: \(directory.path)")
+    #expect(try String(contentsOf: directory.appendingPathComponent("index.html"), encoding: .utf8) == "keep")
+    #expect(await failure(store, .exportHTML("nope", directory: directory.path)) == "Layer not found: nope")
+    let file = directory.appendingPathComponent("index.html").path
+    #expect(await failure(store, .exportHTML("f", directory: file)) == "Not a directory: \(file)")
+}
+
 @Test @MainActor func focusingSeveralLayersMatchesZoomToSelection() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "a", "type": "frame", "x": 0, "y": 0, "width": 100, "height": 100])))

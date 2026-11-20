@@ -445,6 +445,14 @@
 "Show all %d colors" = "显示全部 %d 种颜色";
 "Show Fewer Colors" = "收起颜色";
 
+"Export as HTML…" = "导出为 HTML…";
+"Export as HTML" = "导出为 HTML";
+"Choose an empty folder for the page and its images and icons." = "请选择一个空文件夹，用来存放页面及其图片和图标。";
+"Export" = "导出";
+"Not a folder: %@" = "不是文件夹：%@";
+"The folder is not empty: %@" = "文件夹不是空的：%@";
+"Could not write to %@" = "无法写入 %@";
+"No artwork for icon %@" = "图标 %@ 没有图形";
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@透明度";
 "Top left" = "左上";
