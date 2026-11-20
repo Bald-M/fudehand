@@ -25,6 +25,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 - The properties panel is redesigned: the inspector has *Design*, *Prototype*, and *Chat* tabs, and the prototype settings (interaction, states, scrolling, animation) move to the *Prototype* tab. The *Design* tab opens with a layer header (type, name, show/hide), puts X/Y and W/H in rows with a sizing chip (*Fixed*, *Hug*, *Fill*) inside W and H, sets auto layout alignment with a 3×3 grid plus *Space between* and *Stretch*, shows fills and strokes as swatch, hex, and opacity, and folds an empty fill or stroke into a row with `+`. Dragging the opacity icon changes the opacity (#189).
 - Changing a conversation's model settings or API key while its reply is running no longer stops the reply: the reply finishes, and the change applies from the next message.
+- Chat panel: *Model settings* shows each provider's icon (DeepSeek, Claude, ChatGPT) with its API key status as a dot on the icon's corner, as in the *MCP Connectors* window (#200).
 
 ### Fixed
 
