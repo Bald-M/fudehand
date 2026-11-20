@@ -24,6 +24,8 @@ final class FudehandStore: ObservableObject {
     /// The layer under the pointer, shared by the canvas and the layers panel.
     let hover = LayerHover()
     @Published var tool: CanvasTool = .move
+    /// The annotation expanded on the canvas; set through `expandAnnotation`.
+    @Published var annotation: AnnotationTarget?
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
     /// The content at the last save (or at New/Open); returning to it by dragging back or undoing is not an edit.
@@ -149,6 +151,7 @@ final class FudehandStore: ObservableObject {
         canvas?.show(index)
         if !selection.allSatisfy(index.contains) { setSelection(selection.filter(index.contains)) }
         if !inGesture { document = index.document }
+        syncAnnotation()
     }
 
     /// One undoable edit.
@@ -186,6 +189,8 @@ final class FudehandStore: ObservableObject {
 
     func attach(_ canvas: FudehandCanvasView) {
         self.canvas = canvas
+        // A new canvas (the editor window reopened) starts with every thread collapsed.
+        if annotation != nil { annotation = nil }
         canvas.show(index)
         canvas.setSelection(selection)
     }
@@ -476,6 +481,7 @@ final class FudehandStore: ObservableObject {
     /// Replaces the current document and enters the editor window; New, Open, templates, and Agent commands all go through here.
     func replace(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
+        expandAnnotation(nil)
         editor.replace(next)
         inGesture = false
         collapsedLayers = []

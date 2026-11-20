@@ -477,3 +477,17 @@
 "Place Beside Frame" = "放回畫框旁邊";
 "Save version snapshot" = "儲存版本快照";
 "List version snapshots" = "列出版本快照";
+
+/* Annotations */
+"Annotate" = "批註";
+"Annotation" = "批註";
+"Add an annotation" = "新增批註";
+"Add" = "新增";
+"Reply" = "回覆";
+"Edit" = "編輯";
+"Delete Annotation" = "刪除批註";
+"Delete Reply" = "刪除回覆";
+"You" = "你";
+"Agent" = "Agent";
+"Annotation: %@" = "批註：%@";
+"Expanded" = "已展開";

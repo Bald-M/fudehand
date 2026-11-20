@@ -87,6 +87,18 @@ private func object(_ data: Data) throws -> [String: Any] {
          .setView(ViewChange(inspector: false, inspectorTab: .chat, expand: ["a"], collapse: ["b"]))),
         (#"{"id":43,"command":"focus_node","args":{"id":null,"ids":["a"]}}"#, .focusNodes(["a"])),
         (#"{"id":44,"command":"set_view","args":{"tool":"text","expand":null,"collapse":null}}"#, .setView(ViewChange(tool: .text))),
+        (#"{"id":27,"command":"list_annotations"}"#, .listAnnotations(node: nil)),
+        (#"{"id":28,"command":"list_annotations","args":{"node":"f"}}"#, .listAnnotations(node: "f")),
+        (#"{"id":29,"command":"add_annotation","args":{"node":"f","text":"Why?"}}"#,
+         .addAnnotation(node: "f", x: nil, y: nil, text: "Why?", replyTo: nil)),
+        (#"{"id":30,"command":"add_annotation","args":{"node":"f","x":12.5,"y":0,"text":"Why?"}}"#,
+         .addAnnotation(node: "f", x: 12.5, y: 0, text: "Why?", replyTo: nil)),
+        (#"{"id":31,"command":"add_annotation","args":{"replyTo":"n","text":"Because"}}"#,
+         .addAnnotation(node: nil, x: nil, y: nil, text: "Because", replyTo: "n")),
+        (#"{"id":34,"command":"add_annotation","args":{"replyTo":"n","x":null,"y":null,"text":"Because"}}"#,
+         .addAnnotation(node: nil, x: nil, y: nil, text: "Because", replyTo: "n")),
+        (#"{"id":32,"command":"update_annotation","args":{"id":"n","text":"Edited"}}"#, .updateAnnotation("n", text: "Edited")),
+        (#"{"id":33,"command":"delete_annotation","args":{"id":"n"}}"#, .deleteAnnotation("n")),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -162,11 +174,20 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"focus_node","args":{"ids":[]}}"#, "Invalid argument type: ids"),
         (#"{"id":1,"command":"focus_node","args":{"id":"a","ids":["b"]}}"#, "Pass either id or ids, not both"),
         (#"{"id":1,"command":"set_view","args":{}}"#, "Nothing to change: pass tool, inspector, inspectorTab, expand, or collapse"),
-        (#"{"id":1,"command":"set_view","args":{"tool":"pen"}}"#, "tool must be one of move, hand, frame, rectangle, ellipse, text; got pen"),
+        (#"{"id":1,"command":"set_view","args":{"tool":"pen"}}"#, "tool must be one of move, hand, frame, rectangle, ellipse, text, annotate; got pen"),
         (#"{"id":1,"command":"set_view","args":{"inspector":"yes"}}"#, "Invalid argument type: inspector"),
         (#"{"id":1,"command":"set_view","args":{"inspectorTab":"layers"}}"#, "inspectorTab must be one of design, prototype, chat; got layers"),
         (#"{"id":1,"command":"set_view","args":{"expand":"a"}}"#, "Invalid argument type: expand"),
         (#"{"id":1,"command":"set_view","args":{"expand":["a"],"collapse":["a"]}}"#, "A layer cannot be both expanded and collapsed: a"),
+        (#"{"id":1,"command":"add_annotation","args":{"text":"x"}}"#, "Missing argument: node (or replyTo to reply to an annotation)"),
+        (#"{"id":1,"command":"add_annotation","args":{"node":"f"}}"#, "Missing argument: text"),
+        (#"{"id":1,"command":"add_annotation","args":{"node":"f","x":"1","text":"x"}}"#, "Invalid argument type: x"),
+        (#"{"id":1,"command":"add_annotation","args":{"replyTo":"n","node":"f","text":"x"}}"#,
+         "A reply takes only replyTo and text; node, x, and y belong to a new annotation"),
+        (#"{"id":1,"command":"update_annotation","args":{"id":"n"}}"#, "Missing argument: text"),
+        (#"{"id":1,"command":"add_annotation","args":{"replyTo":"n","x":1,"text":"x"}}"#,
+         "A reply takes only replyTo and text; node, x, and y belong to a new annotation"),
+        (#"{"id":1,"command":"delete_annotation","args":{}}"#, "Missing argument: id"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }

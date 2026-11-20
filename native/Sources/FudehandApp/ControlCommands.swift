@@ -158,6 +158,18 @@ extension FudehandStore {
         case .listConversations, .getConversation, .openConversation, .newConversation, .closeConversation, .deleteConversation,
              .clearConversation, .sendMessage, .setMode, .runPlan, .stopReply, .regenerateReply, .editLastMessage, .answerQuestion, .compactConversation:
             return try handleChatControl(command, caller: caller)
+        case .listAnnotations(let node):
+            if let node { _ = try requireNode(node) }
+            let annotations = node.map(editor.document.annotations(on:)) ?? editor.document.annotations
+            return ["annotations": annotations.map(\.object)]
+        case .addAnnotation(let node, let x, let y, let text, let replyTo):
+            if let replyTo { return try replyToAnnotation(replyTo, text: text, by: .agent).object }
+            return try addAnnotation(on: node!, x: x, y: y, text: text, by: .agent).object
+        case .updateAnnotation(let id, let text):
+            return try updateAnnotation(id, text: text, by: .agent).object
+        case .deleteAnnotation(let id):
+            try deleteAnnotation(id, by: .agent)
+            return ["deleted": id]
         }
     }
 
