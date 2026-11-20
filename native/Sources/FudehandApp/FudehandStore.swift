@@ -126,7 +126,15 @@ final class FudehandStore: ObservableObject {
         if let connectors { self.connectors = connectors }
     }
 
-    var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
+    /// The App-wide appearance for an Appearance setting; `nil` follows the system. Set on `NSApp` so windows and
+    /// AppKit-presented UI (open and save panels, alerts, menus) all follow it.
+    static func appearance(for theme: String?) -> NSAppearance? {
+        switch theme {
+        case "dark": NSAppearance(named: .darkAqua)
+        case "light": NSAppearance(named: .aqua)
+        default: nil
+        }
+    }
     var isDirty: Bool { editor.revision != savedRevision && editor.document != savedDocument }
     var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? L("Untitled") }
     var canUndo: Bool { editor.canUndo }
