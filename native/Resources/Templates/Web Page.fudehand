@@ -1,0 +1,3453 @@
+{
+  "format" : "fudehand.design",
+  "nodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "height" : 28,
+              "id" : "w-1",
+              "name" : "Plotline",
+              "text" : {
+                "align" : "left",
+                "autoResize" : "width-and-height",
+                "color" : "#1D1C21",
+                "content" : "Plotline",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 600
+              },
+              "type" : "text",
+              "width" : 71,
+              "x" : 64,
+              "y" : 33
+            },
+            {
+              "children" : [
+                {
+                  "height" : 22,
+                  "id" : "w-2",
+                  "name" : "Features",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#6B6874",
+                    "content" : "Features",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 62,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "height" : 22,
+                  "id" : "w-3",
+                  "name" : "Pricing",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#6B6874",
+                    "content" : "Pricing",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 50,
+                  "x" : 94,
+                  "y" : 0
+                },
+                {
+                  "height" : 22,
+                  "id" : "w-4",
+                  "name" : "Stories",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#6B6874",
+                    "content" : "Stories",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 50,
+                  "x" : 176,
+                  "y" : 0
+                }
+              ],
+              "height" : 22,
+              "id" : "w-5",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 32
+              },
+              "name" : "Links",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 226,
+              "x" : 566.5,
+              "y" : 36
+            },
+            {
+              "children" : [
+                {
+                  "height" : 22,
+                  "id" : "w-6",
+                  "name" : "Start a garden",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#FFFFFF",
+                    "content" : "Start a garden",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 500
+                  },
+                  "type" : "text",
+                  "width" : 104,
+                  "x" : 24,
+                  "y" : 12
+                }
+              ],
+              "cornerRadius" : 8,
+              "fill" : "#1F6B57",
+              "height" : 46,
+              "id" : "w-7",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "center",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 12,
+                  "left" : 24,
+                  "right" : 24,
+                  "top" : 12
+                },
+                "spacing" : 8
+              },
+              "name" : "Button / Start a garden",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 152,
+              "x" : 1224,
+              "y" : 24
+            }
+          ],
+          "height" : 94,
+          "id" : "w-8",
+          "layout" : {
+            "align" : "space-between",
+            "crossAlign" : "center",
+            "direction" : "horizontal",
+            "padding" : {
+              "bottom" : 24,
+              "left" : 64,
+              "right" : 64,
+              "top" : 24
+            },
+            "spacing" : 24
+          },
+          "name" : "Navigation",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 1440,
+          "x" : 0,
+          "y" : 0
+        },
+        {
+          "children" : [
+            {
+              "height" : 132,
+              "id" : "w-9",
+              "name" : "Plan the season with everyone on",
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Plan the season with everyone on the plot",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 48,
+                "fontWeight" : 600
+              },
+              "type" : "text",
+              "width" : 800,
+              "x" : 64,
+              "y" : 64
+            },
+            {
+              "height" : 55,
+              "id" : "w-10",
+              "name" : "Plotline keeps beds, watering ro",
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#6B6874",
+                "content" : "Plotline keeps beds, watering rotas, and harvests in one shared plan, so nothing goes unwatered and no tomato goes unpicked.",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 400
+              },
+              "type" : "text",
+              "width" : 640,
+              "x" : 64,
+              "y" : 220
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "height" : 22,
+                      "id" : "w-11",
+                      "name" : "Start a garden",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#FFFFFF",
+                        "content" : "Start a garden",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 16,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 104,
+                      "x" : 24,
+                      "y" : 12
+                    }
+                  ],
+                  "cornerRadius" : 8,
+                  "fill" : "#1F6B57",
+                  "height" : 46,
+                  "id" : "w-12",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 12,
+                      "left" : 24,
+                      "right" : 24,
+                      "top" : 12
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Button / Start a garden",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 152,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "height" : 22,
+                      "id" : "w-13",
+                      "name" : "See how it works",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "See how it works",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 16,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 124,
+                      "x" : 24,
+                      "y" : 12
+                    }
+                  ],
+                  "cornerRadius" : 8,
+                  "fill" : "#FFFFFF",
+                  "height" : 46,
+                  "id" : "w-14",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 12,
+                      "left" : 24,
+                      "right" : 24,
+                      "top" : 12
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Button / See how it works",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "stroke" : {
+                    "color" : "#E4E1DB",
+                    "width" : 1
+                  },
+                  "type" : "frame",
+                  "width" : 172,
+                  "x" : 168,
+                  "y" : 0
+                }
+              ],
+              "height" : 46,
+              "id" : "w-15",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 16
+              },
+              "name" : "Actions",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 340,
+              "x" : 64,
+              "y" : 299
+            }
+          ],
+          "height" : 409,
+          "id" : "w-16",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 64,
+              "left" : 64,
+              "right" : 64,
+              "top" : 64
+            },
+            "spacing" : 24
+          },
+          "name" : "Hero",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 1440,
+          "x" : 0,
+          "y" : 94
+        },
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "height" : 24,
+                      "icon" : {
+                        "color" : "#1F6B57",
+                        "name" : "lucide/sprout"
+                      },
+                      "id" : "w-17",
+                      "name" : "sprout",
+                      "type" : "icon",
+                      "width" : 24,
+                      "x" : 12,
+                      "y" : 12
+                    }
+                  ],
+                  "cornerRadius" : 8,
+                  "fill" : "#E1EEE9",
+                  "height" : 48,
+                  "id" : "w-18",
+                  "layout" : {
+                    "align" : "center",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 0
+                  },
+                  "name" : "sprout tile",
+                  "type" : "frame",
+                  "width" : 48,
+                  "x" : 32,
+                  "y" : 32
+                },
+                {
+                  "height" : 28,
+                  "id" : "w-19",
+                  "name" : "Shared beds",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#1D1C21",
+                    "content" : "Shared beds",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 20,
+                    "fontWeight" : 500
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 96
+                },
+                {
+                  "height" : 44,
+                  "id" : "w-20",
+                  "name" : "Map every bed and who looks afte",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#6B6874",
+                    "content" : "Map every bed and who looks after it, from the first seedling to the last harvest.",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 140
+                }
+              ],
+              "cornerRadius" : 16,
+              "fill" : "#FFFFFF",
+              "height" : 216,
+              "id" : "w-21",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "vertical",
+                "padding" : {
+                  "bottom" : 32,
+                  "left" : 32,
+                  "right" : 32,
+                  "top" : 32
+                },
+                "spacing" : 16
+              },
+              "name" : "Feature / Shared beds",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "stroke" : {
+                "color" : "#E4E1DB",
+                "width" : 1
+              },
+              "type" : "frame",
+              "width" : 421.33333333333331,
+              "x" : 64,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "height" : 24,
+                      "icon" : {
+                        "color" : "#1F6B57",
+                        "name" : "lucide/calendar-days"
+                      },
+                      "id" : "w-22",
+                      "name" : "calendar-days",
+                      "type" : "icon",
+                      "width" : 24,
+                      "x" : 12,
+                      "y" : 12
+                    }
+                  ],
+                  "cornerRadius" : 8,
+                  "fill" : "#E1EEE9",
+                  "height" : 48,
+                  "id" : "w-23",
+                  "layout" : {
+                    "align" : "center",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 0
+                  },
+                  "name" : "calendar-days tile",
+                  "type" : "frame",
+                  "width" : 48,
+                  "x" : 32,
+                  "y" : 32
+                },
+                {
+                  "height" : 28,
+                  "id" : "w-24",
+                  "name" : "Watering rota",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#1D1C21",
+                    "content" : "Watering rota",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 20,
+                    "fontWeight" : 500
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 96
+                },
+                {
+                  "height" : 44,
+                  "id" : "w-25",
+                  "name" : "Swap shifts in a tap. Everyone s",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#6B6874",
+                    "content" : "Swap shifts in a tap. Everyone sees who is on duty this week.",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 140
+                }
+              ],
+              "cornerRadius" : 16,
+              "fill" : "#FFFFFF",
+              "height" : 216,
+              "id" : "w-26",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "vertical",
+                "padding" : {
+                  "bottom" : 32,
+                  "left" : 32,
+                  "right" : 32,
+                  "top" : 32
+                },
+                "spacing" : 16
+              },
+              "name" : "Feature / Watering rota",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "stroke" : {
+                "color" : "#E4E1DB",
+                "width" : 1
+              },
+              "type" : "frame",
+              "width" : 421.33333333333331,
+              "x" : 509.33333333333331,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "height" : 24,
+                      "icon" : {
+                        "color" : "#1F6B57",
+                        "name" : "lucide/list-checks"
+                      },
+                      "id" : "w-27",
+                      "name" : "list-checks",
+                      "type" : "icon",
+                      "width" : 24,
+                      "x" : 12,
+                      "y" : 12
+                    }
+                  ],
+                  "cornerRadius" : 8,
+                  "fill" : "#E1EEE9",
+                  "height" : 48,
+                  "id" : "w-28",
+                  "layout" : {
+                    "align" : "center",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 0
+                  },
+                  "name" : "list-checks tile",
+                  "type" : "frame",
+                  "width" : 48,
+                  "x" : 32,
+                  "y" : 32
+                },
+                {
+                  "height" : 28,
+                  "id" : "w-29",
+                  "name" : "Harvest log",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#1D1C21",
+                    "content" : "Harvest log",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 20,
+                    "fontWeight" : 500
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 96
+                },
+                {
+                  "height" : 44,
+                  "id" : "w-30",
+                  "name" : "Record what came in and share th",
+                  "sizing" : {
+                    "horizontal" : "fill",
+                    "vertical" : "hug"
+                  },
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "height",
+                    "color" : "#6B6874",
+                    "content" : "Record what came in and share the surplus before it goes to waste.",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 16,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 357.33333333333331,
+                  "x" : 32,
+                  "y" : 140
+                }
+              ],
+              "cornerRadius" : 16,
+              "fill" : "#FFFFFF",
+              "height" : 216,
+              "id" : "w-31",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "vertical",
+                "padding" : {
+                  "bottom" : 32,
+                  "left" : 32,
+                  "right" : 32,
+                  "top" : 32
+                },
+                "spacing" : 16
+              },
+              "name" : "Feature / Harvest log",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "stroke" : {
+                "color" : "#E4E1DB",
+                "width" : 1
+              },
+              "type" : "frame",
+              "width" : 421.33333333333331,
+              "x" : 954.66666666666663,
+              "y" : 0
+            }
+          ],
+          "height" : 280,
+          "id" : "w-32",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "horizontal",
+            "padding" : {
+              "bottom" : 64,
+              "left" : 64,
+              "right" : 64,
+              "top" : 0
+            },
+            "spacing" : 24
+          },
+          "name" : "Features",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 1440,
+          "x" : 0,
+          "y" : 503
+        },
+        {
+          "children" : [
+            {
+              "fill" : "#E4E1DB",
+              "height" : 1,
+              "id" : "w-33",
+              "name" : "Divider",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "fixed"
+              },
+              "type" : "rectangle",
+              "width" : 1312,
+              "x" : 64,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "height" : 20,
+                  "id" : "w-34",
+                  "name" : "© 2026 Plotline",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#6B6874",
+                    "content" : "© 2026 Plotline",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 14,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 99,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "height" : 20,
+                  "id" : "w-35",
+                  "name" : "Made for community gardens",
+                  "text" : {
+                    "align" : "left",
+                    "autoResize" : "width-and-height",
+                    "color" : "#6B6874",
+                    "content" : "Made for community gardens",
+                    "fontFamily" : "Avenir Next",
+                    "fontSize" : 14,
+                    "fontWeight" : 400
+                  },
+                  "type" : "text",
+                  "width" : 189,
+                  "x" : 1123,
+                  "y" : 0
+                }
+              ],
+              "height" : 20,
+              "id" : "w-36",
+              "layout" : {
+                "align" : "space-between",
+                "crossAlign" : "start",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 24
+              },
+              "name" : "Footer row",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 1312,
+              "x" : 64,
+              "y" : 33
+            }
+          ],
+          "height" : 101,
+          "id" : "w-37",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 48,
+              "left" : 64,
+              "right" : 64,
+              "top" : 0
+            },
+            "spacing" : 32
+          },
+          "name" : "Footer",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 1440,
+          "x" : 0,
+          "y" : 783
+        }
+      ],
+      "fill" : "#F6F5F2",
+      "height" : 884,
+      "id" : "w-38",
+      "layout" : {
+        "align" : "start",
+        "crossAlign" : "start",
+        "direction" : "vertical",
+        "padding" : {
+          "bottom" : 0,
+          "left" : 0,
+          "right" : 0,
+          "top" : 0
+        },
+        "spacing" : 0
+      },
+      "name" : "Web Page · Landing",
+      "sizing" : {
+        "horizontal" : "fixed",
+        "vertical" : "hug"
+      },
+      "type" : "frame",
+      "width" : 1440,
+      "x" : 0,
+      "y" : 0
+    },
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "height" : 44,
+              "id" : "w-144",
+              "name" : "Design system",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Design system",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 32,
+                "fontWeight" : 600
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 0
+            },
+            {
+              "height" : 44,
+              "id" : "w-145",
+              "name" : "Colors, type, spacing, and corne",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#6B6874",
+                "content" : "Colors, type, spacing, and corner radius shared by every starter template. Follow them when you add screens.",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 16,
+                "fontWeight" : 400
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 52
+            }
+          ],
+          "height" : 96,
+          "id" : "w-146",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 0,
+              "left" : 0,
+              "right" : 0,
+              "top" : 0
+            },
+            "spacing" : 8
+          },
+          "name" : "Intro",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 648,
+          "x" : 48,
+          "y" : 48
+        },
+        {
+          "children" : [
+            {
+              "height" : 28,
+              "id" : "w-147",
+              "name" : "Colors",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Colors",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 500
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#F6F5F2",
+                      "height" : 72,
+                      "id" : "w-39",
+                      "name" : "Canvas swatch",
+                      "stroke" : {
+                        "color" : "#E4E1DB",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-40",
+                      "name" : "Canvas",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Canvas",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 47,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-41",
+                      "name" : "#F6F5F2",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#F6F5F2",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 49,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-42",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Canvas",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#FFFFFF",
+                      "height" : 72,
+                      "id" : "w-43",
+                      "name" : "Surface swatch",
+                      "stroke" : {
+                        "color" : "#E4E1DB",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-44",
+                      "name" : "Surface",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Surface",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 49,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-45",
+                      "name" : "#FFFFFF",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#FFFFFF",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 48,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-46",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Surface",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 88,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#1D1C21",
+                      "height" : 72,
+                      "id" : "w-47",
+                      "name" : "Ink swatch",
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-48",
+                      "name" : "Ink",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Ink",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 20,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-49",
+                      "name" : "#1D1C21",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#1D1C21",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 54,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-50",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Ink",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 176,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#6B6874",
+                      "height" : 72,
+                      "id" : "w-51",
+                      "name" : "Muted swatch",
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-52",
+                      "name" : "Muted",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Muted",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 43,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-53",
+                      "name" : "#6B6874",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#6B6874",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 51,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-54",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Muted",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 264,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#E4E1DB",
+                      "height" : 72,
+                      "id" : "w-55",
+                      "name" : "Line swatch",
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-56",
+                      "name" : "Line",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Line",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 27,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-57",
+                      "name" : "#E4E1DB",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#E4E1DB",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 53,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-58",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Line",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 352,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#1F6B57",
+                      "height" : 72,
+                      "id" : "w-59",
+                      "name" : "Pine swatch",
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-60",
+                      "name" : "Pine",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Pine",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 28,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-61",
+                      "name" : "#1F6B57",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#1F6B57",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 50,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-62",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Pine",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 440,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#E1EEE9",
+                      "height" : 72,
+                      "id" : "w-63",
+                      "name" : "Pine Tint swatch",
+                      "stroke" : {
+                        "color" : "#E4E1DB",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 72,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-64",
+                      "name" : "Pine Tint",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Pine Tint",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 56,
+                      "x" : 0,
+                      "y" : 80
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-65",
+                      "name" : "#E1EEE9",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "#E1EEE9",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 51,
+                      "x" : 0,
+                      "y" : 108
+                    }
+                  ],
+                  "height" : 125,
+                  "id" : "w-66",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "start",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Pine Tint",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 528,
+                  "y" : 0
+                }
+              ],
+              "height" : 125,
+              "id" : "w-67",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 16
+              },
+              "name" : "Swatches",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 600,
+              "x" : 0,
+              "y" : 44
+            }
+          ],
+          "height" : 169,
+          "id" : "w-148",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 0,
+              "left" : 0,
+              "right" : 0,
+              "top" : 0
+            },
+            "spacing" : 16
+          },
+          "name" : "Colors",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 648,
+          "x" : 48,
+          "y" : 192
+        },
+        {
+          "children" : [
+            {
+              "height" : 28,
+              "id" : "w-150",
+              "name" : "Type · Avenir Next",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Type · Avenir Next",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 500
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-68",
+                          "name" : "48 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "48 · 600",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-69",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 24.5
+                    },
+                    {
+                      "height" : 66,
+                      "id" : "w-70",
+                      "name" : "Display",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Display",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 48,
+                        "fontWeight" : 600
+                      },
+                      "type" : "text",
+                      "width" : 166,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 66,
+                  "id" : "w-71",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Display",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 278,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-72",
+                          "name" : "32 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "32 · 600",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-73",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 13.5
+                    },
+                    {
+                      "height" : 44,
+                      "id" : "w-74",
+                      "name" : "Title",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Title",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 32,
+                        "fontWeight" : 600
+                      },
+                      "type" : "text",
+                      "width" : 65,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 44,
+                  "id" : "w-75",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Title",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 177,
+                  "x" : 0,
+                  "y" : 82
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-76",
+                          "name" : "24 · 600",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "24 · 600",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-77",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 8
+                    },
+                    {
+                      "height" : 33,
+                      "id" : "w-78",
+                      "name" : "Heading",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Heading",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 24,
+                        "fontWeight" : 600
+                      },
+                      "type" : "text",
+                      "width" : 96,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 33,
+                  "id" : "w-79",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Heading",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 208,
+                  "x" : 0,
+                  "y" : 142
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-80",
+                          "name" : "20 · 500",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "20 · 500",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-81",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 5.5
+                    },
+                    {
+                      "height" : 28,
+                      "id" : "w-82",
+                      "name" : "Subheading",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Subheading",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 20,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 112,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 28,
+                  "id" : "w-83",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Subheading",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 224,
+                  "x" : 0,
+                  "y" : 191
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-84",
+                          "name" : "16 · 400",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "16 · 400",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-85",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 2.5
+                    },
+                    {
+                      "height" : 22,
+                      "id" : "w-86",
+                      "name" : "Body",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Body",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 16,
+                        "fontWeight" : 400
+                      },
+                      "type" : "text",
+                      "width" : 38,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 22,
+                  "id" : "w-87",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Body",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 150,
+                  "x" : 0,
+                  "y" : 235
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-88",
+                          "name" : "14 · 400",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "14 · 400",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-89",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 1.5
+                    },
+                    {
+                      "height" : 20,
+                      "id" : "w-90",
+                      "name" : "Small",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Small",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 14,
+                        "fontWeight" : 400
+                      },
+                      "type" : "text",
+                      "width" : 35,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 20,
+                  "id" : "w-91",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Small",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 147,
+                  "x" : 0,
+                  "y" : 273
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-92",
+                          "name" : "12 · 500",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "12 · 500",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 96,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-93",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Spec",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 96,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-94",
+                      "name" : "Caption",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#1D1C21",
+                        "content" : "Caption",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 44,
+                      "x" : 112,
+                      "y" : 0
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-95",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Type / Caption",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 156,
+                  "x" : 0,
+                  "y" : 309
+                }
+              ],
+              "height" : 326,
+              "id" : "w-149",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "vertical",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 16
+              },
+              "name" : "Scale",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 278,
+              "x" : 0,
+              "y" : 44
+            }
+          ],
+          "height" : 370,
+          "id" : "w-151",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 0,
+              "left" : 0,
+              "right" : 0,
+              "top" : 0
+            },
+            "spacing" : 16
+          },
+          "name" : "Type · Avenir Next",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 648,
+          "x" : 48,
+          "y" : 409
+        },
+        {
+          "children" : [
+            {
+              "height" : 28,
+              "id" : "w-153",
+              "name" : "Spacing",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Spacing",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 500
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-96",
+                          "name" : "4",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "4",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-97",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-98",
+                      "name" : "4 pt",
+                      "type" : "rectangle",
+                      "width" : 4,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-99",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 4",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 52,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-100",
+                          "name" : "8",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "8",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-101",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-102",
+                      "name" : "8 pt",
+                      "type" : "rectangle",
+                      "width" : 8,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-103",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 8",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 56,
+                  "x" : 0,
+                  "y" : 25
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-104",
+                          "name" : "12",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "12",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-105",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-106",
+                      "name" : "12 pt",
+                      "type" : "rectangle",
+                      "width" : 12,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-107",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 12",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 60,
+                  "x" : 0,
+                  "y" : 50
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-108",
+                          "name" : "16",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "16",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-109",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-110",
+                      "name" : "16 pt",
+                      "type" : "rectangle",
+                      "width" : 16,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-111",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 16",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 0,
+                  "y" : 75
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-112",
+                          "name" : "24",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "24",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-113",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-114",
+                      "name" : "24 pt",
+                      "type" : "rectangle",
+                      "width" : 24,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-115",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 24",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 72,
+                  "x" : 0,
+                  "y" : 100
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-116",
+                          "name" : "32",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "32",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-117",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-118",
+                      "name" : "32 pt",
+                      "type" : "rectangle",
+                      "width" : 32,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-119",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 32",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 80,
+                  "x" : 0,
+                  "y" : 125
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-120",
+                          "name" : "48",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "48",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-121",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-122",
+                      "name" : "48 pt",
+                      "type" : "rectangle",
+                      "width" : 48,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-123",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 48",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 96,
+                  "x" : 0,
+                  "y" : 150
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "height" : 17,
+                          "id" : "w-124",
+                          "name" : "64",
+                          "sizing" : {
+                            "horizontal" : "fill",
+                            "vertical" : "hug"
+                          },
+                          "text" : {
+                            "align" : "left",
+                            "autoResize" : "height",
+                            "color" : "#6B6874",
+                            "content" : "64",
+                            "fontFamily" : "Avenir Next",
+                            "fontSize" : 12,
+                            "fontWeight" : 500
+                          },
+                          "type" : "text",
+                          "width" : 32,
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      ],
+                      "height" : 17,
+                      "id" : "w-125",
+                      "layout" : {
+                        "align" : "start",
+                        "crossAlign" : "start",
+                        "direction" : "vertical",
+                        "padding" : {
+                          "bottom" : 0,
+                          "left" : 0,
+                          "right" : 0,
+                          "top" : 0
+                        },
+                        "spacing" : 0
+                      },
+                      "name" : "Value",
+                      "sizing" : {
+                        "horizontal" : "fixed",
+                        "vertical" : "hug"
+                      },
+                      "type" : "frame",
+                      "width" : 32,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "fill" : "#1F6B57",
+                      "height" : 16,
+                      "id" : "w-126",
+                      "name" : "64 pt",
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 48,
+                      "y" : 0.5
+                    }
+                  ],
+                  "height" : 17,
+                  "id" : "w-127",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "horizontal",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 16
+                  },
+                  "name" : "Space / 64",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 112,
+                  "x" : 0,
+                  "y" : 175
+                }
+              ],
+              "height" : 192,
+              "id" : "w-152",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "vertical",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 8
+              },
+              "name" : "Scale",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 112,
+              "x" : 0,
+              "y" : 44
+            }
+          ],
+          "height" : 236,
+          "id" : "w-154",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 0,
+              "left" : 0,
+              "right" : 0,
+              "top" : 0
+            },
+            "spacing" : 16
+          },
+          "name" : "Spacing",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 648,
+          "x" : 48,
+          "y" : 827
+        },
+        {
+          "children" : [
+            {
+              "height" : 28,
+              "id" : "w-155",
+              "name" : "Corner radius",
+              "sizing" : {
+                "horizontal" : "fill",
+                "vertical" : "hug"
+              },
+              "text" : {
+                "align" : "left",
+                "autoResize" : "height",
+                "color" : "#1D1C21",
+                "content" : "Corner radius",
+                "fontFamily" : "Avenir Next",
+                "fontSize" : 20,
+                "fontWeight" : 500
+              },
+              "type" : "text",
+              "width" : 648,
+              "x" : 0,
+              "y" : 0
+            },
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "fill" : "#E1EEE9",
+                      "height" : 64,
+                      "id" : "w-128",
+                      "name" : "Radius 0",
+                      "stroke" : {
+                        "color" : "#1F6B57",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-129",
+                      "name" : "0",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "0",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 8,
+                      "x" : 28,
+                      "y" : 72
+                    }
+                  ],
+                  "height" : 89,
+                  "id" : "w-130",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Radius / 0",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 0,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 4,
+                      "fill" : "#E1EEE9",
+                      "height" : 64,
+                      "id" : "w-131",
+                      "name" : "Radius 4",
+                      "stroke" : {
+                        "color" : "#1F6B57",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-132",
+                      "name" : "4",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "4",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 8,
+                      "x" : 28,
+                      "y" : 72
+                    }
+                  ],
+                  "height" : 89,
+                  "id" : "w-133",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Radius / 4",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 88,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 8,
+                      "fill" : "#E1EEE9",
+                      "height" : 64,
+                      "id" : "w-134",
+                      "name" : "Radius 8",
+                      "stroke" : {
+                        "color" : "#1F6B57",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-135",
+                      "name" : "8",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "8",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 8,
+                      "x" : 28,
+                      "y" : 72
+                    }
+                  ],
+                  "height" : 89,
+                  "id" : "w-136",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Radius / 8",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 176,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 16,
+                      "fill" : "#E1EEE9",
+                      "height" : 64,
+                      "id" : "w-137",
+                      "name" : "Radius 16",
+                      "stroke" : {
+                        "color" : "#1F6B57",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-138",
+                      "name" : "16",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "16",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 15,
+                      "x" : 24.5,
+                      "y" : 72
+                    }
+                  ],
+                  "height" : 89,
+                  "id" : "w-139",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Radius / 16",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 264,
+                  "y" : 0
+                },
+                {
+                  "children" : [
+                    {
+                      "cornerRadius" : 999,
+                      "fill" : "#E1EEE9",
+                      "height" : 64,
+                      "id" : "w-140",
+                      "name" : "Radius 999",
+                      "stroke" : {
+                        "color" : "#1F6B57",
+                        "width" : 1
+                      },
+                      "type" : "rectangle",
+                      "width" : 64,
+                      "x" : 0,
+                      "y" : 0
+                    },
+                    {
+                      "height" : 17,
+                      "id" : "w-141",
+                      "name" : "999",
+                      "text" : {
+                        "align" : "left",
+                        "autoResize" : "width-and-height",
+                        "color" : "#6B6874",
+                        "content" : "999",
+                        "fontFamily" : "Avenir Next",
+                        "fontSize" : 12,
+                        "fontWeight" : 500
+                      },
+                      "type" : "text",
+                      "width" : 22,
+                      "x" : 21,
+                      "y" : 72
+                    }
+                  ],
+                  "height" : 89,
+                  "id" : "w-142",
+                  "layout" : {
+                    "align" : "start",
+                    "crossAlign" : "center",
+                    "direction" : "vertical",
+                    "padding" : {
+                      "bottom" : 0,
+                      "left" : 0,
+                      "right" : 0,
+                      "top" : 0
+                    },
+                    "spacing" : 8
+                  },
+                  "name" : "Radius / 999",
+                  "sizing" : {
+                    "horizontal" : "hug",
+                    "vertical" : "hug"
+                  },
+                  "type" : "frame",
+                  "width" : 64,
+                  "x" : 352,
+                  "y" : 0
+                }
+              ],
+              "height" : 89,
+              "id" : "w-143",
+              "layout" : {
+                "align" : "start",
+                "crossAlign" : "start",
+                "direction" : "horizontal",
+                "padding" : {
+                  "bottom" : 0,
+                  "left" : 0,
+                  "right" : 0,
+                  "top" : 0
+                },
+                "spacing" : 24
+              },
+              "name" : "Radii",
+              "sizing" : {
+                "horizontal" : "hug",
+                "vertical" : "hug"
+              },
+              "type" : "frame",
+              "width" : 416,
+              "x" : 0,
+              "y" : 44
+            }
+          ],
+          "height" : 133,
+          "id" : "w-156",
+          "layout" : {
+            "align" : "start",
+            "crossAlign" : "start",
+            "direction" : "vertical",
+            "padding" : {
+              "bottom" : 0,
+              "left" : 0,
+              "right" : 0,
+              "top" : 0
+            },
+            "spacing" : 16
+          },
+          "name" : "Corner radius",
+          "sizing" : {
+            "horizontal" : "fill",
+            "vertical" : "hug"
+          },
+          "type" : "frame",
+          "width" : 648,
+          "x" : 48,
+          "y" : 1111
+        }
+      ],
+      "fill" : "#FFFFFF",
+      "height" : 1292,
+      "id" : "w-157",
+      "layout" : {
+        "align" : "start",
+        "crossAlign" : "start",
+        "direction" : "vertical",
+        "padding" : {
+          "bottom" : 48,
+          "left" : 48,
+          "right" : 48,
+          "top" : 48
+        },
+        "spacing" : 48
+      },
+      "name" : "Design system",
+      "sizing" : {
+        "horizontal" : "fixed",
+        "vertical" : "hug"
+      },
+      "stroke" : {
+        "color" : "#E4E1DB",
+        "width" : 1
+      },
+      "type" : "frame",
+      "width" : 744,
+      "x" : 1560,
+      "y" : 0
+    }
+  ],
+  "version" : 5
+}

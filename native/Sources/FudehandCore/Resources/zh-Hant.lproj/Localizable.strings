@@ -78,6 +78,9 @@
 "No project files opened yet" = "還沒有打開過的專案檔";
 "Templates" = "範本";
 "No templates" = "暫無範本";
+"Mobile App" = "行動應用程式";
+"Web Page" = "網頁";
+"Dashboard" = "儀表板";
 "Create an untitled design document from “%@”" = "從「%@」新增未命名設計文件";
 "File deleted or moved" = "檔案已刪除或移動";
 "Open" = "打開";

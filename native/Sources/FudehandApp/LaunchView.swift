@@ -110,14 +110,14 @@ struct LaunchView: View {
                             Button { store.newDocument(fromTemplate: template) } label: {
                                 VStack(spacing: 8) {
                                     Image(systemName: "doc.richtext").font(.system(size: 28)).foregroundStyle(.secondary)
-                                    Text(template.name).lineLimit(1)
+                                    Text(template.title).lineLimit(1)
                                 }
                                 .frame(width: 120, height: 88)
                                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .help(L("Create an untitled design document from “%@”", template.name))
+                            .help(L("Create an untitled design document from “%@”", template.title))
                         }
                     }
                 }
