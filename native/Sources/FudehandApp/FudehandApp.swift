@@ -130,6 +130,7 @@ struct FudehandApp: App {
                 Button(L("Fit All")) { store.fitAll() }.keyboardShortcut("0")
                 Divider()
                 Button(L("Insert Image…")) { store.insertImage() }.keyboardShortcut("i", modifiers: [.command, .shift])
+                Button(L("Save Version Snapshot")) { store.saveVersionSnapshotOfSelection() }.keyboardShortcut("s", modifiers: [.command, .option])
                 Button(L("Play Prototype")) { store.playPrototype() }.keyboardShortcut(.return, modifiers: [.command, .option])
                 Button(L("Chat")) { store.showingInspector = true; store.inspectorTab = .chat }.keyboardShortcut("a", modifiers: [.command, .shift])
             }

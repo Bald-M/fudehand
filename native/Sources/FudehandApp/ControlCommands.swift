@@ -95,6 +95,11 @@ extension FudehandStore {
             let node = try requireNode(id)
             let png = try DesignRenderer.snapshotPNG(node, scale: scale)
             return ["id": id, "mimeType": "image/png", "data": png.base64EncodedString(), "width": node.width, "height": node.height]
+        case .saveVersionSnapshot(let frame, let note):
+            let node = try saveVersionSnapshot(of: frame, note: note, step: "Agent: Save Version Snapshot")
+            return versionSnapshotEntry(try requireNode(node.id))
+        case .listVersionSnapshots(let frame):
+            return ["snapshots": editor.document.versionSnapshots(of: frame).map(versionSnapshotEntry)]
         case .listFonts:
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):
@@ -172,6 +177,19 @@ extension FudehandStore {
     func prototypePlayback() -> [String: Any] {
         let frame = prototypeWindowOpen ? prototypeFrame.flatMap { Prototype.frame($0, in: editor.document) } : nil
         return ["open": prototypeWindowOpen, "frame": frame?.id ?? NSNull(), "name": frame?.name ?? NSNull()]
+    }
+
+    /// A version snapshot as the Agent reads it: the record, where the snapshot and its frame are on the canvas (absolute
+    /// coordinates; `frameBounds` and `frameName` are null once the frame is deleted), and its opacity, for comparing the two.
+    private func versionSnapshotEntry(_ node: DesignNode) -> [String: Any] {
+        let document = editor.document
+        func bounds(_ rect: Rect?) -> Any {
+            rect.map { ["x": $0.x, "y": $0.y, "width": $0.width, "height": $0.height] as [String: Any] } ?? NSNull()
+        }
+        let snapshot = node.versionSnapshot!
+        return ["id": node.id, "name": node.name, "frame": snapshot.frame, "frameName": document.node(snapshot.frame)?.name ?? NSNull(),
+                "createdAt": snapshot.timestamp, "note": snapshot.note, "opacity": node.opacity,
+                "bounds": bounds(document.worldRect(node.id)), "frameBounds": bounds(document.worldRect(snapshot.frame))]
     }
 
     private func requireNode(_ id: String) throws -> DesignNode {

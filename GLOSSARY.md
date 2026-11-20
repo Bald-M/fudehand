@@ -25,6 +25,9 @@ _Avoid_: element (元素), component (组件) (components mean something else an
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
 _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
+**Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
+_Avoid_: version history, backup (a snapshot never restores the frame), snapshot alone (`design_snapshot` is the Agent's own PNG capture, which adds nothing to the document)
+
 **Group (分组 / 群組)**: A layer used to organize child layers. It cannot use auto layout or be resized with handles, and its size always equals the union of its child layers. Inside an auto layout frame a group is placed like any other child layer but ignores fill container (fill) and cross-axis stretch: it keeps the size of its child layers and takes no share of the remaining space.
 
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
