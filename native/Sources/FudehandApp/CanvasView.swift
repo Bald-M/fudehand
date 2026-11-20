@@ -392,6 +392,10 @@ final class FudehandCanvasView: NSView {
         return DesignHitTest.selectable(path: path, selection: selection, index: index, deep: deep).map(HitTarget.node) ?? .empty
     }
 
+    /// While a thread's popover holds the keyboard, the first click back on the canvas acts (collapsing the thread or
+    /// pinning a new note) instead of only making the editor window key again.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { annotationPopover != nil }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(convert(point, from: superview)) ? self : nil
     }

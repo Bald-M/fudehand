@@ -130,13 +130,10 @@ struct AnnotationThread: View {
             guard !blank else { return }
             do { try submit(reply); reply = "" } catch { store.alert = error.localizedDescription }
         }
-        return HStack(alignment: .bottom, spacing: 8) {
-            TextField(prompt, text: $reply, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...6)
-                .focused($composing)
-                .onSubmit(send)
+        return VStack(alignment: .trailing, spacing: 8) {
+            NoteEditor(prompt: prompt, text: $reply).focused($composing)
             Button(action, action: send).disabled(blank)
+                .keyboardShortcut(editing == nil ? KeyboardShortcut(.return, modifiers: .command) : nil)
         }
     }
 
@@ -152,12 +149,12 @@ struct AnnotationThread: View {
                     .buttonStyle(.borderless).help(deleteLabel).accessibilityLabel(deleteLabel)
             }
             if editing == id {
-                TextField("", text: $editText, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(1...8)
-                    .onSubmit(save)
+                NoteEditor(prompt: L("Edit"), text: $editText)
                 HStack {
                     Spacer()
                     Button(L("Cancel")) { editing = nil }
                     Button(L("Save"), action: save)
+                        .keyboardShortcut(.return, modifiers: .command)
                         .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } else {
@@ -174,5 +171,29 @@ struct AnnotationThread: View {
 
     private func perform(_ change: () throws -> Void) {
         do { try change() } catch { store.alert = error.localizedDescription }
+    }
+}
+
+/// A multi-line field for an annotation's text: Return starts a new line, and ⌘Return presses the button beside it.
+/// (A vertical `TextField` with the rounded-border style does not wrap on macOS, so a long note scrolled out of view.)
+private struct NoteEditor: View {
+    let prompt: String
+    @Binding var text: String
+
+    var body: some View {
+        TextEditor(text: $text)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
+            .frame(height: 64)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(prompt).foregroundStyle(.tertiary).padding(.horizontal, 9).padding(.vertical, 6).allowsHitTesting(false)
+                }
+            }
+            .accessibilityLabel(prompt)
     }
 }
