@@ -132,3 +132,17 @@ private func card(_ effects: [DesignEffect], type: NodeType = .rectangle) -> Des
     #expect(abs(pixel(image, 160, 210)[0] - 128) < 4)
     #expect(pixel(image, 160, 224) == [255, 255, 255, 255])
 }
+
+@Test @MainActor func backgroundBlursKeepTheirPlaybackAnimationWhenRebuilt() throws {
+    let renderer = DesignRenderer()
+    var node = card([DesignEffect(type: .backgroundBlur)])
+    renderer.sync([node])
+    let backdrop = try #require(renderer.backdrops(for: "c").first)
+    #expect(backdrop.superlayer === renderer.root && renderer.root.sublayers?.firstIndex(of: backdrop) == 0)
+    backdrop.add(CABasicAnimation(keyPath: "opacity"), forKey: "fudehand.animation")
+    // A hover state changing the fill rebuilds the blur, which keeps the animation.
+    node.fill = .white
+    renderer.sync([node])
+    let rebuilt = try #require(renderer.backdrops(for: "c").first)
+    #expect(rebuilt !== backdrop && rebuilt.animation(forKey: "fudehand.animation") != nil)
+}

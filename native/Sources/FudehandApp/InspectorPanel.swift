@@ -752,13 +752,16 @@ private struct NodeInspector: View {
     }
 }
 
-/// The layer's effects: one row per effect, in drawing order (later ones on top), each with its type, settings that expand
-/// below it, show or hide, and remove; a row's context menu moves it. Empty, the section is a single line with its add menu.
+/// The layer's effects: one row per effect, the frontmost at the top like the layers panel, each with its type, settings that
+/// expand below it, show or hide, and remove; a row's context menu moves it. Empty, the section is a single line with its add menu.
 private struct EffectsSection: View {
     let node: DesignNode
     let update: (String, String?, @escaping (inout DesignNode) -> Void) -> Void
-    /// The rows whose settings are shown.
+    /// The rows whose settings are shown, by effect index.
     @State private var expanded: Set<Int> = []
+    /// The effect count this view's own add or remove leads to; any other change to the count (undo, the Agent) collapses
+    /// every row, since the indexes no longer name the same effects.
+    @State private var expectedCount: Int?
     @Environment(\.inspectedLayer) private var layer
 
     var body: some View {
@@ -770,6 +773,7 @@ private struct EffectsSection: View {
                     ForEach(EffectType.allCases, id: \.self) { type in
                         Button(Self.name(type)) {
                             let index = node.effects.count
+                            expectedCount = index + 1
                             update("Add Effect", nil) { $0.effects.append(DesignEffect(type: type)) }
                             expanded.insert(index)
                         }
@@ -778,12 +782,16 @@ private struct EffectsSection: View {
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
             }
-            ForEach(Array(node.effects.enumerated()), id: \.offset) { index, effect in row(index, effect) }
+            ForEach(node.effects.indices.reversed(), id: \.self) { index in row(index, node.effects[index]) }
         }
         .font(.system(size: 12))
         .padding(.horizontal, 14).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onChange(of: layer) { expanded = [] }
+        .onChange(of: layer) { expanded = []; expectedCount = nil }
+        .onChange(of: node.effects.count) { _, count in
+            if count != expectedCount { expanded = [] }
+            expectedCount = nil
+        }
         Divider()
     }
 
@@ -816,14 +824,16 @@ private struct EffectsSection: View {
                 .help(effect.visible ? L("Hide effect") : L("Show effect"))
                 .accessibilityLabel(effect.visible ? L("Hide effect") : L("Show effect"))
             Button {
+                expectedCount = node.effects.count - 1
                 update("Remove Effect", nil) { if $0.effects.indices.contains(index) { $0.effects.remove(at: index) } }
                 expanded = Set(expanded.compactMap { $0 < index ? $0 : $0 > index ? $0 - 1 : nil })
             } label: { Image(systemName: "minus").iconHitTarget() }
                 .buttonStyle(.borderless).help(L("Remove effect")).accessibilityLabel(L("Remove effect"))
         }
         .contextMenu {
-            Button(L("Move Up")) { move(index, by: -1) }.disabled(index == 0)
-            Button(L("Move Down")) { move(index, by: 1) }.disabled(index == node.effects.count - 1)
+            // Up brings the effect forward, drawn later.
+            Button(L("Move Up")) { move(index, by: 1) }.disabled(index == node.effects.count - 1)
+            Button(L("Move Down")) { move(index, by: -1) }.disabled(index == 0)
         }
         if open {
             VStack(alignment: .leading, spacing: 8) {

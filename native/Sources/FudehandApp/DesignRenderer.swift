@@ -148,6 +148,11 @@ final class DesignRenderer {
         if record.applied.map(inputs) != inputs(node) {
             let built = wanted ? EffectLayers.build(node, scale: contentsScale) : EffectLayers.Built()
             record.innerShadows = built.inner
+            // Playback animations added to the old background blurs (see `backdrops(for:)`) carry over, so a restyle mid-animation
+            // (a hover fill, the next text sequence item) does not stop the blur while its layer keeps moving.
+            for (old, new) in zip(record.backdrops, built.backdrops) {
+                for key in old.animationKeys() ?? [] { if let animation = old.animation(forKey: key) { new.add(animation, forKey: key) } }
+            }
             record.backdrops = built.backdrops
             record.copies = built.copies
             record.layer.filters = built.filters.isEmpty ? nil : built.filters
