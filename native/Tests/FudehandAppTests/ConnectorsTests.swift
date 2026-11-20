@@ -186,9 +186,10 @@ private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", 
     #expect(try String(contentsOf: target, encoding: .utf8).contains("serverName: fudehand"))
 }
 
-@Test @MainActor func everyConnectorHasAnIconTheSystemCanDraw() throws {
-    for connector in AgentConnector.allCases {
-        let image = try #require(ConnectorIcon.image(for: connector), "\(connector)")
+@Test @MainActor func everyConnectorAndChatProviderHasAnIconTheSystemCanDraw() throws {
+    let icons = try AgentConnector.allCases.map { ("\($0)", try #require(ConnectorIcon.image(for: $0), "\($0)")) }
+        + ChatSettings.providers.map { ($0.id, try #require(ConnectorIcon.image(forProvider: $0.id), "\($0.id)")) }
+    for (name, image) in icons {
         #expect(image.size == NSSize(width: 24, height: 24))
         // Drawn into a bitmap, the icon must cover part of it, but not all of it (a broken path draws nothing or a stray fill).
         let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 48, pixelsHigh: 48, bitsPerSample: 8, samplesPerPixel: 4,
@@ -199,7 +200,7 @@ private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", 
         NSGraphicsContext.restoreGraphicsState()
         var painted = 0
         for x in 0..<48 { for y in 0..<48 where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { painted += 1 } }
-        #expect(painted > 48 * 48 / 10, "\(connector)")
-        #expect(painted < 48 * 48, "\(connector)")
+        #expect(painted > 48 * 48 / 10, "\(name)")
+        #expect(painted < 48 * 48, "\(name)")
     }
 }
