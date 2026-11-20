@@ -67,7 +67,7 @@ Interaction follows Figma.
 - Scroll wheel or trackpad scrolling, Space + drag, middle-mouse drag, or dragging with the Hand tool pans the canvas. The cursor turns into a hand as soon as Space is pressed, and reverts on release.
 - ⌘ / ⌃ + scroll wheel, or trackpad pinch, zooms anchored at the pointer, within 5%–400%.
 - The window toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, Fit All, and Play Prototype (see "Prototype" below). Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
-- When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately.
+- When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately; with *Reduce motion* on in System Settings › Accessibility › Display they jump straight to the end (see [Accessibility](accessibility.md)).
 
 **Undo**
 

@@ -99,7 +99,7 @@ struct ChatPanel: View {
     private var header: some View {
         HStack(spacing: 8) {
             tabStrip
-            Button { chat.newConversation(); inputFocused = true } label: { Image(systemName: "plus") }
+            Button { chat.newConversation(); inputFocused = true } label: { Image(systemName: "plus").iconHitTarget() }
                 .buttonStyle(.borderless).help(L("New conversation")).accessibilityLabel(L("New conversation"))
                 .disabled(chat.transcript.entries.isEmpty)
             Menu {
@@ -117,7 +117,7 @@ struct ChatPanel: View {
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L("Conversation history"))
-            Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape") }
+            Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape").iconHitTarget() }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.leading, 12).padding(.trailing, 16).padding(.vertical, 8)
     }
@@ -158,12 +158,12 @@ struct ChatPanel: View {
             }
             .buttonStyle(.plain).help(title).accessibilityAddTraits(selected ? .isSelected : [])
             Button { chat.close(tab.id) } label: {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).frame(width: 16, height: 16).contentShape(Rectangle())
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).iconHitTarget()
             }
             .buttonStyle(.plain).help(L("Close conversation")).accessibilityLabel(L("Close conversation"))
         }
         .foregroundStyle(selected ? .primary : .secondary)
-        .padding(.leading, 10).padding(.trailing, 4).padding(.vertical, 4)
+        .padding(.leading, 10).padding(.trailing, 2).padding(.vertical, 2)
         .background(selected ? AnyShapeStyle(Color(nsColor: .textBackgroundColor)) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(selected ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)))
         .id(tab.id)
@@ -272,7 +272,7 @@ struct ChatPanel: View {
                     Image(systemName: "pencil")
                     Text(L("Editing the last message"))
                     Spacer()
-                    Button { editing = false } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                    Button { editing = false } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).iconHitTarget() }
                         .buttonStyle(.plain).help(L("Cancel editing")).accessibilityLabel(L("Cancel editing"))
                 }.font(.caption).foregroundStyle(.secondary)
             }
@@ -299,10 +299,10 @@ struct ChatPanel: View {
                 ContextRing(usage: chat.contextUsage)
                 if busy {
                     let stop = waiting ? L("Stop and cancel the question") : chat.transcript.compacting ? L("Stop compacting") : L("Stop replying")
-                    Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
+                    Button { chat.stopReply() } label: { Image(systemName: "stop.circle.fill").font(.title2).iconHitTarget() }
                         .buttonStyle(.borderless).help(stop).accessibilityLabel(stop)
                 } else {
-                    Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2) }
+                    Button(action: submit) { Image(systemName: "arrow.up.circle.fill").font(.title2).iconHitTarget() }
                         .buttonStyle(.borderless).help(L("Send (Return)")).accessibilityLabel(L("Send"))
                         .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -343,12 +343,12 @@ struct ChatPanel: View {
         HStack(spacing: 6) {
             Text(modeTitle(mode)).font(.caption.weight(.semibold))
             Button { chat.mode = nil } label: {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).frame(width: 16, height: 16).contentShape(Rectangle())
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).iconHitTarget()
             }
             .buttonStyle(.plain).help(L("Leave %@", modeTitle(mode))).accessibilityLabel(L("Leave %@", modeTitle(mode)))
         }
         .foregroundStyle(Color.accentColor)
-        .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 2)
+        .padding(.leading, 8).padding(.trailing, 2)
         .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
     }
 
@@ -451,11 +451,11 @@ struct ChatPanel: View {
                     HStack(spacing: 4) {
                         Image(systemName: NodeType(rawValue: layer.type)?.symbol ?? "square").font(.caption2)
                         Text(layer.name).font(.caption).lineLimit(1)
-                        Button { dismissed.insert(layer.id) } label: { Image(systemName: "xmark").font(.system(size: 8, weight: .bold)) }
+                        Button { dismissed.insert(layer.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).iconHitTarget() }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                             .help(L("Remove from context")).accessibilityLabel(L("Remove %@ from context", layer.name))
                     }
-                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .padding(.leading, 7).padding(.trailing, 2)
                     .background(.quaternary.opacity(0.6), in: Capsule())
                 }
             }

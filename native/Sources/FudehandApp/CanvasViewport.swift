@@ -88,6 +88,8 @@ extension FudehandCanvasView {
         updateIndicator(force: true)
         updateContentsScale()
         host?.canvasViewportSettled(liveViewport)
+        // The layers' VoiceOver frames moved.
+        NSAccessibility.post(element: self, notification: .layoutChanged)
     }
 
     /// Wheel events have no end marker, so a pause settles the viewport.
@@ -107,11 +109,12 @@ extension FudehandCanvasView {
         settleViewport()
     }
 
-    /// Applies a store request: animated ones run from the live viewport; others jump without reporting back.
+    /// Applies a store request: animated ones run from the live viewport, unless the system asks to reduce motion;
+    /// others jump without reporting back.
     func apply(_ request: ViewportRequest) {
         stopAnimation()
         settleWork?.cancel()
-        if request.animated, window != nil, bounds.width > 0, bounds.height > 0 {
+        if request.animated, !reduceMotion(), window != nil, bounds.width > 0, bounds.height > 0 {
             animation = ViewportAnimationRun(from: liveViewport, to: request.viewport, start: CACurrentMediaTime())
             updateDisplayLink()
         } else {
@@ -120,6 +123,7 @@ extension FudehandCanvasView {
             applyViewport()
             updateIndicator(force: true)
             updateContentsScale()
+            NSAccessibility.post(element: self, notification: .layoutChanged)
         }
     }
 

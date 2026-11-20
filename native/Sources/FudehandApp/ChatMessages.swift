@@ -55,7 +55,7 @@ private struct CompactedSummary: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                     Text(L("Context compacted"))
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 8, weight: .bold))
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .bold))
                 }
                 .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity).contentShape(Rectangle())
             }
