@@ -78,6 +78,9 @@
 "No project files opened yet" = "還沒有打開過的專案檔";
 "Templates" = "範本";
 "No templates" = "暫無範本";
+"Mobile App" = "行動應用程式";
+"Web Page" = "網頁";
+"Dashboard" = "儀表板";
 "Create an untitled design document from “%@”" = "從「%@」新增未命名設計文件";
 "File deleted or moved" = "檔案已刪除或移動";
 "Open" = "打開";
@@ -161,17 +164,12 @@
 "Black" = "黑";
 "Auto Layout" = "自動佈局";
 "Direction" = "方向";
-"Spacing" = "間距";
 "Padding" = "內距";
 "Top" = "上";
 "Right" = "右";
 "Bottom" = "下";
 "Left" = "左";
-"Main axis" = "主軸";
-"Cross axis" = "交叉軸";
-"Start" = "起點";
 "Center" = "置中";
-"End" = "終點";
 "Space between" = "兩端分佈";
 "Remove Auto Layout" = "移除自動佈局";
 "Add Auto Layout" = "加入自動佈局";
@@ -307,6 +305,9 @@
 "Take snapshot" = "截圖";
 "Focus layer" = "聚焦圖層";
 "Zoom canvas" = "縮放畫布";
+"Read prototype window" = "讀取原型視窗";
+"Close prototype window" = "關閉原型視窗";
+"Change view" = "變更檢視";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "找不到 Fudehand 原始碼目錄，無法連線";
@@ -439,6 +440,39 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+
+/* Properties panel redesign (#189) */
+"%@ opacity" = "%@透明度";
+"Top left" = "左上";
+"Top center" = "頂部置中";
+"Top right" = "右上";
+"Center left" = "左側置中";
+"Center right" = "右側置中";
+"Bottom left" = "左下";
+"Bottom center" = "底部置中";
+"Bottom right" = "右下";
+"T|padding" = "上";
+"R|padding" = "右";
+"B|padding" = "下";
+"L|padding" = "左";
+"Hug|sizing" = "包覆";
+"Fill|sizing" = "填滿";
+"Gap" = "間距";
+"Select one layer to edit its prototype settings." = "選取單一圖層後可修改其原型設定。";
+"Select a layer to edit its interaction, states, scrolling, and animation here." = "選取圖層後在這裡修改互動、狀態、捲動與動畫。";
+"%@ Snapshot" = "%@ 快照";
+"Save Version Snapshot" = "儲存版本快照";
+"Select one frame to save a version snapshot." = "請選取一個畫框再儲存版本快照。";
+"Version Snapshots" = "版本快照";
+"Version Snapshot" = "版本快照";
+"Deleted" = "已刪除";
+"Saved|version snapshot time" = "儲存時間";
+"Note" = "說明";
+"Snapshot note" = "快照說明";
+"Overlay on Frame" = "疊加到畫框上";
+"Place Beside Frame" = "放回畫框旁邊";
+"Save version snapshot" = "儲存版本快照";
+"List version snapshots" = "列出版本快照";
 
 /* Effects */
 "Effects" = "效果";

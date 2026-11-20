@@ -2,7 +2,8 @@ import AppKit
 import FudehandCore
 import SwiftUI
 
-/// The inspector on the right: the "Design" tab edits the properties of the selected layers, and the "Chat" tab is the Agent chat panel.
+/// The inspector on the right: the "Design" tab edits the selected layers' look and layout, the "Prototype" tab their
+/// interaction, states, scrolling, and animation, and the "Chat" tab is the Agent chat panel.
 struct InspectorPanel: View {
     @ObservedObject var store: FudehandStore
     @ObservedObject var selection: LayerSelection
@@ -14,14 +15,10 @@ struct InspectorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker(L("Inspector"), selection: $store.inspectorTab) {
-                Text(L("Design")).tag(InspectorTab.design)
-                Text(L("Chat")).tag(InspectorTab.chat)
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(10)
+            InspectorTabs(selection: $store.inspectorTab)
             Divider()
             switch store.inspectorTab {
-            case .design: DesignInspector(store: store, selection: selection)
+            case .design, .prototype: DesignInspector(store: store, selection: selection, page: store.inspectorTab)
             case .chat:
                 let selected = selection.ids.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
                 ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
@@ -32,9 +29,44 @@ struct InspectorPanel: View {
     }
 }
 
+/// The tab row at the top of the inspector: text tabs, the selected one emphasized.
+private struct InspectorTabs: View {
+    @Binding var selection: InspectorTab
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(InspectorTab.allCases, id: \.self) { tab in
+                let selected = tab == selection
+                Button { selection = tab } label: {
+                    Text(Self.title(tab))
+                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                        .foregroundStyle(selected ? .primary : .secondary)
+                        .padding(.horizontal, 8).frame(height: InspectorMetrics.fieldHeight)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.primary.opacity(0.08) : .clear))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8).frame(height: 44)
+        .accessibilityElement(children: .contain).accessibilityLabel(L("Inspector"))
+    }
+
+    static func title(_ tab: InspectorTab) -> String {
+        switch tab {
+        case .design: return L("Design")
+        case .prototype: return L("Prototype")
+        case .chat: return L("Chat")
+        }
+    }
+}
+
 private struct DesignInspector: View {
     @ObservedObject var store: FudehandStore
     @ObservedObject var selection: LayerSelection
+    let page: InspectorTab
 
     var body: some View {
         let selected = selection.ids.compactMap { store.document.node($0) }
@@ -43,20 +75,32 @@ private struct DesignInspector: View {
                 if selected.count == 1, let node = selected.first {
                     // Kept when the selection moves to another layer, instead of rebuilt: rebuilding every control took most of the
                     // time of a selection change (#142). Fields reset their drafts on `inspectedLayer` instead.
-                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id)).environment(\.inspectedLayer, node.id)
-                } else if selected.count > 1 {
-                    Section(title: L("%d layers selected", selected.count)) {
-                        SliderRow(label: L("Opacity"), value: selected.map(\.opacity).reduce(0, +) / Double(selected.count)) { value in
-                            store.edit("Change Opacity", coalescing: "\(selected.map(\.id).sorted().joined(separator: ",")).opacity") { document in
-                                for node in selected { try document.update(node.id) { $0.opacity = value } }
+                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id), page: page).environment(\.inspectedLayer, node.id)
+                } else if selected.count > 1 && page == .design {
+                    InspectorSection(L("%d layers selected", selected.count)) {
+                        HStack(spacing: InspectorMetrics.gap) {
+                            NumberField(label: L("Opacity"), symbol: "circle.lefthalf.filled", value: selected.map(\.opacity).reduce(0, +) / Double(selected.count),
+                                        percent: true, scrub: 0.01) { value in
+                                store.edit("Change Opacity", coalescing: "\(selected.map(\.id).sorted().joined(separator: ",")).opacity") { document in
+                                    for node in selected { try document.update(node.id) { $0.opacity = value } }
+                                }
                             }
+                            Spacer().frame(maxWidth: .infinity)
                         }
                     }
+                    // A typed draft belongs to this set of layers and is dropped when the selection changes.
+                    .environment(\.inspectedLayer, selected.map(\.id).sorted().joined(separator: ","))
+                } else if selected.count > 1 {
+                    InspectorSection(L("%d layers selected", selected.count)) {
+                        Text(L("Select one layer to edit its prototype settings."))
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 } else {
-                    Section(title: L("Document")) {
+                    InspectorSection(L("Document")) {
                         LabeledContent(L("Name"), value: store.title)
                         LabeledContent(L("Layers"), value: "\(store.document.nodeCount)")
-                        Text(L("Select a layer to edit its position, size, fill, stroke, text, and auto layout here."))
+                        Text(page == .design ? L("Select a layer to edit its position, size, fill, stroke, text, and auto layout here.")
+                                             : L("Select a layer to edit its interaction, states, scrolling, and animation here."))
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -67,59 +111,6 @@ private struct DesignInspector: View {
     private func parentLayout(of id: String) -> AutoLayout? {
         guard let parent = store.document.parentID(of: id) ?? nil else { return nil }
         return store.document.node(parent)?.layout
-    }
-}
-
-private struct Section<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            content
-        }
-        .font(.system(size: 12))
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        Divider()
-    }
-}
-
-/// Number input: committed on Return or when focus is lost.
-private struct NumberField: View {
-    let label: String
-    let value: Double
-    var minimum: Double? = nil
-    var disabled = false
-    let commit: (Double) -> Void
-    @State private var text = ""
-    @FocusState private var focused: Bool
-    @Environment(\.inspectedLayer) private var layer
-    /// The layer the text was typed for. A draft typed for the previous layer is dropped, never committed to the newly
-    /// selected one, whichever order SwiftUI reports the focus loss and the layer change in.
-    @State private var draftLayer: String?
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(label).foregroundStyle(.secondary).frame(minWidth: 14, alignment: .leading)
-            TextField(label, text: $text)
-                .textFieldStyle(.roundedBorder).monospacedDigit().focused($focused)
-                .onSubmit(submit)
-                .onChange(of: focused) { _, isFocused in if !isFocused { submit() } }
-                .accessibilityLabel(label)
-        }
-        .disabled(disabled)
-        .onAppear { text = NumberInput.format(value); draftLayer = layer }
-        .onChange(of: value) { _, next in if !focused { text = NumberInput.format(next) } }
-        .onChange(of: layer) { text = NumberInput.format(value); draftLayer = layer }
-    }
-
-    private func submit() {
-        guard draftLayer == layer else { text = NumberInput.format(value); draftLayer = layer; return }
-        let next = NumberInput.committedValue(text: text, current: value, minimum: minimum)
-        if let next { commit(next) }
-        text = NumberInput.format(next ?? value)
     }
 }
 
@@ -137,163 +128,190 @@ private struct SliderRow: View {
     }
 }
 
-/// The layer the inspector shows; fields that hold a draft reset it when this changes.
-private struct InspectedLayerKey: EnvironmentKey {
-    static let defaultValue: String? = nil
-}
-
-extension EnvironmentValues {
-    fileprivate var inspectedLayer: String? {
-        get { self[InspectedLayerKey.self] }
-        set { self[InspectedLayerKey.self] = newValue }
-    }
-}
-
-extension DesignColor {
-    var swiftUI: Color { Color(.sRGB, red: r, green: g, blue: b, opacity: a) }
-
-    init(_ color: Color) {
-        let ns = NSColor(color).usingColorSpace(.sRGB) ?? .black
-        self.init(r: Double(ns.redComponent), g: Double(ns.greenComponent), b: Double(ns.blueComponent), a: Double(ns.alphaComponent))
-    }
-}
-
-private struct ColorRow: View {
-    let label: String
-    let color: DesignColor
-    let commit: (DesignColor) -> Void
-    @State private var hex = ""
-    @Environment(\.inspectedLayer) private var layer
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ColorPicker(label, selection: Binding(get: { color.swiftUI }, set: { commit(DesignColor($0)) }), supportsOpacity: true)
-                .labelsHidden()
-            TextField(L("Hex"), text: $hex).textFieldStyle(.roundedBorder).monospaced()
-                .onSubmit { if let next = try? DesignColor(hex: hex.hasPrefix("#") ? hex : "#" + hex) { commit(next) } else { hex = color.hex } }
-                .accessibilityLabel(L("%@ hex", label))
-        }
-        .onAppear { hex = color.hex }
-        .onChange(of: color) { _, next in hex = next.hex }
-        .onChange(of: layer) { hex = color.hex }
-    }
-}
-
 private struct NodeInspector: View {
     @ObservedObject var store: FudehandStore
     let node: DesignNode
     let parentLayout: AutoLayout?
+    let page: InspectorTab
     @State private var name = ""
     @State private var content = ""
     /// The text sequence's items, one per line.
     @State private var sequenceItems = ""
     @State private var previewing = false
     @State private var replacingIcon = false
+    /// The draft of a version snapshot's note.
+    @State private var note = ""
 
     private func update(_ action: String, _ key: String? = nil, _ change: @escaping (inout DesignNode) -> Void) {
         store.updateNode(node.id, action, coalescing: key) { change(&$0) }
     }
 
     var body: some View {
-        Section(title: node.type.title) {
-            TextField(L("Name"), text: $name).textFieldStyle(.roundedBorder)
-                .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
-                .onAppear { name = node.name }
-                .onChange(of: node.name) { _, next in name = next }
-                .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; previewing = false }
-                .accessibilityLabel(L("Layer name"))
+        header
+        if page == .prototype {
+            interactionSection(node.interaction)
+            animationSection(node.animation)
+        } else {
+            designPage
         }
-        Section(title: L("Position and Size")) {
+    }
+
+    private var header: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: InspectorMetrics.gap) {
+                Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28).background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    TextField(L("Name"), text: $name).textFieldStyle(.plain).font(.system(size: 13, weight: .semibold))
+                        .onSubmit { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { update("Rename Layer") { $0.name = trimmed } } }
+                        .onAppear { name = node.name }
+                        .onChange(of: node.name) { _, next in name = next }
+                        .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; note = node.versionSnapshot?.note ?? ""; previewing = false }
+                        .accessibilityLabel(L("Layer name"))
+                    Text(node.type.title).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Button { update(node.visible ? "Hide Layer" : "Show Layer") { $0.visible.toggle() } } label: {
+                    Image(systemName: node.visible ? "eye" : "eye.slash").font(.system(size: 12)).iconHitTarget()
+                }
+                .buttonStyle(.borderless).foregroundStyle(.secondary)
+                .help(node.visible ? L("Hide") : L("Show")).accessibilityLabel(node.visible ? L("Hide %@", node.name) : L("Show %@", node.name))
+            }
+            .padding(.horizontal, InspectorMetrics.margin).padding(.vertical, 12)
+            Divider()
+        }
+    }
+
+    @ViewBuilder private var designPage: some View {
+        InspectorSection(L("Position and Size")) {
             let inLayout = parentLayout != nil
-            HStack {
+            // A group's size always equals the union of its child layers, so sizing modes have no effect on it (#60).
+            let sizing = node.type != .group && (inLayout || node.layout != nil || node.type == .text)
+            HStack(spacing: InspectorMetrics.gap) {
                 NumberField(label: "X", value: node.x, disabled: inLayout) { v in update("Change Position") { $0.x = v } }
                 NumberField(label: "Y", value: node.y, disabled: inLayout) { v in update("Change Position") { $0.y = v } }
             }
-            HStack {
-                NumberField(label: "W", value: node.width, minimum: 0, disabled: node.type == .group) { v in
+            HStack(spacing: InspectorMetrics.gap) {
+                NumberField(label: "W", value: node.width, minimum: 0, disabled: node.type == .group,
+                            accessory: sizing ? AnyView(SizingChip(label: L("Width"), mode: node.sizing.horizontal) { mode in update("Change Sizing") { $0.sizing.horizontal = mode } }) : nil) { v in
                     update("Change Size") { $0.width = v; $0.sizing.horizontal = .fixed; if $0.text?.autoResize == .widthAndHeight { $0.text?.autoResize = .height } }
                 }
-                NumberField(label: "H", value: node.height, minimum: 0, disabled: node.type == .group) { v in
+                NumberField(label: "H", value: node.height, minimum: 0, disabled: node.type == .group,
+                            accessory: sizing ? AnyView(SizingChip(label: L("Height"), mode: node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }) : nil) { v in
                     update("Change Size") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
                 }
             }
-            // A group's size always equals the union of its child layers, so sizing modes have no effect on it (#60).
-            if node.type != .group && (inLayout || node.layout != nil || node.type == .text) {
-                sizingPicker(L("Width"), node.sizing.horizontal) { mode in update("Change Sizing") { $0.sizing.horizontal = mode } }
-                sizingPicker(L("Height"), node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }
-            }
         }
-        Section(title: L("Appearance")) {
-            SliderRow(label: L("Opacity"), value: node.opacity) { v in update("Change Opacity", "opacity") { $0.opacity = v } }
-            if node.type.hasCornerRadius {
-                NumberField(label: L("Corner radius"), value: node.cornerRadius, minimum: 0) { v in update("Change Corner Radius") { $0.cornerRadius = v } }
-            }
-            if node.type == .frame {
-                Toggle(L("Clip content"), isOn: Binding(get: { node.clipsContent }, set: { v in update("Change Clipping") { $0.clipsContent = v } }))
-            }
-        }
-        Group {
-            Section(title: node.type == .text ? L("Background") : L("Fill")) {
-                if let fill = node.fill {
-                    HStack {
-                        ColorRow(label: L("Fill"), color: fill) { c in update("Change Fill", "fill") { $0.fill = c } }
-                        Button { update("Remove Fill") { $0.fill = nil } } label: { Image(systemName: "minus").iconHitTarget() }
-                            .buttonStyle(.borderless).help(L("Remove fill")).accessibilityLabel(L("Remove fill"))
+        if node.type == .frame { layoutSection(node.layout) }
+        InspectorSection(L("Appearance")) {
+            HStack(spacing: InspectorMetrics.gap) {
+                NumberField(label: L("Opacity"), symbol: "circle.lefthalf.filled", value: node.opacity, percent: true, scrub: 0.01) { v in
+                    update("Change Opacity", "opacity") { $0.opacity = v }
+                }
+                if node.type.hasCornerRadius {
+                    NumberField(label: L("Corner radius"), symbol: "square.dashed", value: node.cornerRadius, minimum: 0) { v in
+                        update("Change Corner Radius") { $0.cornerRadius = v }
                     }
                 } else {
-                    Button(L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
+                    Spacer().frame(maxWidth: .infinity)
                 }
             }
-            Section(title: L("Stroke")) {
-                if let stroke = node.stroke {
-                    HStack {
-                        ColorRow(label: L("Stroke"), color: stroke.color) { c in update("Change Stroke", "stroke") { $0.stroke?.color = c } }
-                        Button { update("Remove Stroke") { $0.stroke = nil } } label: { Image(systemName: "minus").iconHitTarget() }
-                            .buttonStyle(.borderless).help(L("Remove stroke")).accessibilityLabel(L("Remove stroke"))
-                    }
+        }
+        let fillTitle = node.type == .text ? L("Background") : L("Fill")
+        if let fill = node.fill {
+            InspectorSection(fillTitle) {
+                ColorField(label: fillTitle, color: fill, removeLabel: L("Remove fill"), remove: { update("Remove Fill") { $0.fill = nil } }) { c in
+                    update("Change Fill", "fill") { $0.fill = c }
+                }
+            }
+        } else {
+            InspectorSection(fillTitle, adding: L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
+        }
+        if let stroke = node.stroke {
+            InspectorSection(L("Stroke")) {
+                ColorField(label: L("Stroke"), color: stroke.color, removeLabel: L("Remove stroke"), remove: { update("Remove Stroke") { $0.stroke = nil } }) { c in
+                    update("Change Stroke", "stroke") { $0.stroke?.color = c }
+                }
+                HStack(spacing: InspectorMetrics.gap) {
                     NumberField(label: L("Weight|stroke"), value: stroke.width, minimum: 0) { v in update("Change Stroke") { $0.stroke?.width = v } }
-                } else {
-                    Button(L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
+                    // Lines the box up with the color box above, which leaves room for the remove button.
+                    Color.clear.frame(width: 20, height: 1)
                 }
             }
+        } else {
+            InspectorSection(L("Stroke"), adding: L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
         }
         if node.type.hasEffects { EffectsSection(node: node, update: update) }
         if let text = node.text { textSection(text) }
-        if node.type == .frame { layoutSection(node.layout) }
         if let image = node.image {
-            Section(title: L("Image")) {
+            InspectorSection(L("Image")) {
                 Picker(L("Scaling"), selection: Binding(get: { image.fit }, set: { v in update("Change Image Scaling") { $0.image?.fit = v } })) {
                     Text(L("Fill|image scaling")).tag(ImageFit.fill)
                     Text(L("Fit|image scaling")).tag(ImageFit.fit)
                     Text(L("Stretch")).tag(ImageFit.stretch)
                 }
-                Button(L("Replace Image…")) { replaceImage() }
+                // A version snapshot's picture is what the frame looked like; replacing it would contradict its record.
+                if node.versionSnapshot == nil { Button(L("Replace Image…")) { replaceImage() } }
             }
         }
         if let icon = node.icon {
-            Section(title: L("Icon")) {
+            InspectorSection(L("Icon")) {
                 LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
-                ColorRow(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
+                ColorField(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
                 Button(L("Replace Icon…")) { replacingIcon = true }
                     .popover(isPresented: $replacingIcon, arrowEdge: .leading) {
                         IconPicker(current: icon.name) { store.replaceIcon(node.id, with: $0) }
                     }
             }
         }
-        interactionSection(node.interaction)
-        animationSection(node.animation)
+        if let snapshot = node.versionSnapshot { versionSnapshotSection(snapshot) }
+        if node.type == .frame { frameSnapshotsSection }
     }
 
-    private func sizingPicker(_ label: String, _ mode: SizingMode, _ commit: @escaping (SizingMode) -> Void) -> some View {
-        Picker(label, selection: Binding(get: { mode }, set: commit)) {
-            Text(L("Fixed")).tag(SizingMode.fixed)
-            Text(L("Hug contents")).tag(SizingMode.hug)
-            Text(L("Fill container")).tag(SizingMode.fill)
+    private static let snapshotTime = Date.FormatStyle.dateTime.year().month().day().hour().minute()
+
+    /// A frame's version snapshots, oldest first: choosing one selects it and brings it into view.
+    private var frameSnapshotsSection: some View {
+        InspectorSection(L("Version Snapshots")) {
+            ForEach(store.document.versionSnapshots(of: node.id)) { layer in
+                if let snapshot = layer.versionSnapshot {
+                    Button { store.setSelection([layer.id]); store.focus(layer.id) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(snapshot.createdAt, format: Self.snapshotTime)
+                            if !snapshot.note.isEmpty { Text(snapshot.note).foregroundStyle(.secondary).lineLimit(1) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Button(L("Save Version Snapshot")) { store.saveVersionSnapshotOfSelection() }
+        }
+    }
+
+    /// A version snapshot's frame, time, and note, and the switch between laying it over its frame and placing it beside.
+    private func versionSnapshotSection(_ snapshot: VersionSnapshot) -> some View {
+        let frame = store.document.worldRect(snapshot.frame)
+        let here = store.document.worldRect(node.id)
+        let overlaid = frame.map { frame in here.map { abs($0.x - frame.x) < 0.5 && abs($0.y - frame.y) < 0.5 } ?? false } ?? false
+        return InspectorSection(L("Version Snapshot")) {
+            LabeledContent(L("Frame")) { Text(store.document.node(snapshot.frame)?.name ?? L("Deleted")) }
+            LabeledContent(L("Saved|version snapshot time")) { Text(snapshot.createdAt, format: Self.snapshotTime) }
+            TextField(L("Note"), text: $note).textFieldStyle(.roundedBorder)
+                .onSubmit { update("Edit Snapshot Note") { $0.versionSnapshot?.note = note.trimmingCharacters(in: .whitespacesAndNewlines) } }
+                .onAppear { note = snapshot.note }
+                .onChange(of: snapshot.note) { _, next in note = next }
+                .accessibilityLabel(L("Snapshot note"))
+            if frame != nil {
+                Button(overlaid ? L("Place Beside Frame") : L("Overlay on Frame")) { store.compareVersionSnapshot(node.id, overlay: !overlaid) }
+            }
         }
     }
 
     private func textSection(_ text: DesignText) -> some View {
-        Section(title: L("Text")) {
+        InspectorSection(L("Text")) {
             TextEditor(text: $content)
                 .font(.system(size: 12)).frame(minHeight: 54, maxHeight: 120)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
@@ -312,13 +330,13 @@ private struct NodeInspector: View {
                 Divider()
                 ForEach(store.fontFamilies, id: \.name) { Text($0.name).tag($0.name) }
             }
-            HStack {
-                NumberField(label: L("Font size"), value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
+            HStack(spacing: InspectorMetrics.gap) {
+                NumberField(label: L("Font size"), symbol: "textformat.size", value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
                 Picker(L("Weight|font"), selection: Binding(get: { text.fontWeight }, set: { v in update("Change Font Weight") { $0.text?.fontWeight = v } })) {
                     ForEach([100, 200, 300, 400, 500, 600, 700, 800, 900], id: \.self) { Text(Self.weightName($0)).tag($0) }
                 }.labelsHidden()
             }
-            ColorRow(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
+            ColorField(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
             Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
                 Image(systemName: "text.alignleft").accessibilityLabel(L("Left")).tag(TextAlign.left)
                 Image(systemName: "text.aligncenter").accessibilityLabel(L("Center")).tag(TextAlign.center)
@@ -380,7 +398,7 @@ private struct NodeInspector: View {
     }
 
     private func animationSection(_ animation: LayerAnimation?) -> some View {
-        Section(title: L("Animation")) {
+        InspectorSection(L("Animation")) {
             if let animation {
                 let change = { (edit: @escaping (inout LayerAnimation) -> Void) in
                     update("Change Animation") { node in
@@ -460,39 +478,48 @@ private struct NodeInspector: View {
         [100: L("Thin"), 200: L("Extra Light"), 300: L("Light|font weight"), 400: L("Regular"), 500: L("Medium"), 600: L("Semibold"), 700: L("Bold"), 800: L("Extra Bold"), 900: L("Black")][weight] ?? "\(weight)"
     }
 
+    private func setLayout(_ action: String, _ next: AutoLayout) { update(action) { $0.layout = next } }
+
     private func layoutSection(_ layout: AutoLayout?) -> some View {
-        Section(title: L("Auto Layout")) {
+        InspectorSection(L("Auto Layout")) {
+            if layout != nil {
+                Button(L("Remove")) { update("Remove Auto Layout") { $0.layout = nil } }
+                    .buttonStyle(.borderless).font(.system(size: 11)).help(L("Remove Auto Layout")).accessibilityLabel(L("Remove Auto Layout"))
+            } else {
+                AddButton(label: L("Add Auto Layout")) { update("Add Auto Layout") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
+            }
+        } content: {
             if let layout {
                 Picker(L("Direction"), selection: Binding(get: { layout.direction }, set: { v in update("Change Layout Direction") { $0.layout?.direction = v } })) {
-                    Image(systemName: "arrow.down").accessibilityLabel(L("Vertical")).tag(LayoutDirection.vertical)
-                    Image(systemName: "arrow.right").accessibilityLabel(L("Horizontal")).tag(LayoutDirection.horizontal)
-                }.pickerStyle(.segmented)
-                NumberField(label: L("Spacing"), value: layout.spacing) { v in update("Change Spacing") { $0.layout?.spacing = v } }
-                Text(L("Padding")).foregroundStyle(.secondary)
-                HStack {
-                    NumberField(label: L("Top"), value: layout.padding.top, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.top = v } }
-                    NumberField(label: L("Right"), value: layout.padding.right, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.right = v } }
+                    Label(L("Vertical"), systemImage: "arrow.down").tag(LayoutDirection.vertical)
+                    Label(L("Horizontal"), systemImage: "arrow.right").tag(LayoutDirection.horizontal)
                 }
-                HStack {
-                    NumberField(label: L("Bottom"), value: layout.padding.bottom, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.bottom = v } }
-                    NumberField(label: L("Left"), value: layout.padding.left, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.left = v } }
+                .pickerStyle(.segmented).labelsHidden()
+                HStack(alignment: .top, spacing: InspectorMetrics.gap) {
+                    AlignmentGridView(layout: layout) { setLayout("Change Alignment", $0) }
+                    VStack(spacing: 4) {
+                        NumberField(label: L("Gap"), value: layout.spacing) { v in update("Change Spacing") { $0.layout?.spacing = v } }
+                        // Each holds one axis of the grid: space between the main axis, stretch the cross axis.
+                        let horizontal = layout.direction == .horizontal
+                        Toggle(isOn: Binding(get: { layout.align == .spaceBetween }, set: { setLayout("Change Alignment", AlignmentGrid.settingSpaceBetween($0, in: layout)) })) {
+                            Label(L("Space between"), systemImage: horizontal ? "arrow.left.and.right" : "arrow.up.and.down")
+                        }
+                        Toggle(isOn: Binding(get: { layout.crossAlign == .stretch }, set: { setLayout("Change Alignment", AlignmentGrid.settingStretch($0, in: layout)) })) {
+                            Label(L("Stretch"), systemImage: horizontal ? "arrow.up.and.down" : "arrow.left.and.right")
+                        }
+                    }
+                    .toggleStyle(BoxToggleStyle())
                 }
-                Picker(L("Main axis"), selection: Binding(get: { layout.align }, set: { v in update("Change Alignment") { $0.layout?.align = v } })) {
-                    Text(L("Start")).tag(LayoutAlign.start)
-                    Text(L("Center")).tag(LayoutAlign.center)
-                    Text(L("End")).tag(LayoutAlign.end)
-                    Text(L("Space between")).tag(LayoutAlign.spaceBetween)
+                Text(L("Padding")).font(.system(size: 11)).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    NumberField(label: L("Top"), caption: L("T|padding"), value: layout.padding.top, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.top = v } }
+                    NumberField(label: L("Right"), caption: L("R|padding"), value: layout.padding.right, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.right = v } }
+                    NumberField(label: L("Bottom"), caption: L("B|padding"), value: layout.padding.bottom, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.bottom = v } }
+                    NumberField(label: L("Left"), caption: L("L|padding"), value: layout.padding.left, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.left = v } }
                 }
-                Picker(L("Cross axis"), selection: Binding(get: { layout.crossAlign }, set: { v in update("Change Alignment") { $0.layout?.crossAlign = v } })) {
-                    Text(L("Start")).tag(LayoutCrossAlign.start)
-                    Text(L("Center")).tag(LayoutCrossAlign.center)
-                    Text(L("End")).tag(LayoutCrossAlign.end)
-                    Text(L("Stretch")).tag(LayoutCrossAlign.stretch)
-                }
-                Button(L("Remove Auto Layout")) { update("Remove Auto Layout") { $0.layout = nil } }
-            } else {
-                Button(L("Add Auto Layout")) { update("Add Auto Layout") { $0.layout = AutoLayout(direction: .vertical, spacing: 8) } }
             }
+            Toggle(L("Clip content"), isOn: Binding(get: { node.clipsContent }, set: { v in update("Change Clipping") { $0.clipsContent = v } }))
+                .toggleStyle(.checkbox)
         }
     }
 
@@ -549,10 +576,12 @@ private struct NodeInspector: View {
         }
     }
 
-    private func setInteraction(_ interaction: DesignInteraction) { update("Change Interaction") { $0.interaction = interaction } }
+    private func setInteraction(_ interaction: DesignInteraction, coalescing key: String? = nil) {
+        update("Change Interaction", key) { $0.interaction = interaction }
+    }
 
     private func interactionSection(_ interaction: DesignInteraction?) -> some View {
-        Section(title: L("Prototype")) {
+        InspectorSection(L("Prototype")) {
             if node.type == .frame {
                 Picker(L("Scrolling"), selection: Binding(get: { node.scroll }, set: { v in update("Change Scrolling") { $0.scroll = v } })) {
                     Text(L("None|scrolling")).tag(ScrollDirection.none)
@@ -647,18 +676,15 @@ private struct NodeInspector: View {
             Text(L("Below Layer")).tag(OverlayPosition.belowTrigger)
         }
         if let background = overlay.background {
-            HStack {
-                ColorRow(label: L("Background"), color: background) { color in
-                    var next = overlay
-                    next.background = color
-                    setInteraction(make(next))
-                }
-                Button {
-                    var next = overlay
-                    next.background = nil
-                    setInteraction(make(next))
-                } label: { Image(systemName: "minus").iconHitTarget() }
-                    .buttonStyle(.borderless).help(L("Remove background")).accessibilityLabel(L("Remove background"))
+            ColorField(label: L("Background"), color: background, removeLabel: L("Remove background"), remove: {
+                var next = overlay
+                next.background = nil
+                setInteraction(make(next))
+            }) { color in
+                var next = overlay
+                next.background = color
+                // A drag in the color picker is one undo step.
+                setInteraction(make(next), coalescing: "interaction.overlay.background")
             }
         } else {
             Button(L("Add Background")) {
@@ -713,10 +739,10 @@ private struct NodeInspector: View {
         if let style {
             Text(title).foregroundStyle(.secondary)
             if let fill = style.fill {
-                HStack {
-                    ColorRow(label: L("Fill"), color: fill) { color in var next = style; next.fill = color; change("Change State", "states.fill", next) }
-                    Button { var next = style; next.fill = nil; change("Change State", nil, next) } label: { Image(systemName: "minus").iconHitTarget() }
-                        .buttonStyle(.borderless).help(L("Remove fill")).accessibilityLabel(L("Remove fill"))
+                ColorField(label: L("Fill"), color: fill, removeLabel: L("Remove fill"), remove: { var next = style; next.fill = nil; change("Change State", nil, next) }) { color in
+                    var next = style
+                    next.fill = color
+                    change("Change State", "states.fill", next)
                 }
             } else {
                 Button(L("Add Fill")) { var next = style; next.fill = node.fill ?? .white; change("Change State", nil, next) }
@@ -753,7 +779,7 @@ private struct NodeInspector: View {
 }
 
 /// The layer's effects: one row per effect, the frontmost at the top like the layers panel, each with its type, settings that
-/// expand below it, show or hide, and remove; a row's context menu moves it. Empty, the section is a single line with its add menu.
+/// expand below it, show or hide, and remove; a row's context menu moves it. Empty, the section folds to its title row and `+`.
 private struct EffectsSection: View {
     let node: DesignNode
     let update: (String, String?, @escaping (inout DesignNode) -> Void) -> Void
@@ -765,34 +791,31 @@ private struct EffectsSection: View {
     @Environment(\.inspectedLayer) private var layer
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(L("Effects")).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                Spacer()
-                Menu {
-                    ForEach(EffectType.allCases, id: \.self) { type in
-                        Button(Self.name(type)) {
-                            let index = node.effects.count
-                            expectedCount = index + 1
-                            update("Add Effect", nil) { $0.effects.append(DesignEffect(type: type)) }
-                            expanded.insert(index)
-                        }
-                    }
-                } label: { MenuIcon(symbol: "plus", label: L("Add Effect")) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
+        InspectorSection(L("Effects"), accessory: { addMenu }) {
+            if !node.effects.isEmpty {
+                ForEach(node.effects.indices.reversed(), id: \.self) { index in row(index, node.effects[index]) }
             }
-            ForEach(node.effects.indices.reversed(), id: \.self) { index in row(index, node.effects[index]) }
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: layer) { expanded = []; expectedCount = nil }
         .onChange(of: node.effects.count) { _, count in
             if count != expectedCount { expanded = [] }
             expectedCount = nil
         }
-        Divider()
+    }
+
+    private var addMenu: some View {
+        Menu {
+            ForEach(EffectType.allCases, id: \.self) { type in
+                Button(Self.name(type)) {
+                    let index = node.effects.count
+                    expectedCount = index + 1
+                    update("Add Effect", nil) { $0.effects.append(DesignEffect(type: type)) }
+                    expanded.insert(index)
+                }
+            }
+        } label: { MenuIcon(symbol: "plus", label: L("Add Effect")) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
     }
 
     @ViewBuilder private func row(_ index: Int, _ effect: DesignEffect) -> some View {
@@ -802,7 +825,7 @@ private struct EffectsSection: View {
         let open = expanded.contains(index)
         HStack(spacing: 4) {
             Button { if open { expanded.remove(index) } else { expanded.insert(index) } } label: {
-                Image(systemName: open ? "chevron.down" : "chevron.right").iconHitTarget()
+                Image(systemName: open ? "chevron.down" : "chevron.right").font(.system(size: 11)).iconHitTarget()
             }
             .buttonStyle(.borderless)
             .help(open ? L("Hide effect settings") : L("Show effect settings"))
@@ -819,16 +842,17 @@ private struct EffectsSection: View {
                 ForEach(EffectType.allCases, id: \.self) { Text(Self.name($0)).tag($0) }
             }
             .labelsHidden()
-            Button { change { $0.visible.toggle() } } label: { Image(systemName: effect.visible ? "eye" : "eye.slash").iconHitTarget() }
-                .buttonStyle(.borderless)
-                .help(effect.visible ? L("Hide effect") : L("Show effect"))
-                .accessibilityLabel(effect.visible ? L("Hide effect") : L("Show effect"))
-            Button {
+            Button { change { $0.visible.toggle() } } label: {
+                Image(systemName: effect.visible ? "eye" : "eye.slash").font(.system(size: 11)).iconHitTarget()
+            }
+            .buttonStyle(.borderless)
+            .help(effect.visible ? L("Hide effect") : L("Show effect"))
+            .accessibilityLabel(effect.visible ? L("Hide effect") : L("Show effect"))
+            RemoveButton(label: L("Remove effect")) {
                 expectedCount = node.effects.count - 1
                 update("Remove Effect", nil) { if $0.effects.indices.contains(index) { $0.effects.remove(at: index) } }
                 expanded = Set(expanded.compactMap { $0 < index ? $0 : $0 > index ? $0 - 1 : nil })
-            } label: { Image(systemName: "minus").iconHitTarget() }
-                .buttonStyle(.borderless).help(L("Remove effect")).accessibilityLabel(L("Remove effect"))
+            }
         }
         .contextMenu {
             // Up brings the effect forward, drawn later.
@@ -836,25 +860,27 @@ private struct EffectsSection: View {
             Button(L("Move Down")) { move(index, by: -1) }.disabled(index == 0)
         }
         if open {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: InspectorMetrics.gap) {
                 if effect.type.isShadow {
-                    ColorRow(label: L("Shadow color"), color: effect.color) { c in
+                    ColorField(label: L("Shadow color"), color: effect.color) { c in
                         update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
                     }
-                    HStack {
+                    HStack(spacing: InspectorMetrics.gap) {
                         NumberField(label: "X", value: effect.x) { v in change { $0.x = v } }
                         NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
                     }
                 }
-                HStack {
+                HStack(spacing: InspectorMetrics.gap) {
                     NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
                     // Text and icon shadows follow the glyphs, which spread does not grow.
                     if effect.type.isShadow, node.type != .text, node.type != .icon {
                         NumberField(label: L("Spread"), value: effect.spread) { v in change { $0.spread = v } }
+                    } else {
+                        Spacer().frame(maxWidth: .infinity)
                     }
                 }
             }
-            .padding(.leading, 22)
+            .padding(.leading, 20)
         }
     }
 

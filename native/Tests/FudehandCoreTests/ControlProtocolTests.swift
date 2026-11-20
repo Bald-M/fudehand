@@ -33,16 +33,54 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":15,"command":"open_document","args":{"path":"/tmp/a.fudehand"}}"#, .openDocument("/tmp/a.fudehand", discard: false)),
         (#"{"id":16,"command":"save_document"}"#, .saveDocument(nil)),
         (#"{"id":17,"command":"save_document","args":{"path":"/tmp/b.fudehand"}}"#, .saveDocument("/tmp/b.fudehand")),
-        (#"{"id":18,"command":"focus_node","args":{"id":"f"}}"#, .focusNode("f")),
+        (#"{"id":18,"command":"focus_node","args":{"id":"f"}}"#, .focusNodes(["f"])),
         (#"{"id":19,"command":"fit_all"}"#, .fitAll),
         (#"{"id":20,"command":"zoom","args":{"scale":0.5}}"#, .zoom(0.5)),
         (#"{"id":21,"command":"node_snapshot","args":{"id":"f"}}"#, .nodeSnapshot("f", scale: 2)),
         (#"{"id":22,"command":"node_snapshot","args":{"id":"f","scale":1}}"#, .nodeSnapshot("f", scale: 1)),
+        (#"{"id":27,"command":"save_version_snapshot","args":{"frame":"f"}}"#, .saveVersionSnapshot(frame: "f", note: "")),
+        (#"{"id":28,"command":"save_version_snapshot","args":{"frame":"f","note":"Before"}}"#, .saveVersionSnapshot(frame: "f", note: "Before")),
+        (#"{"id":29,"command":"list_version_snapshots"}"#, .listVersionSnapshots(frame: nil)),
+        (#"{"id":30,"command":"list_version_snapshots","args":{"frame":"f"}}"#, .listVersionSnapshots(frame: "f")),
         (#"{"id":23,"command":"list_fonts"}"#, .listFonts),
         (#"{"id":24,"command":"import_font","args":{"path":"/tmp/a.ttf"}}"#, .importFont("/tmp/a.ttf")),
         (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
         (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,
          .searchIcons(query: "home", library: .materialRounded, limit: 3)),
+        (#"{"id":27,"command":"show_launch_window"}"#, .showLaunchWindow),
+        (#"{"id":28,"command":"list_recents"}"#, .listRecents),
+        (#"{"id":29,"command":"open_recent","args":{"path":"/tmp/a.fudehand"}}"#, .openRecent("/tmp/a.fudehand", discard: false)),
+        (#"{"id":30,"command":"open_recent","args":{"path":"/tmp/a.fudehand","discard":true}}"#, .openRecent("/tmp/a.fudehand", discard: true)),
+        (#"{"id":31,"command":"remove_recent","args":{"path":"/tmp/a.fudehand"}}"#, .removeRecent("/tmp/a.fudehand")),
+        (#"{"id":32,"command":"clear_recents"}"#, .clearRecents),
+        (#"{"id":33,"command":"list_templates"}"#, .listTemplates),
+        (#"{"id":34,"command":"new_document_from_template","args":{"name":"Mobile"}}"#, .newDocumentFromTemplate("Mobile", discard: false)),
+        (#"{"id":35,"command":"new_document_from_template","args":{"name":"Mobile","discard":true}}"#, .newDocumentFromTemplate("Mobile", discard: true)),
+        (#"{"id":36,"command":"play"}"#, .playPrototype(frame: nil)),
+        (#"{"id":37,"command":"play","args":{"frame":"home"}}"#, .playPrototype(frame: "home")),
+        (#"{"id":38,"command":"get_playback"}"#, .getPrototypePlayback),
+        (#"{"id":39,"command":"close"}"#, .closePrototype),
+        (#"{"id":27,"command":"get_interface"}"#, .getInterface),
+        (#"{"id":28,"command":"update_interface","args":{"language":"zh-Hant"}}"#, .updateInterface(language: .zhHant, appearance: nil)),
+        (#"{"id":29,"command":"update_interface","args":{"language":"en-GB","appearance":"dark"}}"#, .updateInterface(language: .enGB, appearance: .dark)),
+        (#"{"id":30,"command":"get_models"}"#, .getModels),
+        (#"{"id":31,"command":"update_model_provider","args":{"provider":"openai","model":""}}"#,
+         .updateModelProvider("openai", model: "", baseUrl: nil, use: false)),
+        (#"{"id":32,"command":"update_model_provider","args":{"provider":"openai","baseUrl":"https://x.test","use":true}}"#,
+         .updateModelProvider("openai", model: nil, baseUrl: "https://x.test", use: true)),
+        (#"{"id":33,"command":"list_models","args":{"provider":"deepseek"}}"#, .listModels("deepseek", baseUrl: nil)),
+        (#"{"id":34,"command":"list_models","args":{"provider":"deepseek","baseUrl":""}}"#, .listModels("deepseek", baseUrl: "")),
+        (#"{"id":35,"command":"set_api_key","args":{"provider":"anthropic","key":" sk-ant-1 "}}"#, .setAPIKey("anthropic", key: "sk-ant-1")),
+        (#"{"id":36,"command":"delete_api_key","args":{"provider":"anthropic"}}"#, .deleteAPIKey("anthropic")),
+        (#"{"id":37,"command":"get_connectors"}"#, .getConnectors),
+        (#"{"id":38,"command":"set_connector","args":{"connector":"codex","connected":false}}"#, .setConnector(.codex, connected: false)),
+        (#"{"id":39,"command":"set_connector","args":{"connector":"deepseek","connected":true}}"#, .setConnector(.deepseek, connected: true)),
+        (#"{"id":40,"command":"focus_node","args":{"ids":["a","b"]}}"#, .focusNodes(["a", "b"])),
+        (#"{"id":41,"command":"set_view","args":{"tool":"hand"}}"#, .setView(ViewChange(tool: .hand))),
+        (#"{"id":42,"command":"set_view","args":{"inspector":false,"inspectorTab":"chat","expand":["a"],"collapse":["b"]}}"#,
+         .setView(ViewChange(inspector: false, inspectorTab: .chat, expand: ["a"], collapse: ["b"]))),
+        (#"{"id":43,"command":"focus_node","args":{"id":null,"ids":["a"]}}"#, .focusNodes(["a"])),
+        (#"{"id":44,"command":"set_view","args":{"tool":"text","expand":null,"collapse":null}}"#, .setView(ViewChange(tool: .text))),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -70,18 +108,53 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"delete_nodes","args":{"ids":[1]}}"#, "Invalid argument type: ids"),
         (#"{"id":1,"command":"new_document","args":{"discard":"yes"}}"#, "Invalid argument type: discard"),
         (#"{"id":1,"command":"open_document","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"open_recent","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"open_recent","args":{"path":"/tmp/a.fudehand","discard":1}}"#, "Invalid argument type: discard"),
+        (#"{"id":1,"command":"remove_recent","args":{"path":""}}"#, "Invalid argument type: path"),
+        (#"{"id":1,"command":"new_document_from_template","args":{}}"#, "Missing argument: name"),
+        (#"{"id":1,"command":"new_document_from_template","args":{"name":3}}"#, "Invalid argument type: name"),
         (#"{"id":1,"command":"import_font","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"play","args":{"frame":3}}"#, "Invalid argument type: frame"),
+        (#"{"id":1,"command":"play","args":{"frame":""}}"#, "Invalid argument type: frame"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"node_snapshot","args":{"id":"f","scale":5}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"fit_all","args":[]}"#, "Invalid argument type: args"),
+        (#"{"id":1,"command":"save_version_snapshot","args":{}}"#, "Missing argument: frame"),
+        (#"{"id":1,"command":"save_version_snapshot","args":{"frame":"f","note":3}}"#, "Invalid argument type: note"),
+        (#"{"id":1,"command":"list_version_snapshots","args":{"frame":7}}"#, "Invalid argument type: frame"),
         (#"{"id":1,"command":"search_icons","args":{}}"#, "Missing argument: query"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","library":"fontawesome"}}"#,
          "library must be one of sf, material-outlined, material-rounded, material-sharp, weui, lucide; got fontawesome"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":0}}"#, "Invalid argument type: limit"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":201}}"#, "Invalid argument type: limit"),
         (#"{"id":1,"command":"search_icons","args":{"query":"x","limit":2.5}}"#, "Invalid argument type: limit"),
+        (#"{"id":1,"command":"update_interface","args":{}}"#, "Provide language, appearance, or both"),
+        (#"{"id":1,"command":"update_interface","args":{"language":"fr"}}"#, "language must be one of en-US, en-GB, zh-Hans, zh-Hant; got fr"),
+        (#"{"id":1,"command":"update_interface","args":{"appearance":"sepia"}}"#, "appearance must be one of system, light, dark; got sepia"),
+        (#"{"id":1,"command":"update_model_provider","args":{"provider":"openai"}}"#, "Provide model, baseUrl, or use"),
+        (#"{"id":1,"command":"update_model_provider","args":{"model":"x"}}"#, "Missing argument: provider"),
+        (#"{"id":1,"command":"update_model_provider","args":{"provider":"openai","model":3}}"#, "Invalid argument type: model"),
+        (#"{"id":1,"command":"update_model_provider","args":{"provider":"openai","use":"yes"}}"#, "Invalid argument type: use"),
+        (#"{"id":1,"command":"list_models","args":{}}"#, "Missing argument: provider"),
+        (#"{"id":1,"command":"set_api_key","args":{"provider":"openai"}}"#, "Missing argument: key"),
+        (#"{"id":1,"command":"set_api_key","args":{"provider":"openai","key":"   "}}"#, "Invalid argument type: key"),
+        (#"{"id":1,"command":"set_api_key","args":{"provider":"openai","key":12345}}"#, "Invalid argument type: key"),
+        (#"{"id":1,"command":"delete_api_key","args":{}}"#, "Missing argument: provider"),
+        (#"{"id":1,"command":"set_connector","args":{"connected":true}}"#, "Missing argument: connector"),
+        (#"{"id":1,"command":"set_connector","args":{"connector":"cursor","connected":true}}"#, "connector must be one of claude, codex, deepseek; got cursor"),
+        (#"{"id":1,"command":"set_connector","args":{"connector":"codex"}}"#, "Missing argument: connected"),
+        (#"{"id":1,"command":"set_connector","args":{"connector":"codex","connected":1}}"#, "Invalid argument type: connected"),
+        (#"{"id":1,"command":"focus_node","args":{}}"#, "Missing argument: id or ids"),
+        (#"{"id":1,"command":"focus_node","args":{"ids":[]}}"#, "Invalid argument type: ids"),
+        (#"{"id":1,"command":"focus_node","args":{"id":"a","ids":["b"]}}"#, "Pass either id or ids, not both"),
+        (#"{"id":1,"command":"set_view","args":{}}"#, "Nothing to change: pass tool, inspector, inspectorTab, expand, or collapse"),
+        (#"{"id":1,"command":"set_view","args":{"tool":"pen"}}"#, "tool must be one of move, hand, frame, rectangle, ellipse, text; got pen"),
+        (#"{"id":1,"command":"set_view","args":{"inspector":"yes"}}"#, "Invalid argument type: inspector"),
+        (#"{"id":1,"command":"set_view","args":{"inspectorTab":"layers"}}"#, "inspectorTab must be one of design, prototype, chat; got layers"),
+        (#"{"id":1,"command":"set_view","args":{"expand":"a"}}"#, "Invalid argument type: expand"),
+        (#"{"id":1,"command":"set_view","args":{"expand":["a"],"collapse":["a"]}}"#, "A layer cannot be both expanded and collapsed: a"),
     ]
     for (line, message) in cases {
         guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }
@@ -111,4 +184,60 @@ private func object(_ data: Data) throws -> [String: Any] {
     #expect(leadingID(#"{"command":"create_node","id":3,"args":{"#) == nil)
     #expect(leadingID(#"{"id":1"#) == nil)
     #expect(leadingID("oops") == nil)
+}
+
+@Test func controlProtocolParsesChatCommands() throws {
+    let a = "8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8"
+    let id = UUID(uuidString: a)!
+    let cases: [(String, ControlCommand)] = [
+        (#"{"command":"list_conversations"}"#, .listConversations),
+        (#"{"command":"get_conversation"}"#, .getConversation(nil)),
+        (#"{"command":"get_conversation","args":{"id":"\#(a)"}}"#, .getConversation(id)),
+        (#"{"command":"open_conversation","args":{"id":"\#(a)"}}"#, .openConversation(id)),
+        (#"{"command":"new_conversation"}"#, .newConversation),
+        (#"{"command":"close_conversation","args":{"id":"\#(a)"}}"#, .closeConversation(id)),
+        (#"{"command":"delete_conversation","args":{"id":"\#(a)"}}"#, .deleteConversation(id)),
+        (#"{"command":"clear_conversation"}"#, .clearConversation(nil)),
+        (#"{"command":"send_message","args":{"text":"Make it blue"}}"#, .sendMessage(nil, text: "Make it blue", context: [], mode: nil)),
+        (#"{"command":"send_message","args":{"id":"\#(a)","text":"Hi","context":["n1","n2"],"mode":"goal"}}"#,
+         .sendMessage(id, text: "Hi", context: ["n1", "n2"], mode: .goal)),
+        (#"{"command":"set_mode","args":{"mode":"plan"}}"#, .setMode(nil, mode: .plan)),
+        (#"{"command":"set_mode","args":{"id":"\#(a)","mode":"none"}}"#, .setMode(id, mode: nil)),
+        (#"{"command":"run_plan"}"#, .runPlan(nil, context: [])),
+        (#"{"command":"run_plan","args":{"id":"\#(a)","context":["n1"]}}"#, .runPlan(id, context: ["n1"])),
+        (#"{"command":"stop_reply"}"#, .stopReply(nil)),
+        (#"{"command":"regenerate_reply","args":{"id":"\#(a)"}}"#, .regenerateReply(id)),
+        (#"{"command":"edit_last_message","args":{"text":"Now red","context":["n1"]}}"#, .editLastMessage(nil, text: "Now red", context: ["n1"])),
+        (#"{"command":"answer_question","args":{"text":"Dark"}}"#, .answerQuestion(nil, answer: "Dark")),
+        (#"{"command":"answer_question","args":{"skip":true}}"#, .answerQuestion(nil, answer: nil)),
+        (#"{"command":"compact_conversation"}"#, .compactConversation(nil)),
+    ]
+    for (line, command) in cases {
+        #expect(try parse(line).get().command == command, "\(line)")
+    }
+    #expect(try parse(#"{"command":"stop_reply"}"#).get().caller == nil)
+    #expect(try parse(#"{"command":"stop_reply","caller":"\#(a)"}"#).get().caller == id)
+}
+
+@Test func controlProtocolRejectsBadChatArguments() {
+    let cases: [(String, String)] = [
+        (#"{"command":"open_conversation"}"#, "Missing argument: id"),
+        (#"{"command":"open_conversation","args":{"id":"tab-1"}}"#, "Invalid argument type: id"),
+        (#"{"command":"get_conversation","args":{"id":3}}"#, "Invalid argument type: id"),
+        (#"{"command":"send_message","args":{}}"#, "Missing argument: text"),
+        (#"{"command":"send_message","args":{"text":"  "}}"#, "Invalid argument type: text"),
+        (#"{"command":"send_message","args":{"text":"Hi","context":"n1"}}"#, "Invalid argument type: context"),
+        (#"{"command":"send_message","args":{"text":"Hi","mode":"none"}}"#, "mode must be one of plan, goal; got none"),
+        (#"{"command":"set_mode","args":{}}"#, "Missing argument: mode"),
+        (#"{"command":"set_mode","args":{"mode":"build"}}"#, "mode must be one of plan, goal, none; got build"),
+        (#"{"command":"edit_last_message","args":{}}"#, "Missing argument: text"),
+        (#"{"command":"answer_question","args":{}}"#, "Provide either text or skip: true"),
+        (#"{"command":"answer_question","args":{"text":"Dark","skip":true}}"#, "Provide either text or skip: true"),
+        (#"{"command":"answer_question","args":{"skip":"yes"}}"#, "Invalid argument type: skip"),
+        (#"{"command":"stop_reply","caller":"me"}"#, "Invalid argument type: caller"),
+    ]
+    for (line, message) in cases {
+        guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }
+        #expect(failure.message == message, "\(line)")
+    }
 }

@@ -26,10 +26,33 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_save_version_snapshot', 'design_list_version_snapshots', 'design_snapshot',
+      'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
+      'app_list_templates', 'app_new_document_from_template',
+      'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
+      'chat_delete_conversation', 'chat_clear_conversation', 'chat_send_message', 'chat_set_mode', 'chat_run_plan', 'chat_stop_reply', 'chat_regenerate_reply',
+      'chat_edit_last_message', 'chat_answer_question', 'chat_compact_conversation',
+      'settings_get_interface', 'settings_update_interface', 'settings_get_models', 'settings_update_model_provider',
+      'settings_list_models', 'settings_set_api_key', 'settings_delete_api_key', 'settings_get_connectors', 'settings_set_connector',
       'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
+  })
+
+  it('forwards the prototype window tools and their arguments unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('prototype_play', {}, ctx)
+    await callTool('prototype_play', { frame: 'home' }, ctx)
+    await callTool('prototype_get_playback', {}, ctx)
+    await callTool('prototype_close', {}, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'play', args: {} },
+      { command: 'play', args: { frame: 'home' } },
+      { command: 'get_playback', args: {} },
+      { command: 'close', args: {} },
+    ])
+    await fake.close()
   })
 
   it('describes interactions and forwards them to the App unchanged', async () => {
@@ -126,6 +149,9 @@ describe('design tools', () => {
     await callTool('design_save_document', {}, ctx)
     await callTool('design_save_document', { path: '/tmp/a.fudehand' }, ctx)
     await callTool('canvas_zoom', { scale: 0.5 }, ctx)
+    await callTool('canvas_focus_node', { id: 'a' }, ctx)
+    await callTool('canvas_focus_node', { ids: ['a', 'b'] }, ctx)
+    await callTool('canvas_set_view', { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] }, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
@@ -140,9 +166,81 @@ describe('design tools', () => {
       { command: 'save_document', args: {} },
       { command: 'save_document', args: { path: '/tmp/a.fudehand' } },
       { command: 'zoom', args: { scale: 0.5 } },
+      { command: 'focus_node', args: { id: 'a' } },
+      { command: 'focus_node', args: { ids: ['a', 'b'] } },
+      { command: 'set_view', args: { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] } },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
     ])
+  })
+
+  it('forwards the launch window, recent file, and template tools to the App', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('app_show_launch_window', {}, ctx)
+    await callTool('app_list_recents', {}, ctx)
+    await callTool('app_open_recent', { path: '/Users/a/Home.fudehand' }, ctx)
+    await callTool('app_open_recent', { path: '/Users/a/Home.fudehand', discard: true }, ctx)
+    await callTool('app_remove_recent', { path: '/Users/a/Old.fudehand' }, ctx)
+    await callTool('app_clear_recents', {}, ctx)
+    await callTool('app_list_templates', {}, ctx)
+    await callTool('app_new_document_from_template', { name: 'Mobile', discard: true }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'show_launch_window', args: {} },
+      { command: 'list_recents', args: {} },
+      { command: 'open_recent', args: { path: '/Users/a/Home.fudehand' } },
+      { command: 'open_recent', args: { path: '/Users/a/Home.fudehand', discard: true } },
+      { command: 'remove_recent', args: { path: '/Users/a/Old.fudehand' } },
+      { command: 'clear_recents', args: {} },
+      { command: 'list_templates', args: {} },
+      { command: 'new_document_from_template', args: { name: 'Mobile', discard: true } },
+    ])
+    const byName = (name: string) => (tools as { name: string, inputSchema: { required: string[] } }[]).find(tool => tool.name === name)!
+    expect(byName('app_open_recent').inputSchema.required).toEqual(['path'])
+    expect(byName('app_remove_recent').inputSchema.required).toEqual(['path'])
+    expect(byName('app_new_document_from_template').inputSchema.required).toEqual(['name'])
+  })
+
+  it('forwards the chat tools and their arguments to the App unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    const id = '8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8'
+    const calls: [string, Record<string, unknown>, string, Record<string, unknown>][] = [
+      ['chat_list_conversations', {}, 'list_conversations', {}],
+      ['chat_get_conversation', { id }, 'get_conversation', { id }],
+      ['chat_open_conversation', { id }, 'open_conversation', { id }],
+      ['chat_new_conversation', {}, 'new_conversation', {}],
+      ['chat_close_conversation', { id }, 'close_conversation', { id }],
+      ['chat_delete_conversation', { id }, 'delete_conversation', { id }],
+      ['chat_clear_conversation', {}, 'clear_conversation', {}],
+      ['chat_send_message', { id, text: 'Make it blue', context: ['hero'], mode: 'goal' }, 'send_message', { id, text: 'Make it blue', context: ['hero'], mode: 'goal' }],
+      ['chat_set_mode', { mode: 'none' }, 'set_mode', { mode: 'none' }],
+      ['chat_run_plan', { context: ['hero'] }, 'run_plan', { context: ['hero'] }],
+      ['chat_stop_reply', { id }, 'stop_reply', { id }],
+      ['chat_regenerate_reply', {}, 'regenerate_reply', {}],
+      ['chat_edit_last_message', { text: 'Make it red', context: [] }, 'edit_last_message', { text: 'Make it red', context: [] }],
+      ['chat_answer_question', { text: 'Dark' }, 'answer_question', { text: 'Dark' }],
+      ['chat_answer_question', { skip: true }, 'answer_question', { skip: true }],
+      ['chat_compact_conversation', { id }, 'compact_conversation', { id }],
+    ]
+    for (const [name, args] of calls) expect((await callTool(name, args, ctx)).isError, name).toBeFalsy()
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual(calls.map(([, , command, args]) => ({ command, args })))
+    // Only the in-App Agent names its conversation as the caller.
+    expect(fake.received.every(request => !('caller' in request))).toBe(true)
+  })
+
+  it('names the calling conversation so the App can refuse to let it act on itself', async () => {
+    const id = '8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8'
+    const fake = await app(request => (request as { caller?: string }).caller === id && request.command === 'stop_reply'
+      ? { ok: false, error: 'A conversation cannot stop itself; this command was sent by the Agent of that conversation' } : echo(request))
+    const ctx = { root: '/repo', socketPath: fake.socketPath, conversation: id }
+    const refused = await callTool('chat_stop_reply', {}, ctx)
+    expect(refused.isError).toBe(true)
+    expect(text(refused)).toContain('cannot stop itself')
+    await callTool('design_get_state', {}, ctx)
+    expect(fake.received.map(request => (request as { caller?: string }).caller)).toEqual([id, id])
+    for (const name of ['chat_close_conversation', 'chat_delete_conversation', 'chat_send_message', 'chat_stop_reply', 'chat_set_mode'])
+      expect((tools as { name: string, description: string }[]).find(tool => tool.name === name)!.description).toContain('Refused for the conversation whose Agent is calling')
   })
 
   it('expands ~ in file and image paths to the home directory', async () => {
@@ -224,6 +322,21 @@ describe('design tools', () => {
     expect(Buffer.from(sent, 'base64').equals(image)).toBe(true)
   })
 
+  it('forwards version snapshot tools to the App unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_save_version_snapshot', { frame: 'home', note: 'Before the redesign' }, ctx)
+    await callTool('design_save_version_snapshot', { frame: 'home' }, ctx)
+    await callTool('design_list_version_snapshots', { frame: 'home' }, ctx)
+    await callTool('design_list_version_snapshots', {}, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'save_version_snapshot', args: { frame: 'home', note: 'Before the redesign' } },
+      { command: 'save_version_snapshot', args: { frame: 'home' } },
+      { command: 'list_version_snapshots', args: { frame: 'home' } },
+      { command: 'list_version_snapshots', args: {} },
+    ])
+  })
+
   it('design_snapshot returns the snapshot as MCP image content', async () => {
     const fake = await app(() => ({ ok: true, result: { id: 'home', mimeType: 'image/png', data: PNG, width: 390, height: 844 } }))
     const result = await callTool('design_snapshot', { id: 'home' }, { root: '/repo', socketPath: fake.socketPath })
@@ -247,5 +360,35 @@ describe('design tools', () => {
     const fake = await app(() => ({ ok: true, result: { id: 'web', mimeType: 'image/png', data, width: 1440, height: 900 } }))
     const result = await callTool('design_snapshot', { id: 'web' }, { root: '/repo', socketPath: fake.socketPath })
     expect(result.content[0].data.length).toBe(data.length)
+  })
+})
+
+describe('settings tools', () => {
+  it('forwards every settings command and its arguments to the App unchanged', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    const calls: [string, Record<string, unknown>, string][] = [
+      ['settings_get_interface', {}, 'get_interface'],
+      ['settings_update_interface', { language: 'zh-Hans', appearance: 'dark' }, 'update_interface'],
+      ['settings_get_models', {}, 'get_models'],
+      ['settings_update_model_provider', { provider: 'openai', model: '', baseUrl: 'https://example.test/v1', use: true }, 'update_model_provider'],
+      ['settings_list_models', { provider: 'deepseek', baseUrl: '' }, 'list_models'],
+      ['settings_set_api_key', { provider: 'anthropic', key: 'sk-ant-0000-1111-2222' }, 'set_api_key'],
+      ['settings_delete_api_key', { provider: 'anthropic' }, 'delete_api_key'],
+      ['settings_get_connectors', {}, 'get_connectors'],
+      ['settings_set_connector', { connector: 'codex', connected: false }, 'set_connector'],
+    ]
+    for (const [name, args] of calls) {
+      const result = await callTool(name, args, ctx)
+      expect(result.isError).toBeUndefined()
+    }
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual(calls.map(([, args, command]) => ({ command, args })))
+  })
+
+  it('marks the API key as a secret argument, and only that', async () => {
+    const { secretArguments } = await import('../scripts/fudehand-tools.mjs')
+    expect(secretArguments).toEqual({ settings_set_api_key: ['key'] })
+    const tool = (tools as { name: string, inputSchema: { required: string[] } }[]).find(item => item.name === 'settings_set_api_key')!
+    expect(tool.inputSchema.required).toEqual(['provider', 'key'])
   })
 })

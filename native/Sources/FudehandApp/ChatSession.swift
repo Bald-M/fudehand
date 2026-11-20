@@ -32,11 +32,18 @@ struct ModelListing: Equatable {
 
 struct ModelListError: Error, Equatable {
     let message: String
+    /// The same message in English, for Agent tools; the harness's own messages are English already.
+    var english: String
+
+    init(message: String, english: String? = nil) {
+        self.message = message
+        self.english = english ?? message
+    }
 }
 
 /// Manages the child processes of the in-App Agent harness (scripts/agent-chat.mjs): one per open conversation, started on demand,
 /// exchanging JSON lines over stdin/stdout. After a conversation's settings or key change, its process is ended and the next message
-/// restarts it with the new configuration.
+/// restarts it with the new configuration; a process whose reply is running is left to finish it and is replaced at the next message.
 /// Also owns the conversations: the ones open as tabs, and the saved ones that the history menu reopens.
 @MainActor
 final class ChatSession: ObservableObject {
@@ -70,6 +77,8 @@ final class ChatSession: ObservableObject {
         var errorOutput = ""
         /// Whether the harness holds the conversation's history. False for a new process and after the conversation is rewound.
         var synced = false
+        /// The conversation's settings or key changed while its reply was running: the next message starts a new process.
+        var stale = false
 
         init(process: Process, input: FileHandle) {
             self.process = process
@@ -338,13 +347,16 @@ final class ChatSession: ObservableObject {
         }
     }
 
-    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String], listModels: Bool = false) -> Launch {
+    /// `conversation` is the conversation the harness serves; its tool calls name it, so the App can refuse ones that act on it.
+    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String],
+                                   conversation: UUID? = nil, listModels: Bool = false) -> Launch {
         var environment = inherited.filter { !$0.key.hasPrefix("FUDEHAND_") || $0.key == "FUDEHAND_CONTROL_SOCKET" }
         environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"].compactMap { $0 }.joined(separator: ":")
         environment["FUDEHAND_PROVIDER"] = settings.provider
         if !settings.model.isEmpty { environment["FUDEHAND_MODEL"] = settings.model }
         if !settings.baseUrl.isEmpty { environment["FUDEHAND_BASE_URL"] = settings.baseUrl }
         if let apiKey, !apiKey.isEmpty { environment["FUDEHAND_API_KEY"] = apiKey }
+        if let conversation { environment["FUDEHAND_CONVERSATION"] = conversation.uuidString }
         let script = root.appendingPathComponent("scripts/agent-chat.mjs").path
         let arguments = [script, "--root", root.path] + (listModels ? ["--list-models"] : [])
         if let node = runtime?.node {
@@ -369,7 +381,8 @@ final class ChatSession: ObservableObject {
                 child.standardError = FileHandle.nullDevice
                 child.standardInput = FileHandle.nullDevice
                 do { try child.run() } catch {
-                    continuation.resume(returning: .failure(ModelListError(message: L("Cannot start the chat process: %@", error.localizedDescription))))
+                    continuation.resume(returning: .failure(ModelListError(message: L("Cannot start the chat process: %@", error.localizedDescription),
+                                                                           english: "Cannot start the chat process: \(error.localizedDescription)")))
                     return
                 }
                 let data = output.fileHandleForReading.readDataToEndOfFile()
@@ -389,7 +402,8 @@ final class ChatSession: ObservableObject {
         if event?["type"] as? String == "error", let message = event?["message"] as? String {
             return .failure(ModelListError(message: message))
         }
-        return .failure(ModelListError(message: L("The chat process returned no model list. Make sure you have run pnpm install in the project directory.")))
+        return .failure(ModelListError(message: L("The chat process returned no model list. Make sure you have run pnpm install in the project directory."),
+                                       english: "The chat process returned no model list. Make sure you have run pnpm install in the project directory."))
     }
 
     func send(_ text: String, context: [ChatContext] = [], root: URL?, runtime: WorkspaceLocation?) {
@@ -425,6 +439,7 @@ final class ChatSession: ObservableObject {
     /// On failure the turn is ended with the error and false is returned.
     private func ready(_ id: UUID, messages: [[String: String]], root: URL?, runtime: WorkspaceLocation?) -> Bool {
         guard let root else { update(id) { $0.fail(L("Cannot find the Fudehand source directory, so the chat process cannot start")) }; return false }
+        if harnesses[id]?.stale == true { terminate(id) }
         if harnesses[id] == nil {
             do { try start(id, root: root, runtime: runtime) }
             catch { update(id) { $0.fail(L("Cannot start the chat process: %@", error.localizedDescription)) }; return false }
@@ -517,6 +532,9 @@ final class ChatSession: ObservableObject {
         conversationID = id
     }
 
+    /// A saved conversation of the design document being shown, open or not.
+    func saved(_ id: UUID) -> ChatConversation? { history?.load(id) }
+
     /// Opens a saved conversation: selects its tab when it is already open, takes the place of an empty current conversation, or adds a tab.
     func open(_ id: UUID) {
         if tabs.contains(where: { $0.id == id }) { conversationID = id; return }
@@ -544,10 +562,11 @@ final class ChatSession: ObservableObject {
         if conversationID == id { conversationID = tabs[min(index, tabs.count - 1)].id }
     }
 
-    /// Deletes the selected conversation from the history and closes its tab. Not while it is replying, so the reply is not saved again.
-    func deleteConversation() {
-        guard !transcript.busy else { return }
-        let id = conversationID
+    /// Deletes a conversation (the selected one by default) from the history and closes its tab if it is open. Not while it is
+    /// replying, so the reply is not saved again.
+    func deleteConversation(_ id: UUID? = nil) {
+        let id = id ?? conversationID
+        guard tabs.first(where: { $0.id == id })?.transcript.busy != true else { return }
         history?.delete(id)
         conversations = history?.list() ?? []
         close(id)
@@ -584,17 +603,17 @@ final class ChatSession: ObservableObject {
     }
 
     private func restart(_ id: UUID) {
-        guard harnesses[id] != nil else { return }
-        terminate(id)
-        // terminate() discards the old harness's `done` and exit callbacks, so end the running reply here.
+        guard let harness = harnesses[id] else { return }
+        // A running reply is not cut short (an Agent tool may have made the change from inside it); the change applies from the next message.
+        if tabs.first(where: { $0.id == id })?.transcript.busy == true { harness.stale = true; return }
         // The next message starts a new harness, which is given the conversation so far.
-        update(id) { $0.suspend() }
+        terminate(id)
     }
 
     private func start(_ id: UUID, root: URL, runtime: WorkspaceLocation?) throws {
         guard let settings = tabs.first(where: { $0.id == id })?.settings else { return }
         let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: storedKey(for: settings.provider),
-                                 environment: ProcessInfo.processInfo.environment)
+                                 environment: ProcessInfo.processInfo.environment, conversation: id)
         let child = Process()
         child.executableURL = launch.executable
         child.arguments = launch.arguments

@@ -25,6 +25,9 @@ _Avoid_: element (元素), component (组件) (components mean something else an
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, and auto layout. A top-level frame usually represents a screen, and the canvas shows a name label above it.
 _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
+**Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
+_Avoid_: version history, backup (a snapshot never restores the frame), snapshot alone (`design_snapshot` is the Agent's own PNG capture, which adds nothing to the document)
+
 **Group (分组 / 群組)**: A layer used to organize child layers. It cannot use auto layout or be resized with handles, and its size always equals the union of its child layers. Inside an auto layout frame a group is placed like any other child layer but ignores fill container (fill) and cross-axis stretch: it keeps the size of its child layers and takes no share of the remaining space.
 
 **Effect (效果 / 效果)**: A shadow or blur in a layer's effects list, drawn in list order: *Drop Shadow* (投影 / 投影) and *Inner Shadow* (内阴影 / 內陰影), with a color, an X/Y offset, a blur, and a spread; *Layer Blur* (图层模糊 / 圖層模糊), which blurs the layer with its children; and *Background Blur* (背景模糊 / 背景模糊), which blurs the layers under it in the same parent, seen through a see-through fill. Each can be hidden without removing it. Every layer type but group has effects.
@@ -63,7 +66,7 @@ _Avoid_: preview mode, present mode
 
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
-**Properties panel (属性面板 / 屬性面板)**: The Design (设计) tab of the right inspector, which edits the selected layer's position, size, fill, stroke, text, and auto layout.
+**Properties panel (属性面板 / 屬性面板)**: The Design (设计) and Prototype (原型) tabs of the right inspector: the Design tab edits the selected layer's position, size, auto layout, appearance, fill, stroke, and text; the Prototype tab its interaction, states, scrolling, and animation.
 
 **Font library (字体库 / 字體庫)**: The directory `~/Library/Application Support/fudehand/Fonts` holding font files imported with *Import Font…* or `design_import_font`. Its fonts are registered for the App only, not installed on the system, and not stored in project files: a project file opened on a Mac without the font falls back to the system font.
 
@@ -74,8 +77,11 @@ _Avoid_: preview mode, present mode
 **Launch window (启动窗口 / 啟動視窗)**: The window shown when the App starts, with three areas: New, Recent, and Templates. It closes once editing begins and can be reopened from *Window → Launch Window (窗口 › 启动窗口)*.
 _Avoid_: welcome page (欢迎页), home page (首页)
 
-**Template (模板 / 範本)**: A `.fudehand` design bundled with the App (`native/Resources/Templates/`), used in the launch window to create a new untitled design document; the new document is not linked to the template file, so saving never overwrites the template.
+**Template (模板 / 範本)**: A `.fudehand` design bundled with the App (`native/Resources/Templates/`), used in the launch window to create a new untitled design document; the new document is not linked to the template file, so saving never overwrites the template. The bundled starter templates follow the *design foundations*.
 _Avoid_: example (示例), work template (作品模板) (these refer to the removed web-project pipeline)
+
+**Design foundations (基础设计规范 / 基礎設計規範)**: The shared colors, type scale, spacing scale, and corner radii in `docs/design-foundations.md` that the bundled starter templates use and show in their "Design system" frame. A convention people and agents can follow, not part of the design document: changing a value in one design updates nothing else.
+_Avoid_: design system (设计系统) for the docs page (the "Design system" frame shows the foundations), theme (主题)
 
 **MCP connector (MCP 连接器 / MCP 連接器)**: The window opened from the app menu's *MCP Connectors… (MCP 连接器…)*. It detects whether the MCP server is registered in the user-level configuration of Claude Code, Codex, and DeepSeek Harness, and connects or disconnects it with one click (through the CLI for Claude Code and Codex; for DeepSeek Harness, which has no such command, by editing a marked block in its home patch file `~/.dsh/cordis.patch.yml`).
 _Avoid_: plugin (插件), integration (集成)
