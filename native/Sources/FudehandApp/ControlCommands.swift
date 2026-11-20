@@ -104,6 +104,14 @@ extension FudehandStore {
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):
             return ["icons": IconCatalog.shared.search(query, library: library, limit: limit)]
+        case .listColors(let ids):
+            return selectionColorsResult(try colorLayers(ids))
+        case .replaceColor(let from, let to, let ids):
+            let layers = try colorLayers(ids)
+            let uses = SelectionColors.uses(of: from, under: Set(layers), in: editor.document)
+            guard !uses.isEmpty else { throw ControlCommandError("None of these layers or their child layers uses \(from.hex)") }
+            let replaced = try setColor(to, at: uses, "Agent: Replace Color")
+            return selectionColorsResult(layers).merging(["replaced": replaced]) { $1 }
         case .getInterface, .updateInterface, .getModels, .updateModelProvider, .listModels, .setAPIKey, .deleteAPIKey, .getConnectors, .setConnector:
             return try await handleSettings(command)
         case .importFont(let path):
@@ -224,6 +232,20 @@ extension FudehandStore {
         }
         if let children = object["children"] as? [Any] { object["children"] = children.map { ($0 as? [String: Any]).map(iconDefaults) ?? $0 } }
         return object
+    }
+
+    /// The layers whose selection colors a command reads or replaces: those named, or else the selection.
+    private func colorLayers(_ ids: [String]?) throws -> [String] {
+        guard let ids else {
+            guard !selection.isEmpty else { throw ControlCommandError("Nothing is selected; select layers or pass ids") }
+            return selection.sorted()
+        }
+        for id in ids { _ = try requireNode(id) }
+        return ids
+    }
+
+    private func selectionColorsResult(_ ids: [String]) -> [String: Any] {
+        ["ids": ids, "colors": SelectionColors.collect(Set(ids), in: editor.document).map { ["color": $0.color.hex, "count": $0.count] }]
     }
 
     private func requireDiscardable(_ discard: Bool) throws {

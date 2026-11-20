@@ -268,6 +268,15 @@ final class FudehandStore: ObservableObject {
         }
     }
 
+    /// Changes a selection color: sets `color` on the given uses (the fills, strokes, text colors, and icon colors that held
+    /// one color of the selection) as one undo step, and returns how many properties changed.
+    @discardableResult
+    func setColor(_ color: DesignColor, at uses: [ColorUse], _ name: String = "Change Selection Color", coalescing: String? = nil) throws -> Int {
+        var changed = 0
+        try perform(name, coalescing: coalescing) { changed = SelectionColors.set(color, at: uses, in: &$0) }
+        return changed
+    }
+
     // MARK: Version snapshots
 
     /// Saves a version snapshot of a frame: renders the frame as it looks now into a read-only top-level image layer placed beside

@@ -440,6 +440,10 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+"Selection Colors" = "選取範圍顏色";
+"Selection color %@" = "選取範圍顏色 %@";
+"Show all %d colors" = "顯示全部 %d 種顏色";
+"Show Fewer Colors" = "收合顏色";
 
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@透明度";

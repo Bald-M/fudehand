@@ -440,6 +440,10 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+"Selection Colors" = "Selection Colours";
+"Selection color %@" = "Selection colour %@";
+"Show all %d colors" = "Show all %d colours";
+"Show Fewer Colors" = "Show Fewer Colours";
 
 /* Properties panel redesign (#189) */
 "%@ opacity" = "%@ opacity";

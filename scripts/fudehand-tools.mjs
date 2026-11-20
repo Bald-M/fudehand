@@ -143,6 +143,16 @@ export const tools = [
       library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
       limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
     }, ['query']),
+  controlTool('design_list_colors', 'list_colors',
+    'Read the selection colors: every color used by the fills, strokes, text colors, and icon colors of the given layers and all their child layers, merged by hex value, most used first. Returns ids and colors [{color, count}].',
+    { ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' } }, []),
+  controlTool('design_replace_color', 'replace_color',
+    'Replace a selection color: every fill, stroke, text color, and icon color of the given layers and their child layers that uses from becomes to, as a single undo step. Fails, changing nothing, when no layer there uses from. Returns replaced (how many properties changed) and the new selection colors.',
+    {
+      from: { type: 'string', description: 'The color to replace, #RRGGBB or #RRGGBBAA (as returned by design_list_colors)' },
+      to: { type: 'string', description: 'The new color, #RRGGBB or #RRGGBBAA' },
+      ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' },
+    }, ['from', 'to']),
   controlTool('design_save_version_snapshot', 'save_version_snapshot',
     'Save a version snapshot of a frame, as one undo step: the frame as it looks now, rendered into a read-only top-level image layer placed to the right of the frame and of its earlier snapshots, top-aligned with it. ' +
     'Use it before changing a frame substantially so the old and new versions can be compared side by side, or overlaid by moving the snapshot to the frame\'s position (frameBounds) and lowering its opacity with design_update_node. ' +
