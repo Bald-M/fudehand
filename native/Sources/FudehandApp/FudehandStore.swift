@@ -436,6 +436,9 @@ final class FudehandStore: ObservableObject {
         let url: URL
         var id: URL { url }
         var name: String { url.deletingPathExtension().lastPathComponent }
+        /// The file name (US English) is the string-table key, so bundled templates show in the UI language;
+        /// a template without an entry shows its file name.
+        var title: String { L(name) }
     }
 
     static func templates(in directory: URL?) -> [Template] {

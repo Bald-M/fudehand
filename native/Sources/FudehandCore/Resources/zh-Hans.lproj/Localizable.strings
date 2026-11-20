@@ -78,6 +78,9 @@
 "No project files opened yet" = "还没有打开过的工程文件";
 "Templates" = "模板";
 "No templates" = "暂无模板";
+"Mobile App" = "手机应用";
+"Web Page" = "网页";
+"Dashboard" = "仪表盘";
 "Create an untitled design document from “%@”" = "从“%@”新建未命名设计文档";
 "File deleted or moved" = "文件已删除或移动";
 "Open" = "打开";
