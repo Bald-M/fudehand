@@ -1,6 +1,6 @@
 # Advanced Effects Extend the Effects List and Its Core Animation Rendering
 
-2026-11-20 (#193). Status: **proposed** — to be reviewed before any of it is implemented, as #193 requires. It builds on the effects list of #190 (drop shadow, inner shadow, layer blur, background blur), implemented in PR #214, which is not merged yet; where this ADR depends on a choice made there, it says so, and it is revisited if that PR changes.
+2026-11-20 (#193). Status: **accepted** (reviewed 2026-11-20, as #193 requires before implementation). It builds on the effects list of #190 (drop shadow, inner shadow, layer blur, background blur), implemented in PR #214, which is not merged yet; where this ADR depends on a choice made there, it says so, and it is revisited if that PR changes.
 
 The effects add menu prototype ("Effects add menu (open)", drawn in Fudehand) lists six more effects after shadows and blurs: **Noise**, **Texture**, **Glass**, **Shader**, and, marked Beta, **3D transform** and **Perspective**. This ADR fixes each one's parameters and rendering, the shader's security and performance limits, and how the canvas, `design_snapshot`, and the prototype window stay identical.
 
@@ -110,7 +110,7 @@ Each effect is its own PR after #214 is merged, in this order: **Noise → Textu
 
 ## Consequences
 
-- Nothing here starts before #214 is merged and this ADR is accepted.
+- Nothing here starts before #214 is merged.
 - Pixel effects cost memory: one bitmap per effect per layer at the current zoom, capped by `maximumRasterSide`.
 - Glass sees only its siblings beneath it, the same as Background Blur.
 - Turned and perspective layers are selected by their flat rectangle until hit testing learns quads.
