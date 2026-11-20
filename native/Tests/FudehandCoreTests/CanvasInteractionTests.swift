@@ -206,3 +206,29 @@ private func guides(_ effects: [InteractionEffect]) -> [Guide]? {
     _ = machine.pointerDragged(to: Point(x: 110, y: 10), modifiers: [.control], context: ctx)
     #expect(down(&machine, 600, 600, hit: .empty, context: ctx) == [.endGesture, .guides([]), .select([])])
 }
+
+@Test func pressingAnAnnotationMarkerTogglesItWithoutSelectingOrDragging() {
+    for tool in [CanvasTool.move, .rectangle, .annotate] {
+        var machine = CanvasInteraction()
+        #expect(down(&machine, 10, 10, hit: .annotation("n"), context: context(selection: ["a"], tool: tool)) == [.toggleAnnotation("n")])
+        #expect(machine.isIdle)
+        #expect(machine.pointerDragged(to: Point(x: 80, y: 80), modifiers: [], context: context(selection: ["a"], tool: tool)) == [])
+        #expect(machine.pointerUp(at: Point(x: 80, y: 80), context: context(selection: ["a"], tool: tool)) == [])
+    }
+    var double = CanvasInteraction()
+    #expect(down(&double, 10, 10, hit: .annotation("n"), clickCount: 2, context: context()) == [])
+    // Panning still wins: Space, the hand tool, and the middle button pan over a marker.
+    var machine = CanvasInteraction()
+    #expect(down(&machine, 10, 10, hit: .annotation("n"), context: context(spaceHeld: true)) == [])
+    #expect(!machine.isIdle)
+}
+
+@Test func annotateToolStartsAnAnnotationOnTheLayerUnderThePointer() {
+    var machine = CanvasInteraction()
+    let ctx = context(selection: ["b"], tool: .annotate)
+    #expect(down(&machine, 30, 40, hit: .node("a"), context: ctx) == [.annotate("a", Point(x: 60, y: 80))])
+    #expect(machine.isIdle)
+    #expect(down(&machine, 30, 40, hit: .empty, context: ctx) == [])
+    #expect(down(&machine, 30, 40, hit: .label("a"), context: ctx) == [])
+    #expect(machine.pointerDragged(to: Point(x: 90, y: 90), modifiers: [], context: ctx) == [])
+}

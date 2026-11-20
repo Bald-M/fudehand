@@ -14,7 +14,7 @@ see them on the canvas, and snap layers to the columns and rows.
   every zoom. Snapshots, thumbnails, and prototype playback never show them (they are not part of the layer tree's rendering).
 - Moving and resizing a layer snaps to the column and row edges of the parent frame's visible guides.
 - The properties panel gets a "Layout Guides" section; every add, edit, show/hide, and removal is one undo step.
-- Guides are saved in `.fudehand` (format version 7; version 6 added version snapshots); older files open unchanged. Agents read and write them through
+- Guides are saved in `.fudehand` (format version 8; versions 6 and 7 added version snapshots and annotations); older files open unchanged. Agents read and write them through
   `design_get_node` / `design_create_node` / `design_update_node` as the `layoutGuides` field.
 
 ## Non-goals

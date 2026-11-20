@@ -10,6 +10,7 @@ struct CanvasToolbar: View {
     static let tools: [(CanvasTool, String, String, String)] = [
         (.move, "Move", "V", "cursorarrow"), (.hand, "Hand", "H", "hand.raised"), (.frame, "Frame", "F", "number"),
         (.rectangle, "Rectangle", "R", "rectangle"), (.ellipse, "Ellipse", "O", "circle"), (.text, "Text", "T", "t.square"),
+        (.annotate, "Annotate", "C", "text.bubble"),
     ]
 
     var body: some View {

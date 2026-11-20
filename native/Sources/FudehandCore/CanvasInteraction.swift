@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CanvasTool: String, Equatable, CaseIterable, Sendable {
-    case move, hand, frame, rectangle, ellipse, text
+    case move, hand, frame, rectangle, ellipse, text, annotate
 
     /// The layer type a creation tool corresponds to.
     public var creates: NodeType? {
@@ -10,7 +10,7 @@ public enum CanvasTool: String, Equatable, CaseIterable, Sendable {
         case .rectangle: return .rectangle
         case .ellipse: return .ellipse
         case .text: return .text
-        case .move, .hand: return nil
+        case .move, .hand, .annotate: return nil
         }
     }
 }
@@ -37,6 +37,8 @@ public enum HitTarget: Equatable, Sendable {
     /// The name label above a top-level frame.
     case label(String)
     case handle(String, ResizeHandle)
+    /// An annotation marker; markers sit above everything else on the canvas.
+    case annotation(String)
 }
 
 public enum PointerButton: Equatable { case primary, middle }
@@ -68,6 +70,10 @@ public enum InteractionEffect: Equatable {
     case enter(String, Point)
     /// Creation tool: creates a layer at a rectangle in canvas coordinates. `clicked` is true for a single click (default size) and false for a dragged-out size.
     case create(NodeType, Rect, clicked: Bool)
+    /// Pressing an annotation marker: expands its thread, or collapses it when it is the one already expanded.
+    case toggleAnnotation(String)
+    /// Annotate tool: starts a new annotation on a layer at a point in canvas coordinates.
+    case annotate(String, Point)
 }
 
 public struct InteractionContext {
@@ -153,12 +159,23 @@ public struct CanvasInteraction {
             state = .panning(origin: point, viewport: context.viewport)
             return []
         }
+        if case .annotation(let id) = hit {
+            state = .idle
+            // The second press of a double-click would collapse what the first one expanded.
+            return clickCount > 1 ? [] : [.toggleAnnotation(id)]
+        }
         if let type = context.tool.creates {
             state = .creating(type, origin: point)
             return []
         }
+        if context.tool == .annotate {
+            state = .idle
+            guard case .node(let id) = hit else { return [] }
+            return [.annotate(id, CanvasGeometry.screenToWorld(point, viewport: context.viewport))]
+        }
         let id: String
         switch hit {
+        case .annotation: return []
         case .empty:
             state = .marquee(origin: point, base: modifiers.contains(.shift) ? context.selection : [])
             return modifiers.contains(.shift) ? [] : [.select([])]

@@ -25,6 +25,9 @@ final class RecordingHost: CanvasHost {
     func canvasViewportSettled(_ viewport: Viewport) { settled.append(viewport); store.canvasViewportSettled(viewport) }
     func canvasSizeChanged(_ size: CGSize) { store.canvasSizeChanged(size) }
     func canvasHover(_ id: String?) { store.canvasHover(id) }
+    func canvasToggleAnnotation(_ id: String) { store.canvasToggleAnnotation(id) }
+    func canvasAnnotate(_ node: String, at point: Point) { store.canvasAnnotate(node, at: point) }
+    func canvasCollapseAnnotation() { store.canvasCollapseAnnotation() }
 }
 
 /// Top-level frame a (0,0 400×300, containing card 20,20 100×50) and rectangle b (600,0 300×300); viewport (0, 100) at 100%, with the frame's name label visible on screen.

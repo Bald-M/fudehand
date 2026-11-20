@@ -14,7 +14,8 @@ private func snapshotObject(_ record: [String: Any], type: String = "image") -> 
     return object
 }
 
-@Test func version5FilesOpen() throws {
+@Test func version6IsWrittenAndVersion5Opens() throws {
+    #expect(DesignDocument.formatVersion >= 6)
     let json = #"{"format":"fudehand.design","version":5,"nodes":[{"id":"r","type":"rectangle","name":"","x":0,"y":0,"width":1,"height":1}]}"#
     #expect(try DesignDocument.decode(Data(json.utf8)).nodes.count == 1)
 }

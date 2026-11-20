@@ -473,6 +473,20 @@
 "Place Beside Frame" = "Place Beside Frame";
 "Save version snapshot" = "Save version snapshot";
 "List version snapshots" = "List version snapshots";
+
+/* Annotations */
+"Annotate" = "Annotate";
+"Annotation" = "Annotation";
+"Add an annotation" = "Add an annotation";
+"Add" = "Add";
+"Reply" = "Reply";
+"Edit" = "Edit";
+"Delete Annotation" = "Delete Annotation";
+"Delete Reply" = "Delete Reply";
+"You" = "You";
+"Agent" = "Agent";
+"Annotation: %@" = "Annotation: %@";
+"Expanded" = "Expanded";
 "Layout Guides" = "Layout Guides";
 "Add layout guide" = "Add layout guide";
 "Remove layout guide" = "Remove layout guide";
