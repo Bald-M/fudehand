@@ -60,9 +60,9 @@ private func iconButtons() throws -> [IconButton] {
     }
 }
 
-/// Icon-only buttons are at least 16×16 points to click (#174): `iconHitTarget()` or an explicit frame on the label. Menus
-/// (`.menuStyle`) are drawn by AppKit at its own size, which a SwiftUI frame does not change, and toolbar items
-/// (`WorkspaceView`) are sized by the system, so neither is checked here.
+/// Icon-only buttons are at least 16×16 points to click (#174): `iconHitTarget()` or an explicit frame on the label. A
+/// menu's `Image` label fails outright: AppKit draws the menu at the image's height whatever the SwiftUI frame, so its label
+/// must be `MenuIcon`, which this scan does not match. Toolbar items (`WorkspaceView`) are sized by the system.
 @Test func everyIconOnlyButtonHasAClickTargetOfAtLeastSixteenPoints() throws {
     let frame = try NSRegularExpression(pattern: #"\.frame\(width: (\d+), height: (\d+)\)"#)
     func framed(_ text: String) -> Bool {
@@ -71,8 +71,8 @@ private func iconButtons() throws -> [IconButton] {
             Int(ns.substring(with: match.range(at: 1)))! >= 16 && Int(ns.substring(with: match.range(at: 2)))! >= 16
         }
     }
-    for button in try iconButtons() where button.file != "WorkspaceView.swift" && !button.modifiers.contains(".menuStyle(") {
-        let sized = button.label.contains(".iconHitTarget()") || framed(button.label)
+    for button in try iconButtons() where button.file != "WorkspaceView.swift" {
+        let sized = !button.modifiers.contains(".menuStyle(") && (button.label.contains(".iconHitTarget()") || framed(button.label))
         #expect(sized, "\(button.file):\(button.line) has a click target under 16×16")
     }
 }
