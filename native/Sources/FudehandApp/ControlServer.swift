@@ -12,7 +12,8 @@ struct ControlCommandError: LocalizedError, Equatable {
 /// The control channel: a Unix domain socket open only to the current user, listening on no network address.
 /// Each connection reads requests line by line, commands run on the main thread, and responses are written back in request order.
 final class ControlServer: @unchecked Sendable {
-    typealias Handler = @MainActor (ControlCommand) async throws -> Any
+    /// Takes the command and the conversation whose Agent sent it (nil for any other caller).
+    typealias Handler = @MainActor (ControlCommand, UUID?) async throws -> Any
 
     static func defaultPath(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if let path = environment["FUDEHAND_CONTROL_SOCKET"], !path.isEmpty { return path }
@@ -184,7 +185,7 @@ final class ControlServer: @unchecked Sendable {
         let done = DispatchSemaphore(value: 0)
         let handler = handler
         Task { @MainActor in
-            do { box.data = ControlProtocol.success(id: request.id, result: try await handler(request.command)) }
+            do { box.data = ControlProtocol.success(id: request.id, result: try await handler(request.command, request.caller)) }
             catch { box.data = ControlProtocol.failure(id: request.id, message: error.localizedDescription) }
             done.signal()
         }

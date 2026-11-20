@@ -132,3 +132,59 @@ private func object(_ data: Data) throws -> [String: Any] {
     #expect(leadingID(#"{"id":1"#) == nil)
     #expect(leadingID("oops") == nil)
 }
+
+@Test func controlProtocolParsesChatCommands() throws {
+    let a = "8E0A1C2B-3D4E-4F50-8172-93A4B5C6D7E8"
+    let id = UUID(uuidString: a)!
+    let cases: [(String, ControlCommand)] = [
+        (#"{"command":"list_conversations"}"#, .listConversations),
+        (#"{"command":"get_conversation"}"#, .getConversation(nil)),
+        (#"{"command":"get_conversation","args":{"id":"\#(a)"}}"#, .getConversation(id)),
+        (#"{"command":"open_conversation","args":{"id":"\#(a)"}}"#, .openConversation(id)),
+        (#"{"command":"new_conversation"}"#, .newConversation),
+        (#"{"command":"close_conversation","args":{"id":"\#(a)"}}"#, .closeConversation(id)),
+        (#"{"command":"delete_conversation","args":{"id":"\#(a)"}}"#, .deleteConversation(id)),
+        (#"{"command":"clear_conversation"}"#, .clearConversation(nil)),
+        (#"{"command":"send_message","args":{"text":"Make it blue"}}"#, .sendMessage(nil, text: "Make it blue", context: [], mode: nil)),
+        (#"{"command":"send_message","args":{"id":"\#(a)","text":"Hi","context":["n1","n2"],"mode":"goal"}}"#,
+         .sendMessage(id, text: "Hi", context: ["n1", "n2"], mode: .goal)),
+        (#"{"command":"set_mode","args":{"mode":"plan"}}"#, .setMode(nil, mode: .plan)),
+        (#"{"command":"set_mode","args":{"id":"\#(a)","mode":"none"}}"#, .setMode(id, mode: nil)),
+        (#"{"command":"run_plan"}"#, .runPlan(nil, context: [])),
+        (#"{"command":"run_plan","args":{"id":"\#(a)","context":["n1"]}}"#, .runPlan(id, context: ["n1"])),
+        (#"{"command":"stop_reply"}"#, .stopReply(nil)),
+        (#"{"command":"regenerate_reply","args":{"id":"\#(a)"}}"#, .regenerateReply(id)),
+        (#"{"command":"edit_last_message","args":{"text":"Now red","context":["n1"]}}"#, .editLastMessage(nil, text: "Now red", context: ["n1"])),
+        (#"{"command":"answer_question","args":{"text":"Dark"}}"#, .answerQuestion(nil, answer: "Dark")),
+        (#"{"command":"answer_question","args":{"skip":true}}"#, .answerQuestion(nil, answer: nil)),
+        (#"{"command":"compact_conversation"}"#, .compactConversation(nil)),
+    ]
+    for (line, command) in cases {
+        #expect(try parse(line).get().command == command, "\(line)")
+    }
+    #expect(try parse(#"{"command":"stop_reply"}"#).get().caller == nil)
+    #expect(try parse(#"{"command":"stop_reply","caller":"\#(a)"}"#).get().caller == id)
+}
+
+@Test func controlProtocolRejectsBadChatArguments() {
+    let cases: [(String, String)] = [
+        (#"{"command":"open_conversation"}"#, "Missing argument: id"),
+        (#"{"command":"open_conversation","args":{"id":"tab-1"}}"#, "Invalid argument type: id"),
+        (#"{"command":"get_conversation","args":{"id":3}}"#, "Invalid argument type: id"),
+        (#"{"command":"send_message","args":{}}"#, "Missing argument: text"),
+        (#"{"command":"send_message","args":{"text":"  "}}"#, "Invalid argument type: text"),
+        (#"{"command":"send_message","args":{"text":"Hi","context":"n1"}}"#, "Invalid argument type: context"),
+        (#"{"command":"send_message","args":{"text":"Hi","mode":"none"}}"#, "mode must be one of plan, goal; got none"),
+        (#"{"command":"set_mode","args":{}}"#, "Missing argument: mode"),
+        (#"{"command":"set_mode","args":{"mode":"build"}}"#, "mode must be one of plan, goal, none; got build"),
+        (#"{"command":"edit_last_message","args":{}}"#, "Missing argument: text"),
+        (#"{"command":"answer_question","args":{}}"#, "Provide either text or skip: true"),
+        (#"{"command":"answer_question","args":{"text":"Dark","skip":true}}"#, "Provide either text or skip: true"),
+        (#"{"command":"answer_question","args":{"skip":"yes"}}"#, "Invalid argument type: skip"),
+        (#"{"command":"stop_reply","caller":"me"}"#, "Invalid argument type: caller"),
+    ]
+    for (line, message) in cases {
+        guard case .failure(let failure) = parse(line) else { Issue.record("Should be rejected: \(line)"); continue }
+        #expect(failure.message == message, "\(line)")
+    }
+}

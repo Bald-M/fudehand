@@ -33,6 +33,26 @@ public enum ControlCommand: Equatable, Sendable {
     case clearRecents
     case listTemplates
     case newDocumentFromTemplate(String, discard: Bool)
+    // Chat panel conversations. A nil conversation means the selected one.
+    case listConversations
+    case getConversation(UUID?)
+    case openConversation(UUID)
+    case newConversation
+    case closeConversation(UUID)
+    case deleteConversation(UUID)
+    case clearConversation(UUID?)
+    /// `context` holds layer ids; `mode` switches the conversation first, nil keeps its mode.
+    case sendMessage(UUID?, text: String, context: [String], mode: ChatMode?)
+    /// A nil mode leaves plan or goal mode.
+    case setMode(UUID?, mode: ChatMode?)
+    /// Confirms the plan made in plan mode, as Run Plan does.
+    case runPlan(UUID?, context: [String])
+    case stopReply(UUID?)
+    case regenerateReply(UUID?)
+    case editLastMessage(UUID?, text: String, context: [String])
+    /// A nil answer skips the question.
+    case answerQuestion(UUID?, answer: String?)
+    case compactConversation(UUID?)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -58,6 +78,8 @@ public enum ControlID: Equatable, Sendable {
 public struct ControlRequest: Equatable, Sendable {
     public let id: ControlID?
     public let command: ControlCommand
+    /// The chat panel conversation whose Agent sent the request; nil for any other caller.
+    public let caller: UUID?
 }
 
 public struct ControlFailure: Error, Equatable, Sendable {
@@ -71,6 +93,8 @@ public struct ControlFailure: Error, Equatable, Sendable {
 
 /// Line-delimited JSON: request `{"id":1,"command":"focus_node","args":{"id":"home"}}`,
 /// response `{"id":1,"ok":true,"result":…}` or `{"id":1,"ok":false,"error":"…"}`.
+/// A request from the in-App Agent also carries `"caller"`, the id of its conversation, so a command cannot stop, delete, or
+/// reconfigure the conversation that sent it.
 public enum ControlProtocol {
     public static func parse(_ line: Data) -> Result<ControlRequest, ControlFailure> {
         guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
@@ -78,7 +102,12 @@ public enum ControlProtocol {
         }
         let id: ControlID? = (object["id"] as? String).map(ControlID.string) ?? integer(object["id"]).map(ControlID.int)
         do {
-            return .success(ControlRequest(id: id, command: try command(object)))
+            var caller: UUID?
+            if let value = object["caller"], !(value is NSNull) {
+                guard let text = value as? String, let uuid = UUID(uuidString: text) else { throw Message(text: "Invalid argument type: caller") }
+                caller = uuid
+            }
+            return .success(ControlRequest(id: id, command: try command(object), caller: caller))
         } catch let message as Message {
             return .failure(ControlFailure(id: id, message: message.text))
         } catch {
@@ -152,6 +181,35 @@ public enum ControlProtocol {
             guard let number = value as? NSNumber, isBool(number) else { throw Message(text: "Invalid argument type: \(key)") }
             return number.boolValue
         }
+        func conversation(_ key: String = "id") throws -> UUID {
+            guard let uuid = UUID(uuidString: try string(key)) else { throw Message(text: "Invalid argument type: \(key)") }
+            return uuid
+        }
+        func optionalConversation() throws -> UUID? {
+            switch args["id"] {
+            case nil, is NSNull: return nil
+            default: return try conversation()
+            }
+        }
+        func layerIDs() throws -> [String] {
+            switch args["context"] {
+            case nil, is NSNull: return []
+            default: return try strings("context")
+            }
+        }
+        func message() throws -> String {
+            let text = try string("text")
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Message(text: "Invalid argument type: text") }
+            return text
+        }
+        func chatMode(allowingNone: Bool) throws -> ChatMode? {
+            let name = try string("mode")
+            if allowingNone, name == "none" { return nil }
+            guard let mode = ChatMode(rawValue: name) else {
+                throw Message(text: "mode must be one of plan, goal\(allowingNone ? ", none" : ""); got \(name)")
+            }
+            return mode
+        }
         func positive(_ key: String, default fallback: Double? = nil) throws -> Double {
             guard let value = args[key], !(value is NSNull) else {
                 if let fallback { return fallback }
@@ -209,6 +267,27 @@ public enum ControlProtocol {
         case "clear_recents": return .clearRecents
         case "list_templates": return .listTemplates
         case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
+        case "list_conversations": return .listConversations
+        case "get_conversation": return .getConversation(try optionalConversation())
+        case "open_conversation": return .openConversation(try conversation())
+        case "new_conversation": return .newConversation
+        case "close_conversation": return .closeConversation(try conversation())
+        case "delete_conversation": return .deleteConversation(try conversation())
+        case "clear_conversation": return .clearConversation(try optionalConversation())
+        case "send_message":
+            let mode = args["mode"] == nil || args["mode"] is NSNull ? nil : try chatMode(allowingNone: false)
+            return .sendMessage(try optionalConversation(), text: try message(), context: try layerIDs(), mode: mode)
+        case "set_mode": return .setMode(try optionalConversation(), mode: try chatMode(allowingNone: true))
+        case "run_plan": return .runPlan(try optionalConversation(), context: try layerIDs())
+        case "stop_reply": return .stopReply(try optionalConversation())
+        case "regenerate_reply": return .regenerateReply(try optionalConversation())
+        case "edit_last_message": return .editLastMessage(try optionalConversation(), text: try message(), context: try layerIDs())
+        case "answer_question":
+            let skip = try flag("skip")
+            let text = args["text"] == nil || args["text"] is NSNull ? nil : try message()
+            guard skip != (text != nil) else { throw Message(text: "Provide either text or skip: true") }
+            return .answerQuestion(try optionalConversation(), answer: text)
+        case "compact_conversation": return .compactConversation(try optionalConversation())
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

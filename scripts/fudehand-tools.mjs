@@ -61,10 +61,10 @@ function controlTool(name, command, description, properties = {}, required = Obj
   return {
     name, description: `${description} Requires Fudehand to be running.`,
     inputSchema: { type: 'object', properties, required },
-    async run(args, { root, socketPath }) {
+    async run(args, { root, socketPath, conversation }) {
       let forwarded = Object.fromEntries(Object.keys(properties).filter(key => args[key] !== undefined).map(key => [key, args[key]]))
       if (prepare) forwarded = await prepare(forwarded, root)
-      return json(await sendControl(command, forwarded, { socketPath }))
+      return json(await sendControl(command, forwarded, { socketPath, caller: conversation }))
     },
   }
 }
@@ -73,6 +73,11 @@ const id = { id: { type: 'string', description: 'Layer id' } }
 const ids = { ids: { type: 'array', items: { type: 'string' }, description: 'List of layer ids' } }
 const discard = { discard: { type: 'boolean', description: 'When true, discard unsaved changes' } }
 const path = description => ({ path: { type: 'string', description } })
+const conversation = { id: { type: 'string', description: 'Conversation id from chat_list_conversations; when omitted, the selected conversation' } }
+const openConversation = { id: { type: 'string', description: 'Conversation id from chat_list_conversations' } }
+const context = { context: { type: 'array', items: { type: 'string' }, description: 'Ids of layers to attach as context tags, as the selected layers are in the panel; when omitted, none' } }
+const ownConversation = 'Refused for the conversation whose Agent is calling.'
+const sent = 'The reply runs on in the App: read its progress and result with chat_get_conversation.'
 
 export const tools = [
   controlTool('design_get_state', 'get_state', 'Read an overview of the design document: file, whether it has been edited, selection, viewport, whether undo is available, and a summary of top-level layers.'),
@@ -148,6 +153,46 @@ export const tools = [
   controlTool('app_list_templates', 'list_templates', 'List the templates bundled with Fudehand, shown in the launch window: each has a name (pass it to app_new_document_from_template) and the title the launch window shows in the current UI language.'),
   controlTool('app_new_document_from_template', 'new_document_from_template', 'Create an untitled design document from a template, as the launch window does: the document is not linked to the template file, so saving it needs a path and never overwrites the template. Refused when the current document has unsaved changes, unless discard is true. Returns the document overview.',
     { name: { type: 'string', description: 'Template name, as returned by app_list_templates' }, ...discard }, ['name']),
+  controlTool('chat_list_conversations', 'list_conversations',
+    'List the conversations of the current design document in the chat panel: the open tabs in order (with whether each is replying, waiting for an answer, its mode, and its model), the selected one, and the saved conversations of the history menu, newest first.'),
+  controlTool('chat_get_conversation', 'get_conversation',
+    'Read a conversation, open or saved: its messages, tool calls, errors, and question cards (with their options and answer), whether it is replying or waiting for an answer, its mode, the tokens it takes up in the context window (contextTokens), and the predicted next message (suggestion).',
+    conversation, []),
+  controlTool('chat_open_conversation', 'open_conversation',
+    'Open a conversation in the chat panel and select its tab: switches to it when it is already open, otherwise reopens it from the history. Returns the conversation list.', openConversation),
+  controlTool('chat_new_conversation', 'new_conversation',
+    'Start an empty conversation in a new tab with the selected conversation\'s model, or select the empty tab that is already open. Returns the conversation list, whose selected id is the new conversation.'),
+  controlTool('chat_close_conversation', 'close_conversation',
+    `Close a conversation's tab, stopping its reply; it stays in the history. ${ownConversation} Returns the conversation list.`, openConversation),
+  controlTool('chat_delete_conversation', 'delete_conversation',
+    `Delete a conversation from the history and close its tab. Refused while it is replying. ${ownConversation} Returns the conversation list.`, openConversation),
+  controlTool('chat_clear_conversation', 'clear_conversation',
+    `Empty an open conversation in place, as /clear does, stopping its reply. ${ownConversation} Returns the conversation.`, conversation, []),
+  controlTool('chat_send_message', 'send_message',
+    `Send a message to an open conversation, selecting its tab, and start the Agent's reply. mode switches the conversation first, as /plan and /goal do: plan has the Agent reply with a plan and change nothing until a later message confirms it; goal makes the message a goal the Agent works on until it is done. Refused while the conversation is replying or waiting for an answer to a question. ${ownConversation} ${sent}`,
+    {
+      ...conversation, text: { type: 'string', description: 'The message' }, ...context,
+      mode: { type: 'string', enum: ['plan', 'goal'], description: 'Switch the conversation into this mode before sending; when omitted, the conversation keeps its mode' },
+    }, ['text']),
+  controlTool('chat_set_mode', 'set_mode',
+    `Switch an open conversation into plan or goal mode for its next messages, or leave the mode with none, as the mode tag in the panel does. ${ownConversation} Returns the conversation.`,
+    { ...conversation, mode: { type: 'string', enum: ['plan', 'goal', 'none'], description: 'plan, goal, or none to leave the mode' } }, ['mode']),
+  controlTool('chat_run_plan', 'run_plan',
+    `Confirm the plan an open conversation made in plan mode, as Run Plan does: leaves plan mode and asks the Agent to carry the plan out. Refused when no plan is waiting (planReady in chat_get_conversation). ${ownConversation} ${sent}`,
+    { ...conversation, ...context }, []),
+  controlTool('chat_stop_reply', 'stop_reply',
+    `Stop an open conversation's reply, keeping what it produced so far and cancelling a question it is waiting on. ${ownConversation} Returns the conversation.`, conversation, []),
+  controlTool('chat_regenerate_reply', 'regenerate_reply',
+    `Send the last message of an open conversation again, replacing the reply it got. Refused while it is replying. ${ownConversation} ${sent}`, conversation, []),
+  controlTool('chat_edit_last_message', 'edit_last_message',
+    `Replace the last message of an open conversation, and the reply it got, with new text, and send it. Refused while it is replying. ${ownConversation} ${sent}`,
+    { ...conversation, text: { type: 'string', description: 'The new message' }, ...context }, ['text']),
+  controlTool('chat_answer_question', 'answer_question',
+    `Answer the question card an open conversation is waiting on, with text (one of its option labels or any other answer), or skip it with skip: true to leave the choice to the Agent; the reply then continues. ${ownConversation} ${sent}`,
+    { ...conversation, text: { type: 'string', description: 'The answer' }, skip: { type: 'boolean', description: 'Skip the question instead of answering it' } }, []),
+  controlTool('chat_compact_conversation', 'compact_conversation',
+    `Compact an open conversation, as /compact does: the Agent summarizes it and carries on from the summary, freeing context; the messages stay visible. Refused while it is replying. ${ownConversation} ${sent}`,
+    conversation, []),
   ...styleTools,
 ]
 

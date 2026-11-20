@@ -52,8 +52,8 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var fontFamilies: [FontFamily]
     let zoomIndicator = ZoomIndicator()
     let chat: ChatSession
-    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here.
-    private(set) var toolsRoot: URL?
+    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here. Set by `bootstrap()`, or by a test.
+    var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
     /// The model of the "MCP Connectors" window; the window may open before the main window, so the source location is read on demand.
     private(set) lazy var connectors: ConnectorsModel = {
@@ -102,9 +102,9 @@ final class FudehandStore: ObservableObject {
     private let chatRoot: URL?
 
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
-    /// `templateDirectory` holds the templates; by default the ones bundled with the App.
+    /// `templateDirectory` holds the templates; by default the ones bundled with the App. `chat` replaces the chat session, for tests.
     init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil,
-         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates")) {
+         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates"), chat: ChatSession? = nil) {
         self.defaults = defaults
         templates = Self.templates(in: templateDirectory)
         SystemSymbols.install()
@@ -114,7 +114,7 @@ final class FudehandStore: ObservableObject {
         // The App starts on an untitled document. What an earlier one left behind was never saved with a file: drop it.
         let unsaved = chatRoot.map { ChatHistory.unsaved(root: $0) }
         unsaved?.remove()
-        chat = ChatSession(history: unsaved)
+        self.chat = chat ?? ChatSession(history: unsaved)
         let stored = defaults.string(forKey: "native.theme") ?? "system"
         theme = ["light", "dark"].contains(stored) ? stored : "system"
         language = AppLanguage.saved(in: defaults)

@@ -338,13 +338,16 @@ final class ChatSession: ObservableObject {
         }
     }
 
-    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String], listModels: Bool = false) -> Launch {
+    /// `conversation` is the conversation the harness serves; its tool calls name it, so the App can refuse ones that act on it.
+    nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String],
+                                   conversation: UUID? = nil, listModels: Bool = false) -> Launch {
         var environment = inherited.filter { !$0.key.hasPrefix("FUDEHAND_") || $0.key == "FUDEHAND_CONTROL_SOCKET" }
         environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"].compactMap { $0 }.joined(separator: ":")
         environment["FUDEHAND_PROVIDER"] = settings.provider
         if !settings.model.isEmpty { environment["FUDEHAND_MODEL"] = settings.model }
         if !settings.baseUrl.isEmpty { environment["FUDEHAND_BASE_URL"] = settings.baseUrl }
         if let apiKey, !apiKey.isEmpty { environment["FUDEHAND_API_KEY"] = apiKey }
+        if let conversation { environment["FUDEHAND_CONVERSATION"] = conversation.uuidString }
         let script = root.appendingPathComponent("scripts/agent-chat.mjs").path
         let arguments = [script, "--root", root.path] + (listModels ? ["--list-models"] : [])
         if let node = runtime?.node {
@@ -517,6 +520,9 @@ final class ChatSession: ObservableObject {
         conversationID = id
     }
 
+    /// A saved conversation of the design document being shown, open or not.
+    func saved(_ id: UUID) -> ChatConversation? { history?.load(id) }
+
     /// Opens a saved conversation: selects its tab when it is already open, takes the place of an empty current conversation, or adds a tab.
     func open(_ id: UUID) {
         if tabs.contains(where: { $0.id == id }) { conversationID = id; return }
@@ -544,10 +550,11 @@ final class ChatSession: ObservableObject {
         if conversationID == id { conversationID = tabs[min(index, tabs.count - 1)].id }
     }
 
-    /// Deletes the selected conversation from the history and closes its tab. Not while it is replying, so the reply is not saved again.
-    func deleteConversation() {
-        guard !transcript.busy else { return }
-        let id = conversationID
+    /// Deletes a conversation (the selected one by default) from the history and closes its tab if it is open. Not while it is
+    /// replying, so the reply is not saved again.
+    func deleteConversation(_ id: UUID? = nil) {
+        let id = id ?? conversationID
+        guard tabs.first(where: { $0.id == id })?.transcript.busy != true else { return }
         history?.delete(id)
         conversations = history?.list() ?? []
         close(id)
@@ -594,7 +601,7 @@ final class ChatSession: ObservableObject {
     private func start(_ id: UUID, root: URL, runtime: WorkspaceLocation?) throws {
         guard let settings = tabs.first(where: { $0.id == id })?.settings else { return }
         let launch = Self.launch(root: root, runtime: runtime, settings: settings, apiKey: storedKey(for: settings.provider),
-                                 environment: ProcessInfo.processInfo.environment)
+                                 environment: ProcessInfo.processInfo.environment, conversation: id)
         let child = Process()
         child.executableURL = launch.executable
         child.arguments = launch.arguments
