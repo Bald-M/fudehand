@@ -540,3 +540,25 @@ final class CanvasHarness {
     h.request(Viewport(x: 0, y: 100, scale: 0.03))
     #expect(h.canvas.overlay.layoutGuidePaths.isEmpty)
 }
+
+@Test @MainActor func layersInAGroupSnapToTheEnclosingFramesColumns() throws {
+    var document = CanvasHarness.document()
+    var column = LayoutGuide(type: .columns)
+    column.count = 1; column.align = .start; column.width = 100; column.margin = 160
+    try document.update("a") { frame in
+        frame.layoutGuides = [column]
+        var group = DesignNode(id: "group", type: .group, x: 20, y: 20, width: 100, height: 50)
+        var inner = frame.children[0]
+        inner.x = 0; inner.y = 0
+        group.children = [inner]
+        frame.children = [group]
+    }
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    h.click(NSPoint(x: 70, y: 145))
+    h.click(NSPoint(x: 70, y: 145), clicks: 2)
+    #expect(h.store.selection == ["card"])
+    // The card lands at canvas x 157, 3 points from the column's left edge at 160.
+    h.drag(from: NSPoint(x: 70, y: 145), to: NSPoint(x: 207, y: 145))
+    #expect(h.store.editor.document.worldRect("card")?.x == 160)
+}

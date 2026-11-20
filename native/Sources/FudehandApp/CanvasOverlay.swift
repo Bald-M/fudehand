@@ -156,20 +156,23 @@ final class CanvasOverlay: NSView {
 
     private func renderLayoutGuides(_ frames: [DesignIndex.GuideFrame], viewport: Viewport) {
         layoutGuideCount = 0
+        // Only the part of each frame on screen is drawn.
+        let screen = Rect(x: -viewport.x / viewport.scale, y: -viewport.y / viewport.scale,
+                          width: bounds.width / viewport.scale, height: bounds.height / viewport.scale)
         for frame in frames {
-            let clip = frame.clip
+            let clip = frame.clip.clamped(screen)
             guard clip.width > 0, clip.height > 0 else { continue }
             for guide in frame.guides {
                 let path = CGMutablePath()
                 switch guide.type {
                 case .grid:
                     guard guide.size * viewport.scale >= Self.minimumGridSpacing else { continue }
-                    for offset in guide.gridLines(length: frame.rect.width) where (clip.minX...clip.maxX).contains(frame.rect.x + offset) {
+                    for offset in guide.gridLines(length: frame.rect.width, in: (clip.minX - frame.rect.x)...(clip.maxX - frame.rect.x)) {
                         let x = (frame.rect.x + offset) * viewport.scale + viewport.x
                         path.move(to: CGPoint(x: x, y: clip.minY * viewport.scale + viewport.y))
                         path.addLine(to: CGPoint(x: x, y: clip.maxY * viewport.scale + viewport.y))
                     }
-                    for offset in guide.gridLines(length: frame.rect.height) where (clip.minY...clip.maxY).contains(frame.rect.y + offset) {
+                    for offset in guide.gridLines(length: frame.rect.height, in: (clip.minY - frame.rect.y)...(clip.maxY - frame.rect.y)) {
                         let y = (frame.rect.y + offset) * viewport.scale + viewport.y
                         path.move(to: CGPoint(x: clip.minX * viewport.scale + viewport.x, y: y))
                         path.addLine(to: CGPoint(x: clip.maxX * viewport.scale + viewport.x, y: y))

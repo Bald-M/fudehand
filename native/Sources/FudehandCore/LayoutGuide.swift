@@ -48,9 +48,15 @@ public struct LayoutGuide: Equatable, Sendable {
     }
 
     /// The offsets of a grid's lines inside a length, not counting the frame's own edges; empty for columns and rows.
-    public func gridLines(length: Double) -> [Double] {
+    public func gridLines(length: Double) -> [Double] { gridLines(length: length, in: 0...length) }
+
+    /// The grid lines that fall within a range of offsets, so drawing a fine grid on a large frame only visits the part on screen.
+    public func gridLines(length: Double, in range: ClosedRange<Double>) -> [Double] {
         guard type == .grid, size > 0 else { return [] }
-        return Array(stride(from: size, to: length, by: size))
+        let first = max(1, (range.lowerBound / size).rounded(.up))
+        let last = min(((length / size).rounded(.up)) - 1, (range.upperBound / size).rounded(.down))
+        guard first <= last else { return [] }
+        return (Int(first)...Int(last)).map { Double($0) * size }
     }
 
     /// The column or row bands as rectangles in the frame's coordinate space: columns take the frame's full height and rows its

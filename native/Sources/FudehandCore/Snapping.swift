@@ -54,10 +54,11 @@ public enum Snapping {
             bestDelta(edge, edge, edge, others.map(edges), threshold)
         }
         var vertical: Double?, horizontal: Double?
-        if handle.movesLeft, let d = delta(left, { ($0.minX, $0.midX, $0.maxX) }) { left += d; vertical = left }
-        if handle.movesRight, let d = delta(right, { ($0.minX, $0.midX, $0.maxX) }) { right += d; vertical = right }
-        if handle.movesTop, let d = delta(top, { ($0.minY, $0.midY, $0.maxY) }) { top += d; horizontal = top }
-        if handle.movesBottom, let d = delta(bottom, { ($0.minY, $0.midY, $0.maxY) }) { bottom += d; horizontal = bottom }
+        // An axis whose snap would leave the rectangle under the handles' minimum size of 1 (or flip it) is left unsnapped.
+        if handle.movesLeft, let d = delta(left, { ($0.minX, $0.midX, $0.maxX) }), right - (left + d) >= 1 { left += d; vertical = left }
+        if handle.movesRight, let d = delta(right, { ($0.minX, $0.midX, $0.maxX) }), right + d - left >= 1 { right += d; vertical = right }
+        if handle.movesTop, let d = delta(top, { ($0.minY, $0.midY, $0.maxY) }), bottom - (top + d) >= 1 { top += d; horizontal = top }
+        if handle.movesBottom, let d = delta(bottom, { ($0.minY, $0.midY, $0.maxY) }), bottom + d - top >= 1 { bottom += d; horizontal = bottom }
         let snapped = Rect(x: left, y: top, width: right - left, height: bottom - top)
         var guides: [Guide] = []
         func append(_ guide: Guide) { if !guides.contains(guide) { guides.append(guide) } }

@@ -163,3 +163,19 @@ private func message(_ object: [String: Any]) -> String? {
     #expect(Snapping.snapEdges(Rect(x: 117, y: 0, width: 100, height: 50), handle: .right, to: [target], threshold: 6).rect
             == Rect(x: 117, y: 0, width: 100, height: 50))
 }
+
+@Test func gridLinesCanBeLimitedToARange() {
+    var grid = LayoutGuide(type: .grid)
+    grid.size = 10
+    #expect(grid.gridLines(length: 100_000, in: 495...530) == [500, 510, 520, 530])
+    #expect(grid.gridLines(length: 100, in: -50...25) == [10, 20])
+    #expect(grid.gridLines(length: 100, in: 95...200).isEmpty)
+}
+
+@Test func resizeSnapsEachAxisOnItsOwn() {
+    // The vertical snap would collapse the height below 1, so only the horizontal snap applies.
+    let targets = [Rect(x: 120, y: 0, width: 0, height: 300), Rect(x: 0, y: 99.5, width: 500, height: 0)]
+    let result = Snapping.snapEdges(Rect(x: 0, y: 100, width: 116, height: 0.5), handle: .bottomRight, to: targets, threshold: 6)
+    #expect(result.rect == Rect(x: 0, y: 100, width: 120, height: 0.5))
+    #expect(result.guides.map(\.axis) == [.vertical])
+}

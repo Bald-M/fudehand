@@ -317,11 +317,11 @@ final class FudehandCanvasView: NSView {
             for sibling in siblings where !selection.contains(sibling.id) && sibling.visible {
                 if let rect = index.worldRect(sibling.id) { snapTargets.append(rect) }
             }
-            if let parent, let rect = index.worldRect(parent) {
-                snapTargets.append(rect)
-                if let frame = index.guideFrames.first(where: { $0.id == parent }) {
-                    snapTargets += frame.guides.flatMap { $0.snapRects(in: frame.rect) }
-                }
+            if let parent, let rect = index.worldRect(parent) { snapTargets.append(rect) }
+            // Layout guides of the nearest enclosing frame, past any groups in between.
+            if let parent, let frameID = index.ancestry(of: parent).last(where: { index.node($0)?.type == .frame }),
+               let frame = index.guideFrames.first(where: { $0.id == frameID }) {
+                snapTargets += frame.guides.flatMap { $0.snapRects(in: frame.rect) }
             }
         }
         let candidates = Set(document.nodes.filter { $0.visible && !$0.locked }.map(\.id))

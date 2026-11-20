@@ -216,8 +216,8 @@ public struct CanvasInteraction {
             var guides: [Guide] = []
             if !modifiers.contains(.control) {
                 let snapped = Snapping.snapEdges(rect, handle: resizing.handle, to: context.snapTargets, threshold: Self.snapThreshold / scale)
-                // Snapping never flips the rectangle or shrinks it below the handles' minimum of 1.
-                if snapped.rect.width >= 1, snapped.rect.height >= 1 { rect = snapped.rect; guides = snapped.guides }
+                rect = snapped.rect
+                guides = snapped.guides
             }
             return (started ? [] : [.beginGesture("Resize")]) + [.resize(resizing.id, rect), .guides(guides)]
         case .marquee(let origin, let base):

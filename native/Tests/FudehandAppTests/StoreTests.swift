@@ -71,6 +71,10 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .updateNode("f", changes: JSONObject(["layoutGuides": [["type": "columns", "count": 12], ["type": "rows", "visible": false]]])))
     #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
     store.updateNode("f", "Show Layout Guide") { $0.layoutGuides[1].visible = true }
+    store.updateNode("f", "Remove Layout Guide") { $0.layoutGuides.remove(at: 0) }
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.rows])
+    store.undo()
+    #expect(store.editor.document.node("f")?.layoutGuides.map(\.type) == [.columns, .rows])
     store.undo()
     #expect(store.editor.document.node("f")?.layoutGuides[1].visible == false)
     store.undo()
