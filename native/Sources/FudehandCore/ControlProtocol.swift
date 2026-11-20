@@ -26,6 +26,13 @@ public enum ControlCommand: Equatable, Sendable {
     case playPrototype(frame: String?)
     case getPrototypePlayback
     case closePrototype
+    case showLaunchWindow
+    case listRecents
+    case openRecent(String, discard: Bool)
+    case removeRecent(String)
+    case clearRecents
+    case listTemplates
+    case newDocumentFromTemplate(String, discard: Bool)
 }
 
 /// A JSON object carried as is (a layer definition or a field patch), validated by `DesignJSON`.
@@ -195,6 +202,13 @@ public enum ControlProtocol {
         case "play": return .playPrototype(frame: try optionalString("frame"))
         case "get_playback": return .getPrototypePlayback
         case "close": return .closePrototype
+        case "show_launch_window": return .showLaunchWindow
+        case "list_recents": return .listRecents
+        case "open_recent": return .openRecent(try string("path"), discard: try flag("discard"))
+        case "remove_recent": return .removeRecent(try string("path"))
+        case "clear_recents": return .clearRecents
+        case "list_templates": return .listTemplates
+        case "new_document_from_template": return .newDocumentFromTemplate(try string("name"), discard: try flag("discard"))
         default: throw Message(text: "Unknown command: \(name)")
         }
     }

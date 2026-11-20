@@ -27,6 +27,8 @@ describe('design tools', () => {
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_snapshot',
+      'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
+      'app_list_templates', 'app_new_document_from_template',
       'style_list', 'style_read',
     ])
     for (const tool of tools as { inputSchema: { type: string } }[]) expect(tool.inputSchema.type).toBe('object')
@@ -148,6 +150,33 @@ describe('design tools', () => {
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
     ])
+  })
+
+  it('forwards the launch window, recent file, and template tools to the App', async () => {
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('app_show_launch_window', {}, ctx)
+    await callTool('app_list_recents', {}, ctx)
+    await callTool('app_open_recent', { path: '/Users/a/Home.fudehand' }, ctx)
+    await callTool('app_open_recent', { path: '/Users/a/Home.fudehand', discard: true }, ctx)
+    await callTool('app_remove_recent', { path: '/Users/a/Old.fudehand' }, ctx)
+    await callTool('app_clear_recents', {}, ctx)
+    await callTool('app_list_templates', {}, ctx)
+    await callTool('app_new_document_from_template', { name: 'Mobile', discard: true }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'show_launch_window', args: {} },
+      { command: 'list_recents', args: {} },
+      { command: 'open_recent', args: { path: '/Users/a/Home.fudehand' } },
+      { command: 'open_recent', args: { path: '/Users/a/Home.fudehand', discard: true } },
+      { command: 'remove_recent', args: { path: '/Users/a/Old.fudehand' } },
+      { command: 'clear_recents', args: {} },
+      { command: 'list_templates', args: {} },
+      { command: 'new_document_from_template', args: { name: 'Mobile', discard: true } },
+    ])
+    const byName = (name: string) => (tools as { name: string, inputSchema: { required: string[] } }[]).find(tool => tool.name === name)!
+    expect(byName('app_open_recent').inputSchema.required).toEqual(['path'])
+    expect(byName('app_remove_recent').inputSchema.required).toEqual(['path'])
+    expect(byName('app_new_document_from_template').inputSchema.required).toEqual(['name'])
   })
 
   it('expands ~ in file and image paths to the home directory', async () => {

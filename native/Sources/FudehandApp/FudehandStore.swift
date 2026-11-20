@@ -93,13 +93,20 @@ final class FudehandStore: ObservableObject {
     var prototypeFrame: String? { prototypeShown.frame }
     /// Whether the prototype window is open; set by the window as it appears and disappears.
     var prototypeWindowOpen = false
+    /// Shows the launch window, as Window › Launch Window does; registered the same way as `presentEditor`.
+    var presentLaunch: () -> Void = {}
+    /// The templates offered in the launch window.
+    let templates: [Template]
 
     /// Where chat conversations are saved, one directory per design document; nil keeps them in memory only.
     private let chatRoot: URL?
 
     /// `fontDirectory` is where imported font files are kept; nil uses them in place, until the App quits.
-    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil) {
+    /// `templateDirectory` holds the templates; by default the ones bundled with the App.
+    init(defaults: UserDefaults = .standard, chatRoot: URL? = nil, fontDirectory: URL? = nil,
+         templateDirectory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Templates")) {
         self.defaults = defaults
+        templates = Self.templates(in: templateDirectory)
         SystemSymbols.install()
         fontLibrary = FontLibrary(directory: fontDirectory)
         fontFamilies = fontLibrary.families()
@@ -459,11 +466,6 @@ final class FudehandStore: ObservableObject {
         var name: String { url.deletingPathExtension().lastPathComponent }
     }
 
-    /// The App's bundled templates: the `.fudehand` files copied to `Contents/Resources/Templates/` at build time.
-    static var bundledTemplates: [Template] {
-        templates(in: Bundle.main.resourceURL?.appendingPathComponent("Templates"))
-    }
-
     static func templates(in directory: URL?) -> [Template] {
         guard let directory,
               let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
@@ -474,8 +476,13 @@ final class FudehandStore: ObservableObject {
 
     /// New from a template: produces an untitled document not associated with the template file, asking for a location on save.
     func newDocument(fromTemplate template: Template) {
-        guard confirmDiscard() else { return }
-        do { try openTemplate(template.url) } catch { alert = error.localizedDescription }
+        do { try newDocument(fromTemplate: template, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+    }
+
+    /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
+    func newDocument(fromTemplate template: Template, discarding: () throws -> Bool) throws {
+        guard try discarding() else { return }
+        try openTemplate(template.url)
     }
 
     func openTemplate(_ url: URL) throws {
@@ -519,10 +526,16 @@ final class FudehandStore: ObservableObject {
 
     /// A project file passed by a Finder double-click or "Open With": asks first when there are unsaved changes, and shows the reason when it cannot be opened.
     func openFromSystem(_ url: URL) {
+        do { try openFile(url, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+    }
+
+    /// Opens a project file from Finder or the recent files. The current file with no unsaved changes is only shown again; otherwise
+    /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
+    func openFile(_ url: URL, discarding: () throws -> Bool) throws {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
-        guard confirmDiscard() else { return }
-        do { try open(url) } catch { alert = error.localizedDescription }
+        guard try discarding() else { return }
+        try open(url)
     }
 
     func shutdown() async { await chat.shutdown() }

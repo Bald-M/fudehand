@@ -136,6 +136,18 @@ export const tools = [
       ] }
     },
   },
+  controlTool('app_show_launch_window', 'show_launch_window', 'Show the launch window (New, Recent, Templates) in front, as Window > Launch Window does; the editor window and the document stay as they are. Returns the document overview.'),
+  controlTool('app_list_recents', 'list_recents', 'List the recent files shown in the launch window and File > Open Recent, newest first: path, name, openedAt (ISO 8601), and available (false when the file was deleted or moved).'),
+  controlTool('app_open_recent', 'open_recent', 'Open a project file from the recent files, by its path as app_list_recents returns it. Refused when the file was deleted or moved, or when the current document has unsaved changes, unless discard is true. Returns the document overview.',
+    { ...path('Path of a recent file, as returned by app_list_recents'), ...discard }, ['path'],
+    async (args, root) => ({ ...args, path: absolute(args.path, root) })),
+  controlTool('app_remove_recent', 'remove_recent', 'Remove one file from the recent files (the file itself is not touched). Returns the removed path and the remaining list.',
+    path('Path of a recent file, as returned by app_list_recents'), ['path'],
+    async (args, root) => ({ ...args, path: absolute(args.path, root) })),
+  controlTool('app_clear_recents', 'clear_recents', 'Clear the recent files (the files themselves are not touched). Returns the removed paths and the now empty list.'),
+  controlTool('app_list_templates', 'list_templates', 'List the templates bundled with Fudehand, shown in the launch window, by name.'),
+  controlTool('app_new_document_from_template', 'new_document_from_template', 'Create an untitled design document from a template, as the launch window does: the document is not linked to the template file, so saving it needs a path and never overwrites the template. Refused when the current document has unsaved changes, unless discard is true. Returns the document overview.',
+    { name: { type: 'string', description: 'Template name, as returned by app_list_templates' }, ...discard }, ['name']),
   ...styleTools,
 ]
 
