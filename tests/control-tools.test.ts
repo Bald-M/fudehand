@@ -60,7 +60,7 @@ describe('design tools', () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['interaction', 'navigate', 'back', 'destination', 'push-left', 'sheet', 'ease-in-out'])
       expect(byName('design_create_node').description).toContain(field)
-    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, effects, and text.sequence are replaced whole')
     const fake = await app(echo)
     const interaction = { action: 'navigate', destination: 'detail', transition: { type: 'push-left', duration: 0.3 } }
     await callTool('design_update_node', { id: 'a', changes: { interaction } }, { root: '/repo', socketPath: fake.socketPath })
@@ -75,7 +75,7 @@ describe('design tools', () => {
     for (const field of ['open-overlay', 'close-overlay', 'toggle-visibility', 'targets', 'below-trigger', 'closeOnOutsideClick',
       'background', 'scroll', 'vertical', 'horizontal', 'fixedOnScroll', 'states', 'hover', 'pressed'])
       expect(byName('design_create_node').description).toContain(field)
-    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, effects, and text.sequence are replaced whole')
     const fake = await app(echo)
     const changes = {
       scroll: 'vertical',
@@ -89,6 +89,17 @@ describe('design tools', () => {
       { command: 'update_node', args: { id: 'a', changes } },
       { command: 'update_node', args: { id: 'b', changes: { fixedOnScroll: true, interaction: { action: 'toggle-visibility', targets: ['x', 'y'] } } } },
     ])
+    await fake.close()
+  })
+
+  it('describes effects and forwards them unchanged', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040'])
+      expect(byName('design_create_node').description).toContain(field)
+    const fake = await app(echo)
+    const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }] }
+    await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([{ command: 'update_node', args: { id: 'a', changes } }])
     await fake.close()
   })
 
@@ -108,7 +119,7 @@ describe('design tools', () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
     for (const field of ['animation', 'fade-in', 'slide-in', 'scale-in', 'spin', 'pulse', 'shimmer', 'delay', 'repeat', '"infinite"', 'text.sequence', 'interval', 'loop'])
       expect(byName('design_create_node').description).toContain(field)
-    expect(byName('design_update_node').description).toContain('interaction, animation, states, and text.sequence are replaced whole')
+    expect(byName('design_update_node').description).toContain('interaction, animation, states, effects, and text.sequence are replaced whole')
     const fake = await app(echo)
     const changes = { animation: { type: 'pulse', property: 'opacity', repeat: 'infinite' }, text: { sequence: { items: ['3', '2', '1'] } } }
     await callTool('design_update_node', { id: 'a', changes }, { root: '/repo', socketPath: fake.socketPath })

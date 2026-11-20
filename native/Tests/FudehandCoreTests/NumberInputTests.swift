@@ -25,3 +25,13 @@ import FudehandCore
     #expect(NumberInput.committedValue(text: "inf", current: 3) == nil)
     #expect(NumberInput.committedValue(text: "nan", current: 3) == nil)
 }
+
+@Test func numberInputTextLeftAsDisplayedIsNotADraft() {
+    // A focused field whose value changes from outside (an effect's type switched, undo, an Agent edit) shows the new value
+    // unless the person has typed something; otherwise leaving the field would commit the old value back.
+    #expect(!NumberInput.isDraft("12", showing: 12))
+    #expect(!NumberInput.isDraft("123.5", showing: 123.4567))
+    #expect(!NumberInput.isDraft("25%", showing: 0.25, percent: true))
+    #expect(NumberInput.isDraft("13", showing: 12))
+    #expect(NumberInput.isDraft("30%", showing: 0.25, percent: true))
+}

@@ -18,6 +18,12 @@ public enum NumberInput {
         return clamped == current ? nil : clamped
     }
 
+    /// Whether a field's `text` holds something the person typed, rather than `value` as the field displays it. A field that
+    /// is not a draft follows outside changes to its value even while focused, so leaving it never commits a stale value.
+    public static func isDraft(_ text: String, showing value: Double, percent: Bool = false) -> Bool {
+        text != (percent ? formatPercent(value) : format(value))
+    }
+
     /// A 0–1 fraction shown as a percentage, such as an opacity.
     public static func formatPercent(_ fraction: Double) -> String { format(fraction * 100) + "%" }
 

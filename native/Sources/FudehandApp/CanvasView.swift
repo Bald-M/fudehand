@@ -103,6 +103,9 @@ final class FudehandCanvasView: NSView {
         layer?.insertSublayer(gridLayer, at: 0)
         zoomHost.wantsLayer = true
         world.wantsLayer = true
+        // Layer blurs and background blurs are Core Image filters on the design's layers.
+        zoomHost.layerUsesCoreImageFilters = true
+        world.layerUsesCoreImageFilters = true
         zoomHost.addSubview(world)
         world.layer?.addSublayer(renderer.root)
         addSubview(zoomHost)

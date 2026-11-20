@@ -30,6 +30,9 @@ _Avoid_: version history, backup (a snapshot never restores the frame), snapshot
 
 **Group (分组 / 群組)**: A layer used to organize child layers. It cannot use auto layout or be resized with handles, and its size always equals the union of its child layers. Inside an auto layout frame a group is placed like any other child layer but ignores fill container (fill) and cross-axis stretch: it keeps the size of its child layers and takes no share of the remaining space.
 
+**Effect (效果 / 效果)**: A shadow or blur in a layer's effects list, drawn in list order: *Drop Shadow* (投影 / 投影) and *Inner Shadow* (内阴影 / 內陰影), with a color, an X/Y offset, a blur, and a spread; *Layer Blur* (图层模糊 / 圖層模糊), which blurs the layer with its children; and *Background Blur* (背景模糊 / 背景模糊), which blurs the layers under it in the same parent, seen through a see-through fill. Each can be hidden without removing it. Every layer type but group has effects.
+_Avoid_: filter, style (a reusable named effect is out of scope)
+
 **Auto layout (自动布局 / 自動佈局)**: A frame arranges its child layers automatically by direction, spacing, padding, and alignment; a child layer's sizing mode can be fixed, hug contents (hug), or fill container (fill).
 
 **Layout guide (布局辅助线 / 佈局輔助線)**: A grid, columns, or rows drawn over a frame on the editing canvas, with its own color, that can be shown or hidden. Layers moved or resized inside the frame snap to the edges of its visible columns and rows. Layout guides are saved with the frame but never appear in snapshots or prototype playback.

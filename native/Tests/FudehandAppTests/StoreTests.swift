@@ -124,9 +124,9 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     _ = try await control(store, .saveDocument(temporaryFile().path))
     let bad = temporaryFile()
-    try Data(#"{"format":"fudehand.design","version":9,"nodes":[]}"#.utf8).write(to: bad)
+    try Data(#"{"format":"fudehand.design","version":10,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 9); upgrade Fudehand to open it")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 10); upgrade Fudehand to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 
@@ -998,4 +998,17 @@ private func temporaryDirectory() -> URL {
     let result = try await control(store, .listVersionSnapshots(frame: nil))
     let listed = try #require(result["snapshots"] as? [[String: Any]])
     #expect(listed.count == 1 && listed[0]["frameName"] is NSNull && listed[0]["frameBounds"] is NSNull)
+}
+
+/// The inspector and the Agent edit effects the same way, each change one undo step (#190).
+@Test @MainActor func effectEditsFromThePanelAndTheAgentAreOneUndoStepEach() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    store.updateNode("r", "Add Effect") { $0.effects.append(DesignEffect(type: .dropShadow)) }
+    let updated = try await control(store, .updateNode("r", changes: JSONObject(["effects": [["type": "background-blur", "radius": 20]]])))
+    #expect((updated["effects"] as? [[String: Any]])?.first?["type"] as? String == "background-blur")
+    store.undo()
+    #expect(store.editor.document.node("r")?.effects == [DesignEffect(type: .dropShadow)])
+    store.undo()
+    #expect(store.editor.document.node("r")?.effects.isEmpty == true)
 }

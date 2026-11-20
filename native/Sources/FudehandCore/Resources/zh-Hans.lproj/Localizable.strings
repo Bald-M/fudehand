@@ -499,6 +499,25 @@
 "Agent" = "Agent";
 "Annotation: %@" = "批注：%@";
 "Expanded" = "已展开";
+
+/* Effects */
+"Effects" = "效果";
+"Add Effect" = "添加效果";
+"Drop Shadow" = "投影";
+"Inner Shadow" = "内阴影";
+"Layer Blur" = "图层模糊";
+"Background Blur" = "背景模糊";
+"Effect type" = "效果类型";
+"Show effect settings" = "显示效果设置";
+"Hide effect settings" = "隐藏效果设置";
+"Show effect" = "显示效果";
+"Hide effect" = "隐藏效果";
+"Remove effect" = "移除效果";
+"Move Up" = "上移";
+"Move Down" = "下移";
+"Shadow color" = "阴影颜色";
+"Blur" = "模糊";
+"Spread" = "扩展";
 "Layout Guides" = "布局辅助线";
 "Add layout guide" = "添加布局辅助线";
 "Remove layout guide" = "移除布局辅助线";

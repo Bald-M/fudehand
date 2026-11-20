@@ -119,7 +119,7 @@ private func message(_ object: [String: Any]) -> String? {
     let json = #"{"format":"fudehand.design","version":7,"nodes":[{"id":"f","type":"frame","name":"F","x":0,"y":0,"width":10,"height":10}]}"#
     let document = try DesignDocument.decode(Data(json.utf8))
     #expect(document.nodes[0].layoutGuides.isEmpty)
-    #expect(DesignDocument.formatVersion == 8)
+    #expect(DesignDocument.formatVersion >= 8)
 }
 
 // MARK: Index
