@@ -439,3 +439,22 @@
 "No icons match “%@”." = "沒有與「%@」相符的圖示。";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols 僅限用於 Apple 平台的設計。";
 "Style" = "風格";
+
+/* Effects */
+"Effects" = "效果";
+"Add Effect" = "加入效果";
+"Drop Shadow" = "投影";
+"Inner Shadow" = "內陰影";
+"Layer Blur" = "圖層模糊";
+"Background Blur" = "背景模糊";
+"Effect type" = "效果類型";
+"Show effect settings" = "顯示效果設定";
+"Hide effect settings" = "隱藏效果設定";
+"Show effect" = "顯示效果";
+"Hide effect" = "隱藏效果";
+"Remove effect" = "移除效果";
+"Move Up" = "上移";
+"Move Down" = "下移";
+"Shadow color" = "陰影顏色";
+"Blur" = "模糊";
+"Spread" = "擴展";

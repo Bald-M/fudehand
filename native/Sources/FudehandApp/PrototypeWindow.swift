@@ -98,6 +98,8 @@ final class PrototypeStageView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        // Layer blurs and background blurs are Core Image filters on the design's layers.
+        layerUsesCoreImageFilters = true
         layer?.masksToBounds = true
         content.anchorPoint = .zero
         content.actions = DesignRenderer.noActions
@@ -201,16 +203,16 @@ final class PrototypeStageView: NSView {
         let changed = Set([hovered, pressed, nextHovered, nextPressed].compactMap { $0 })
         var before: [String: (CGColor?, CGColor?, Float)] = [:]
         for id in changed {
-            guard let layer = shown.layer(for: id) else { continue }
-            let now = layer.presentation() ?? layer
-            before[id] = (now.backgroundColor, (now as? CAShapeLayer)?.fillColor, now.opacity)
+            guard let layer = shown.layer(for: id), let content = shown.contentLayer(for: id) else { continue }
+            let now = content.presentation() ?? content
+            before[id] = (now.backgroundColor, (now as? CAShapeLayer)?.fillColor, (layer.presentation() ?? layer).opacity)
         }
         hovered = nextHovered
         pressed = nextPressed
         render(shown)
         for (id, (background, fill, opacity)) in before {
-            guard let layer = shown.layer(for: id) else { continue }
-            func ease(_ key: String, from: Any?, to: Any?) {
+            guard let layer = shown.layer(for: id), let content = shown.contentLayer(for: id) else { continue }
+            func ease(_ key: String, from: Any?, to: Any?, on layer: CALayer) {
                 guard let from, !CFEqual(from as CFTypeRef, (to ?? NSNull()) as CFTypeRef) else { return }
                 let animation = CABasicAnimation(keyPath: key)
                 animation.fromValue = from
@@ -219,9 +221,9 @@ final class PrototypeStageView: NSView {
                 animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 layer.add(animation, forKey: "state.\(key)")
             }
-            if let shape = layer as? CAShapeLayer { ease("fillColor", from: fill, to: shape.fillColor) }
-            else { ease("backgroundColor", from: background, to: layer.backgroundColor) }
-            ease("opacity", from: opacity, to: layer.opacity)
+            if let shape = content as? CAShapeLayer { ease("fillColor", from: fill, to: shape.fillColor, on: shape) }
+            else { ease("backgroundColor", from: background, to: content.backgroundColor, on: content) }
+            for target in [layer] + shown.backdrops(for: id) { ease("opacity", from: opacity, to: layer.opacity, on: target) }
         }
     }
 
@@ -308,6 +310,7 @@ final class PrototypeStageView: NSView {
         CATransaction.setCompletionBlock { [weak self] in
             guard let self, self.token == session else { return }
             renderer.layer(for: overlay.frame)?.removeAllAnimations()
+            renderer.backdrops(for: overlay.frame).forEach { $0.removeAllAnimations() }
             renderer.layer(for: Prototype.scrimID(overlay.frame))?.removeAllAnimations()
             self.player?.finishTransition()
             // Finishing drops the closing overlay from the scene.
@@ -334,8 +337,11 @@ final class PrototypeStageView: NSView {
         case .pushRight: CGPoint(x: -half.width, y: place.y)
         case .none, .dissolve: nil
         }
-        if let away { animate(layer, "position", hidden: NSValue(point: away), visible: NSValue(point: place)) }
-        else { animate(layer, "opacity", hidden: 0, visible: 1) }
+        // A background blur has the overlay's frame, so it moves and fades the same way.
+        for target in [layer] + shown.backdrops(for: overlay.frame) {
+            if let away { animate(target, "position", hidden: NSValue(point: away), visible: NSValue(point: place)) }
+            else { animate(target, "opacity", hidden: 0, visible: 1) }
+        }
         CATransaction.commit()
     }
 

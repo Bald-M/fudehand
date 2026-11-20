@@ -1,6 +1,8 @@
 import AppKit
+import CoreImage
 import FudehandCore
 import ImageIO
+import Metal
 
 /// Syncs the design document to a Core Animation layer tree: one layer per node, reused by id, updating only the properties that changed.
 @MainActor
@@ -9,12 +11,23 @@ final class DesignRenderer {
     let root = CALayer()
     /// One per node, so a sync looks each id up once.
     private final class Record {
-        let layer: CALayer
+        /// What the parent holds: `content` itself, or, while the node has effects, a plain layer around it that also holds the
+        /// drop shadows and background blurs. It carries the node's position, opacity, visibility, and layer blur, so a played
+        /// animation moves and fades the effects with the layer.
+        var layer: CALayer
+        /// The layer of the node's type: fill, stroke, text, image, or icon, and the child layers.
+        let content: CALayer
+        /// Inner shadows, drawn inside `content` below the child layers.
+        var innerShadows: [CALayer] = []
+        /// Background blurs, next to `layer` in the parent, just under it (see `EffectLayers.Built.backdrops`).
+        var backdrops: [CALayer] = []
+        /// Copies of a text or icon layer that effects draw from, kept at the same raster scale.
+        var copies: [CALayer] = []
         /// The node last applied to the layer (without children), used to skip unchanged nodes.
         var applied: DesignNode?
         /// The sync that last saw the node; records an older sync left behind belong to deleted nodes.
         var pass = 0
-        init(_ layer: CALayer) { self.layer = layer }
+        init(_ layer: CALayer) { self.layer = layer; content = layer }
     }
     private var records: [String: Record] = [:]
     private var pass = 0
@@ -24,7 +37,7 @@ final class DesignRenderer {
             guard contentsScale != oldValue else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in records.values.map(\.layer) where layer is TextLayer || layer.contents != nil {
+            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
                 if layer is TextLayer { layer.setNeedsDisplay() }
                 (layer as? ImageLayer)?.rasterize(force: true)
@@ -47,11 +60,15 @@ final class DesignRenderer {
 
     var layerCount: Int { records.count }
     func layer(for id: String) -> CALayer? { records[id]?.layer }
+    /// The layer that draws the node's fill; differs from `layer(for:)` while the node has effects.
+    func contentLayer(for id: String) -> CALayer? { records[id]?.content }
+    /// The node's background blur layers. They sit outside `layer(for:)`, so an animation of that layer is also added to these.
+    func backdrops(for id: String) -> [CALayer] { records[id]?.backdrops ?? [] }
 
     /// The available fonts changed: the next sync typesets every text layer again, even when its node is unchanged.
     func fontsChanged() {
         // Forgetting only the text keeps the layer (a nil `applied` would read as a type change and replace it).
-        for record in records.values where record.layer is TextLayer { record.applied?.text = nil }
+        for record in records.values where record.content is TextLayer { record.applied?.text = nil }
     }
 
     func sync(_ nodes: [DesignNode]) {
@@ -63,20 +80,22 @@ final class DesignRenderer {
         if seen != records.count {
             for (id, record) in records where record.pass != pass {
                 record.layer.removeFromSuperlayer()
+                record.backdrops.forEach { $0.removeFromSuperlayer() }
                 records[id] = nil
             }
         }
         CATransaction.commit()
     }
 
-    /// Returns the number of nodes synced, descendants included.
-    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode]) -> Int {
-        var ordered: [CALayer] = []
+    /// Returns the number of nodes synced, descendants included. `below` are the parent's own layers kept under its children.
+    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], below: [CALayer] = []) -> Int {
+        var ordered = below
         var seen = nodes.count
         for node in nodes {
             var record = records[node.id]
             if let existing = record, existing.applied?.type != node.type {
                 existing.layer.removeFromSuperlayer()
+                existing.backdrops.forEach { $0.removeFromSuperlayer() }
                 record = nil
             }
             let current = record ?? {
@@ -88,10 +107,12 @@ final class DesignRenderer {
             var shallow = node
             shallow.children = []
             if current.applied != shallow {
-                Self.apply(node, to: current.layer, previous: current.applied, scale: contentsScale)
+                Self.apply(node, to: current.content, previous: current.applied, scale: contentsScale)
+                applyEffects(node, to: current)
                 current.applied = shallow
             }
-            seen += syncChildren(of: current.layer, node.children)
+            seen += syncChildren(of: current.content, node.children, below: current.innerShadows)
+            ordered += current.backdrops
             ordered.append(current.layer)
         }
         let current = parent.sublayers ?? []
@@ -99,6 +120,53 @@ final class DesignRenderer {
             parent.sublayers = ordered
         }
         return seen
+    }
+
+    /// Builds the node's effect layers again when anything they depend on changed, wraps `content` while the node has visible
+    /// effects, and moves the node's placement, opacity, and visibility onto the wrapper.
+    private func applyEffects(_ node: DesignNode, to record: Record) {
+        let wanted = node.effects.contains(where: \.visible)
+        // Without a wrapper the node has no effect layers, so a node without effects has nothing to update.
+        guard wanted || record.layer !== record.content else { return }
+        if wanted != (record.layer !== record.content) {
+            if wanted {
+                let wrapper = CALayer()
+                wrapper.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+                wrapper.actions = Self.noActions
+                record.layer = wrapper
+            } else {
+                record.content.removeFromSuperlayer()
+                record.layer = record.content
+            }
+            record.applied?.effects = []
+        }
+        func inputs(_ node: DesignNode) -> DesignNode {
+            var node = node
+            node.x = 0; node.y = 0; node.opacity = 1; node.visible = true; node.name = ""; node.children = []
+            return node
+        }
+        if record.applied.map(inputs) != inputs(node) {
+            let built = wanted ? EffectLayers.build(node, scale: contentsScale) : EffectLayers.Built()
+            record.innerShadows = built.inner
+            record.backdrops = built.backdrops
+            record.copies = built.copies
+            record.layer.filters = built.filters.isEmpty ? nil : built.filters
+            if wanted { record.layer.sublayers = built.behind + [record.content] }
+        }
+        guard wanted else { return }
+        let wrapper = record.layer, content = record.content
+        wrapper.position = content.position
+        wrapper.bounds = content.bounds
+        wrapper.isHidden = content.isHidden
+        wrapper.opacity = content.opacity
+        for backdrop in record.backdrops {
+            backdrop.position = wrapper.position
+            backdrop.isHidden = wrapper.isHidden
+            backdrop.opacity = wrapper.opacity
+        }
+        content.position = CGPoint(x: content.bounds.midX, y: content.bounds.midY)
+        content.isHidden = false
+        content.opacity = 1
     }
 
     static func makeLayer(for type: NodeType, scale: CGFloat) -> CALayer {
@@ -167,19 +235,6 @@ final class DesignRenderer {
         }
     }
 
-    /// A vertically mirrored copy of a layer's bitmap contents, for the flipped snapshot context (see `snapshotPNG`); other contents unchanged.
-    static func flipped(_ contents: Any?) -> Any? {
-        guard let value = contents, CFGetTypeID(value as CFTypeRef) == CGImage.typeID else { return contents }
-        let image = value as! CGImage
-        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return contents }
-        context.translateBy(x: 0, y: CGFloat(image.height))
-        context.scaleBy(x: 1, y: -1)
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return context.makeImage()
-    }
-
     static func cgImage(_ data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
@@ -212,22 +267,57 @@ final class DesignRenderer {
             throw ControlCommandError("Snapshot is too large (\(Int(pixels.width))×\(Int(pixels.height)) pixels); reduce scale")
         }
         let width = max(1, Int(pixels.width)), height = max(1, Int(pixels.height))
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+        // Rendered by Core Animation itself, like the canvas, so blurs, masks, and shadows come out the same; `render(in:)` skips
+        // filters and masks. The stage has the canvas's top-left origin and scales the layers to pixels.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let stage = CALayer()
+        stage.isGeometryFlipped = true
+        stage.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        renderer.root.anchorPoint = .zero
+        renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
+        renderer.root.transform = CATransform3DMakeScale(CGFloat(scale), CGFloat(scale), 1)
+        stage.addSublayer(renderer.root)
+        CATransaction.commit()
+        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
             throw ControlCommandError("Could not create the snapshot canvas")
         }
-        // The bitmap has a bottom-left origin; flipping it matches the layers' top-left origin. A text or image layer's bitmap would
-        // be turned upside down as a whole in this flipped context, so it is drawn reversed in advance.
-        context.translateBy(x: 0, y: CGFloat(height))
-        context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
-        renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
-        renderer.root.layoutIfNeeded()
-        for case let layer as TextLayer in renderer.records.values.map(\.layer) { layer.invertedForSnapshot = true; layer.displayIfNeeded() }
-        for case let layer as ImageLayer in renderer.records.values.map(\.layer) { layer.invertForSnapshot() }
-        for case let layer as IconLayer in renderer.records.values.map(\.layer) { layer.contents = flipped(layer.contents) }
-        renderer.root.render(in: context)
-        guard let image = context.makeImage() else { throw ControlCommandError("Snapshot failed") }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .managed
+        guard let texture = device.makeTexture(descriptor: descriptor) else { throw ControlCommandError("Could not create the snapshot canvas") }
+        let compositor = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                                 kCARendererMetalCommandQueue as String: queue])
+        compositor.layer = stage
+        compositor.bounds = stage.bounds
+        // The renderer draws only what has been committed.
+        CATransaction.flush()
+        compositor.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
+        compositor.addUpdate(compositor.bounds)
+        compositor.render()
+        compositor.endFrame()
+        guard let commands = queue.makeCommandBuffer(), let blit = commands.makeBlitCommandEncoder() else { throw ControlCommandError("Snapshot failed") }
+        blit.synchronize(resource: texture)
+        blit.endEncoding()
+        commands.commit()
+        commands.waitUntilCompleted()
+        // The texture's first row is the bottom of the stage.
+        let rowBytes = width * 4
+        var pixelData = Data(count: rowBytes * height)
+        pixelData.withUnsafeMutableBytes { buffer in
+            let base = buffer.baseAddress!
+            for row in 0..<height {
+                texture.getBytes(base + (height - 1 - row) * rowBytes, bytesPerRow: rowBytes,
+                                 from: MTLRegionMake2D(0, row, width, 1), mipmapLevel: 0)
+            }
+        }
+        guard let provider = CGDataProvider(data: pixelData as CFData),
+              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
+            throw ControlCommandError("Snapshot failed")
+        }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
             throw ControlCommandError("Could not encode the snapshot")
@@ -255,9 +345,6 @@ final class ImageLayer: CALayer {
         contents = nil
         rasterize(force: true)
     }
-
-    /// Replaces the contents with a vertically mirrored copy, for the flipped snapshot context (see `snapshotPNG`).
-    @MainActor func invertForSnapshot() { contents = DesignRenderer.flipped(contents) }
 
     /// Rasterizes the SVG at the size that covers the bounds (what fill shows) × `contentsScale`. Unless forced, only when that is
     /// larger than the current raster, and then with 1.5× headroom: shrinking keeps the sharper raster, and a resize drag that

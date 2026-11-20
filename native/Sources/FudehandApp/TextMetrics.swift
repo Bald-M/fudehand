@@ -66,8 +66,6 @@ enum TextMetrics {
 /// A layer that draws text with CoreText, using the same typesetting as `TextMetrics.measure`.
 final class TextLayer: CALayer {
     var attributed = NSAttributedString() { didSet { setNeedsDisplay() } }
-    /// An offscreen snapshot draws the whole layer tree into a vertically flipped bitmap, which turns the text bitmap upside down with it; it is drawn reversed in advance when snapshotting.
-    var invertedForSnapshot = false { didSet { setNeedsDisplay() } }
 
     override init() {
         super.init()
@@ -76,7 +74,6 @@ final class TextLayer: CALayer {
 
     override init(layer: Any) {
         attributed = (layer as? TextLayer)?.attributed ?? NSAttributedString()
-        invertedForSnapshot = (layer as? TextLayer)?.invertedForSnapshot ?? false
         super.init(layer: layer)
     }
 
@@ -84,8 +81,8 @@ final class TextLayer: CALayer {
 
     override func draw(in context: CGContext) {
         context.saveGState()
-        // CoreText typesets with a bottom-left origin and y pointing up; a vertically flipped context (a layer with flipped geometry, the flipped bitmap used for snapshots) is flipped back first.
-        if (context.ctm.d < 0) != invertedForSnapshot {
+        // CoreText typesets with a bottom-left origin and y pointing up; a vertically flipped context (a layer with flipped geometry) is flipped back first.
+        if context.ctm.d < 0 {
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
         }

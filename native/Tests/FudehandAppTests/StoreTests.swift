@@ -604,3 +604,16 @@ private func temporaryFile() -> URL {
     #expect(store.editor.document.node("c")?.name == "Back")
     #expect(store.editor.document.node("c")?.icon?.name == "lucide/house")
 }
+
+/// The inspector and the Agent edit effects the same way, each change one undo step (#190).
+@Test @MainActor func effectEditsFromThePanelAndTheAgentAreOneUndoStepEach() async throws {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    store.updateNode("r", "Add Effect") { $0.effects.append(DesignEffect(type: .dropShadow)) }
+    let updated = try await control(store, .updateNode("r", changes: JSONObject(["effects": [["type": "background-blur", "radius": 20]]])))
+    #expect((updated["effects"] as? [[String: Any]])?.first?["type"] as? String == "background-blur")
+    store.undo()
+    #expect(store.editor.document.node("r")?.effects == [DesignEffect(type: .dropShadow)])
+    store.undo()
+    #expect(store.editor.document.node("r")?.effects.isEmpty == true)
+}

@@ -439,3 +439,22 @@
 "No icons match “%@”." = "No icons match “%@”.";
 "SF Symbols may be used only in designs for Apple platforms." = "SF Symbols may be used only in designs for Apple platforms.";
 "Style" = "Style";
+
+/* Effects */
+"Effects" = "Effects";
+"Add Effect" = "Add Effect";
+"Drop Shadow" = "Drop Shadow";
+"Inner Shadow" = "Inner Shadow";
+"Layer Blur" = "Layer Blur";
+"Background Blur" = "Background Blur";
+"Effect type" = "Effect type";
+"Show effect settings" = "Show effect settings";
+"Hide effect settings" = "Hide effect settings";
+"Show effect" = "Show effect";
+"Hide effect" = "Hide effect";
+"Remove effect" = "Remove effect";
+"Move Up" = "Move Up";
+"Move Down" = "Move Down";
+"Shadow color" = "Shadow color";
+"Blur" = "Blur";
+"Spread" = "Spread";

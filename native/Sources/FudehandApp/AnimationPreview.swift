@@ -45,6 +45,8 @@ final class AnimationPreviewView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        // Layer blurs and background blurs are Core Image filters on the design's layers.
+        layerUsesCoreImageFilters = true
         content.anchorPoint = .zero
         content.actions = DesignRenderer.noActions
         content.addSublayer(renderer.root)

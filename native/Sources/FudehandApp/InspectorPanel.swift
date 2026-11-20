@@ -257,6 +257,7 @@ private struct NodeInspector: View {
                 }
             }
         }
+        if node.type.hasEffects { EffectsSection(node: node, update: update) }
         if let text = node.text { textSection(text) }
         if node.type == .frame { layoutSection(node.layout) }
         if let image = node.image {
@@ -748,5 +749,124 @@ private struct NodeInspector: View {
         panel.allowedContentTypes = [.png, .jpeg, .svg]
         guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.imageSize(data) != nil else { return }
         update("Replace Image") { $0.image?.data = data }
+    }
+}
+
+/// The layer's effects: one row per effect, in drawing order (later ones on top), each with its type, settings that expand
+/// below it, show or hide, and remove; a row's context menu moves it. Empty, the section is a single line with its add menu.
+private struct EffectsSection: View {
+    let node: DesignNode
+    let update: (String, String?, @escaping (inout DesignNode) -> Void) -> Void
+    /// The rows whose settings are shown.
+    @State private var expanded: Set<Int> = []
+    @Environment(\.inspectedLayer) private var layer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L("Effects")).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Menu {
+                    ForEach(EffectType.allCases, id: \.self) { type in
+                        Button(Self.name(type)) {
+                            let index = node.effects.count
+                            update("Add Effect", nil) { $0.effects.append(DesignEffect(type: type)) }
+                            expanded.insert(index)
+                        }
+                    }
+                } label: { MenuIcon(symbol: "plus", label: L("Add Effect")) }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
+            }
+            ForEach(Array(node.effects.enumerated()), id: \.offset) { index, effect in row(index, effect) }
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: layer) { expanded = [] }
+        Divider()
+    }
+
+    @ViewBuilder private func row(_ index: Int, _ effect: DesignEffect) -> some View {
+        let change = { (edit: @escaping (inout DesignEffect) -> Void) in
+            update("Change Effect", nil) { node in if node.effects.indices.contains(index) { edit(&node.effects[index]) } }
+        }
+        let open = expanded.contains(index)
+        HStack(spacing: 4) {
+            Button { if open { expanded.remove(index) } else { expanded.insert(index) } } label: {
+                Image(systemName: open ? "chevron.down" : "chevron.right").iconHitTarget()
+            }
+            .buttonStyle(.borderless)
+            .help(open ? L("Hide effect settings") : L("Show effect settings"))
+            .accessibilityLabel(open ? L("Hide effect settings") : L("Show effect settings"))
+            Picker(L("Effect type"), selection: Binding(get: { effect.type }, set: { type in
+                change { current in
+                    guard current.type != type else { return }
+                    var next = current.type.isShadow && type.isShadow ? current : DesignEffect(type: type)
+                    next.type = type
+                    next.visible = current.visible
+                    current = next
+                }
+            })) {
+                ForEach(EffectType.allCases, id: \.self) { Text(Self.name($0)).tag($0) }
+            }
+            .labelsHidden()
+            Button { change { $0.visible.toggle() } } label: { Image(systemName: effect.visible ? "eye" : "eye.slash").iconHitTarget() }
+                .buttonStyle(.borderless)
+                .help(effect.visible ? L("Hide effect") : L("Show effect"))
+                .accessibilityLabel(effect.visible ? L("Hide effect") : L("Show effect"))
+            Button {
+                update("Remove Effect", nil) { if $0.effects.indices.contains(index) { $0.effects.remove(at: index) } }
+                expanded = Set(expanded.compactMap { $0 < index ? $0 : $0 > index ? $0 - 1 : nil })
+            } label: { Image(systemName: "minus").iconHitTarget() }
+                .buttonStyle(.borderless).help(L("Remove effect")).accessibilityLabel(L("Remove effect"))
+        }
+        .contextMenu {
+            Button(L("Move Up")) { move(index, by: -1) }.disabled(index == 0)
+            Button(L("Move Down")) { move(index, by: 1) }.disabled(index == node.effects.count - 1)
+        }
+        if open {
+            VStack(alignment: .leading, spacing: 8) {
+                if effect.type.isShadow {
+                    ColorRow(label: L("Shadow color"), color: effect.color) { c in
+                        update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
+                    }
+                    HStack {
+                        NumberField(label: "X", value: effect.x) { v in change { $0.x = v } }
+                        NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
+                    }
+                }
+                HStack {
+                    NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
+                    // Text and icon shadows follow the glyphs, which spread does not grow.
+                    if effect.type.isShadow, node.type != .text, node.type != .icon {
+                        NumberField(label: L("Spread"), value: effect.spread) { v in change { $0.spread = v } }
+                    }
+                }
+            }
+            .padding(.leading, 22)
+        }
+    }
+
+    private func move(_ index: Int, by offset: Int) {
+        let target = index + offset
+        guard node.effects.indices.contains(target) else { return }
+        update("Reorder Effects", nil) { node in
+            guard node.effects.indices.contains(index), node.effects.indices.contains(target) else { return }
+            node.effects.swapAt(index, target)
+        }
+        let wasOpen = expanded.contains(index), otherOpen = expanded.contains(target)
+        expanded.remove(index); expanded.remove(target)
+        if wasOpen { expanded.insert(target) }
+        if otherOpen { expanded.insert(index) }
+    }
+
+    static func name(_ type: EffectType) -> String {
+        switch type {
+        case .dropShadow: return L("Drop Shadow")
+        case .innerShadow: return L("Inner Shadow")
+        case .layerBlur: return L("Layer Blur")
+        case .backgroundBlur: return L("Background Blur")
+        }
     }
 }

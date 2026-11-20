@@ -5,9 +5,9 @@ import ImageIO
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
-                                        "scroll", "fixedOnScroll", "states", "children"]
-    /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, and `text.sequence` are
-    /// not among them: an update replaces them whole.
+                                        "scroll", "fixedOnScroll", "states", "effects", "children"]
+    /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, `effects`, and
+    /// `text.sequence` are not among them: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding"]
 
     /// The upper limit on the absolute value of every numeric field.
@@ -125,6 +125,7 @@ public enum DesignJSON {
         try unsupported("text", type == .text)
         try unsupported("image", type == .image)
         try unsupported("icon", type == .icon)
+        try unsupported("effects", type.hasEffects)
 
         var node = DesignNode(id: id, type: type, name: try reader.string("name", default: type.title),
                               x: try reader.number("x", default: 0), y: try reader.number("y", default: 0),
@@ -210,6 +211,12 @@ public enum DesignJSON {
         if let animation = try reader.child("animation") {
             node.animation = try self.animation(animation)
         }
+        if let effects = reader.value("effects") {
+            guard let list = effects as? [Any], let objects = list as? [[String: Any]] else { throw reader.fail("effects must be an array of objects") }
+            node.effects = try objects.enumerated().map { index, object in
+                try effect(Reader(object: object, owner: id, path: "effects[\(index)]"))
+            }
+        }
         if let children = reader.value("children") {
             guard let list = children as? [Any] else { throw reader.fail("children must be an array") }
             node.children = try list.map(node(from:))
@@ -287,6 +294,22 @@ public enum DesignJSON {
             }
         }
         return animation
+    }
+
+    static func effect(_ reader: Reader) throws -> DesignEffect {
+        guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
+        let type: EffectType = try reader.choice("type", default: .dropShadow)
+        try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"] : ["type", "visible", "radius"])
+        var effect = DesignEffect(type: type)
+        effect.visible = try reader.bool("visible", default: true)
+        effect.radius = try reader.number("radius", default: effect.radius, min: 0, max: DesignEffect.maximumRadius)
+        if type.isShadow {
+            effect.color = try reader.color("color", default: effect.color)!
+            effect.x = try reader.number("x", default: effect.x)
+            effect.y = try reader.number("y", default: effect.y)
+            effect.spread = try reader.number("spread", default: effect.spread)
+        }
+        return effect
     }
 
     static func sequence(_ reader: Reader) throws -> TextSequence {
@@ -393,6 +416,16 @@ public enum DesignJSON {
             if animation.type == .slideIn { value["from"] = animation.from.rawValue; value["distance"] = animation.distance }
             if animation.type == .pulse { value["property"] = animation.property.rawValue }
             object["animation"] = value
+        }
+        if !node.effects.isEmpty {
+            object["effects"] = node.effects.map { effect -> [String: Any] in
+                var value: [String: Any] = ["type": effect.type.rawValue, "radius": effect.radius]
+                if !effect.visible { value["visible"] = false }
+                if effect.type.isShadow {
+                    value["color"] = effect.color.hex; value["x"] = effect.x; value["y"] = effect.y; value["spread"] = effect.spread
+                }
+                return value
+            }
         }
         if includeChildren, !node.children.isEmpty {
             object["children"] = node.children.map { self.object($0, includeImageData: includeImageData) }

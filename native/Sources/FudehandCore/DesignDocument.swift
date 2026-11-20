@@ -176,6 +176,32 @@ public struct LayerStyle: Equatable, Sendable {
     public init(fill: DesignColor? = nil, opacity: Double? = nil) { self.fill = fill; self.opacity = opacity }
 }
 
+public enum EffectType: String, Sendable, CaseIterable {
+    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur"
+    public var isShadow: Bool { self == .dropShadow || self == .innerShadow }
+}
+
+/// One entry in a layer's effects list. A shadow uses every field; a blur uses only `radius`. Shadows of frames, rectangles,
+/// ellipses, and images follow the layer's shape (spread grows or shrinks it); those of text and icons follow the glyphs and
+/// ignore spread. A drop shadow is not drawn under the layer itself, so it does not show through a see-through fill.
+public struct DesignEffect: Equatable, Sendable {
+    public var type: EffectType
+    public var visible: Bool
+    public var color: DesignColor
+    public var x: Double
+    public var y: Double
+    /// The blur radius in points; a Gaussian blur with a standard deviation of half of it.
+    public var radius: Double
+    public var spread: Double
+
+    public init(type: EffectType, visible: Bool = true, color: DesignColor = DesignColor(r: 0, g: 0, b: 0, a: 64.0 / 255), x: Double = 0, y: Double = 4,
+                radius: Double = 4, spread: Double = 0) {
+        self.type = type; self.visible = visible; self.color = color; self.x = x; self.y = y; self.radius = radius; self.spread = spread
+    }
+
+    public static let maximumRadius = 250.0
+}
+
 /// How a layer looks while the pointer is over it and while it is pressed during prototype playback.
 public struct LayerStates: Equatable, Sendable {
     public var hover: LayerStyle?
@@ -203,6 +229,7 @@ public enum NodeType: String, Sendable, CaseIterable {
 
     public var hasChildren: Bool { self == .frame || self == .group }
     public var hasCornerRadius: Bool { self == .frame || self == .rectangle || self == .image }
+    public var hasEffects: Bool { self != .group }
 }
 
 /// One node in the layer tree. Coordinates are relative to the parent node, and the order of `children` is the stacking order (later ones on top).
@@ -233,6 +260,8 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     public var fixedOnScroll = false
     public var states: LayerStates?
     public var animation: LayerAnimation?
+    /// Drawn in order: later effects on top.
+    public var effects: [DesignEffect] = []
     public var children: [DesignNode] = []
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
@@ -253,8 +282,8 @@ public struct DesignDocument: Equatable, Sendable {
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
     /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
-    /// toggles, 5 icon layers; older files open unchanged and are written as the current version.
-    public static let formatVersion = 5
+    /// toggles, 5 icon layers, 6 effects; older files open unchanged and are written as the current version.
+    public static let formatVersion = 6
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]

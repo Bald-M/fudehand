@@ -40,6 +40,10 @@ final class LayerAnimationPlayer {
         for (id, animation) in LayerAnimation.animated(in: node) {
             guard let layer = renderer.layer(for: id) else { continue }
             if let mask = Self.add(animation, to: layer, at: now + wait + animation.delay) { masked[id] = mask }
+            // A background blur moves and fades with its layer; a shimmer's mask would replace the blur's shape, so it is left out.
+            if animation.type != .shimmer {
+                for backdrop in renderer.backdrops(for: id) { Self.add(animation, to: backdrop, at: now + wait + animation.delay) }
+            }
             animated.append(id)
         }
         CATransaction.commit()
@@ -64,7 +68,9 @@ final class LayerAnimationPlayer {
         subtree = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for id in animated { renderer.layer(for: id)?.removeAnimation(forKey: Self.key) }
+        for id in animated {
+            for layer in [renderer.layer(for: id)].compactMap({ $0 }) + renderer.backdrops(for: id) { layer.removeAnimation(forKey: Self.key) }
+        }
         for (id, mask) in masked where renderer.layer(for: id)?.mask === mask { renderer.layer(for: id)?.mask = nil }
         CATransaction.commit()
         animated = []
