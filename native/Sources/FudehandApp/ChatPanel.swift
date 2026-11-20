@@ -113,10 +113,10 @@ struct ChatPanel: View {
                 Button(L("Delete This Conversation"), role: .destructive) { chat.deleteConversation() }
                     .disabled(chat.transcript.entries.isEmpty || busy)
             } label: {
-                Label(L("Conversation history"), systemImage: "clock.arrow.circlepath").labelStyle(.iconOnly)
+                MenuIcon(symbol: "clock.arrow.circlepath", label: L("Conversation history"))
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help(L("Conversation history"))
+            .help(L("Conversation history")).accessibilityLabel(L("Conversation history"))
             Button { settingsFor = SettingsTarget(provider: nil) } label: { Image(systemName: "gearshape").iconHitTarget() }
                 .buttonStyle(.borderless).help(L("Model settings")).accessibilityLabel(L("Model settings"))
         }.padding(.leading, 12).padding(.trailing, 16).padding(.vertical, 8)
@@ -869,7 +869,7 @@ private struct ChatSettingsSheet: View {
                 }
             }
         } label: {
-            Image(systemName: "chevron.up.chevron.down")
+            MenuIcon(symbol: "chevron.up.chevron.down", label: L("Choose model"))
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .help(L("Choose model")).accessibilityLabel(L("Choose model"))

@@ -46,7 +46,11 @@ struct WorkspaceView: View {
                     Text(L("Light")).tag("light")
                     Text(L("Dark")).tag("dark")
                 }
-            } label: { Image(systemName: "circle.lefthalf.filled") }.help(L("Appearance")).accessibilityLabel(L("Appearance"))
+            } label: {
+                // A toolbar menu takes its accessibility title from the image, which is the symbol name unless described (#174).
+                Image(nsImage: NSImage(systemSymbolName: "circle.lefthalf.filled", accessibilityDescription: L("Appearance"))!)
+            }
+            .help(L("Appearance")).accessibilityLabel(L("Appearance"))
             Toggle(isOn: $store.showingInspector) { Image(systemName: "sidebar.right") }
                 .help(L("Inspector (⌥⌘I)")).accessibilityLabel(L("Inspector")).keyboardShortcut("i", modifiers: [.command, .option])
         }
