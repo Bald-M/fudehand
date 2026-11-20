@@ -22,6 +22,10 @@ public enum ControlCommand: Equatable, Sendable {
     case listFonts
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    /// Opens the prototype window from `frame` (a top-level frame), or, when nil, where Play Prototype starts.
+    case playPrototype(frame: String?)
+    case getPrototypePlayback
+    case closePrototype
     case showLaunchWindow
     case listRecents
     case openRecent(String, discard: Bool)
@@ -195,6 +199,9 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "play": return .playPrototype(frame: try optionalString("frame"))
+        case "get_playback": return .getPrototypePlayback
+        case "close": return .closePrototype
         case "show_launch_window": return .showLaunchWindow
         case "list_recents": return .listRecents
         case "open_recent": return .openRecent(try string("path"), discard: try flag("discard"))

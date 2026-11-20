@@ -205,6 +205,7 @@ private struct WindowActions: ViewModifier {
                 DispatchQueue.main.async { dismissWindow(id: FudehandApp.launchWindowID) }
             }
             store.presentPrototype = { [openWindow] in openWindow(id: FudehandApp.prototypeWindowID) }
+            store.dismissPrototype = { [dismissWindow] in dismissWindow(id: FudehandApp.prototypeWindowID) }
             store.presentLaunch = { [openWindow] in openWindow(id: FudehandApp.launchWindowID) }
             start()
         }

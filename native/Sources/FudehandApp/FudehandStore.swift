@@ -86,6 +86,13 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var prototypeRequest: PrototypeRequest?
     /// Shows the prototype window; registered the same way as `presentEditor`.
     var presentPrototype: () -> Void = {}
+    /// Closes the prototype window; registered the same way.
+    var dismissPrototype: () -> Void = {}
+    /// The frame the prototype window has on show, as reported by its stage; it may since have been deleted.
+    let prototypeShown = PrototypeShown()
+    var prototypeFrame: String? { prototypeShown.frame }
+    /// Whether the prototype window is open; set by the window as it appears and disappears.
+    var prototypeWindowOpen = false
     /// Shows the launch window, as Window › Launch Window does; registered the same way as `presentEditor`.
     var presentLaunch: () -> Void = {}
     /// The templates offered in the launch window.
@@ -266,9 +273,30 @@ final class FudehandStore: ObservableObject {
     var prototypeStart: String? { Prototype.startFrame(in: editor.document, selection: selection) }
 
     func playPrototype() {
-        guard let start = prototypeStart else { alert = L("Add a frame to play the prototype."); return }
+        do { try playPrototype(from: nil) } catch { alert = L("Add a frame to play the prototype.") }
+    }
+
+    /// Opens the prototype window and plays from top-level frame `frame`, or from `prototypeStart` when nil; playing again
+    /// restarts. Throws, in English, when there is no such frame to play.
+    func playPrototype(from frame: String?) throws {
+        guard let start = frame ?? prototypeStart else { throw ControlCommandError("The document has no top-level frame to play; add a frame first") }
+        guard Prototype.frame(start, in: editor.document) != nil else {
+            throw ControlCommandError(editor.document.node(start) == nil ? "Layer not found: \(start)" : "Layer \(start) is not a top-level frame")
+        }
         prototypeRequest = PrototypeRequest(start: start, token: (prototypeRequest?.token ?? 0) + 1)
+        prototypeShown.frame = start
+        prototypeWindowOpen = true
         presentPrototype()
+    }
+
+    /// The prototype window's stage moved to frame `id`.
+    func prototypeMoved(to id: String) {
+        if prototypeShown.frame != id { prototypeShown.frame = id }
+    }
+
+    func closePrototype() {
+        prototypeWindowOpen = false
+        dismissPrototype()
     }
 
     // MARK: Fonts
@@ -521,6 +549,11 @@ final class LayerHover: ObservableObject {
 /// Kept out of the store's published state so a selection change redraws only the layer rows and the inspector that observe it.
 final class LayerSelection: ObservableObject {
     @Published fileprivate(set) var ids: Set<String> = []
+}
+
+/// Kept out of the store's published state so moving through the prototype redraws only the prototype window.
+final class PrototypeShown: ObservableObject {
+    @Published fileprivate(set) var frame: String?
 }
 
 // MARK: Canvas

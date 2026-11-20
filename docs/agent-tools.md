@@ -91,7 +91,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Choose the canvas tool (move, hand, frame, rectangle, ellipse, text) | Missing |
 | Show or hide the inspector, switch its tab | Missing |
 | Expand or collapse layers in the layers panel | Missing |
-| Play the prototype, play from the start, close the prototype window | Missing |
+| Play the prototype, play from the start, close the prototype window | `prototype_play`, `prototype_close`; `prototype_get_playback` reads whether the window is open and the frame on show |
 | Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | `app_show_launch_window` |
 | List, open, remove, clear recent files | `app_list_recents`, `app_open_recent`, `app_remove_recent`, `app_clear_recents` |

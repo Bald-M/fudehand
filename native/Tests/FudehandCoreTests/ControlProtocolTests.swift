@@ -52,6 +52,10 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":33,"command":"list_templates"}"#, .listTemplates),
         (#"{"id":34,"command":"new_document_from_template","args":{"name":"Mobile"}}"#, .newDocumentFromTemplate("Mobile", discard: false)),
         (#"{"id":35,"command":"new_document_from_template","args":{"name":"Mobile","discard":true}}"#, .newDocumentFromTemplate("Mobile", discard: true)),
+        (#"{"id":36,"command":"play"}"#, .playPrototype(frame: nil)),
+        (#"{"id":37,"command":"play","args":{"frame":"home"}}"#, .playPrototype(frame: "home")),
+        (#"{"id":38,"command":"get_playback"}"#, .getPrototypePlayback),
+        (#"{"id":39,"command":"close"}"#, .closePrototype),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)
@@ -85,6 +89,8 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":1,"command":"new_document_from_template","args":{}}"#, "Missing argument: name"),
         (#"{"id":1,"command":"new_document_from_template","args":{"name":3}}"#, "Invalid argument type: name"),
         (#"{"id":1,"command":"import_font","args":{}}"#, "Missing argument: path"),
+        (#"{"id":1,"command":"play","args":{"frame":3}}"#, "Invalid argument type: frame"),
+        (#"{"id":1,"command":"play","args":{"frame":""}}"#, "Invalid argument type: frame"),
         (#"{"id":1,"command":"zoom","args":{"scale":"big"}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":0}}"#, "Invalid argument type: scale"),
         (#"{"id":1,"command":"zoom","args":{"scale":true}}"#, "Invalid argument type: scale"),

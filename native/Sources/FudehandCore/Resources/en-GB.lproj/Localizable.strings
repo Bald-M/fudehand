@@ -307,6 +307,8 @@
 "Take snapshot" = "Take snapshot";
 "Focus layer" = "Focus layer";
 "Zoom canvas" = "Zoom canvas";
+"Read prototype window" = "Read prototype window";
+"Close prototype window" = "Close prototype window";
 
 /* MCP connectors */
 "Cannot find the Fudehand source directory, so it cannot connect" = "Cannot find the Fudehand source directory, so it cannot connect";
