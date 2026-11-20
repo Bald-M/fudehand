@@ -472,8 +472,12 @@ private func temporaryFile() -> URL {
     #expect(await failure(store, .playPrototype(frame: "zz")) == "Layer not found: zz")
     #expect(store.prototypeRequest?.start == "a" && presented == 3)
 
-    // The stage reports where playback moved; a deleted frame reads as null while the window stays open.
+    // The stage reports where playback moved, redrawing only the prototype window; a deleted frame reads as null while the window stays open.
+    var storeChanges = 0, shownChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 }, store.prototypeShown.objectWillChange.sink { shownChanges += 1 }]
     store.prototypeMoved(to: "b")
+    #expect(storeChanges == 0 && shownChanges == 1)
+    _ = observers
     #expect(try await control(store, .getPrototypePlayback)["frame"] as? String == "b")
     _ = try await control(store, .deleteNodes(["b"]))
     let deleted = try await control(store, .getPrototypePlayback)

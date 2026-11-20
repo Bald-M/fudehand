@@ -13,9 +13,15 @@ struct PrototypeRequest: Equatable {
 /// the document as it is edited, by people or the Agent.
 struct PrototypeWindow: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject private var shown: PrototypeShown
+
+    init(store: FudehandStore) {
+        self.store = store
+        shown = store.prototypeShown
+    }
 
     var body: some View {
-        let frame = store.prototypeFrame.flatMap { Prototype.frame($0, in: store.document) }
+        let frame = shown.frame.flatMap { Prototype.frame($0, in: store.document) }
         let scale = frame.map { Self.fitScale(Size(width: $0.width, height: $0.height)) } ?? 1
         // The stage stays in place while its frame is missing, so undoing the deletion resumes playback where it was.
         ZStack {
@@ -125,7 +131,7 @@ final class PrototypeStageView: NSView {
         if token != request.token {
             token = request.token
             player = PrototypePlayer(start: request.start)
-            // A new stage (the window reopened from the Window menu) starts the last playback over; reported after this update.
+            // Should SwiftUI build a new stage for the last playback, it starts that playback over; reported after this view update.
             DispatchQueue.main.async { [moved] in moved(request.start) }
             hovered = nil
             pressed = nil
