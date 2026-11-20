@@ -9,12 +9,22 @@ public enum NumberInput {
 
     /// The value to commit when a field showing `current` is submitted with `text`, or nil when there
     /// is nothing to commit: the text is not a finite number, or it does not change the value.
-    public static func committedValue(text: String, current: Double, minimum: Double? = nil) -> Double? {
+    public static func committedValue(text: String, current: Double, minimum: Double? = nil, maximum: Double? = nil) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         // The displayed text is rounded, so text left as displayed must not round the stored value.
         guard trimmed != format(current), let number = Double(trimmed), number.isFinite else { return nil }
         let limit = DesignJSON.maximumMagnitude
-        let clamped = min(limit, max(minimum ?? -limit, number))
+        let clamped = min(maximum ?? limit, max(minimum ?? -limit, number))
         return clamped == current ? nil : clamped
+    }
+
+    /// A 0–1 fraction shown as a percentage, such as an opacity.
+    public static func formatPercent(_ fraction: Double) -> String { format(fraction * 100) + "%" }
+
+    /// The 0–1 fraction to commit for typed percentage `text` (the `%` is optional), with the rules of `committedValue`.
+    public static func committedPercent(text: String, current: Double) -> Double? {
+        var trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix("%") { trimmed.removeLast() }
+        return committedValue(text: trimmed, current: current * 100, minimum: 0, maximum: 100).map { $0 / 100 }
     }
 }

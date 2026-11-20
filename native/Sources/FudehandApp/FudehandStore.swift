@@ -11,7 +11,7 @@ struct WorkspaceLocation: Decodable {
     let path: String?
 }
 
-enum InspectorTab: String, CaseIterable { case design, chat }
+enum InspectorTab: String, CaseIterable { case design, prototype, chat }
 
 /// App state: the sole owner of the design document and the undo history; the canvas, the panels, and the control channel all modify the document through it.
 @MainActor
