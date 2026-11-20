@@ -118,7 +118,9 @@ struct NumberText: View {
             .onChange(of: focused) { _, isFocused in if !isFocused { submit() } }
             .accessibilityLabel(label)
             .onAppear { text = display(value); draftLayer = layer }
-            .onChange(of: value) { _, next in if !focused { text = display(next) } }
+            .onChange(of: value) { old, next in
+                if !focused || !NumberInput.isDraft(text, showing: old, percent: percent) { text = display(next) }
+            }
             .onChange(of: layer) { text = display(value); draftLayer = layer }
     }
 
