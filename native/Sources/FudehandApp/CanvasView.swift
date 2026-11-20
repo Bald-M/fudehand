@@ -54,6 +54,10 @@ final class FudehandCanvasView: NSView {
     /// What `world.bounds` reflects; differs from `liveViewport` only while a zoom is pending.
     var committedViewport = Viewport()
     var animation: ViewportAnimationRun?
+    /// Whether viewport changes skip their animation; follows the system "Reduce motion" setting (#174).
+    var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// The layers listed for VoiceOver, kept by id so an element stays the same object while it is focused.
+    private var accessibilityElements: [String: CanvasLayerElement] = [:]
     var lastIndicatorUpdate: CFTimeInterval = 0
     private var interaction = CanvasInteraction()
     private(set) var hover: String?
@@ -96,6 +100,28 @@ final class FudehandCanvasView: NSView {
     override func accessibilityLabel() -> String? { L("Design canvas") }
     override func accessibilityHelp() -> String? {
         L("Click to select a layer, drag to move it, and drag a handle to resize it; drag empty space to select with a marquee; scroll or hold Space and drag to pan; hold Command and scroll to zoom.")
+    }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .layoutArea }
+    override func accessibilityChildren() -> [Any]? { accessibilityLayers() }
+    override func accessibilitySelectedChildren() -> [Any]? { accessibilityLayers().filter { $0.isAccessibilitySelected() } }
+
+    /// The top-level layers and the selection as VoiceOver elements, positioned for the live viewport.
+    func accessibilityLayers() -> [CanvasLayerElement] {
+        let items = CanvasAccessibility.items(index: index, selection: selection)
+        var next: [String: CanvasLayerElement] = [:]
+        let elements = items.map { item -> CanvasLayerElement in
+            let element = accessibilityElements[item.id] ?? CanvasLayerElement(id: item.id, canvas: self)
+            element.setAccessibilityLabel(item.name)
+            element.setAccessibilityRoleDescription(item.type.title)
+            element.setAccessibilitySelected(item.selected)
+            let r = item.viewRect(liveViewport)
+            element.setAccessibilityFrameInParentSpace(NSRect(x: r.x, y: r.y, width: r.width, height: r.height))
+            next[item.id] = element
+            return element
+        }
+        accessibilityElements = next
+        return elements
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -176,6 +202,7 @@ final class FudehandCanvasView: NSView {
         guard next != selection else { return }
         selection = next
         refreshOverlay()
+        NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
     }
 
     func update(viewportRequest: ViewportRequest, tool: CanvasTool) {
@@ -537,4 +564,26 @@ final class FudehandCanvasView: NSView {
 
 final class CanvasFlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// A layer on the canvas as VoiceOver sees it; pressing it selects the layer.
+final class CanvasLayerElement: NSAccessibilityElement {
+    let id: String
+    private weak var canvas: FudehandCanvasView?
+
+    init(id: String, canvas: FudehandCanvasView) {
+        self.id = id
+        self.canvas = canvas
+        super.init()
+        setAccessibilityParent(canvas)
+        setAccessibilityRole(.layoutItem)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        MainActor.assumeIsolated {
+            guard let canvas else { return false }
+            canvas.host?.canvasSelect([id])
+            return true
+        }
+    }
 }

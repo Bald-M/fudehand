@@ -159,10 +159,10 @@ private struct RecentRow: View {
             Spacer()
             Text(entry.openedAt, format: Date.FormatStyle(date: .abbreviated, time: .shortened).locale(locale)).font(.caption).foregroundStyle(.secondary)
             if !entry.available {
-                Button(action: remove) { Image(systemName: "xmark.circle.fill") }
+                Button(action: remove) { Image(systemName: "xmark.circle.fill").iconHitTarget() }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-                    .help(L("Remove from List"))
+                    .help(L("Remove from List")).accessibilityLabel(L("Remove from List"))
             }
         }
         .opacity(entry.available ? 1 : 0.6)

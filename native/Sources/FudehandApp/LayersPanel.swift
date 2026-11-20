@@ -82,7 +82,7 @@ struct LayersPanel: View {
             Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
             Button { toggleCollapsed(node.id) } label: {
                 Image(systemName: collapsed.contains(node.id) ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold)).frame(width: 12)
+                    .font(.system(size: 10, weight: .semibold)).frame(width: 16, height: 20).contentShape(Rectangle())
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
             .opacity(row.hasChildren ? 1 : 0).disabled(!row.hasChildren)
@@ -101,12 +101,12 @@ struct LayersPanel: View {
                 Spacer(minLength: 4)
             }
             Button { store.updateNode(node.id, node.locked ? "Unlock Layer" : "Lock Layer") { $0.locked.toggle() } } label: {
-                Image(systemName: node.locked ? "lock.fill" : "lock.open").font(.system(size: 10))
+                Image(systemName: node.locked ? "lock.fill" : "lock.open").font(.system(size: 11)).iconHitTarget()
             }
             .buttonStyle(.plain).foregroundStyle(.secondary).opacity(node.locked ? 1 : 0.35)
             .help(node.locked ? L("Unlock") : L("Lock")).accessibilityLabel(node.locked ? L("Unlock %@", node.name) : L("Lock %@", node.name))
             Button { store.updateNode(node.id, node.visible ? "Hide Layer" : "Show Layer") { $0.visible.toggle() } } label: {
-                Image(systemName: node.visible ? "eye" : "eye.slash").font(.system(size: 10))
+                Image(systemName: node.visible ? "eye" : "eye.slash").font(.system(size: 11)).iconHitTarget()
             }
             .buttonStyle(.plain).foregroundStyle(.secondary).opacity(node.visible ? 0.35 : 1)
             .help(node.visible ? L("Hide") : L("Show")).accessibilityLabel(node.visible ? L("Hide %@", node.name) : L("Show %@", node.name))

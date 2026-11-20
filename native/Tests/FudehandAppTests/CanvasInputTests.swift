@@ -47,6 +47,8 @@ final class CanvasHarness {
 
     init(document: DesignDocument = CanvasHarness.document()) {
         canvas = FudehandCanvasView(frame: window.contentLayoutRect)
+        // Tests must not depend on this machine's Reduce Motion setting.
+        canvas.reduceMotion = { false }
         host = RecordingHost(store)
         window.contentView = canvas
         canvas.host = host
@@ -330,6 +332,40 @@ final class CanvasHarness {
     h.canvas.advanceAnimation(to: 1)
     #expect(h.host.settled == [target])
     #expect(h.canvas.worldBounds == NSRect(x: 400, y: 200, width: 2000, height: 1400))
+}
+
+@Test @MainActor func reduceMotionJumpsAnimatedRequestsToTheTarget() {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.canvas.reduceMotion = { true }
+    let target = Viewport(x: -200, y: -100, scale: 0.5)
+    h.request(target, animated: true)
+    #expect(h.canvas.animation == nil && h.canvas.activeDisplayLink == nil)
+    #expect(h.canvas.liveViewport == target && !h.canvas.isZoomPending)
+    #expect(h.canvas.worldBounds == NSRect(x: 400, y: 200, width: 2000, height: 1400))
+}
+
+@Test @MainActor func voiceOverSeesTopLevelLayersAndTheSelectionOnTheCanvas() throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    #expect(h.canvas.isAccessibilityElement() && h.canvas.accessibilityRole() == .layoutArea)
+    var layers = h.canvas.accessibilityLayers()
+    #expect(layers.map(\.id) == ["a", "b"])
+    #expect(layers.map { $0.accessibilityLabel() } == ["Home", "Rectangle"])
+    #expect(layers.map { $0.accessibilityRoleDescription() } == ["Frame", "Rectangle"])
+    // The viewport is (0, 100) at 100%.
+    #expect(layers[0].accessibilityFrameInParentSpace() == NSRect(x: 0, y: 100, width: 400, height: 300))
+    let frame = layers[0]
+
+    h.store.setSelection(["card"])
+    layers = h.canvas.accessibilityLayers()
+    #expect(layers.map(\.id) == ["a", "b", "card"])
+    #expect(layers[0] === frame)
+    let selected = try #require(h.canvas.accessibilitySelectedChildren() as? [CanvasLayerElement])
+    #expect(selected.map(\.id) == ["card"] && selected[0].accessibilityRoleDescription() == "Rectangle")
+
+    #expect(layers[1].accessibilityPerformPress())
+    #expect(h.store.selection == ["b"])
 }
 
 @Test @MainActor func pinchWithoutAnEndSettlesAfterIdle() async throws {

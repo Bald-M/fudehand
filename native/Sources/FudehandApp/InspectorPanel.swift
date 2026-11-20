@@ -237,7 +237,7 @@ private struct NodeInspector: View {
                 if let fill = node.fill {
                     HStack {
                         ColorRow(label: L("Fill"), color: fill) { c in update("Change Fill", "fill") { $0.fill = c } }
-                        Button { update("Remove Fill") { $0.fill = nil } } label: { Image(systemName: "minus") }
+                        Button { update("Remove Fill") { $0.fill = nil } } label: { Image(systemName: "minus").iconHitTarget() }
                             .buttonStyle(.borderless).help(L("Remove fill")).accessibilityLabel(L("Remove fill"))
                     }
                 } else {
@@ -248,7 +248,7 @@ private struct NodeInspector: View {
                 if let stroke = node.stroke {
                     HStack {
                         ColorRow(label: L("Stroke"), color: stroke.color) { c in update("Change Stroke", "stroke") { $0.stroke?.color = c } }
-                        Button { update("Remove Stroke") { $0.stroke = nil } } label: { Image(systemName: "minus") }
+                        Button { update("Remove Stroke") { $0.stroke = nil } } label: { Image(systemName: "minus").iconHitTarget() }
                             .buttonStyle(.borderless).help(L("Remove stroke")).accessibilityLabel(L("Remove stroke"))
                     }
                     NumberField(label: L("Weight|stroke"), value: stroke.width, minimum: 0) { v in update("Change Stroke") { $0.stroke?.width = v } }
@@ -656,7 +656,7 @@ private struct NodeInspector: View {
                     var next = overlay
                     next.background = nil
                     setInteraction(make(next))
-                } label: { Image(systemName: "minus") }
+                } label: { Image(systemName: "minus").iconHitTarget() }
                     .buttonStyle(.borderless).help(L("Remove background")).accessibilityLabel(L("Remove background"))
             }
         } else {
@@ -681,7 +681,7 @@ private struct NodeInspector: View {
                 Text(store.document.node(id)?.name ?? L("Missing layer")).lineLimit(1)
                 Spacer()
                 if targets.count > 1 {
-                    Button { setInteraction(.toggleVisibility(targets: targets.filter { $0 != id })) } label: { Image(systemName: "minus") }
+                    Button { setInteraction(.toggleVisibility(targets: targets.filter { $0 != id })) } label: { Image(systemName: "minus").iconHitTarget() }
                         .buttonStyle(.borderless).help(L("Remove layer")).accessibilityLabel(L("Remove layer"))
                 }
             }
@@ -714,7 +714,7 @@ private struct NodeInspector: View {
             if let fill = style.fill {
                 HStack {
                     ColorRow(label: L("Fill"), color: fill) { color in var next = style; next.fill = color; change("Change State", "states.fill", next) }
-                    Button { var next = style; next.fill = nil; change("Change State", nil, next) } label: { Image(systemName: "minus") }
+                    Button { var next = style; next.fill = nil; change("Change State", nil, next) } label: { Image(systemName: "minus").iconHitTarget() }
                         .buttonStyle(.borderless).help(L("Remove fill")).accessibilityLabel(L("Remove fill"))
                 }
             } else {

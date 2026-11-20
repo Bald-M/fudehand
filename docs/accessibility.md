@@ -1,0 +1,17 @@
+# Accessibility
+
+Fudehand's own interface — the launch window, the editor, its panels, and the canvas — should be usable with the keyboard and VoiceOver and should respect the system's accessibility preferences (issue #174). Making the designs people draw accessible (for example checking their contrast) is a separate product feature and not covered here.
+
+## Conventions
+
+- **Labels**: every control that shows only an icon has an `.accessibilityLabel(L("…"))`, worded like its `.help` tooltip but without the shortcut ("Zoom In", not "Zoom In (⌘+)"). A label that names a layer includes it ("Lock %@"). Labels are UI copy, so each one has an entry in all four `Localizable.strings` tables and uses the terms in `GLOSSARY.md`. A status shown only as a shape or color (the conversation tab's busy dot, the context-usage ring) gets a label too, and a value when it has one.
+- **Click targets**: an icon-only button or menu is at least 16×16 points to click. Wrap its image in `iconHitTarget()` (at least 20×20, with the whole rectangle clickable) or give it an explicit `.frame(width:height:)` of at least 16×16. Toolbar items are sized by the system. Glyphs for close (`xmark`) and disclosure (`chevron`) controls are at least 10 pt.
+- **Colors**: use system semantic colors (`.primary`, `.secondary`, `Color.accentColor`, `NSColor.windowBackgroundColor`, …) so light, dark, and Increase Contrast appearances follow the system; avoid fixed colors for text and controls.
+- **Motion**: interface animations that only move the view honor *Reduce motion* (`NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`) by jumping to their end. The canvas's viewport transitions (Fit All, Zoom to Selection, focusing a frame, the zoom buttons) do this. Playing a prototype or previewing a layer animation shows the design as authored and is not affected.
+- **Canvas**: the canvas is a VoiceOver *layout area* labeled "Design canvas". Its children are the top-level layers in document order followed by any selected nested layers; each reads its layer name with the layer type as its role ("Home, Frame"), is positioned where the layer is on screen, and reports whether it is selected. Pressing one (VO-Space) selects that layer. Editing goes through the layers and inspector panels, which are ordinary SwiftUI controls. The rules live in `FudehandCore/CanvasAccessibility.swift`.
+
+## Checks
+
+- `AccessibilityTests` (Swift) scans `Sources/FudehandApp` for icon-only buttons and menus (a label closure that holds only an `Image`) and fails when one has no `.accessibilityLabel` or a click target under 16×16. `LocalizationTests` already fails on an `L("…")` call without a table entry.
+- `CanvasAccessibilityTests` and the canvas tests cover the canvas's VoiceOver children and Reduce motion.
+- Before merging a UI change, look at it with VoiceOver (⌘F5) and Accessibility Inspector (Xcode › Open Developer Tool) where it adds controls, and in light, dark, and Increase Contrast appearances.

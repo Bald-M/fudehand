@@ -64,4 +64,5 @@ The store calls `canvas.show(index)` (the document with its `DesignIndex`) direc
 - Create and track tasks directly in GitHub Issues with `gh issue`; do not keep local task records. `.scratch/<feature>/` is only for drafting longer specs or plans.
 - Record new terms in `GLOSSARY.md` and architecture decisions in `docs/adr/`. ADR 0002 fully removed the browser shell and ADR 0006 removed the web-work pipeline — do not reintroduce `apps/atlas`, `catalog.json`, `examples/`, the preview launcher, or WKWebView frames.
 - Agent parity (ADR 0007): every App feature, settings included, is also an Agent tool. A PR that adds or changes a feature adds or changes its tool, its tests, and the coverage table in `docs/agent-tools.md`, following the rules there.
+- Accessibility (`docs/accessibility.md`): icon-only buttons and menus need a localized `.accessibilityLabel` and a click target of at least 16×16 (`iconHitTarget()`); `AccessibilityTests` enforces both.
 - UI changes must be checked in the real app in both light and dark appearance; put evidence screenshots in `docs/evidence/`.
