@@ -17,7 +17,7 @@ final class DesignRenderer {
         var layer: CALayer
         /// The layer of the node's type: fill, stroke, text, image, or icon, and the child layers.
         let content: CALayer
-        /// Inner shadows, drawn inside `content` below the child layers.
+        /// Inner shadows and noise, drawn inside `content` below the child layers.
         var innerShadows: [CALayer] = []
         /// Background blurs, next to `layer` in the parent, just under it (see `EffectLayers.Built.backdrops`).
         var backdrops: [CALayer] = []
@@ -37,9 +37,9 @@ final class DesignRenderer {
             guard contentsScale != oldValue else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer.contents != nil {
+            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer is NoiseLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
-                if layer is TextLayer { layer.setNeedsDisplay() }
+                if layer is TextLayer || layer is NoiseLayer { layer.setNeedsDisplay() }
                 (layer as? ImageLayer)?.rasterize(force: true)
                 (layer as? IconLayer)?.rasterize(force: true)
             }

@@ -228,6 +228,9 @@ public enum DesignJSON {
             node.effects = try objects.enumerated().map { index, object in
                 try effect(Reader(object: object, owner: id, path: "effects[\(index)]"))
             }
+            if let unsupported = node.effects.first(where: { !$0.type.supports(type) }) {
+                throw reader.fail("\(type.rawValue) does not support \(unsupported.type.rawValue) effects")
+            }
         }
         if let guides = reader.value("layoutGuides") {
             guard let list = guides as? [[String: Any]] else { throw reader.fail("layoutGuides must be an array of objects") }
@@ -317,9 +320,17 @@ public enum DesignJSON {
     static func effect(_ reader: Reader) throws -> DesignEffect {
         guard reader.value("type") != nil else { throw reader.fail("missing \(reader.name("type"))") }
         let type: EffectType = try reader.choice("type", default: .dropShadow)
-        try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"] : ["type", "visible", "radius"])
+        try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"]
+                             : type == .noise ? ["type", "visible", "color", "size", "density", "seed"] : ["type", "visible", "radius"])
         var effect = DesignEffect(type: type)
         effect.visible = try reader.bool("visible", default: true)
+        if type == .noise {
+            effect.color = try reader.color("color", default: effect.color)!
+            effect.size = try reader.number("size", default: effect.size, min: DesignEffect.noiseSizes.lowerBound, max: DesignEffect.noiseSizes.upperBound)
+            effect.density = try reader.number("density", default: effect.density, min: 0, max: 1)
+            effect.seed = try reader.integer("seed", default: Double(effect.seed), min: 0)
+            return effect
+        }
         effect.radius = try reader.number("radius", default: effect.radius, min: 0, max: DesignEffect.maximumRadius)
         if type.isShadow {
             effect.color = try reader.color("color", default: effect.color)!
@@ -476,8 +487,13 @@ public enum DesignJSON {
         }
         if !node.effects.isEmpty {
             object["effects"] = node.effects.map { effect -> [String: Any] in
-                var value: [String: Any] = ["type": effect.type.rawValue, "radius": effect.radius]
+                var value: [String: Any] = ["type": effect.type.rawValue]
                 if !effect.visible { value["visible"] = false }
+                if effect.type == .noise {
+                    value["color"] = effect.color.hex; value["size"] = effect.size; value["density"] = effect.density; value["seed"] = effect.seed
+                } else {
+                    value["radius"] = effect.radius
+                }
                 if effect.type.isShadow {
                     value["color"] = effect.color.hex; value["x"] = effect.x; value["y"] = effect.y; value["spread"] = effect.spread
                 }

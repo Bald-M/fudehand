@@ -13,11 +13,11 @@ enum EffectLayers {
         /// Background blurs. Core Animation's background filters only blur the layers drawn before them in the same superlayer,
         /// so these go next to the node in its parent, just under it.
         var backdrops: [CALayer] = []
-        /// Inner shadows, drawn inside the node above its fill and below its children.
+        /// Inner shadows and noise, drawn inside the node above its fill and below its children, in effect order.
         var inner: [CALayer] = []
         /// Layer blurs, applied to the node with its children and its other effects.
         var filters: [CIFilter] = []
-        /// Text or icon copies that need the node's raster scale.
+        /// Text or icon copies and noise layers, which need the node's raster scale.
         var copies: [CALayer] = []
     }
 
@@ -87,6 +87,19 @@ enum EffectLayers {
                     built.copies.append(mask)
                 }
                 built.backdrops.append(backdrop)
+            case .noise:
+                // Only frames, rectangles, and ellipses take noise (`EffectType.supports`), so the layer always has a shape.
+                guard let shape = shape(node, spread: 0) else { continue }
+                let grains = NoiseLayer()
+                grains.actions = DesignRenderer.noActions
+                grains.frame = bounds
+                grains.contentsScale = DesignRenderer.rasterScale(scale, for: bounds.size)
+                grains.effect = effect
+                grains.setNeedsDisplay()
+                clip(grains, to: node, shape: shape)
+                // With the inner shadows, in effect order: above the fill, below the child layers.
+                built.inner.append(grains)
+                built.copies.append(grains)
             }
         }
         return built

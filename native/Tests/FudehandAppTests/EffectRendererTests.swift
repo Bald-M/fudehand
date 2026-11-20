@@ -146,3 +146,34 @@ private func card(_ effects: [DesignEffect], type: NodeType = .rectangle) -> Des
     let rebuilt = try #require(renderer.backdrops(for: "c").first)
     #expect(rebuilt !== backdrop && rebuilt.animation(forKey: "fudehand.animation") != nil)
 }
+
+@Test @MainActor func noiseDrawsTheTileFromTheTopLeftCornerInsideTheShape() throws {
+    let effect = DesignEffect(type: .noise, color: DesignColor(r: 0, g: 0, b: 0), size: 2, density: 0.5, seed: 3)
+    var node = card([effect])
+    node.fill = .white
+    let image = try snapshot(stage(node))
+    let cells = NoiseTile.cells(density: 0.5, seed: 3)
+    // Each 2 pt cell of the 80 × 60 card, sampled at its center: white darkened by the grain's strength, or plain white.
+    for row in 0..<30 {
+        for column in 0..<40 {
+            let strength = Int(cells[row * NoiseTile.side + column])
+            let red = pixel(image, 40 + column * 2 + 1, 40 + row * 2 + 1)[0]
+            #expect(abs(red - (255 - strength)) <= 3, "cell \(column),\(row): \(red) for strength \(strength)")
+        }
+    }
+    // The grains are clipped to the shape: an ellipse leaves its bounding box's corners untouched.
+    let round = try snapshot(stage(card([DesignEffect(type: .noise, color: DesignColor(r: 0, g: 0, b: 0), density: 1)], type: .ellipse)))
+    #expect(pixel(round, 41, 41) == [255, 255, 255, 255])
+    #expect(pixel(round, 80, 70)[0] < 255)
+}
+
+@Test @MainActor func noiseSitsBelowTheChildLayers() throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 100, height: 100)
+    frame.effects = [DesignEffect(type: .noise)]
+    frame.children = [DesignNode(id: "child", type: .rectangle, width: 10, height: 10)]
+    renderer.sync([frame])
+    let content = try #require(renderer.contentLayer(for: "f"))
+    #expect(content.sublayers?.first is NoiseLayer)
+    #expect(content.sublayers?.last === renderer.layer(for: "child"))
+}

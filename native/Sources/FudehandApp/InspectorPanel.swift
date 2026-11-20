@@ -884,9 +884,12 @@ private struct EffectsSection: View {
         }
     }
 
+    /// The effect types this layer takes (noise only on frames, rectangles, and ellipses).
+    private var types: [EffectType] { EffectType.allCases.filter { $0.supports(node.type) } }
+
     private var addMenu: some View {
         Menu {
-            ForEach(EffectType.allCases, id: \.self) { type in
+            ForEach(types, id: \.self) { type in
                 Button(Self.name(type)) {
                     let index = node.effects.count
                     expectedCount = index + 1
@@ -920,7 +923,7 @@ private struct EffectsSection: View {
                     current = next
                 }
             })) {
-                ForEach(EffectType.allCases, id: \.self) { Text(Self.name($0)).tag($0) }
+                ForEach(types, id: \.self) { Text(Self.name($0)).tag($0) }
             }
             .labelsHidden()
             Button { change { $0.visible.toggle() } } label: {
@@ -942,6 +945,21 @@ private struct EffectsSection: View {
         }
         if open {
             VStack(alignment: .leading, spacing: InspectorMetrics.gap) {
+                if effect.type == .noise {
+                    ColorField(label: L("Noise color"), color: effect.color) { c in
+                        update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
+                    }
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Grain size"), caption: L("Size|noise"), value: effect.size) { v in
+                            change { $0.size = min(DesignEffect.noiseSizes.upperBound, max(DesignEffect.noiseSizes.lowerBound, v)) }
+                        }
+                        NumberField(label: L("Density"), value: effect.density, percent: true) { v in change { $0.density = v } }
+                    }
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Seed"), value: Double(effect.seed), minimum: 0) { v in change { $0.seed = Int(v.rounded()) } }
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                }
                 if effect.type.isShadow {
                     ColorField(label: L("Shadow color"), color: effect.color) { c in
                         update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
@@ -951,7 +969,7 @@ private struct EffectsSection: View {
                         NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
                     }
                 }
-                HStack(spacing: InspectorMetrics.gap) {
+                if effect.type != .noise { HStack(spacing: InspectorMetrics.gap) {
                     NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
                     // Text and icon shadows follow the glyphs, which spread does not grow.
                     if effect.type.isShadow, node.type != .text, node.type != .icon {
@@ -959,7 +977,7 @@ private struct EffectsSection: View {
                     } else {
                         Spacer().frame(maxWidth: .infinity)
                     }
-                }
+                } }
             }
             .padding(.leading, 20)
         }
@@ -984,6 +1002,7 @@ private struct EffectsSection: View {
         case .innerShadow: return L("Inner Shadow")
         case .layerBlur: return L("Layer Blur")
         case .backgroundBlur: return L("Background Blur")
+        case .noise: return L("Noise")
         }
     }
 }
