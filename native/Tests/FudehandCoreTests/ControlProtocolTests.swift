@@ -71,10 +71,12 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":37,"command":"get_connectors"}"#, .getConnectors),
         (#"{"id":38,"command":"set_connector","args":{"connector":"codex","connected":false}}"#, .setConnector(.codex, connected: false)),
         (#"{"id":39,"command":"set_connector","args":{"connector":"deepseek","connected":true}}"#, .setConnector(.deepseek, connected: true)),
-        (#"{"id":41,"command":"focus_node","args":{"ids":["a","b"]}}"#, .focusNodes(["a", "b"])),
-        (#"{"id":42,"command":"set_view","args":{"tool":"hand"}}"#, .setView(ViewChange(tool: .hand))),
-        (#"{"id":43,"command":"set_view","args":{"inspector":false,"inspectorTab":"chat","expand":["a"],"collapse":["b"]}}"#,
+        (#"{"id":40,"command":"focus_node","args":{"ids":["a","b"]}}"#, .focusNodes(["a", "b"])),
+        (#"{"id":41,"command":"set_view","args":{"tool":"hand"}}"#, .setView(ViewChange(tool: .hand))),
+        (#"{"id":42,"command":"set_view","args":{"inspector":false,"inspectorTab":"chat","expand":["a"],"collapse":["b"]}}"#,
          .setView(ViewChange(inspector: false, inspectorTab: .chat, expand: ["a"], collapse: ["b"]))),
+        (#"{"id":43,"command":"focus_node","args":{"id":null,"ids":["a"]}}"#, .focusNodes(["a"])),
+        (#"{"id":44,"command":"set_view","args":{"tool":"text","expand":null,"collapse":null}}"#, .setView(ViewChange(tool: .text))),
     ]
     for (line, command) in cases {
         #expect(try parse(line).get().command == command)

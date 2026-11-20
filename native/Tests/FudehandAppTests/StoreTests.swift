@@ -792,4 +792,11 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .setView(ViewChange(collapse: ["g"])))
     _ = try await control(store, .deleteNodes(["g"]))
     #expect((try await control(store, .getState)["view"] as? [String: Any])?["collapsed"] as? [String] == [])
+
+    // Another document starts with every layer expanded, even where an id repeats.
+    _ = try await control(store, .createNode(parent: "f", index: nil, node: JSONObject(["id": "k", "type": "rectangle"])))
+    _ = try await control(store, .setView(ViewChange(collapse: ["f"])))
+    _ = try await control(store, .newDocument(discard: true))
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
+    #expect(store.collapsedLayers.isEmpty)
 }

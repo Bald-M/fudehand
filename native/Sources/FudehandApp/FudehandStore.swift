@@ -422,6 +422,7 @@ final class FudehandStore: ObservableObject {
         canvas?.releaseHeldInput()
         editor.replace(next)
         inGesture = false
+        collapsedLayers = []
         chat.show(chatHistory(for: url), fresh: url == nil)
         fileURL = url
         savedRevision = editor.revision

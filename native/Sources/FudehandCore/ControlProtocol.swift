@@ -289,7 +289,8 @@ public enum ControlProtocol {
         case "open_document": return .openDocument(try string("path"), discard: try flag("discard"))
         case "save_document": return .saveDocument(try optionalString("path"))
         case "focus_node":
-            switch (args["id"], args["ids"]) {
+            let present = { (key: String) in args[key].map { !($0 is NSNull) } ?? false }
+            switch (present("id") ? args["id"] : nil, present("ids") ? args["ids"] : nil) {
             case (nil, nil): throw Message(text: "Missing argument: id or ids")
             case (_?, _?): throw Message(text: "Pass either id or ids, not both")
             case (_?, nil): return .focusNodes([try string("id")])
@@ -382,8 +383,9 @@ public enum ControlProtocol {
             }
             var change = ViewChange(tool: try choice("tool", CanvasTool.self), inspectorTab: try choice("inspectorTab", InspectorTab.self))
             if args["inspector"] != nil, !(args["inspector"] is NSNull) { change.inspector = try flag("inspector") }
-            if args["expand"] != nil { change.expand = try strings("expand") }
-            if args["collapse"] != nil { change.collapse = try strings("collapse") }
+            for key in ["expand", "collapse"] where !(args[key] == nil || args[key] is NSNull) {
+                if key == "expand" { change.expand = try strings(key) } else { change.collapse = try strings(key) }
+            }
             guard change != ViewChange() else { throw Message(text: "Nothing to change: pass tool, inspector, inspectorTab, expand, or collapse") }
             if let both = change.expand.first(where: change.collapse.contains) {
                 throw Message(text: "A layer cannot be both expanded and collapsed: \(both)")
