@@ -10,10 +10,11 @@ enum EffectLayers {
     struct Built {
         /// Drop shadows, drawn under the node in effect order.
         var behind: [CALayer] = []
-        /// Background blurs. Core Animation's background filters only blur the layers drawn before them in the same superlayer,
-        /// so these go next to the node in its parent, just under it.
+        /// Background blurs and glass backdrops. Core Animation's background filters only blur the layers drawn before them in the
+        /// same superlayer, so these go next to the node in its parent, just under it.
         var backdrops: [CALayer] = []
-        /// Inner shadows and noise, drawn inside the node above its fill and below its children, in effect order.
+        /// Inner shadows, noise, textures, and glass tints and highlights, drawn inside the node above its fill and below its
+        /// children, in effect order.
         var inner: [CALayer] = []
         /// Layer blurs, applied to the node with its children and its other effects.
         var filters: [CIFilter] = []
