@@ -94,7 +94,7 @@ describe('design tools', () => {
 
   it('describes effects and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
-    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033'])
+    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033', 'texture', 'soft-light'])
       expect(byName('design_create_node').description).toContain(field)
     const fake = await app(echo)
     const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }, { type: 'noise', size: 2, density: 0.3, seed: 7 }] }
@@ -339,6 +339,20 @@ describe('design tools', () => {
     expect(missing.isError).toBe(true)
     expect(text(missing)).toBe('Could not read image: nope.png')
     expect(fake.received).toHaveLength(2)
+  })
+
+  it('reads a texture effect\'s image.path into base64, in children and updates', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'uia-texture-'))
+    cleanup.push(() => rm(dir, { recursive: true, force: true }))
+    await writeFile(join(dir, 'paper.png'), Buffer.from(PNG, 'base64'))
+    const fake = await app(echo)
+    const ctx = { root: dir, socketPath: fake.socketPath }
+    const texture = { type: 'texture', image: { path: 'paper.png' }, size: 32 }
+    await callTool('design_create_node', { node: { type: 'frame', children: [{ type: 'rectangle', effects: [{ type: 'noise' }, texture] }] } }, ctx)
+    await callTool('design_update_node', { id: 'r', changes: { effects: [texture] } }, ctx)
+    const inlined = { type: 'texture', image: { data: PNG }, size: 32 }
+    expect(fake.received[0].args.node.children[0].effects).toEqual([{ type: 'noise' }, inlined])
+    expect(fake.received[1].args.changes).toEqual({ effects: [inlined] })
   })
 
   it('reads an SVG image.path byte for byte', async () => {

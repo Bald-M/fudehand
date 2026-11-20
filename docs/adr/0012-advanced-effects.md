@@ -41,10 +41,10 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
 ### Texture
 
-`{ "type": "texture", "image": { "data": "<base64>" }, "size": 64, "opacity": 1, "blend": "normal" }`
+`{ "type": "texture", "image": { "data": "<base64>" }, "size": 64, "opacity": 1, "blend": "normal" }` (implemented in #193's Texture PR)
 
-- A tiled image over the layer's area. `image` is a PNG, JPEG, or SVG, validated like an image layer's `image`; the Agent passes `image.path` and Node reads it into base64, the same narrow exception image layers already have. `size`: tile width in pt, 4–1024, height following the image's aspect ratio. `opacity`: 0–1. `blend`: `normal`, `multiply`, `screen`, `overlay`, or `softLight`, mapped to the layer's `compositingFilter`.
-- Rendering: decoded once (SVG rasterized for the current scale, like `ImageLayer`), drawn as a tiled pattern by a layer in the `inner` bucket.
+- A tiled image over the layer's area. `image` is a PNG, JPEG, or SVG, validated like an image layer's `image`; the Agent passes `image.path` and Node reads it into base64, the same narrow exception image layers already have. `size`: tile width in pt, 4–1024, height following the image's aspect ratio. `opacity`: 0–1. `blend`: `normal`, `multiply`, `screen`, `overlay`, or `soft-light` (kebab-case like the effect types), mapped to the holder layer's `compositingFilter`, so it blends with the layer's fill.
+- Rendering: the tile is drawn once into a block at least 256 pt on each side (a bitmap at its own pixel density, an SVG at 3 pixels per point, within 4096 pixels), cached per image and tile size, and the block repeats as sublayers in the `inner` bucket (`TextureLayer`). Small tiles on a large frame therefore stay a handful of layers. Unlike an SVG image layer, an SVG texture is not rasterized again when zooming in: a texture is surface detail, and one fixed raster keeps it cheap.
 
 ### Glass
 

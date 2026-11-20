@@ -94,6 +94,11 @@ enum EffectLayers {
                 clip(grains, to: node, shape: shape)
                 // With the inner shadows, in effect order: above the fill, below the child layers.
                 built.inner.append(grains)
+            case .texture:
+                guard let shape = shape(node, spread: 0) else { continue }
+                let tiles = TextureLayer.make(effect, bounds: bounds)
+                clip(tiles, to: node, shape: shape)
+                built.inner.append(tiles)
             }
         }
         return built

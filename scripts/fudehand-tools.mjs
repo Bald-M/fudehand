@@ -21,17 +21,21 @@ const absolute = (path, root) => {
   return isAbsolute(path) ? path : resolve(root, path)
 }
 
-/** Reads the PNG, JPEG, or SVG that `image.path` points to in a node (and its children) into a base64 `image.data`. */
+/** Replaces `image.path` in an object (a layer or a texture effect) with the base64 `image.data` of the file it points to. */
+async function inlineImage(value, root) {
+  if (!value || typeof value !== 'object' || !value.image || typeof value.image !== 'object' || typeof value.image.path !== 'string') return value
+  const { path, ...image } = value.image
+  let data
+  try { data = await readFile(absolute(path, root)) } catch { throw new Error(`Could not read image: ${path}`) }
+  return { ...value, image: { ...image, data: data.toString('base64') } }
+}
+
+/** Reads the PNG, JPEG, or SVG that `image.path` points to in a node, its texture effects, and its children into base64 `image.data`. */
 async function inlineImages(value, root) {
   if (Array.isArray(value)) return Promise.all(value.map(item => inlineImages(item, root)))
   if (!value || typeof value !== 'object') return value
-  const result = { ...value }
-  if (result.image && typeof result.image === 'object' && typeof result.image.path === 'string') {
-    const { path, ...image } = result.image
-    let data
-    try { data = await readFile(absolute(path, root)) } catch { throw new Error(`Could not read image: ${path}`) }
-    result.image = { ...image, data: data.toString('base64') }
-  }
+  const result = await inlineImage(value, root)
+  if (Array.isArray(result.effects)) result.effects = await Promise.all(result.effects.map(effect => inlineImage(effect, root)))
   if (Array.isArray(result.children)) result.children = await inlineImages(result.children, root)
   return result
 }
@@ -40,7 +44,7 @@ const NODE_GUIDE = [
   'Layer fields (coordinates are relative to the parent layer, in pt): ',
   'id (optional, generated if omitted), type (frame/rectangle/ellipse/text/image/icon/group), name, x, y, width, height, ',
   'visible, locked, opacity (0–1), fill (#RRGGBB or #RRGGBBAA), stroke {color, width}, ',
-  'effects (any layer but group): an array drawn in order, later ones on top, of {type drop-shadow/inner-shadow/layer-blur/background-blur/noise, visible (default true), radius (blur in pt, 0–250, default 4; not for noise)}; a shadow also takes color (default #00000040), x and y offset in pt (default 0 and 4), and spread in pt (default 0; grows the shape, ignored by text and icons). Shadows follow the layer\'s shape, or the glyphs of text and icons; a drop shadow is not drawn under the layer. layer-blur blurs the layer with its children; background-blur blurs the layers under it in the same parent, seen through a see-through fill (e.g. frosted glass). noise (frame/rectangle/ellipse only) draws grain over the layer\'s area, above its fill and below its children, clipped to its shape: color (default #00000033; its alpha is the strength), size (grain side in pt, 0.5–8, default 1), density (share of grains drawn, 0–1, default 0.5), and seed (integer ≥ 0, default 0; the same seed always gives the same grains). ',
+  'effects (any layer but group): an array drawn in order, later ones on top, of {type drop-shadow/inner-shadow/layer-blur/background-blur/noise/texture, visible (default true), radius (blur in pt, 0–250, default 4; not for noise or texture)}; a shadow also takes color (default #00000040), x and y offset in pt (default 0 and 4), and spread in pt (default 0; grows the shape, ignored by text and icons). Shadows follow the layer\'s shape, or the glyphs of text and icons; a drop shadow is not drawn under the layer. layer-blur blurs the layer with its children; background-blur blurs the layers under it in the same parent, seen through a see-through fill (e.g. frosted glass). noise (frame/rectangle/ellipse only) draws grain over the layer\'s area, above its fill and below its children, clipped to its shape: color (default #00000033; its alpha is the strength), size (grain side in pt, 0.5–8, default 1), density (share of grains drawn, 0–1, default 0.5), and seed (integer ≥ 0, default 0; the same seed always gives the same grains). texture (frame/rectangle/ellipse only) repeats an image over the layer\'s area from its top-left corner, in the same place as noise: image {path to a PNG, JPEG, or SVG file or data (base64 of one)} (required), size (tile width in pt, 4–1024, default 64; the height follows the image), opacity (0–1, default 1), and blend (normal/multiply/screen/overlay/soft-light, default normal; blends with the layer\'s fill). ',
   'cornerRadius (frame/rectangle/image), clipsContent (frame), sizing {horizontal, vertical} (fixed/hug/fill; fill only takes effect inside an auto layout parent; a group ignores fill and stretch and keeps the size of its children), ',
   'text {content, fontSize, fontWeight integer 100–900, fontFamily (a family from design_list_fonts; any other falls back to the system font), color, align left/center/right, lineHeight multiplier, autoResize none/height/width-and-height} (required for text), ',
   'image {path to a PNG, JPEG, or SVG file (~ expands to the home directory) or data (base64 of one), fit fill/fit/stretch} (required for image; an SVG stays vector and is drawn sharp at any zoom), ',

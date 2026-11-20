@@ -891,9 +891,15 @@ private struct EffectsSection: View {
         Menu {
             ForEach(types, id: \.self) { type in
                 Button(Self.name(type)) {
+                    var effect = DesignEffect(type: type)
+                    // A texture needs its image first; cancelling the open panel adds nothing.
+                    if type == .texture {
+                        guard let data = Self.chooseTexture() else { return }
+                        effect.texture = data
+                    }
                     let index = node.effects.count
                     expectedCount = index + 1
-                    update("Add Effect", nil) { $0.effects.append(DesignEffect(type: type)) }
+                    update("Add Effect", nil) { $0.effects.append(effect) }
                     expanded.insert(index)
                 }
             }
@@ -915,9 +921,14 @@ private struct EffectsSection: View {
             .help(open ? L("Hide effect settings") : L("Show effect settings"))
             .accessibilityLabel(open ? L("Hide effect settings") : L("Show effect settings"))
             Picker(L("Effect type"), selection: Binding(get: { effect.type }, set: { type in
+                var texture: Data?
+                if type == .texture, effect.type != .texture {
+                    guard let data = Self.chooseTexture() else { return }
+                    texture = data
+                }
                 change { current in
                     guard current.type != type else { return }
-                    var next = current.type.isShadow && type.isShadow ? current : DesignEffect(type: type)
+                    var next = current.type.isShadow && type.isShadow ? current : DesignEffect(type: type, texture: texture)
                     next.type = type
                     next.visible = current.visible
                     current = next
@@ -945,6 +956,23 @@ private struct EffectsSection: View {
         }
         if open {
             VStack(alignment: .leading, spacing: InspectorMetrics.gap) {
+                if effect.type == .texture {
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Tile size"), caption: L("Size|texture"), value: effect.size) { v in
+                            change { $0.size = min(DesignEffect.textureSizes.upperBound, max(DesignEffect.textureSizes.lowerBound, v)) }
+                        }
+                        NumberField(label: L("Opacity"), symbol: "circle.lefthalf.filled", value: effect.opacity, percent: true) { v in
+                            change { $0.opacity = v }
+                        }
+                    }
+                    Picker(L("Blend"), selection: Binding(get: { effect.blend }, set: { v in change { $0.blend = v } })) {
+                        ForEach(TextureBlend.allCases, id: \.self) { Text(Self.name($0)).tag($0) }
+                    }
+                    Button(L("Replace Image…")) {
+                        guard let data = Self.chooseTexture() else { return }
+                        change { $0.texture = data }
+                    }
+                }
                 if effect.type == .noise {
                     ColorField(label: L("Noise color"), color: effect.color) { c in
                         update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
@@ -969,7 +997,7 @@ private struct EffectsSection: View {
                         NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
                     }
                 }
-                if effect.type != .noise {
+                if effect.type != .noise, effect.type != .texture {
                     HStack(spacing: InspectorMetrics.gap) {
                         NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
                         // Text and icon shadows follow the glyphs, which spread does not grow.
@@ -1005,7 +1033,26 @@ private struct EffectsSection: View {
         case .layerBlur: return L("Layer Blur")
         case .backgroundBlur: return L("Background Blur")
         case .noise: return L("Noise")
+        case .texture: return L("Texture")
         }
+    }
+
+    static func name(_ blend: TextureBlend) -> String {
+        switch blend {
+        case .normal: return L("Normal|blend")
+        case .multiply: return L("Multiply")
+        case .screen: return L("Screen|blend")
+        case .overlay: return L("Overlay|blend")
+        case .softLight: return L("Soft Light")
+        }
+    }
+
+    /// Asks for the PNG, JPEG, or SVG a texture repeats; nil when cancelled or unreadable.
+    static func chooseTexture() -> Data? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .svg]
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url), DesignRenderer.imageSize(data) != nil else { return nil }
+        return data
     }
 }
 

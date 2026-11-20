@@ -177,17 +177,24 @@ public struct LayerStyle: Equatable, Sendable {
 }
 
 public enum EffectType: String, Sendable, CaseIterable {
-    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise
+    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise, texture
     public var isShadow: Bool { self == .dropShadow || self == .innerShadow }
 
-    /// Whether a layer of `type` takes this effect. Noise paints over a layer's area, so only frames, rectangles, and ellipses do.
+    /// Whether a layer of `type` takes this effect. Noise and texture paint over a layer's area, so only frames, rectangles, and
+    /// ellipses do.
     public func supports(_ type: NodeType) -> Bool {
-        self == .noise ? (type == .frame || type == .rectangle || type == .ellipse) : type.hasEffects
+        self == .noise || self == .texture ? (type == .frame || type == .rectangle || type == .ellipse) : type.hasEffects
     }
 }
 
+/// How a texture combines with what is under it in its layer.
+public enum TextureBlend: String, Sendable, CaseIterable {
+    case normal, multiply, screen, overlay, softLight = "soft-light"
+}
+
 /// One entry in a layer's effects list. A shadow uses color, offset, radius, and spread; a blur uses only `radius`; noise uses
-/// color, size, density, and seed (see `NoiseTile`). Shadows of frames, rectangles,
+/// color, size, density, and seed (see `NoiseTile`); a texture uses its image, size (the tile width), opacity, and blend.
+/// Shadows of frames, rectangles,
 /// ellipses, and images follow the layer's shape (spread grows or shrinks it); those of text and icons follow the glyphs and
 /// ignore spread. A drop shadow is not drawn under the layer itself, so it does not show through a see-through fill.
 public struct DesignEffect: Equatable, Sendable {
@@ -199,23 +206,32 @@ public struct DesignEffect: Equatable, Sendable {
     /// The blur radius in points; a Gaussian blur with a standard deviation of half of it.
     public var radius: Double
     public var spread: Double
-    /// Noise only: the side of a grain in points.
+    /// Noise: the side of a grain in points. Texture: the width of one tile in points; its height follows the image.
     public var size: Double
     /// Noise only: the share of grain cells drawn, 0–1.
     public var density: Double
     /// Noise only: picks the grain pattern; the same seed gives the same grains everywhere.
     public var seed: Int
+    /// Texture only: the PNG, JPEG, or SVG that is tiled; saved in files as base64.
+    public var texture: Data?
+    /// Texture only: 0–1.
+    public var opacity: Double
+    /// Texture only.
+    public var blend: TextureBlend
 
-    /// `color` defaults to black at 25% opacity for a shadow and 20% for noise.
+    /// `color` defaults to black at 25% opacity for a shadow and 20% for noise; `size` to 1 for noise and 64 for a texture.
     public init(type: EffectType, visible: Bool = true, color: DesignColor? = nil, x: Double = 0, y: Double = 4,
-                radius: Double = 4, spread: Double = 0, size: Double = 1, density: Double = 0.5, seed: Int = 0) {
+                radius: Double = 4, spread: Double = 0, size: Double? = nil, density: Double = 0.5, seed: Int = 0,
+                texture: Data? = nil, opacity: Double = 1, blend: TextureBlend = .normal) {
         self.type = type; self.visible = visible; self.x = x; self.y = y; self.radius = radius; self.spread = spread
         self.color = color ?? DesignColor(r: 0, g: 0, b: 0, a: type == .noise ? 51.0 / 255 : 64.0 / 255)
-        self.size = size; self.density = density; self.seed = seed
+        self.size = size ?? (type == .texture ? 64 : 1); self.density = density; self.seed = seed
+        self.texture = texture; self.opacity = opacity; self.blend = blend
     }
 
     public static let maximumRadius = 250.0
     public static let noiseSizes = 0.5...8.0
+    public static let textureSizes = 4.0...1024.0
 }
 
 /// How a layer looks while the pointer is over it and while it is pressed during prototype playback.
