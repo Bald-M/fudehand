@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import FudehandCore
 import SwiftUI
 
@@ -9,9 +10,12 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
     private var control: ControlServer?
     /// Open-file requests received during launch, before the window and the store are ready.
     private var pendingFiles: [URL] = []
+    private var appearanceObserver: AnyCancellable?
 
     func attach(_ store: FudehandStore) {
         self.store = store
+        // `$theme` publishes the new value before the property changes, so map the published value, not `store.theme`.
+        appearanceObserver = store.$theme.sink { NSApplication.shared.appearance = FudehandStore.appearance(for: $0) }
         let files = pendingFiles
         pendingFiles = []
         // Only one document is edited at a time; when several are opened together, take the last one.
@@ -40,6 +44,8 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // A cold launch always shows the launch window first and does not restore the editor window that was open at the last quit.
         UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": false])
+        // Before the first window shows; `attach` keeps it in step with the store from then on.
+        NSApp.appearance = FudehandStore.appearance(for: UserDefaults.standard.string(forKey: "native.theme"))
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -85,7 +91,6 @@ struct FudehandApp: App {
             LaunchView(store: store)
                 // The scene's title is not refreshed while the window is open; this one is.
                 .navigationTitle(L("Launch Window"))
-                .preferredColorScheme(store.colorScheme)
                 .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))
         }
@@ -140,7 +145,6 @@ struct FudehandApp: App {
         Window("Fudehand", id: Self.editorWindowID) {
             WorkspaceView(store: store)
                 .frame(minWidth: 960, minHeight: 620)
-                .preferredColorScheme(store.colorScheme)
                 .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))
         }
@@ -148,14 +152,12 @@ struct FudehandApp: App {
 
         Window(L("Prototype"), id: Self.prototypeWindowID) {
             PrototypeWindow(store: store)
-                .preferredColorScheme(store.colorScheme)
                 .environment(\.locale, store.language.locale)
         }
         .windowResizability(.contentSize)
 
         Window(L("MCP Connectors"), id: ConnectorsMenuItem.windowID) {
             ConnectorsView(model: store.connectors)
-                .preferredColorScheme(store.colorScheme)
                 .environment(\.locale, store.language.locale)
         }
         .windowResizability(.contentSize)
