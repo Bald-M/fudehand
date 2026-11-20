@@ -94,6 +94,19 @@ enum EffectLayers {
                 clip(grains, to: node, shape: shape)
                 // With the inner shadows, in effect order: above the fill, below the child layers.
                 built.inner.append(grains)
+            case .glass:
+                guard let shape = shape(node, spread: 0) else { continue }
+                // The backdrop, like a background blur's: the layers under this one in the same parent, saturated, then blurred.
+                let backdrop = plain(bounds)
+                backdrop.backgroundColor = CGColor(gray: 0, alpha: 0.001)
+                backdrop.backgroundFilters = saturate(effect.saturation) + blur(effect.radius)
+                clip(backdrop, to: node, shape: shape)
+                built.backdrops.append(backdrop)
+                let tint = plain(bounds)
+                tint.backgroundColor = DesignRenderer.cgColor(effect.color)
+                clip(tint, to: node, shape: shape)
+                built.inner.append(tint)
+                if effect.highlight > 0 { built.inner.append(highlight(node, opacity: effect.highlight)) }
             case .texture:
                 guard let shape = shape(node, spread: 0) else { continue }
                 let tiles = TextureLayer.make(effect, bounds: bounds)
@@ -171,6 +184,31 @@ enum EffectLayers {
         filter.setValue(CIVector(x: 0, y: 0, z: 0, w: inverted ? -alpha : alpha), forKey: "inputAVector")
         filter.setValue(CIVector(x: effect.color.r, y: effect.color.g, z: effect.color.b, w: inverted ? alpha : 0), forKey: "inputBiasVector")
         return [filter]
+    }
+
+    private static func saturate(_ amount: Double) -> [CIFilter] {
+        guard amount != 1, let filter = CIFilter(name: "CIColorControls") else { return [] }
+        filter.setValue(amount, forKey: kCIInputSaturationKey)
+        return [filter]
+    }
+
+    /// Glass's light edge: a 1 pt white line just inside the shape, strongest at the top and gone by the middle.
+    private static func highlight(_ node: DesignNode, opacity: Double) -> CALayer {
+        let bounds = CGRect(x: 0, y: 0, width: node.width, height: node.height)
+        let edge = CAShapeLayer()
+        edge.actions = DesignRenderer.noActions
+        edge.frame = bounds
+        edge.path = shape(node, spread: -0.5)
+        edge.fillColor = nil
+        edge.strokeColor = CGColor(gray: 1, alpha: opacity)
+        edge.lineWidth = 1
+        let fade = CAGradientLayer()
+        fade.actions = DesignRenderer.noActions
+        fade.frame = bounds
+        fade.colors = [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)]
+        fade.locations = [0, 0.5]
+        edge.mask = fade
+        return edge
     }
 
     private static func blur(_ radius: Double) -> [CIFilter] {

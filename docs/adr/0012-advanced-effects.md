@@ -48,10 +48,10 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
 ### Glass
 
-`{ "type": "glass", "radius": 20, "saturation": 1.4, "tint": "#FFFFFF33", "highlight": 0.5 }`
+`{ "type": "glass", "radius": 20, "saturation": 1.4, "tint": "#FFFFFF33", "highlight": 0.5 }` (implemented in #193's Glass PR; the tint is stored in the effect's `color`)
 
 - Frosted glass as one effect instead of a stack: `radius` is the backdrop blur, as for Background Blur (0–250); `saturation`, 0–2, boosts the backdrop's colors the way system materials do; `tint` is drawn over the blurred backdrop (its alpha is the tint strength); `highlight`, 0–1, is the opacity of a 1 pt light edge along the shape's inner top edge.
-- Rendering: a `backdrops` layer exactly like Background Blur's, with background filters `CIColorControls` (saturation) then `CIGaussianBlur`; the tint and the highlight are `inner` layers. It therefore has **the same limit as Background Blur: it only sees the layers under it in the same parent.** Glass and a Background Blur on one layer would blur twice, so `DesignJSON` refuses the pair.
+- Rendering: a `backdrops` layer exactly like Background Blur's, with background filters `CIColorControls` (saturation) then `CIGaussianBlur`; the tint and the highlight are `inner` layers. It therefore has **the same limit as Background Blur: it only sees the layers under it in the same parent.** Glass and a Background Blur on one layer would blur twice, so `DesignJSON` refuses the pair, as it refuses a second Glass (hidden ones count, so showing one later cannot make an invalid list); the properties panel leaves those choices out of its menus. The highlight is a 1 pt stroke just inside the shape, faded out by the middle of its height with a gradient mask.
 - No refraction or edge distortion: that needs a displacement pass over the backdrop and is left for a later decision.
 
 ### Shader

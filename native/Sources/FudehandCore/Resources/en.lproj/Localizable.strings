@@ -528,6 +528,10 @@
 "Screen|blend" = "Screen";
 "Overlay|blend" = "Overlay";
 "Soft Light" = "Soft Light";
+"Glass" = "Glass";
+"Tint" = "Tint";
+"Saturation" = "Saturation";
+"Highlight" = "Highlight";
 "Move Up" = "Move Up";
 "Move Down" = "Move Down";
 "Shadow color" = "Shadow color";

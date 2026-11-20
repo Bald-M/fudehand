@@ -886,12 +886,21 @@ private struct EffectsSection: View {
         }
     }
 
-    /// The effect types this layer takes (noise only on frames, rectangles, and ellipses).
-    private var types: [EffectType] { EffectType.allCases.filter { $0.supports(node.type) } }
+    /// The effect types this layer takes (noise, texture, and glass only on frames, rectangles, and ellipses), for a new effect
+    /// or for the one at `index`: glass at most once, and not with a background blur, as `DesignJSON` requires.
+    private func types(replacing index: Int? = nil) -> [EffectType] {
+        let others = node.effects.indices.filter { $0 != index }.map { node.effects[$0].type }
+        return EffectType.allCases.filter { type in
+            guard type.supports(node.type) else { return false }
+            if type == .glass { return !others.contains(.glass) && !others.contains(.backgroundBlur) }
+            if type == .backgroundBlur { return !others.contains(.glass) }
+            return true
+        }
+    }
 
     private var addMenu: some View {
         Menu {
-            ForEach(types, id: \.self) { type in
+            ForEach(types(), id: \.self) { type in
                 Button(Self.name(type)) {
                     var effect = DesignEffect(type: type)
                     // A texture needs its image first; cancelling the open panel adds nothing.
@@ -937,7 +946,7 @@ private struct EffectsSection: View {
                     current = next
                 }
             })) {
-                ForEach(types, id: \.self) { Text(Self.name($0)).tag($0) }
+                ForEach(types(replacing: index), id: \.self) { Text(Self.name($0)).tag($0) }
             }
             .labelsHidden()
             .id(typeMenuRefresh)
@@ -992,6 +1001,11 @@ private struct EffectsSection: View {
                         Spacer().frame(maxWidth: .infinity)
                     }
                 }
+                if effect.type == .glass {
+                    ColorField(label: L("Tint"), color: effect.color) { c in
+                        update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
+                    }
+                }
                 if effect.type.isShadow {
                     ColorField(label: L("Shadow color"), color: effect.color) { c in
                         update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
@@ -1007,7 +1021,15 @@ private struct EffectsSection: View {
                         // Text and icon shadows follow the glyphs, which spread does not grow.
                         if effect.type.isShadow, node.type != .text, node.type != .icon {
                             NumberField(label: L("Spread"), value: effect.spread) { v in change { $0.spread = v } }
+                        } else if effect.type == .glass {
+                            NumberField(label: L("Saturation"), value: effect.saturation, minimum: 0) { v in change { $0.saturation = min(v, 2) } }
                         } else {
+                            Spacer().frame(maxWidth: .infinity)
+                        }
+                    }
+                    if effect.type == .glass {
+                        HStack(spacing: InspectorMetrics.gap) {
+                            NumberField(label: L("Highlight"), value: effect.highlight, percent: true) { v in change { $0.highlight = v } }
                             Spacer().frame(maxWidth: .infinity)
                         }
                     }
@@ -1038,6 +1060,7 @@ private struct EffectsSection: View {
         case .backgroundBlur: return L("Background Blur")
         case .noise: return L("Noise")
         case .texture: return L("Texture")
+        case .glass: return L("Glass")
         }
     }
 

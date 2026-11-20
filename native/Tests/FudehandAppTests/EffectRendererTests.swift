@@ -236,3 +236,36 @@ private func checker() throws -> Data {
     #expect(pixel(image, 70, 66)[0] > 245 && pixel(image, 70, 66)[1] < 10)
     #expect(pixel(image, 41, 41) == [255, 255, 255, 255])
 }
+
+/// A white stage with a red square at (40, 40), 60 × 60, and a see-through glass card over it at (70, 40), 80 × 60.
+private func glassStage(_ glass: DesignEffect) -> DesignNode {
+    var frame = DesignNode(id: "f", type: .frame, width: 200, height: 160)
+    frame.fill = .white
+    var red = DesignNode(id: "red", type: .rectangle, x: 40, y: 40, width: 60, height: 60)
+    red.fill = DesignColor(r: 1, g: 0, b: 0)
+    var pane = DesignNode(id: "pane", type: .rectangle, x: 70, y: 40, width: 80, height: 60)
+    pane.effects = [glass]
+    frame.children = [red, pane]
+    return frame
+}
+
+@Test @MainActor func glassTintsWhatIsUnderIt() throws {
+    let image = try snapshot(glassStage(DesignEffect(type: .glass, radius: 0, saturation: 1, highlight: 0)))
+    // White at 20% over red, inside the pane; red untouched outside it; white stays white under the pane.
+    let tinted = pixel(image, 85, 70)
+    #expect(tinted[0] > 250 && abs(tinted[1] - 51) < 6 && abs(tinted[2] - 51) < 6, "\(tinted)")
+    #expect(pixel(image, 55, 70) == [255, 0, 0, 255])
+    #expect(pixel(image, 130, 70) == [255, 255, 255, 255])
+}
+
+@Test @MainActor func glassSaturationAndHighlight() throws {
+    // Saturation 0 turns the red under the pane grey; it does not reach the red outside.
+    let grey = try snapshot(glassStage(DesignEffect(type: .glass, color: DesignColor(r: 1, g: 1, b: 1, a: 0), radius: 0, saturation: 0, highlight: 0)))
+    let under = pixel(grey, 85, 70)
+    #expect(abs(under[0] - under[1]) < 6 && abs(under[1] - under[2]) < 6 && under[0] < 230, "\(under)")
+    #expect(pixel(grey, 55, 70) == [255, 0, 0, 255])
+    // The highlight lightens the pane's top inner edge over the red, and not the middle of its left edge.
+    let lit = try snapshot(glassStage(DesignEffect(type: .glass, color: DesignColor(r: 1, g: 1, b: 1, a: 0), radius: 0, saturation: 1, highlight: 1)))
+    #expect(pixel(lit, 85, 40)[1] > 200, "\(pixel(lit, 85, 40))")
+    #expect(pixel(lit, 70, 95)[1] < 20, "\(pixel(lit, 70, 95))")
+}
