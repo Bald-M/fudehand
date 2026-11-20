@@ -460,3 +460,16 @@
 "Gap" = "间距";
 "Select one layer to edit its prototype settings." = "选中单个图层后可修改其原型设置。";
 "Select a layer to edit its interaction, states, scrolling, and animation here." = "选中图层后在这里修改交互、状态、滚动与动画。";
+"%@ Snapshot" = "%@ 快照";
+"Save Version Snapshot" = "保存版本快照";
+"Select one frame to save a version snapshot." = "请选中一个画框再保存版本快照。";
+"Version Snapshots" = "版本快照";
+"Version Snapshot" = "版本快照";
+"Deleted" = "已删除";
+"Saved|version snapshot time" = "保存时间";
+"Note" = "说明";
+"Snapshot note" = "快照说明";
+"Overlay on Frame" = "叠加到画框上";
+"Place Beside Frame" = "放回画框旁边";
+"Save version snapshot" = "保存版本快照";
+"List version snapshots" = "列出版本快照";

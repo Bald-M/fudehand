@@ -800,3 +800,81 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "children": [["id": "c", "type": "rectangle"]]])))
     #expect(store.collapsedLayers.isEmpty)
 }
+
+// MARK: Version snapshots
+
+@MainActor private func storeWithFrame() async throws -> FudehandStore {
+    let store = makeStore()
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
+        "id": "home", "type": "frame", "name": "Home", "x": 100, "y": 50, "width": 120, "height": 80, "fill": "#FF0000",
+        "children": [["id": "label", "type": "rectangle", "width": 10, "height": 10]],
+    ])))
+    return store
+}
+
+@Test @MainActor func agentSavesAVersionSnapshotAsOneUndoStep() async throws {
+    let store = try await storeWithFrame()
+    let saved = try await control(store, .saveVersionSnapshot(frame: "home", note: "Before the redesign"))
+    let id = try #require(saved["id"] as? String)
+    #expect(saved["frame"] as? String == "home" && saved["frameName"] as? String == "Home" && saved["note"] as? String == "Before the redesign")
+    #expect(saved["bounds"] as? [String: Double] == ["x": 260, "y": 50, "width": 120, "height": 80])
+    #expect(saved["frameBounds"] as? [String: Double] == ["x": 100, "y": 50, "width": 120, "height": 80])
+    let node = try #require(store.editor.document.node(id))
+    #expect(store.editor.document.nodes.last?.id == id && node.type == .image)
+    // The image is the frame rendered at twice its size.
+    let data = try #require(node.image?.data)
+    let image = try #require(NSBitmapImageRep(data: data))
+    #expect(image.pixelsWide == 240 && image.pixelsHigh == 160)
+    #expect(store.editor.undoName == "Agent: Save Version Snapshot")
+    // Snapshots stay when the frame changes, and the list reads them back.
+    _ = try await control(store, .updateNode("home", changes: JSONObject(["fill": "#0000FF"])))
+    let listed = try await control(store, .listVersionSnapshots(frame: "home"))
+    #expect((listed["snapshots"] as? [[String: Any]])?.map { $0["id"] as? String } == [id])
+    store.undo()
+    store.undo()
+    #expect(store.editor.document.versionSnapshots().isEmpty)
+}
+
+@Test @MainActor func onlyFramesHaveVersionSnapshots() async throws {
+    let store = try await storeWithFrame()
+    #expect(await failure(store, .saveVersionSnapshot(frame: "label", note: ""))
+            == "Layer label is a rectangle, not a frame; only frames have version snapshots")
+    #expect(await failure(store, .saveVersionSnapshot(frame: "nope", note: "")) == "Layer not found: nope")
+    store.setSelection(["label"])
+    store.saveVersionSnapshotOfSelection()
+    #expect(store.alert == "Select one frame to save a version snapshot.")
+    #expect(store.editor.document.versionSnapshots().isEmpty)
+}
+
+@Test @MainActor func theMenuSavesTheSelectedFrameAndSelectsTheSnapshot() async throws {
+    let store = try await storeWithFrame()
+    store.setSelection(["home"])
+    store.saveVersionSnapshotOfSelection()
+    let snapshot = try #require(store.editor.document.versionSnapshots(of: "home").first)
+    #expect(store.selection == [snapshot.id] && store.editor.undoName == "Save Version Snapshot" && store.alert == nil)
+    // A second one lines up to the right of the first.
+    store.setSelection(["home"])
+    store.saveVersionSnapshotOfSelection()
+    let both = store.editor.document.versionSnapshots(of: "home")
+    #expect(both.count == 2 && both[1].x == snapshot.frame.maxX + VersionSnapshot.gap)
+}
+
+@Test @MainActor func aVersionSnapshotCanBeOverlaidOnItsFrameAndPutBack() async throws {
+    let store = try await storeWithFrame()
+    let saved = try await control(store, .saveVersionSnapshot(frame: "home", note: ""))
+    let id = try #require(saved["id"] as? String)
+    store.compareVersionSnapshot(id, overlay: true)
+    var node = try #require(store.editor.document.node(id))
+    #expect(node.x == 100 && node.y == 50 && node.opacity == 0.5 && store.editor.undoName == "Overlay Snapshot on Frame")
+    store.compareVersionSnapshot(id, overlay: false)
+    node = try #require(store.editor.document.node(id))
+    #expect(node.x == 260 && node.y == 50 && node.opacity == 1)
+    // The note is edited like any other field, by the panel or by design_update_node.
+    _ = try await control(store, .updateNode(id, changes: JSONObject(["versionSnapshot": ["note": "Old header"]])))
+    #expect(store.editor.document.node(id)?.versionSnapshot?.note == "Old header")
+    // Once the frame is gone the snapshot stays, and the list says its frame is gone.
+    _ = try await control(store, .deleteNodes(["home"]))
+    let result = try await control(store, .listVersionSnapshots(frame: nil))
+    let listed = try #require(result["snapshots"] as? [[String: Any]])
+    #expect(listed.count == 1 && listed[0]["frameName"] is NSNull && listed[0]["frameBounds"] is NSNull)
+}
