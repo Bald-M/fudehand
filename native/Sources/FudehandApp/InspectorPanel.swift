@@ -969,15 +969,17 @@ private struct EffectsSection: View {
                         NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
                     }
                 }
-                if effect.type != .noise { HStack(spacing: InspectorMetrics.gap) {
-                    NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
-                    // Text and icon shadows follow the glyphs, which spread does not grow.
-                    if effect.type.isShadow, node.type != .text, node.type != .icon {
-                        NumberField(label: L("Spread"), value: effect.spread) { v in change { $0.spread = v } }
-                    } else {
-                        Spacer().frame(maxWidth: .infinity)
+                if effect.type != .noise {
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
+                        // Text and icon shadows follow the glyphs, which spread does not grow.
+                        if effect.type.isShadow, node.type != .text, node.type != .icon {
+                            NumberField(label: L("Spread"), value: effect.spread) { v in change { $0.spread = v } }
+                        } else {
+                            Spacer().frame(maxWidth: .infinity)
+                        }
                     }
-                } }
+                }
             }
             .padding(.leading, 20)
         }

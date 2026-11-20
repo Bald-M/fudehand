@@ -37,9 +37,9 @@ final class DesignRenderer {
             guard contentsScale != oldValue else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer is NoiseLayer || layer.contents != nil {
+            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
-                if layer is TextLayer || layer is NoiseLayer { layer.setNeedsDisplay() }
+                if layer is TextLayer { layer.setNeedsDisplay() }
                 (layer as? ImageLayer)?.rasterize(force: true)
                 (layer as? IconLayer)?.rasterize(force: true)
             }

@@ -17,7 +17,7 @@ enum EffectLayers {
         var inner: [CALayer] = []
         /// Layer blurs, applied to the node with its children and its other effects.
         var filters: [CIFilter] = []
-        /// Text or icon copies and noise layers, which need the node's raster scale.
+        /// Text or icon copies that need the node's raster scale.
         var copies: [CALayer] = []
     }
 
@@ -90,16 +90,10 @@ enum EffectLayers {
             case .noise:
                 // Only frames, rectangles, and ellipses take noise (`EffectType.supports`), so the layer always has a shape.
                 guard let shape = shape(node, spread: 0) else { continue }
-                let grains = NoiseLayer()
-                grains.actions = DesignRenderer.noActions
-                grains.frame = bounds
-                grains.contentsScale = DesignRenderer.rasterScale(scale, for: bounds.size)
-                grains.effect = effect
-                grains.setNeedsDisplay()
+                let grains = NoiseLayer.make(effect, bounds: bounds)
                 clip(grains, to: node, shape: shape)
                 // With the inner shadows, in effect order: above the fill, below the child layers.
                 built.inner.append(grains)
-                built.copies.append(grains)
             }
         }
         return built

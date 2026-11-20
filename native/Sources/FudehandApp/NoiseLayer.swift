@@ -2,43 +2,31 @@ import AppKit
 import FudehandCore
 
 /// Draws a noise effect: `NoiseTile` repeated across the layer from its top-left corner, one tile cell per grain of the effect's
-/// size in points, so grains grow with the zoom and stay put when the layer moves. It draws itself like `TextLayer`, so the
-/// canvas, the prototype window, and snapshots get the same grains.
-final class NoiseLayer: CALayer {
-    var effect = DesignEffect(type: .noise) { didSet { if effect != oldValue { setNeedsDisplay() } } }
-
-    override init() {
-        super.init()
-        needsDisplayOnBoundsChange = true
-    }
-
-    override init(layer: Any) {
-        effect = (layer as? NoiseLayer)?.effect ?? DesignEffect(type: .noise)
-        super.init(layer: layer)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func draw(in context: CGContext) {
-        guard let tile = Self.tile(effect) else { return }
-        context.saveGState()
-        // Work with a bottom-left origin, where images draw upright; a flipped context (a layer with flipped geometry) is flipped back.
-        if context.ctm.d < 0 {
-            context.translateBy(x: 0, y: bounds.height)
-            context.scaleBy(x: 1, y: -1)
-        }
-        context.interpolationQuality = .none
+/// size in points, so grains grow with the zoom and stay put when the layer moves. Each repeat is a sublayer showing the same
+/// cached tile image, scaled without smoothing, so zooming never redraws it and a large layer costs no more than one small image.
+enum NoiseLayer {
+    static func make(_ effect: DesignEffect, bounds: CGRect) -> CALayer {
+        let holder = CALayer()
+        holder.actions = DesignRenderer.noActions
+        holder.frame = bounds
+        guard let tile = tile(effect) else { return holder }
         let side = CGFloat(NoiseTile.side) * effect.size
         var top: CGFloat = 0
         while top < bounds.height {
             var left: CGFloat = 0
             while left < bounds.width {
-                context.draw(tile, in: CGRect(x: left, y: bounds.height - top - side, width: side, height: side))
+                let repeated = CALayer()
+                repeated.actions = DesignRenderer.noActions
+                repeated.frame = CGRect(x: left, y: top, width: side, height: side)
+                repeated.contents = tile
+                repeated.magnificationFilter = .nearest
+                repeated.minificationFilter = .nearest
+                holder.addSublayer(repeated)
                 left += side
             }
             top += side
         }
-        context.restoreGState()
+        return holder
     }
 
     private struct Key: Hashable { let color: String, density: Double, seed: Int }

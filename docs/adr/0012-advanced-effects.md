@@ -30,14 +30,14 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
   Noise, Texture, Shader, and Glass paint over a layer's area, so they need a shape to fill; text, image, and icon layers get them only if someone asks. Groups have no effects in #214, and this keeps that.
 - **They join #214's `inner` bucket**: Noise, Texture, Shader, and Glass's tint and highlight are drawn with the inner shadows above the fill and below the children, all in list order, each clipped to the layer's shape (corner radius, ellipse) with #214's `clip`. (The first draft had a separate `surface` bucket below inner shadows; list order is simpler and lets people choose.)
-- **The format version moves to the one after #214's.** Older files open unchanged; older builds refuse newer files with their usual message.
+- **The format version moves past #214's once that version has been released.** #214's version 9 is not in a release yet, so effect types added before the next release stay in version 9; the first one added after a release moves the version, so older builds refuse newer files with their usual message. Older files always open unchanged.
 
 ### Noise
 
 `{ "type": "noise", "size": 1, "density": 0.5, "color": "#00000033", "seed": 0 }`
 
 - `size`: grain size in pt, 0.5–8. `density`: share of grain cells drawn, 0–1. `color`: grain color; its alpha is the strength (as for shadows, there is no separate opacity). `seed`: integer ≥ 0.
-- Rendering: whether a cell has a grain, and how strong it is, comes from a hash of `(seed, cell x, cell y)` in the layer's own coordinates — so grains stay put when the layer moves and are the same on every render, in every snapshot, and on another Mac. The hash and the tile pixels are computed in `FudehandCore` (testable, no AppKit); a 256×256-cell tile is made once per color, density, and seed and drawn tiled, from the layer's top-left corner, by a `NoiseLayer` in the `inner` bucket that draws itself like a text layer. Grains are sized in points and grow when zooming in, like the rest of the design.
+- Rendering: whether a cell has a grain, and how strong it is, comes from a hash of `(seed, cell x, cell y)` in the layer's own coordinates — so grains stay put when the layer moves and are the same on every render, in every snapshot, and on another Mac. The hash and the tile pixels are computed in `FudehandCore` (testable, no AppKit); a 256×256-cell tile is made once per color, density, and seed and repeated from the layer's top-left corner by sublayers in the `inner` bucket that all show that one tile image, scaled without smoothing (`NoiseLayer`), so zooming never redraws it and a large layer costs no more than one small image. Grains are sized in points and grow when zooming in, like the rest of the design.
 
 ### Texture
 

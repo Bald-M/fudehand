@@ -174,6 +174,8 @@ private func card(_ effects: [DesignEffect], type: NodeType = .rectangle) -> Des
     frame.children = [DesignNode(id: "child", type: .rectangle, width: 10, height: 10)]
     renderer.sync([frame])
     let content = try #require(renderer.contentLayer(for: "f"))
-    #expect(content.sublayers?.first is NoiseLayer)
+    // One tile repeat covers the 100 pt frame, and the child layer stays above the grains.
+    let grains = try #require(content.sublayers?.first)
+    #expect(grains.sublayers?.count == 1 && grains.sublayers?.first?.contents != nil)
     #expect(content.sublayers?.last === renderer.layer(for: "child"))
 }
