@@ -12,7 +12,7 @@
   English | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-![fudehand main window: layers panel on the left, canvas in the middle, properties panel on the right](docs/evidence/localization-en-US-light.jpg)
+![Fudehand main window: a todo list app screen on the canvas, the layers panel on the left, and the properties panel on the right](docs/evidence/readme-main-en-light.jpg)
 
 Fudehand runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.fudehand` project files, which are plain JSON.
 
