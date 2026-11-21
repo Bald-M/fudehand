@@ -270,3 +270,84 @@ private func rect(_ id: String, _ extra: [String: Any] = [:]) -> [String: Any] {
     #expect(rule(result, "t").contains("position: relative"))
     #expect(result.html.contains(">Hello</div>"))
 }
+
+@Test func shadowsBecomeBoxShadowsWithTheTopmostFirst() throws {
+    let result = try export(frame("root", children: [rect("r", ["fill": "#FFFFFF", "effects": [
+        ["type": "drop-shadow", "color": "#00000040", "x": 0, "y": 4, "radius": 8, "spread": 2],
+        ["type": "inner-shadow", "color": "#FF000080", "x": 2, "y": -3, "radius": 6],
+        ["type": "drop-shadow", "visible": false, "radius": 30],
+    ]])]))
+    // Box-shadow blur is twice the standard deviation, as the model's radius is, so it is written unchanged.
+    #expect(rule(result, "r").contains("box-shadow: inset 2px -3px 6px 0 rgba(255, 0, 0, 0.502), 0 4px 8px 2px rgba(0, 0, 0, 0.251)"))
+}
+
+@Test func blursAreHalvedIntoStandardDeviations() throws {
+    let result = try export(frame("root", children: [rect("r", ["effects": [
+        ["type": "layer-blur", "radius": 10], ["type": "background-blur", "radius": 24],
+    ]])]))
+    let css = rule(result, "r")
+    #expect(css.contains("filter: blur(5px)"))
+    #expect(css.contains("backdrop-filter: blur(12px)"))
+}
+
+@Test func textShadowsFollowTheGlyphs() throws {
+    let result = try export(frame("root", children: [["id": "t", "type": "text", "name": "t", "width": 80, "height": 20,
+        "text": ["content": "Hi"], "effects": [
+            ["type": "drop-shadow", "color": "#000000", "x": 1, "y": 2, "radius": 3, "spread": 5],
+            ["type": "inner-shadow", "color": "#000000", "x": 0, "y": 1, "radius": 2],
+            ["type": "layer-blur", "radius": 4],
+        ]]]))
+    let css = rule(result, "t")
+    #expect(css.contains("text-shadow: 1px 2px 3px #000000"))
+    #expect(css.contains("filter: blur(2px)"))
+    #expect(!css.contains { $0.hasPrefix("box-shadow") })
+    // CSS has no inset text shadow, so it is noted instead.
+    #expect(result.html.contains("<!-- inner-shadow effect: color #000000, x 0, y 1, radius 2 -->\n  <div class=\"t\""))
+}
+
+@Test func iconShadowsAreDropShadowFilters() throws {
+    let result = try export(frame("root", children: [["id": "i", "type": "icon", "name": "i", "width": 24, "height": 24,
+        "icon": ["name": "lucide/house"], "effects": [
+            ["type": "layer-blur", "radius": 2], ["type": "drop-shadow", "color": "#00000040", "x": 0, "y": 2, "radius": 4],
+        ]]]))
+    // Shadows first, so the layer blur also blurs them, as on the canvas.
+    #expect(rule(result, "i").contains("filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.251)) blur(1px)"))
+}
+
+@Test func glassIsABackdropFilterATintAndAHighlight() throws {
+    let result = try export(frame("root", children: [rect("r", ["fill": "#FFFFFF20", "cornerRadius": 12, "effects": [
+        ["type": "glass", "radius": 20, "saturation": 1.5, "tint": "#FFFFFF33", "highlight": 0.5],
+    ]])]))
+    let css = rule(result, "r")
+    #expect(css.contains("backdrop-filter: saturate(1.5) blur(10px)"))
+    #expect(css.contains("background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)), rgba(255, 255, 255, 0.125)"))
+    #expect(css.contains("box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5)"))
+
+    let bare = try export(frame("root", children: [rect("r", ["effects": [["type": "glass", "highlight": 0]]])]))
+    #expect(rule(bare, "r").contains("background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2))"))
+    #expect(!rule(bare, "r").contains { $0.hasPrefix("box-shadow") })
+}
+
+@Test func transform3DAndPerspective() throws {
+    let result = try export(frame("root", children: [rect("r", ["effects": [
+        ["type": "transform-3d", "rotateX": 20, "rotateY": -35.5, "translateZ": 40],
+    ]])], extra: ["effects": [["type": "perspective", "distance": 600, "originX": 0.25, "originY": 1]]]))
+    #expect(rule(result, "r").contains("transform: rotateX(20deg) rotateY(-35.5deg) translateZ(40px)"))
+    #expect(rule(result, "root").contains("perspective: 600px"))
+    #expect(rule(result, "root").contains("perspective-origin: 25% 100%"))
+}
+
+@Test func rasterEffectsAreNotedInComments() throws {
+    let result = try export(frame("root", children: [rect("r", ["effects": [
+        ["type": "noise", "color": "#00000033", "size": 2, "density": 0.4, "seed": 7],
+        ["type": "texture", "image": ["data": png.base64EncodedString()], "size": 32, "opacity": 0.5, "blend": "multiply"],
+        ["type": "shader", "shader": "waves", "params": ["scale": 120]],
+        ["type": "noise", "visible": false],
+    ]])]))
+    let html = result.html
+    #expect(html.contains("  <!-- noise effect: color rgba(0, 0, 0, 0.2), size 2, density 0.4, seed 7 -->\n"))
+    #expect(html.contains("  <!-- texture effect: png image, size 32, opacity 0.5, blend multiply -->\n"))
+    #expect(html.contains("  <!-- shader effect: waves, angle 30, colorA #6C63FF, colorB #FF8A65, scale 120, opacity 1, blend normal -->\n  <div class=\"r\""))
+    #expect(html.components(separatedBy: "noise effect").count == 2)
+    #expect(!result.files.keys.contains { $0.hasPrefix("assets/") })
+}

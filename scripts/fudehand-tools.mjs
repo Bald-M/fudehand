@@ -198,7 +198,7 @@ export const tools = [
   },
   controlTool('design_export_html', 'export_html',
     'Export a layer (usually a frame) as a reference web page for implementing the design in front-end code, as File > Export as HTML… does: writes index.html (one CSS class per layer; auto layout becomes flexbox, other children are placed absolutely; each element carries data-layer-id) and its images and icons under assets/. ' +
-    'Icons are drawn through a CSS mask tinted with the icon color; SF Symbols are written as PNG, other icons as SVG. Hidden layers and prototype settings are left out, and fonts keep their macOS family names. ' +
+    'Icons are drawn through a CSS mask tinted with the icon color; SF Symbols are written as PNG, other icons as SVG. Effects become CSS (shadows, blurs, glass, 3D transform, perspective); noise, textures, shaders, and inset or backdrop effects on text and icons are only named with their parameters in an HTML comment before the element. Hidden layers, hidden effects, and prototype settings are left out, and fonts keep their macOS family names. ' +
     'The directory is created when missing and must otherwise be empty. Returns the files written (relative to the directory), the asset file of each image and icon layer, and the HTML; the document is not changed. Adapt the result to the target project\'s framework and styles rather than copying it.',
     { ...id, directory: { type: 'string', description: 'Directory to write into; prefer an absolute path. ~ expands to the home directory, other relative paths are resolved against the Fudehand source directory' } },
     ['id', 'directory'],

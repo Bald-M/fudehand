@@ -12,7 +12,9 @@ public struct DesignHTMLExport: Equatable, Sendable {
 /// Turns a laid-out layer (usually a frame) into an HTML page with one CSS class per layer, as a reference for implementing the
 /// design in front-end code. Auto layout becomes flexbox; layers in a frame without auto layout or in a group are placed absolutely.
 /// Images are written as their own files; icons as SVG (PNG for SF Symbols, which the App rasterizes) drawn through a CSS mask
-/// tinted with the icon color, as the canvas does. Hidden layers and prototype settings are left out.
+/// tinted with the icon color, as the canvas does. Effects become CSS as ADR 0012 lays out; noise, textures, shaders, and the
+/// glyph-shaped effects CSS cannot draw are noted in an HTML comment before the element. Hidden layers, hidden effects, and
+/// prototype settings are left out.
 public enum DesignHTML {
     public typealias IconArtwork = (String) -> (data: Data, ext: String)?
 
@@ -75,6 +77,8 @@ public enum DesignHTML {
             var css = position(node, context: context)
             css += size(node, context: context)
             css += appearance(node)
+            let (effectCSS, notes) = effects(node)
+            css += effectCSS
             let open = #"class="\#(name)" data-layer-id="\#(escape(node.id))""#
             let tag: String
             switch node.type {
@@ -105,7 +109,7 @@ public enum DesignHTML {
                     : "\(indent)<div \(open)>\n\(children.joined(separator: "\n"))\n\(indent)</div>"
             }
             rules[ruleIndex] = ".\(name) { \(css.map { $0 + ";" }.joined(separator: " ")) }"
-            return tag
+            return notes.map { "\(indent)<!-- \($0) -->\n" }.joined() + tag
         }
 
         func position(_ node: DesignNode, context: Context) -> [String] {
@@ -151,7 +155,13 @@ public enum DesignHTML {
 
         func appearance(_ node: DesignNode) -> [String] {
             var css: [String] = []
-            if let fill = node.fill { css.append("background: \(Self.color(fill))") }
+            // Glass tints are drawn over the fill, so they are background layers above it, the topmost first.
+            let tints = node.effects.filter { $0.visible && $0.type == .glass }.reversed().map { effect -> String in
+                let tint = Self.color(effect.color)
+                return "linear-gradient(\(tint), \(tint))"
+            }
+            let layers = tints + (node.fill.map { [Self.color($0)] } ?? [])
+            if !layers.isEmpty { css.append("background: \(layers.joined(separator: ", "))") }
             if node.type == .ellipse { css.append("border-radius: 50%") }
             else if node.type.hasCornerRadius, node.cornerRadius > 0 { css.append("border-radius: \(Self.px(node.cornerRadius))") }
             // The canvas draws strokes inside the bounds and above the children, which an inset outline matches without moving them.
@@ -161,6 +171,75 @@ public enum DesignHTML {
             if node.opacity < 1 { css.append("opacity: \(Self.number(node.opacity))") }
             if node.type == .image || (node.type == .frame && node.clipsContent) { css.append("overflow: hidden") }
             return css
+        }
+
+        /// The CSS for a layer's visible effects, and a note for each one CSS cannot draw. Box shadows and background layers list
+        /// the topmost first, the reverse of the effects list. Shadow blur in CSS is twice the standard deviation, as
+        /// `DesignEffect.radius` is, so it is written unchanged; `blur()` takes the standard deviation, so it is halved.
+        func effects(_ node: DesignNode) -> (css: [String], notes: [String]) {
+            let glyphs = node.type == .text || node.type == .icon
+            var boxShadows: [String] = [], textShadows: [String] = [], dropShadows: [String] = [], blurs: [String] = []
+            var backdrops: [String] = [], notes: [String] = [], css: [String] = []
+            var transform: String?, perspective: [String] = []
+            func shadow(_ effect: DesignEffect, spread: Bool) -> String {
+                let parts = [effect.x, effect.y, effect.radius] + (spread ? [effect.spread] : [])
+                return (parts.map(Self.px) + [Self.color(effect.color)]).joined(separator: " ")
+            }
+            func note(_ effect: DesignEffect, _ details: [String]) {
+                notes.append("\(effect.type.rawValue) effect: \(details.joined(separator: ", "))")
+            }
+            for effect in node.effects where effect.visible {
+                switch effect.type {
+                case .dropShadow:
+                    if node.type == .text { textShadows.insert(shadow(effect, spread: false), at: 0) }
+                    else if node.type == .icon { dropShadows.append("drop-shadow(\(shadow(effect, spread: false)))") }
+                    else { boxShadows.insert(shadow(effect, spread: true), at: 0) }
+                case .innerShadow:
+                    if glyphs {
+                        note(effect, ["color \(Self.color(effect.color))", "x \(Self.number(effect.x))", "y \(Self.number(effect.y))",
+                                      "radius \(Self.number(effect.radius))"])
+                    } else {
+                        boxShadows.insert("inset " + shadow(effect, spread: true), at: 0)
+                    }
+                case .layerBlur:
+                    blurs.append("blur(\(Self.px(effect.radius / 2)))")
+                case .backgroundBlur:
+                    if glyphs { note(effect, ["radius \(Self.number(effect.radius))"]) }
+                    else { backdrops.append("blur(\(Self.px(effect.radius / 2)))") }
+                case .glass:
+                    backdrops.append("saturate(\(Self.number(effect.saturation))) blur(\(Self.px(effect.radius / 2)))")
+                    // The canvas draws a light line just inside the top edge.
+                    if effect.highlight > 0 {
+                        boxShadows.insert("inset 0 1px 0 rgba(255, 255, 255, \(Self.number(effect.highlight)))", at: 0)
+                    }
+                case .transform3D:
+                    transform = "rotateX(\(Self.number(effect.rotateX))deg) rotateY(\(Self.number(effect.rotateY))deg) translateZ(\(Self.px(effect.translateZ)))"
+                case .perspective:
+                    perspective = ["perspective: \(Self.px(effect.distance))",
+                                   "perspective-origin: \(Self.number(effect.originX * 100))% \(Self.number(effect.originY * 100))%"]
+                case .noise:
+                    note(effect, ["color \(Self.color(effect.color))", "size \(Self.number(effect.size))",
+                                  "density \(Self.number(effect.density))", "seed \(effect.seed)"])
+                case .texture:
+                    note(effect, ["\(Self.imageExtension(effect.texture ?? Data())) image", "size \(Self.number(effect.size))",
+                                  "opacity \(Self.number(effect.opacity))", "blend \(effect.blend.rawValue)"])
+                case .shader:
+                    let params = effect.shaderParams.sorted { $0.key < $1.key }.map { name, value -> String in
+                        switch value {
+                        case .number(let number): return "\(name) \(Self.number(number))"
+                        case .color(let color): return "\(name) \(Self.color(color))"
+                        }
+                    }
+                    note(effect, [effect.shader] + params + ["opacity \(Self.number(effect.opacity))", "blend \(effect.blend.rawValue)"])
+                }
+            }
+            if !boxShadows.isEmpty { css.append("box-shadow: \(boxShadows.joined(separator: ", "))") }
+            if !textShadows.isEmpty { css.append("text-shadow: \(textShadows.joined(separator: ", "))") }
+            // Shadows first, so a layer blur also blurs them, as on the canvas.
+            if !(dropShadows + blurs).isEmpty { css.append("filter: \((dropShadows + blurs).joined(separator: " "))") }
+            if !backdrops.isEmpty { css.append("backdrop-filter: \(backdrops.joined(separator: " "))") }
+            if let transform { css.append("transform: \(transform)") }
+            return (css + perspective, notes)
         }
 
         func flex(_ layout: AutoLayout) -> [String] {
