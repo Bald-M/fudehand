@@ -42,8 +42,11 @@ final class FudehandAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // A cold launch always shows the launch window first and does not restore the editor window that was open at the last quit.
-        UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": false])
+        // A cold launch always shows the launch window first, on the current Space, and restores none of the windows open at
+        // the last quit. Not keeping windows on quit is not enough: Quit and Keep Windows (⌥⌘Q), the system setting "Close
+        // windows when quitting an application" turned off, and logging out with "Reopen windows" all keep them anyway, and the
+        // restored editor and an empty Prototype window would come back on the Space each was on, bypassing the launch window.
+        UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": false, "ApplePersistenceIgnoreState": true])
         // Before the first window shows; `attach` keeps it in step with the store from then on.
         NSApp.appearance = FudehandStore.appearance(for: UserDefaults.standard.string(forKey: "native.theme"))
     }
