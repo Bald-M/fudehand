@@ -9,8 +9,9 @@ import Testing
 enum CanvasBenchmark {
     static let enabled = ProcessInfo.processInfo.environment["FUDEHAND_BENCHMARK"] == "1"
 
-    /// `frames` top-level frames, ten per row, each holding 50 children; every fifth child is text.
-    static func document(frames: Int) -> DesignDocument {
+    /// `frames` top-level frames, ten per row, each holding 50 children; every fifth child is text. With `effects`, every tenth
+    /// child (10% of the layers) carries a Noise, a Texture, a Glass, a Shader, and a 3D transform, the gate of ADR 0012.
+    static func document(frames: Int, effects: Bool = false) -> DesignDocument {
         DesignDocument(nodes: (0..<frames).map { index in
             var frame = DesignNode(id: "f\(index)", type: .frame, name: "Frame \(index)",
                                    x: Double(index % 10) * 500, y: Double(index / 10) * 400, width: 400, height: 300)
@@ -19,11 +20,18 @@ enum CanvasBenchmark {
                 let x = 10 + Double(child % 10) * 38, y = 20 + Double(child / 10) * 52
                 var node = DesignNode(id: "f\(index)c\(child)", type: child % 5 == 0 ? .text : .rectangle, x: x, y: y, width: 30, height: 40)
                 if node.type == .text { node.text = DesignText(content: "Label \(child)", fontSize: 12) } else { node.fill = .black }
+                if effects, child % 10 == 1 { node.effects = advancedEffects }
                 return node
             }
             return frame
         })
     }
+
+    static let advancedEffects: [DesignEffect] = {
+        let svg = Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><circle cx="4" cy="4" r="2"/></svg>"#.utf8)
+        return [DesignEffect(type: .noise), DesignEffect(type: .texture, size: 8, texture: svg), DesignEffect(type: .glass),
+                DesignEffect(type: .shader), DesignEffect(type: .transform3D, rotateY: 20)]
+    }()
 
     /// Average milliseconds per run.
     static func time(_ runs: Int, _ body: (Int) -> Void) -> Double {
@@ -34,8 +42,8 @@ enum CanvasBenchmark {
 }
 
 @Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasDragAndHoverBenchmark() {
-    for frames in [10, 40, 100] {
-        let document = CanvasBenchmark.document(frames: frames)
+    for frames in [10, 40, 100] { for effects in [false, true] {
+        let document = CanvasBenchmark.document(frames: frames, effects: effects)
         let h = CanvasHarness(document: document)
         defer { h.dispose() }
         let label = NSPoint(x: 5, y: 88)
@@ -62,7 +70,7 @@ enum CanvasBenchmark {
         // Hovering a child of the last frame's neighbor row: every frame label is tested first.
         let hover = CanvasBenchmark.time(1000) { _ in _ = h.canvas.hitTarget(at: NSPoint(x: 520, y: 130)) }
 
-        print(String(format: "[bench] layers=%d dragEvent=%.2fms canvasMove=%.2fms rendererSync=%.2fms hoverHit=%.3fms",
-                     document.nodeCount, drag, move, sync, hover))
-    }
+        print(String(format: "[bench] layers=%d effects=%@ dragEvent=%.2fms canvasMove=%.2fms rendererSync=%.2fms hoverHit=%.3fms",
+                     document.nodeCount, effects ? "10%" : "none", drag, move, sync, hover))
+    } }
 }
