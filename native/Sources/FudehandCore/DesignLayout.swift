@@ -5,16 +5,24 @@ public typealias TextMeasure = (DesignText, _ maxWidth: Double?) -> Size
 
 /// Auto layout, text auto-sizing, and group shrinking. Results are written straight back to the nodes' x/y/width/height, and rendering only reads those values.
 public enum DesignLayout {
-    public static func apply(to nodes: inout [DesignNode], measure: TextMeasure) {
+    /// Lays out every top-level node with its subtree.
+    ///
+    /// `unchangedFrom` holds the laid-out top-level nodes an edit started from; the top-level nodes the edit left equal to
+    /// one of them are skipped. A top-level node is laid out from its own subtree alone, and laying out a laid-out subtree
+    /// again changes nothing, so an edit lays out only the top-level nodes it touched. Skipped subtrees also keep sharing
+    /// storage with the document the edit started from, so comparing the two afterwards stays cheap (#228).
+    public static func apply(to nodes: inout [DesignNode], measure: TextMeasure, unchangedFrom previous: [DesignNode] = []) {
+        let laidOut = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let changed = nodes.indices.filter { laidOut[nodes[$0].id] != nodes[$0] }
         // Widths are settled only in the top-down phase and affect the height of wrapped text and hug parents, so run two passes.
         for _ in 0..<2 {
-            for index in nodes.indices {
+            for index in changed {
                 measureUp(&nodes[index], parentLayout: nil, measure: measure)
                 layoutDown(&nodes[index])
             }
         }
         // Moves, hug sizes, and group shrinking derive geometry that file reading would reject (#56); every edit ends here.
-        for index in nodes.indices { clamp(&nodes[index]) }
+        for index in changed { clamp(&nodes[index]) }
     }
 
     /// Keeps position and size within the range `DesignJSON` accepts when reading.

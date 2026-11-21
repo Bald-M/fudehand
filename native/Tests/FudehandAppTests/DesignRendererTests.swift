@@ -229,3 +229,24 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     frame.layoutGuides = [guide, LayoutGuide(type: .grid)]
     #expect(try DesignRenderer.snapshotPNG(frame, scale: 1) == plain)
 }
+
+/// A sync skips the subtrees of nodes whose children did not change (#228), yet updates a changed node deep in another subtree,
+/// and a deletion in one subtree removes only the deleted node's layer, not the layers of the subtrees it skipped.
+@Test @MainActor func syncSkipsUnchangedSubtreesWithoutMissingChanges() {
+    let renderer = DesignRenderer()
+    var other = DesignNode(id: "g", type: .frame, x: 0, y: 200, width: 200, height: 100)
+    other.children = [DesignNode(id: "gc", type: .rectangle), DesignNode(id: "gd", type: .rectangle)]
+    var nodes = sample() + [other]
+    renderer.sync(nodes)
+    #expect(renderer.layerCount == 7)
+
+    nodes[0].children[1].x = 160
+    renderer.sync(nodes)
+    #expect(renderer.layer(for: "e")?.frame.origin == CGPoint(x: 160, y: 10))
+
+    nodes[2].children.removeFirst()
+    renderer.sync(nodes)
+    #expect(renderer.layer(for: "gc") == nil && renderer.layerCount == 6)
+    #expect(renderer.layer(for: "f")?.sublayers?.count == 2 && renderer.layer(for: "t") != nil)
+    #expect(renderer.layer(for: "g")?.sublayers?.count == 1)
+}

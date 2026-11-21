@@ -14,19 +14,21 @@ struct PrototypeRequest: Equatable {
 struct PrototypeWindow: View {
     @ObservedObject var store: FudehandStore
     @ObservedObject private var shown: PrototypeShown
+    @ObservedObject private var displayed: DisplayedDocument
 
     init(store: FudehandStore) {
         self.store = store
         shown = store.prototypeShown
+        displayed = store.displayed
     }
 
     var body: some View {
-        let frame = shown.frame.flatMap { Prototype.frame($0, in: store.document) }
+        let frame = shown.frame.flatMap { Prototype.frame($0, in: displayed.document) }
         let scale = frame.map { Self.fitScale(Size(width: $0.width, height: $0.height)) } ?? 1
         // The stage stays in place while its frame is missing, so undoing the deletion resumes playback where it was.
         ZStack {
             if let request = store.prototypeRequest {
-                PrototypeStage(document: store.document, request: request, scale: scale) { store.prototypeMoved(to: $0) }
+                PrototypeStage(document: displayed.document, request: request, scale: scale) { store.prototypeMoved(to: $0) }
             }
             if frame == nil {
                 VStack(spacing: 12) {

@@ -27,6 +27,10 @@ final class DesignRenderer {
         var applied: DesignNode?
         /// The sync that last saw the node; records an older sync left behind belong to deleted nodes.
         var pass = 0
+        /// The children last synced, and how many nodes their subtrees hold. A sync skips a subtree whose children array is
+        /// unchanged: arrays compare by identity first, so an edit elsewhere in the document costs nothing here (#228).
+        var syncedChildren: [DesignNode]?
+        var subtreeCount = 0
         init(_ layer: CALayer) { self.layer = layer; content = layer }
     }
     private var records: [String: Record] = [:]
@@ -68,15 +72,23 @@ final class DesignRenderer {
     /// The available fonts changed: the next sync typesets every text layer again, even when its node is unchanged.
     func fontsChanged() {
         // Forgetting only the text keeps the layer (a nil `applied` would read as a type change and replace it).
-        for record in records.values where record.content is TextLayer { record.applied?.text = nil }
+        for record in records.values {
+            if record.content is TextLayer { record.applied?.text = nil }
+            // Text layers anywhere in the tree must be reached again.
+            record.syncedChildren = nil
+        }
     }
 
     func sync(_ nodes: [DesignNode]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         pass += 1
-        let seen = syncChildren(of: root, nodes)
+        var seen = syncChildren(of: root, nodes, skipping: true)
         // Ids are unique, so when as many nodes were synced as there are records, none was left behind by a deleted node.
+        // Otherwise sync every node again, so that only the records of deleted nodes are left with an older pass.
+        if seen != records.count {
+            seen = syncChildren(of: root, nodes, skipping: false)
+        }
         if seen != records.count {
             for (id, record) in records where record.pass != pass {
                 record.layer.removeFromSuperlayer()
@@ -88,7 +100,8 @@ final class DesignRenderer {
     }
 
     /// Returns the number of nodes synced, descendants included. `below` are the parent's own layers kept under its children.
-    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], below: [CALayer] = []) -> Int {
+    /// `skipping` skips the subtrees of unchanged nodes whose children are unchanged, counting their nodes as synced.
+    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], below: [CALayer] = [], skipping: Bool) -> Int {
         var ordered = below
         var seen = nodes.count
         for node in nodes {
@@ -106,12 +119,20 @@ final class DesignRenderer {
             current.pass = pass
             var shallow = node
             shallow.children = []
+            var unchanged = true
             if current.applied != shallow {
                 Self.apply(node, to: current.content, previous: current.applied, scale: contentsScale)
                 applyEffects(node, to: current)
                 current.applied = shallow
+                unchanged = false
             }
-            seen += syncChildren(of: current.content, node.children, below: current.innerShadows)
+            if skipping, unchanged, let synced = current.syncedChildren, synced == node.children {
+                seen += current.subtreeCount
+            } else {
+                current.subtreeCount = syncChildren(of: current.content, node.children, below: current.innerShadows, skipping: skipping)
+                current.syncedChildren = node.children
+                seen += current.subtreeCount
+            }
             ordered += current.backdrops
             ordered.append(current.layer)
         }

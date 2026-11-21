@@ -15,11 +15,16 @@ struct WorkspaceLocation: Decodable {
 @MainActor
 final class FudehandStore: ObservableObject {
     private(set) var editor = DesignEditor(measure: TextMetrics.measure)
+    /// The document the panels display, published apart from the store's own state: an edit then recomputes only the views
+    /// that show the document, not every view that observes the store, the window toolbar among them (#228).
+    let displayed = DisplayedDocument()
     /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
-    @Published private(set) var document = DesignDocument()
+    var document: DesignDocument { displayed.document }
     /// The lookup index of `document`, which the panels read: during a continuous gesture it lags `index` like `document` does.
     /// Panels look layers up here instead of searching the whole tree on every update (#227).
-    private(set) var documentIndex = DesignIndex()
+    var documentIndex: DesignIndex { displayed.index }
+    /// The rows of the layers panel, updated with `document`.
+    let layerOutline = LayerOutline()
     /// The selected layers, kept out of the store's published state: selecting in a large document then recomputes only the views
     /// that show the selection, not every view that observes the store (#142).
     let layerSelection = LayerSelection()
@@ -31,6 +36,9 @@ final class FudehandStore: ObservableObject {
     @Published var annotation: AnnotationTarget?
     @Published private(set) var fileURL: URL?
     @Published private(set) var savedRevision = 0
+    /// The editor's document differs from the last save. Updated on every document change, so views do not compare whole
+    /// documents every time they are recomputed (#228).
+    @Published private(set) var isDirty = false
     /// The content at the last save (or at New/Open); returning to it by dragging back or undoing is not an edit.
     private var savedDocument = DesignDocument()
     /// The most recent viewport request; pushed directly to the canvas, bypassing SwiftUI, so the panels are not recomputed on every zoom.
@@ -143,7 +151,6 @@ final class FudehandStore: ObservableObject {
         default: nil
         }
     }
-    var isDirty: Bool { editor.revision != savedRevision && editor.document != savedDocument }
     var title: String { fileURL?.deletingPathExtension().lastPathComponent ?? L("Untitled") }
     var canUndo: Bool { editor.canUndo }
     var canRedo: Bool { editor.canRedo }
@@ -166,8 +173,21 @@ final class FudehandStore: ObservableObject {
         let index = self.index
         canvas?.show(index)
         if !selection.allSatisfy(index.contains) { setSelection(selection.filter(index.contains)) }
-        if !inGesture { documentIndex = index; document = index.document }
+        if !inGesture { publish(index) }
+        updateDirty()
         syncAnnotation()
+    }
+
+    /// Shows the editor's document in the panels.
+    private func publish(_ index: DesignIndex) {
+        displayed.show(index)
+        layerOutline.update(index, collapsed: collapsedLayers)
+    }
+
+    /// Edits keep the parts of the document they leave alone shared with the saved document, so comparing the two is cheap.
+    private func updateDirty() {
+        let dirty = editor.revision != savedRevision && editor.document != savedDocument
+        if dirty != isDirty { isDirty = dirty }
     }
 
     /// One undoable edit.
@@ -175,7 +195,7 @@ final class FudehandStore: ObservableObject {
         try editor.perform(name, coalescing: coalescing, change)
         changed()
         // Edits received during a drag (such as Agent commands) are also shown in the panels immediately.
-        if inGesture { documentIndex = index; document = index.document }
+        if inGesture { publish(index) }
     }
 
     /// An edit from a panel: shows the error on failure.
@@ -389,7 +409,7 @@ final class FudehandStore: ObservableObject {
             fontFamilies = fontLibrary.families()
             TextMetrics.resetCache()
             canvas?.fontsChanged()
-            editor.applyLive { _ in }
+            editor.layOutAgain()
             changed()
         }
         return try urls.flatMap(fontLibrary.importFont)
@@ -437,6 +457,7 @@ final class FudehandStore: ObservableObject {
     /// Collapses or expands a layer's child layers in the layers panel.
     func setCollapsed(_ id: String, _ collapsed: Bool) {
         if collapsed { collapsedLayers.insert(id) } else { collapsedLayers.remove(id) }
+        layerOutline.update(documentIndex, collapsed: collapsedLayers)
     }
 
     func zoom(_ scale: Double) {
@@ -606,6 +627,7 @@ final class FudehandStore: ObservableObject {
         fileURL = url
         savedRevision = editor.revision
         savedDocument = editor.document
+        updateDirty()
         recordRecent(url)
     }
 
@@ -684,6 +706,17 @@ final class FudehandStore: ObservableObject {
     }
 
     func shutdown() async { await chat.shutdown() }
+}
+
+/// See `FudehandStore.displayed`.
+final class DisplayedDocument: ObservableObject {
+    @Published fileprivate(set) var document = DesignDocument()
+    fileprivate(set) var index = DesignIndex()
+
+    fileprivate func show(_ next: DesignIndex) {
+        index = next
+        document = next.document
+    }
 }
 
 /// Kept out of the store's published state so pointer movement redraws only the layer rows that observe it.
@@ -769,8 +802,10 @@ extension FudehandStore: CanvasHost {
             return parent.flatMap { index.node($0)?.layout } == nil
         }
         guard !movable.isEmpty else { return }
+        // The index describes the document the edit starts from, and moving layers leaves every index path valid (#228).
+        let paths = movable.compactMap(index.indexPath)
         edit("Move Layers") { document in
-            for id in movable { try document.update(id) { $0.x += delta.x; $0.y += delta.y } }
+            for path in paths { document.update(at: path) { $0.x += delta.x; $0.y += delta.y } }
         }
     }
 

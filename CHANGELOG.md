@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Edits stay fast in large documents: an edit lays out only the top-level layers it changed, the canvas skips layers whose children did not change, and the layers panel, the window title, and the toolbar update only when what they show changes. On a 5,100-layer document, nudging 50 layers with an arrow key drops from about 65 ms to under 3 ms, and undo, redo, and releasing a drag from about 25 ms to under 3 ms; `pnpm bench:native` now measures them (#228).
+
 ## [0.0.5] - 2026-11-21
 
 ### Summary

@@ -7,10 +7,12 @@ import SwiftUI
 struct InspectorPanel: View {
     @ObservedObject var store: FudehandStore
     @ObservedObject var selection: LayerSelection
+    @ObservedObject var displayed: DisplayedDocument
 
     init(store: FudehandStore) {
         self.store = store
         selection = store.layerSelection
+        displayed = store.displayed
     }
 
     var body: some View {
@@ -18,12 +20,12 @@ struct InspectorPanel: View {
             InspectorTabs(selection: $store.inspectorTab)
             Divider()
             switch store.inspectorTab {
-            case .design, .prototype: DesignInspector(store: store, selection: selection, page: store.inspectorTab)
+            case .design, .prototype: DesignInspector(store: store, displayed: displayed, selection: selection, page: store.inspectorTab)
             case .chat:
-                let selected = selection.ids.compactMap { store.documentIndex.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                let selected = selection.ids.compactMap { displayed.index.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
                 ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
                           selection: selected.map { ChatContext(id: $0.id, name: $0.name, type: $0.type.rawValue) },
-                          layerName: { store.documentIndex.node($0)?.name })
+                          layerName: { displayed.index.node($0)?.name })
             }
         }
     }
@@ -65,17 +67,18 @@ private struct InspectorTabs: View {
 
 private struct DesignInspector: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var displayed: DisplayedDocument
     @ObservedObject var selection: LayerSelection
     let page: InspectorTab
 
     var body: some View {
-        let selected = selection.ids.compactMap { store.documentIndex.node($0) }
+        let selected = selection.ids.compactMap { displayed.index.node($0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if selected.count == 1, let node = selected.first {
                     // Kept when the selection moves to another layer, instead of rebuilt: rebuilding every control took most of the
                     // time of a selection change (#142). Fields reset their drafts on `inspectedLayer` instead.
-                    NodeInspector(store: store, node: node, parentLayout: parentLayout(of: node.id), page: page).environment(\.inspectedLayer, node.id)
+                    NodeInspector(store: store, displayed: displayed, node: node, parentLayout: parentLayout(of: node.id), page: page).environment(\.inspectedLayer, node.id)
                 } else if selected.count > 1 && page == .design {
                     InspectorSection(L("%d layers selected", selected.count)) {
                         HStack(spacing: InspectorMetrics.gap) {
@@ -90,7 +93,7 @@ private struct DesignInspector: View {
                     }
                     // A typed draft belongs to this set of layers and is dropped when the selection changes.
                     .environment(\.inspectedLayer, selected.map(\.id).sorted().joined(separator: ","))
-                    SelectionColorsSection(store: store, ids: selection.ids)
+                    SelectionColorsSection(store: store, displayed: displayed, ids: selection.ids)
                 } else if selected.count > 1 {
                     InspectorSection(L("%d layers selected", selected.count)) {
                         Text(L("Select one layer to edit its prototype settings."))
@@ -99,7 +102,7 @@ private struct DesignInspector: View {
                 } else {
                     InspectorSection(L("Document")) {
                         LabeledContent(L("Name"), value: store.title)
-                        LabeledContent(L("Layers"), value: "\(store.document.nodeCount)")
+                        LabeledContent(L("Layers"), value: "\(displayed.document.nodeCount)")
                         Text(page == .design ? L("Select a layer to edit its position, size, fill, stroke, text, and auto layout here.")
                                              : L("Select a layer to edit its interaction, states, scrolling, and animation here."))
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -110,8 +113,8 @@ private struct DesignInspector: View {
     }
 
     private func parentLayout(of id: String) -> AutoLayout? {
-        guard let parent = store.documentIndex.parentID(of: id) ?? nil else { return nil }
-        return store.documentIndex.node(parent)?.layout
+        guard let parent = displayed.index.parentID(of: id) ?? nil else { return nil }
+        return displayed.index.node(parent)?.layout
     }
 }
 
@@ -134,6 +137,7 @@ private struct SliderRow: View {
 /// (a color well per swatch made selecting a frame several times slower in large documents).
 private struct SelectionColorsSection: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var displayed: DisplayedDocument
     let ids: Set<String>
     @State private var expanded = false
     /// The swatch being edited: the uses that held its color when it was opened. Only they are written, so dragging the
@@ -142,8 +146,8 @@ private struct SelectionColorsSection: View {
     private static let collapsedLimit = 7
 
     var body: some View {
-        let colors = SelectionColors.collect(ids, in: store.documentIndex)
-        let editedColor = editing.flatMap { edit in edit.uses.lazy.compactMap { SelectionColors.color(of: $0, in: store.documentIndex) }.first }
+        let colors = SelectionColors.collect(ids, in: displayed.index)
+        let editedColor = editing.flatMap { edit in edit.uses.lazy.compactMap { SelectionColors.color(of: $0, in: displayed.index) }.first }
         Group {
             if !colors.isEmpty {
                 let overflow = !expanded && colors.count > Self.collapsedLimit
@@ -191,6 +195,7 @@ private struct SelectionColorsSection: View {
 
 private struct NodeInspector: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var displayed: DisplayedDocument
     let node: DesignNode
     let parentLayout: AutoLayout?
     let page: InspectorTab
@@ -308,7 +313,7 @@ private struct NodeInspector: View {
             InspectorSection(L("Stroke"), adding: L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
         }
         if node.type.hasEffects { EffectsSection(node: node, update: update) }
-        SelectionColorsSection(store: store, ids: [node.id])
+        SelectionColorsSection(store: store, displayed: displayed, ids: [node.id])
         if let text = node.text { textSection(text) }
         if let image = node.image {
             InspectorSection(L("Image")) {
@@ -340,7 +345,7 @@ private struct NodeInspector: View {
     /// A frame's version snapshots, oldest first: choosing one selects it and brings it into view.
     private var frameSnapshotsSection: some View {
         InspectorSection(L("Version Snapshots")) {
-            ForEach(store.document.versionSnapshots(of: node.id)) { layer in
+            ForEach(displayed.document.versionSnapshots(of: node.id)) { layer in
                 if let snapshot = layer.versionSnapshot {
                     Button { store.setSelection([layer.id]); store.focus(layer.id) } label: {
                         VStack(alignment: .leading, spacing: 2) {
@@ -358,11 +363,11 @@ private struct NodeInspector: View {
 
     /// A version snapshot's frame, time, and note, and the switch between laying it over its frame and placing it beside.
     private func versionSnapshotSection(_ snapshot: VersionSnapshot) -> some View {
-        let frame = store.documentIndex.worldRect(snapshot.frame)
-        let here = store.documentIndex.worldRect(node.id)
+        let frame = displayed.index.worldRect(snapshot.frame)
+        let here = displayed.index.worldRect(node.id)
         let overlaid = frame.map { frame in here.map { abs($0.x - frame.x) < 0.5 && abs($0.y - frame.y) < 0.5 } ?? false } ?? false
         return InspectorSection(L("Version Snapshot")) {
-            LabeledContent(L("Frame")) { Text(store.documentIndex.node(snapshot.frame)?.name ?? L("Deleted")) }
+            LabeledContent(L("Frame")) { Text(displayed.index.node(snapshot.frame)?.name ?? L("Deleted")) }
             LabeledContent(L("Saved|version snapshot time")) { Text(snapshot.createdAt, format: Self.snapshotTime) }
             TextField(L("Note"), text: $note).textFieldStyle(.roundedBorder)
                 .onSubmit { update("Edit Snapshot Note") { $0.versionSnapshot?.note = note.trimmingCharacters(in: .whitespacesAndNewlines) } }
@@ -606,20 +611,20 @@ private struct NodeInspector: View {
 
     /// The top-level frames an interaction can go to; the frame holding this layer comes last, since going to it is rarely meant.
     private var destinations: [DesignNode] {
-        let own = store.documentIndex.ancestry(of: node.id).first
-        let frames = store.document.nodes.filter { $0.type == .frame }
+        let own = displayed.index.ancestry(of: node.id).first
+        let frames = displayed.document.nodes.filter { $0.type == .frame }
         return frames.filter { $0.id != own } + frames.filter { $0.id == own }
     }
 
     /// The default destination: the first top-level frame other than the one holding this layer.
     private var otherFrame: String? {
-        let own = store.documentIndex.ancestry(of: node.id).first
-        return store.document.nodes.first { $0.type == .frame && $0.id != own }?.id
+        let own = displayed.index.ancestry(of: node.id).first
+        return displayed.document.nodes.first { $0.type == .frame && $0.id != own }?.id
     }
 
     /// Layers a visibility toggle can show and hide: the others in the top-level frame holding this layer, depth first.
     private var toggleCandidates: [DesignNode] {
-        guard let top = store.documentIndex.ancestry(of: node.id).first.flatMap({ store.documentIndex.node($0) }) else { return [] }
+        guard let top = displayed.index.ancestry(of: node.id).first.flatMap({ displayed.index.node($0) }) else { return [] }
         var result: [DesignNode] = []
         DesignDocument(nodes: top.children).forEach { if $0.id != node.id { result.append($0) } }
         return result
@@ -627,8 +632,8 @@ private struct NodeInspector: View {
 
     /// Whether this layer sits directly in a frame that scrolls during playback.
     private var inScrollingFrame: Bool {
-        guard let parent = store.documentIndex.parentID(of: node.id) ?? nil else { return false }
-        return (store.documentIndex.node(parent)?.scroll ?? .none) != .none
+        guard let parent = displayed.index.parentID(of: node.id) ?? nil else { return false }
+        return (displayed.index.node(parent)?.scroll ?? .none) != .none
     }
 
     private static func action(_ interaction: DesignInteraction) -> String {
@@ -786,7 +791,7 @@ private struct NodeInspector: View {
         Text(L("Shows the hidden and hides the shown among:")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(targets, id: \.self) { id in
             HStack {
-                Text(store.documentIndex.node(id)?.name ?? L("Missing layer")).lineLimit(1)
+                Text(displayed.index.node(id)?.name ?? L("Missing layer")).lineLimit(1)
                 Spacer()
                 if targets.count > 1 {
                     Button { setInteraction(.toggleVisibility(targets: targets.filter { $0 != id })) } label: { Image(systemName: "minus").iconHitTarget() }

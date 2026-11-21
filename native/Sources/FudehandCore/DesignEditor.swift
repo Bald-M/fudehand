@@ -205,7 +205,7 @@ public struct DesignEditor {
         var next = document
         let result = try change(&next)
         next.pruneAnnotations()
-        DesignLayout.apply(to: &next.nodes, measure: measure)
+        DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: document.nodes)
         guard next != document else { return result }
         let now = Date()
         if coalescing == nil || undoStack.last?.coalescing != coalescing || !redoStack.isEmpty
@@ -227,10 +227,20 @@ public struct DesignEditor {
     }
 
     public mutating func applyLive(_ change: (inout DesignDocument) -> Void) {
+        applyLive(change, layingOutAll: false)
+    }
+
+    /// Lays out the whole document again, for when text measures differently (fonts were imported); like `applyLive`, it is
+    /// not an undo step of its own.
+    public mutating func layOutAgain() {
+        applyLive({ _ in }, layingOutAll: true)
+    }
+
+    private mutating func applyLive(_ change: (inout DesignDocument) -> Void, layingOutAll: Bool) {
         var next = document
         change(&next)
         next.pruneAnnotations()
-        DesignLayout.apply(to: &next.nodes, measure: measure)
+        DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: layingOutAll ? [] : document.nodes)
         guard next != document else { return }
         document = next
         revision += 1
