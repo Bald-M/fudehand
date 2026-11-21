@@ -231,8 +231,10 @@ public enum DesignJSON {
             if let unsupported = node.effects.first(where: { !$0.type.supports(type) }) {
                 throw reader.fail("\(type.rawValue) does not support \(unsupported.type.rawValue) effects")
             }
+            for single in [EffectType.glass, .transform3D, .perspective] where node.effects.filter({ $0.type == single }).count > 1 {
+                throw reader.fail("a layer takes at most one \(single.rawValue) effect")
+            }
             let glass = node.effects.filter { $0.type == .glass }.count
-            if glass > 1 { throw reader.fail("a layer takes at most one glass effect") }
             // Glass already blurs what is under the layer; a background blur as well would blur it twice.
             if glass == 1, node.effects.contains(where: { $0.type == .backgroundBlur }) {
                 throw reader.fail("glass and background-blur cannot be on the same layer")
@@ -329,9 +331,25 @@ public enum DesignJSON {
         try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"]
                              : type == .noise ? ["type", "visible", "color", "size", "density", "seed"]
                              : type == .texture ? ["type", "visible", "image", "size", "opacity", "blend"]
-                             : type == .glass ? ["type", "visible", "radius", "saturation", "tint", "highlight"] : ["type", "visible", "radius"])
+                             : type == .glass ? ["type", "visible", "radius", "saturation", "tint", "highlight"]
+                             : type == .transform3D ? ["type", "visible", "rotateX", "rotateY", "translateZ"]
+                             : type == .perspective ? ["type", "visible", "distance", "originX", "originY"] : ["type", "visible", "radius"])
         var effect = DesignEffect(type: type)
         effect.visible = try reader.bool("visible", default: true)
+        if type == .transform3D {
+            let turn = DesignEffect.maximumRotation, depth = DesignEffect.maximumDepth
+            effect.rotateX = try reader.number("rotateX", default: 0, min: -turn, max: turn)
+            effect.rotateY = try reader.number("rotateY", default: 0, min: -turn, max: turn)
+            effect.translateZ = try reader.number("translateZ", default: 0, min: -depth, max: depth)
+            return effect
+        }
+        if type == .perspective {
+            let range = DesignEffect.perspectiveDistances
+            effect.distance = try reader.number("distance", default: effect.distance, min: range.lowerBound, max: range.upperBound)
+            effect.originX = try reader.number("originX", default: effect.originX, min: 0, max: 1)
+            effect.originY = try reader.number("originY", default: effect.originY, min: 0, max: 1)
+            return effect
+        }
         if type == .noise {
             effect.color = try reader.color("color", default: effect.color)!
             effect.size = try reader.number("size", default: effect.size, min: DesignEffect.noiseSizes.lowerBound, max: DesignEffect.noiseSizes.upperBound)
@@ -517,6 +535,10 @@ public enum DesignJSON {
                 if !effect.visible { value["visible"] = false }
                 if effect.type == .noise {
                     value["color"] = effect.color.hex; value["size"] = effect.size; value["density"] = effect.density; value["seed"] = effect.seed
+                } else if effect.type == .transform3D {
+                    value["rotateX"] = effect.rotateX; value["rotateY"] = effect.rotateY; value["translateZ"] = effect.translateZ
+                } else if effect.type == .perspective {
+                    value["distance"] = effect.distance; value["originX"] = effect.originX; value["originY"] = effect.originY
                 } else if effect.type == .texture {
                     let data = effect.texture ?? Data()
                     value["image"] = ["data": includeImageData ? data.base64EncodedString() : "<\(data.count) bytes>"]

@@ -20,6 +20,10 @@ enum EffectLayers {
         var filters: [CIFilter] = []
         /// Text or icon copies that need the node's raster scale.
         var copies: [CALayer] = []
+        /// A 3D transform, applied to the node (and its background blurs) about its center.
+        var transform = CATransform3DIdentity
+        /// Perspective, applied to the node's child layers.
+        var sublayerTransform = CATransform3DIdentity
     }
 
     static func build(_ node: DesignNode, scale: CGFloat) -> Built {
@@ -108,6 +112,10 @@ enum EffectLayers {
                 clip(tint, to: node, shape: shape)
                 built.inner.append(tint)
                 if effect.highlight > 0 { built.inner.append(highlight(node, opacity: effect.highlight)) }
+            case .transform3D:
+                built.transform = turn(effect)
+            case .perspective:
+                built.sublayerTransform = perspective(effect, size: bounds.size)
             case .texture:
                 guard let shape = shape(node, spread: 0) else { continue }
                 let tiles = TextureLayer.make(effect, bounds: bounds)
@@ -185,6 +193,24 @@ enum EffectLayers {
         filter.setValue(CIVector(x: 0, y: 0, z: 0, w: inverted ? -alpha : alpha), forKey: "inputAVector")
         filter.setValue(CIVector(x: effect.color.r, y: effect.color.g, z: effect.color.b, w: inverted ? alpha : 0), forKey: "inputBiasVector")
         return [filter]
+    }
+
+    /// As CSS `rotateX() rotateY() translateZ()`: positive rotateX tips the top edge away from the viewer, positive rotateY
+    /// turns the right edge away, and positive translateZ moves the layer toward the viewer (`EffectRendererTests` checks each).
+    static func turn(_ effect: DesignEffect) -> CATransform3D {
+        let radians = { (degrees: Double) in CGFloat(degrees * .pi / 180) }
+        var transform = CATransform3DMakeTranslation(0, 0, CGFloat(effect.translateZ))
+        transform = CATransform3DConcat(transform, CATransform3DMakeRotation(radians(effect.rotateY), 0, 1, 0))
+        return CATransform3DConcat(transform, CATransform3DMakeRotation(radians(effect.rotateX), 1, 0, 0))
+    }
+
+    /// The children of a layer of `size` seen from `distance` points in front of the point at `originX`, `originY` (fractions
+    /// of the size), as CSS `perspective` and `perspective-origin`. Core Animation applies it about the layer's center.
+    static func perspective(_ effect: DesignEffect, size: CGSize) -> CATransform3D {
+        let dx = CGFloat(effect.originX - 0.5) * size.width, dy = CGFloat(effect.originY - 0.5) * size.height
+        var depth = CATransform3DIdentity
+        depth.m34 = -1 / CGFloat(effect.distance)
+        return CATransform3DConcat(CATransform3DConcat(CATransform3DMakeTranslation(-dx, -dy, 0), depth), CATransform3DMakeTranslation(dx, dy, 0))
     }
 
     private static func saturate(_ amount: Double) -> [CIFilter] {

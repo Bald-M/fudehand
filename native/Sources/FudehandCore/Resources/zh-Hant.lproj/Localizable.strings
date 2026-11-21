@@ -532,6 +532,14 @@
 "Tint" = "著色";
 "Saturation" = "飽和度";
 "Highlight" = "高光";
+"3D Transform" = "3D 變換";
+"Perspective" = "透視";
+"%@ (Beta)" = "%@（Beta）";
+"X rotation" = "X 軸旋轉";
+"Y rotation" = "Y 軸旋轉";
+"Depth" = "深度";
+"Origin X" = "原點 X";
+"Origin Y" = "原點 Y";
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Shadow color" = "陰影顏色";

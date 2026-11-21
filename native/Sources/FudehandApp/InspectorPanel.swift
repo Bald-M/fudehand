@@ -893,6 +893,7 @@ private struct EffectsSection: View {
         return EffectType.allCases.filter { type in
             guard type.supports(node.type) else { return false }
             if type == .glass { return !others.contains(.glass) && !others.contains(.backgroundBlur) }
+            if type == .transform3D || type == .perspective { return !others.contains(type) }
             if type == .backgroundBlur { return !others.contains(.glass) }
             return true
         }
@@ -900,23 +901,30 @@ private struct EffectsSection: View {
 
     private var addMenu: some View {
         Menu {
-            ForEach(types(), id: \.self) { type in
-                Button(Self.name(type)) {
-                    var effect = DesignEffect(type: type)
-                    // A texture needs its image first; cancelling the open panel adds nothing.
-                    if type == .texture {
-                        guard let data = Self.chooseTexture() else { return }
-                        effect.texture = data
-                    }
-                    let index = node.effects.count
-                    expectedCount = index + 1
-                    update("Add Effect", nil) { $0.effects.append(effect) }
-                    expanded.insert(index)
-                }
-            }
+            // As in the effects menu design: the established effects, then the Beta ones.
+            ForEach(types().filter { !$0.isBeta }, id: \.self) { type in add(type) }
+            if types().contains(where: \.isBeta) { Divider() }
+            ForEach(types().filter(\.isBeta), id: \.self) { type in add(type) }
         } label: { MenuIcon(symbol: "plus", label: L("Add Effect")) }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
+    }
+
+    private func add(_ type: EffectType) -> some View {
+        Button {
+            var effect = DesignEffect(type: type)
+            // A texture needs its image first; cancelling the open panel adds nothing.
+            if type == .texture {
+                guard let data = Self.chooseTexture() else { return }
+                effect.texture = data
+            }
+            let index = node.effects.count
+            expectedCount = index + 1
+            update("Add Effect", nil) { $0.effects.append(effect) }
+            expanded.insert(index)
+        } label: {
+            Text(type.isBeta ? L("%@ (Beta)", Self.name(type)) : Self.name(type))
+        }
     }
 
     @ViewBuilder private func row(_ index: Int, _ effect: DesignEffect) -> some View {
@@ -1001,6 +1009,35 @@ private struct EffectsSection: View {
                         Spacer().frame(maxWidth: .infinity)
                     }
                 }
+                if effect.type == .transform3D {
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("X rotation"), caption: "X°", value: effect.rotateX) { v in
+                            change { $0.rotateX = min(DesignEffect.maximumRotation, max(-DesignEffect.maximumRotation, v)) }
+                        }
+                        NumberField(label: L("Y rotation"), caption: "Y°", value: effect.rotateY) { v in
+                            change { $0.rotateY = min(DesignEffect.maximumRotation, max(-DesignEffect.maximumRotation, v)) }
+                        }
+                    }
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Depth"), caption: "Z", value: effect.translateZ) { v in
+                            change { $0.translateZ = min(DesignEffect.maximumDepth, max(-DesignEffect.maximumDepth, v)) }
+                        }
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                }
+                if effect.type == .perspective {
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Distance"), value: effect.distance) { v in
+                            let range = DesignEffect.perspectiveDistances
+                            change { $0.distance = min(range.upperBound, max(range.lowerBound, v)) }
+                        }
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Origin X"), value: effect.originX, percent: true) { v in change { $0.originX = v } }
+                        NumberField(label: L("Origin Y"), value: effect.originY, percent: true) { v in change { $0.originY = v } }
+                    }
+                }
                 if effect.type == .glass {
                     ColorField(label: L("Tint"), color: effect.color) { c in
                         update("Change Effect", "effects.\(index).color") { node in if node.effects.indices.contains(index) { node.effects[index].color = c } }
@@ -1015,7 +1052,7 @@ private struct EffectsSection: View {
                         NumberField(label: "Y", value: effect.y) { v in change { $0.y = v } }
                     }
                 }
-                if effect.type != .noise, effect.type != .texture {
+                if [.dropShadow, .innerShadow, .layerBlur, .backgroundBlur, .glass].contains(effect.type) {
                     HStack(spacing: InspectorMetrics.gap) {
                         NumberField(label: L("Blur"), value: effect.radius, minimum: 0) { v in change { $0.radius = min(v, DesignEffect.maximumRadius) } }
                         // Text and icon shadows follow the glyphs, which spread does not grow.
@@ -1061,6 +1098,8 @@ private struct EffectsSection: View {
         case .noise: return L("Noise")
         case .texture: return L("Texture")
         case .glass: return L("Glass")
+        case .transform3D: return L("3D Transform")
+        case .perspective: return L("Perspective")
         }
     }
 

@@ -532,6 +532,14 @@
 "Tint" = "Tint";
 "Saturation" = "Saturation";
 "Highlight" = "Highlight";
+"3D Transform" = "3D Transform";
+"Perspective" = "Perspective";
+"%@ (Beta)" = "%@ (Beta)";
+"X rotation" = "X rotation";
+"Y rotation" = "Y rotation";
+"Depth" = "Depth";
+"Origin X" = "Origin X";
+"Origin Y" = "Origin Y";
 "Move Up" = "Move Up";
 "Move Down" = "Move Down";
 "Shadow color" = "Shadow color";
