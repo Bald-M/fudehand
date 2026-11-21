@@ -192,3 +192,25 @@ private func reopened(_ e: DesignEditor) throws -> DesignDocument {
     #expect(Set(log.measured) == ["first", "two"])
     #expect(e.undoName == "Move Layers")
 }
+
+/// A document undo brings back from before `layOutAgain` was measured differently, so the next edit lays out every layer
+/// rather than only the ones it changed (#228).
+@Test func editsAfterUndoingPastLayOutAgainLayOutEveryLayer() throws {
+    final class Scale { var factor = 1.0 }
+    let scale = Scale()
+    let measure: TextMeasure = { text, maxWidth in
+        let size = fakeMeasure(text, maxWidth)
+        return Size(width: size.width * scale.factor, height: size.height)
+    }
+    var label = DesignNode(id: "label", type: .text)
+    label.text = DesignText(content: "abc", autoResize: .widthAndHeight)
+    var e = DesignEditor(document: DesignDocument(nodes: [label, DesignNode(id: "box", type: .rectangle)]), measure: measure)
+    try e.perform("Rename") { try $0.update("label") { $0.name = "Title" } }
+    // The fonts change: text now measures twice as wide.
+    scale.factor = 2
+    e.layOutAgain()
+    #expect(e.document.node("label")?.width == 60)
+    #expect(e.undo() && e.document.node("label")?.width == 30)
+    try e.perform("Move") { try $0.update("box") { $0.x = 10 } }
+    #expect(e.document.node("label")?.width == 60)
+}
