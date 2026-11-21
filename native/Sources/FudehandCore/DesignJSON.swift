@@ -333,7 +333,8 @@ public enum DesignJSON {
                              : type == .texture ? ["type", "visible", "image", "size", "opacity", "blend"]
                              : type == .glass ? ["type", "visible", "radius", "saturation", "tint", "highlight"]
                              : type == .transform3D ? ["type", "visible", "rotateX", "rotateY", "translateZ"]
-                             : type == .perspective ? ["type", "visible", "distance", "originX", "originY"] : ["type", "visible", "radius"])
+                             : type == .perspective ? ["type", "visible", "distance", "originX", "originY"]
+                             : type == .shader ? ["type", "visible", "shader", "params", "opacity", "blend"] : ["type", "visible", "radius"])
         var effect = DesignEffect(type: type)
         effect.visible = try reader.bool("visible", default: true)
         if type == .transform3D {
@@ -366,6 +367,33 @@ public enum DesignJSON {
             effect.texture = data
             effect.size = try reader.number("size", default: effect.size, min: DesignEffect.textureSizes.lowerBound,
                                             max: DesignEffect.textureSizes.upperBound)
+            effect.opacity = try reader.number("opacity", default: effect.opacity, min: 0, max: 1)
+            effect.blend = try reader.choice("blend", default: effect.blend)
+            return effect
+        }
+        if type == .shader {
+            let id = try reader.string("shader")
+            guard let entry = ShaderCatalog.entry(id) else {
+                throw reader.fail("\(reader.name("shader")) must be one of \(ShaderCatalog.all.map(\.id).joined(separator: ", ")); got \(id)")
+            }
+            effect.shader = id
+            effect.shaderParams = entry.defaults
+            if let params = try reader.child("params") {
+                try params.checkKeys(Set(entry.parameters.map(\.name)))
+                for parameter in entry.parameters {
+                    switch parameter.defaultValue {
+                    case .number(let fallback):
+                        let range = parameter.range ?? -maximumMagnitude...maximumMagnitude
+                        effect.shaderParams[parameter.name] = .number(try params.number(parameter.name, default: fallback,
+                                                                                       min: range.lowerBound, max: range.upperBound))
+                    case .color(let fallback):
+                        if let raw = params.value(parameter.name), !(raw is String) {
+                            throw params.fail("\(params.name(parameter.name)) must be a string")
+                        }
+                        effect.shaderParams[parameter.name] = .color(try params.color(parameter.name, default: fallback)!)
+                    }
+                }
+            }
             effect.opacity = try reader.number("opacity", default: effect.opacity, min: 0, max: 1)
             effect.blend = try reader.choice("blend", default: effect.blend)
             return effect
@@ -539,6 +567,15 @@ public enum DesignJSON {
                     value["rotateX"] = effect.rotateX; value["rotateY"] = effect.rotateY; value["translateZ"] = effect.translateZ
                 } else if effect.type == .perspective {
                     value["distance"] = effect.distance; value["originX"] = effect.originX; value["originY"] = effect.originY
+                } else if effect.type == .shader {
+                    value["shader"] = effect.shader
+                    value["params"] = effect.shaderParams.mapValues { parameter -> Any in
+                        switch parameter {
+                        case .number(let number): return number
+                        case .color(let color): return color.hex
+                        }
+                    }
+                    value["opacity"] = effect.opacity; value["blend"] = effect.blend.rawValue
                 } else if effect.type == .texture {
                     let data = effect.texture ?? Data()
                     value["image"] = ["data": includeImageData ? data.base64EncodedString() : "<\(data.count) bytes>"]

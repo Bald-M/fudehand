@@ -37,9 +37,9 @@ final class DesignRenderer {
             guard contentsScale != oldValue else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer.contents != nil {
+            for layer in records.values.flatMap({ [$0.content] + $0.copies }) where layer is TextLayer || layer is ShaderLayer || layer.contents != nil {
                 layer.contentsScale = Self.rasterScale(contentsScale, for: layer.bounds.size)
-                if layer is TextLayer { layer.setNeedsDisplay() }
+                if layer is TextLayer || layer is ShaderLayer { layer.setNeedsDisplay() }
                 (layer as? ImageLayer)?.rasterize(force: true)
                 (layer as? IconLayer)?.rasterize(force: true)
             }
@@ -147,6 +147,10 @@ final class DesignRenderer {
         }
         if record.applied.map(inputs) != inputs(node) {
             let built = wanted ? EffectLayers.build(node, scale: contentsScale) : EffectLayers.Built()
+            // A shader that only changed size keeps showing its bitmap until the size settles (see `ShaderLayer.carryOver`).
+            for (old, new) in zip(record.innerShadows.compactMap { $0 as? ShaderLayer }, built.inner.compactMap { $0 as? ShaderLayer }) {
+                new.carryOver(from: old)
+            }
             record.innerShadows = built.inner
             // Playback animations added to the old background blurs (see `backdrops(for:)`) carry over, so a restyle mid-animation
             // (a hover fill, the next text sequence item) does not stop the blur while its layer keeps moving.

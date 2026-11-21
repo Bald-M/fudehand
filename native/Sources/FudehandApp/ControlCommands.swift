@@ -100,6 +100,8 @@ extension FudehandStore {
             return versionSnapshotEntry(try requireNode(node.id))
         case .listVersionSnapshots(let frame):
             return ["snapshots": editor.document.versionSnapshots(of: frame).map(versionSnapshotEntry)]
+        case .listShaders:
+            return ShaderCatalog.object
         case .listFonts:
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):

@@ -540,6 +540,16 @@
 "Depth" = "深度";
 "Origin X" = "原點 X";
 "Origin Y" = "原點 Y";
+"Shader" = "著色器";
+"Waves" = "波浪";
+"Mesh Gradient" = "網格漸層";
+"Halftone" = "半色調";
+"Scale" = "尺度";
+"Angle" = "角度";
+"First color" = "第一顏色";
+"Second color" = "第二顏色";
+"Dot spacing" = "點間距";
+"Dot color" = "點顏色";
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Shadow color" = "陰影顏色";

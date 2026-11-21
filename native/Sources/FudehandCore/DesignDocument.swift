@@ -178,18 +178,19 @@ public struct LayerStyle: Equatable, Sendable {
 
 public enum EffectType: String, Sendable, CaseIterable {
     case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise, texture, glass,
-         transform3D = "transform-3d", perspective
+         shader, transform3D = "transform-3d", perspective
     public var isShadow: Bool { self == .dropShadow || self == .innerShadow }
     /// Marked Beta in the add menu: these turn layers only on screen; layout, selection, and hit testing still use their flat
     /// rectangles (ADR 0012).
     public var isBeta: Bool { self == .transform3D || self == .perspective }
+    /// The add menu's groups, as in the effects menu design: the established effects, then Shader, then the Beta ones.
+    public var menuGroup: Int { isBeta ? 2 : self == .shader ? 1 : 0 }
 
-    /// Whether a layer of `type` takes this effect. Noise, texture, and glass paint over a layer's area, so only frames,
-    /// rectangles, and ellipses do.
-    /// Perspective is how a frame's children are seen, so only frames take it.
+    /// Whether a layer of `type` takes this effect. Noise, texture, glass, and shaders paint over a layer's area, so only
+    /// frames, rectangles, and ellipses do. Perspective is how a frame's children are seen, so only frames take it.
     public func supports(_ type: NodeType) -> Bool {
         switch self {
-        case .noise, .texture, .glass: return type == .frame || type == .rectangle || type == .ellipse
+        case .noise, .texture, .glass, .shader: return type == .frame || type == .rectangle || type == .ellipse
         case .perspective: return type == .frame
         default: return type.hasEffects
         }
@@ -204,7 +205,8 @@ public enum TextureBlend: String, Sendable, CaseIterable {
 /// One entry in a layer's effects list. A shadow uses color, offset, radius, and spread; a blur uses only `radius`; noise uses
 /// color, size, density, and seed (see `NoiseTile`); a texture uses its image, size (the tile width), opacity, and blend;
 /// glass uses radius (its backdrop blur), saturation, color (the tint drawn over the backdrop), and highlight; a 3D transform
-/// uses rotateX, rotateY, and translateZ; perspective uses distance, originX, and originY.
+/// uses rotateX, rotateY, and translateZ; perspective uses distance, originX, and originY; a shader uses shader (a
+/// `ShaderCatalog` id), shaderParams (every parameter of that entry), opacity, and blend.
 /// Shadows of frames, rectangles,
 /// ellipses, and images follow the layer's shape (spread grows or shrinks it); those of text and icons follow the glyphs and
 /// ignore spread. A drop shadow is not drawn under the layer itself, so it does not show through a see-through fill.
@@ -242,6 +244,9 @@ public struct DesignEffect: Equatable, Sendable {
     public var distance: Double
     public var originX: Double
     public var originY: Double
+    /// Shader only: the `ShaderCatalog` entry drawn, and a value for each of its parameters.
+    public var shader: String
+    public var shaderParams: [String: ShaderValue]
 
     /// `color` defaults to black at 25% opacity for a shadow, black at 20% for noise, and white at 20% for glass; `size` to 1
     /// for noise and 64 for a texture; `radius` to 4, or 20 for glass.
@@ -257,6 +262,10 @@ public struct DesignEffect: Equatable, Sendable {
         self.texture = texture; self.opacity = opacity; self.blend = blend; self.saturation = saturation; self.highlight = highlight
         self.rotateX = rotateX; self.rotateY = rotateY; self.translateZ = translateZ
         self.distance = distance; self.originX = originX; self.originY = originY
+        // A new shader effect draws the catalog's first entry with its defaults.
+        let first = ShaderCatalog.all[0]
+        self.shader = type == .shader ? first.id : ""
+        self.shaderParams = type == .shader ? first.defaults : [:]
     }
 
     public static let maximumRadius = 250.0

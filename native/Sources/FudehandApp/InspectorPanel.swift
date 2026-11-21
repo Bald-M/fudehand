@@ -901,10 +901,12 @@ private struct EffectsSection: View {
 
     private var addMenu: some View {
         Menu {
-            // As in the effects menu design: the established effects, then the Beta ones.
-            ForEach(types().filter { !$0.isBeta }, id: \.self) { type in add(type) }
-            if types().contains(where: \.isBeta) { Divider() }
-            ForEach(types().filter(\.isBeta), id: \.self) { type in add(type) }
+            // As in the effects menu design: the established effects, Shader, then the Beta ones, divided.
+            let groups = Dictionary(grouping: types(), by: \.menuGroup).sorted { $0.key < $1.key }.map(\.value)
+            ForEach(groups.indices, id: \.self) { index in
+                if index > 0 { Divider() }
+                ForEach(groups[index], id: \.self) { type in add(type) }
+            }
         } label: { MenuIcon(symbol: "plus", label: L("Add Effect")) }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L("Add Effect")).accessibilityLabel(L("Add Effect"))
@@ -1009,6 +1011,38 @@ private struct EffectsSection: View {
                         Spacer().frame(maxWidth: .infinity)
                     }
                 }
+                if effect.type == .shader, let entry = ShaderCatalog.entry(effect.shader) {
+                    Picker(L("Shader"), selection: Binding(get: { effect.shader }, set: { id in
+                        guard let next = ShaderCatalog.entry(id) else { return }
+                        change { $0.shader = next.id; $0.shaderParams = next.defaults }
+                    })) {
+                        ForEach(ShaderCatalog.all, id: \.id) { Text(L($0.name)).tag($0.id) }
+                    }
+                    ForEach(entry.parameters, id: \.name) { parameter in
+                        switch effect.shaderParams[parameter.name] ?? parameter.defaultValue {
+                        case .number(let number):
+                            NumberField(label: L(parameter.label), value: number) { v in
+                                let range = parameter.range ?? -DesignJSON.maximumMagnitude...DesignJSON.maximumMagnitude
+                                change { $0.shaderParams[parameter.name] = .number(min(range.upperBound, max(range.lowerBound, v))) }
+                            }
+                        case .color(let color):
+                            ColorField(label: L(parameter.label), color: color) { c in
+                                update("Change Effect", "effects.\(index).\(parameter.name)") { node in
+                                    if node.effects.indices.contains(index) { node.effects[index].shaderParams[parameter.name] = .color(c) }
+                                }
+                            }
+                        }
+                    }
+                    HStack(spacing: InspectorMetrics.gap) {
+                        NumberField(label: L("Opacity"), symbol: "circle.lefthalf.filled", value: effect.opacity, percent: true) { v in
+                            change { $0.opacity = v }
+                        }
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                    Picker(L("Blend"), selection: Binding(get: { effect.blend }, set: { v in change { $0.blend = v } })) {
+                        ForEach(TextureBlend.allCases, id: \.self) { Text(Self.name($0)).tag($0) }
+                    }
+                }
                 if effect.type == .transform3D {
                     HStack(spacing: InspectorMetrics.gap) {
                         NumberField(label: L("X rotation"), caption: "X°", value: effect.rotateX) { v in
@@ -1098,6 +1132,7 @@ private struct EffectsSection: View {
         case .noise: return L("Noise")
         case .texture: return L("Texture")
         case .glass: return L("Glass")
+        case .shader: return L("Shader")
         case .transform3D: return L("3D Transform")
         case .perspective: return L("Perspective")
         }
