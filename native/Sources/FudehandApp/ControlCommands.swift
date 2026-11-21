@@ -139,7 +139,7 @@ extension FudehandStore {
             presentLaunch()
             return controlState()
         case .closeEditorWindow(let discard):
-            try closeEditor { try requireDiscardable(discard); return true }
+            _ = try closeEditor { try requireDiscardable(discard); return true }
             dismissEditor()
             return controlState()
         case .listRecents:
