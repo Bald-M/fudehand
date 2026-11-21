@@ -54,7 +54,7 @@ Node 只用于 MCP server 和对话面板背后的 Agent harness。App 没有第
 
 ## 快速开始
 
-只想使用 App 的话，用磁盘映像（`Fudehand-<版本>.dmg`）即可：把 Fudehand 拖进“应用程序”。需要 macOS 14 或更高版本；MCP 连接器和对话面板还需要 Node.js 22.12 或更高版本（从 [nodejs.org](https://nodejs.org) 下载，或 `brew install node`），不需要 Swift、pnpm 和源码。App 自带 MCP server 和对话面板的 Agent harness，启动时复制到 `~/Library/Application Support/fudehand/tools`，所以移动或升级 App 后 Agent 连接仍然可用。磁盘映像用 `pnpm package:native` 构建，只做了临时签名，第一次打开需要右键 → *打开*。
+从 [GitHub Releases](https://github.com/Bald-M/fudehand/releases) 下载磁盘映像（`Fudehand-<版本>.dmg`），把 Fudehand 拖进“应用程序”。需要 macOS 14 或更高版本。MCP 连接器和对话面板还需要 Node.js 22.12 或更高版本（从 [nodejs.org](https://nodejs.org) 下载，或 `brew install node`），不需要 Swift、pnpm 和源码。App 自带 MCP server 和对话面板的 Agent harness，启动时复制到 `~/Library/Application Support/fudehand/tools`，所以移动或升级 App 后 Agent 连接仍然可用。磁盘映像用 `pnpm package:native` 构建，App 使用 ad-hoc 签名。如果首次打开时被 Gatekeeper 拦截，可在“系统设置 → 隐私与安全性”中选择“仍要打开”。
 
 从源码构建：
 

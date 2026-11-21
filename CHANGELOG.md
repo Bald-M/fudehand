@@ -10,26 +10,15 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
-### Added
-
-- `pnpm package:native` builds `dist/Fudehand-<version>.dmg`, an App that does not depend on the source checkout (#236).
-
-### Changed
-
-- Edits stay fast in large documents: an edit lays out only the top-level layers it changed, the canvas skips layers whose children did not change, and the layers panel, the window title, and the toolbar update only when what they show changes. On a 5,100-layer document, nudging 50 layers with an arrow key drops from about 65 ms to under 3 ms, and undo, redo, and releasing a drag from about 25 ms to under 3 ms; `pnpm bench:native` now measures them (#228).
-
-### Fixed
-
-- The App installed from a disk image can connect Claude Code, Codex, and DeepSeek Harness: it carries its MCP server and the chat panel's Agent harness, copies them to `~/Library/Application Support/fudehand/tools`, and finds Node.js and the agents' commands when opened from Finder. *MCP Connectors* explains a missing or too old Node.js, and *Update* points a registration made elsewhere at this App (#236).
-
 ## [0.0.5] - 2026-11-21
 
 ### Summary
 
-Every App feature now has an Agent tool, including the launch window and templates, the prototype window, the chat panel's conversations, the canvas view, and settings. The properties panel is redesigned, with *Design*, *Prototype*, and *Chat* tabs and a *Selection Colors* section. Layers gain effects: shadows, blurs, noise, texture, glass, built-in shaders, and 3D transforms. The canvas adds copy, cut, paste, and duplicate, annotations, version snapshots, and layout guides; the launch window offers starter templates; and *Export as HTML…* hands a design to an agent as a reference web page. Project files are now format version 9; older files still open.
+Every App feature now has an Agent tool, including the launch window and templates, the prototype window, the chat panel's conversations, the canvas view, and settings. The properties panel is redesigned, with *Design*, *Prototype*, and *Chat* tabs and a *Selection Colors* section. Layers gain effects: shadows, blurs, noise, texture, glass, built-in shaders, and 3D transforms. The canvas adds copy, cut, paste, and duplicate, annotations, version snapshots, and layout guides; the launch window offers starter templates; and *Export as HTML…* hands a design to an agent as a reference web page. The disk image includes the MCP server and the chat panel's Agent harness, closing the editor returns to the launch window, and edits stay responsive in large documents. Project files are now format version 9; older files still open.
 
 ### Added
 
+- `pnpm package:native` builds `dist/Fudehand-<version>.dmg`, an App that does not depend on the source checkout (#236).
 - Selection colors: the properties panel gains a *Selection Colors* section listing every color the selected layers and all their child layers use — fills, strokes, text colors, and icon colors — merged and ordered by how often each is used, with a *+N* tile that shows the rest. Changing a color replaces it everywhere in the selection as one undo step. Agents read and replace them with `design_list_colors` and `design_replace_color` (#191).
 - Starter templates: the launch window's Templates section now offers *Mobile App*, *Web Page*, and *Dashboard*, each with a *Design system* frame showing the shared [design foundations](docs/design-foundations.md) (colors, Avenir Next type scale, spacing scale, corner radii) that all three follow. Template names show in the UI language, and `app_list_templates` returns that title next to the name (#22).
 - Agents can use the launch window: `app_show_launch_window` brings it to the front, `app_list_recents` lists the recent files (marking those deleted or moved), `app_open_recent`, `app_remove_recent`, and `app_clear_recents` open, remove, and clear them, and `app_list_templates` and `app_new_document_from_template` create an untitled document from a template. Like `design_new_document`, opening a recent file or creating from a template refuses to drop unsaved changes unless `discard` is true, and none of these tools shows a dialog (#179).
@@ -51,12 +40,15 @@ Every App feature now has an Agent tool, including the launch window and templat
 
 ### Changed
 
+- Closing the editor window returns to the launch window, where you can create a document, reopen a recent file, or choose a template. Unsaved changes are confirmed first. Agents can close the editor with `app_close_editor_window` (#235).
+- Edits stay fast in large documents: an edit lays out only the top-level layers it changed, the canvas skips layers whose children did not change, and the layers panel, the window title, and the toolbar update only when what they show changes. On a 5,100-layer document, nudging 50 layers with an arrow key drops from about 65 ms to under 3 ms, and undo, redo, and releasing a drag from about 25 ms to under 3 ms; `pnpm bench:native` now measures them (#228).
 - The properties panel is redesigned: the inspector has *Design*, *Prototype*, and *Chat* tabs, and the prototype settings (interaction, states, scrolling, animation) move to the *Prototype* tab. The *Design* tab opens with a layer header (type, name, show/hide), puts X/Y and W/H in rows with a sizing chip (*Fixed*, *Hug*, *Fill*) inside W and H, sets auto layout alignment with a 3×3 grid plus *Space between* and *Stretch*, shows fills and strokes as swatch, hex, and opacity, and folds an empty fill or stroke into a row with `+`. Dragging the opacity icon changes the opacity (#189).
 - Changing a conversation's model settings or API key while its reply is running no longer stops the reply: the reply finishes, and the change applies from the next message.
 - Chat panel: *Model settings* shows each provider's icon (DeepSeek, Claude, ChatGPT) with its API key status as a dot on the icon's corner, as in the *MCP Connectors* window (#200).
 
 ### Fixed
 
+- The App installed from a disk image can connect Claude Code, Codex, and DeepSeek Harness: it carries its MCP server and the chat panel's Agent harness, copies them to `~/Library/Application Support/fudehand/tools`, and finds Node.js and the agents' commands when opened from Finder. *MCP Connectors* explains a missing or too old Node.js, and *Update* points a registration made elsewhere at this App (#236).
 - The *Appearance* setting (System, Light, Dark) now also applies to open and save panels (*File → Open…*, *Save As…*, *Insert Image…*, font import) and alerts, which used to follow the system appearance (#216).
 - Selecting many layers, ⌘A, and nudging no longer stall the properties panel: it looks the selected layers up in the shared layer index instead of searching the whole tree for each one (#227).
 - Launching no longer restores windows from the last session, such as an empty prototype window or the editor window on another desktop Space: the launch window, or the editor window when a file opens Fudehand, now appears on the current Space (#229).

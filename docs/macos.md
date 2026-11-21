@@ -4,7 +4,9 @@ Fudehand is a native SwiftUI/AppKit design tool. The canvas renders the layers o
 
 ## Launching and Building
 
-Requires macOS 14+, Swift 6+, Node.js 22.12+, and pnpm 11.7.0. Installing the Xcode Command Line Tools is enough; full Xcode is not needed, and there are no third-party Swift package dependencies.
+Download the disk image from [GitHub Releases](https://github.com/Bald-M/fudehand/releases) and drag Fudehand into Applications. The installed App requires macOS 14+. MCP Connectors and the chat panel also require Node.js 22.12+.
+
+To build from source, install Swift 6+, Node.js 22.12+, and pnpm 11.7.0. The Xcode Command Line Tools provide Swift, and the App has no third-party Swift package dependencies.
 
 ```bash
 pnpm install
