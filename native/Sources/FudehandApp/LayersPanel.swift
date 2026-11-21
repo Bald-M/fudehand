@@ -126,6 +126,11 @@ struct LayersPanel: View {
             Button(L("Bring to Front")) { reorder(node.id, toTop: true) }
             Button(L("Send to Back")) { reorder(node.id, toTop: false) }
             Divider()
+            Button(L("Copy")) { store.canvasCopy(targets(node), cut: false) }
+            Button(L("Cut")) { store.canvasCopy(targets(node), cut: true) }
+            Button(L("Paste")) { guard store.canPasteLayers else { return }; store.setSelection([node.id]); store.paste() }
+            Button(L("Duplicate")) { store.setSelection(targets(node)); store.duplicateSelection() }
+            Divider()
             Button(L("Zoom to Layer")) { store.focus(node.id) }
             Button(L("Export as HTML…")) { store.setSelection([node.id]); store.exportHTMLWithPanel() }
             Divider()
@@ -135,6 +140,11 @@ struct LayersPanel: View {
         .accessibilityLabel("\(node.type.title) \(node.name)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction { store.setSelection([node.id]) }
+    }
+
+    /// What Copy, Cut, and Duplicate in a row's context menu act on: the selection when the row is part of it, otherwise the row.
+    private func targets(_ node: DesignNode) -> Set<String> {
+        store.selection.contains(node.id) ? store.selection : [node.id]
     }
 
     /// Acts when the button goes down; the drag updates that follow the press are ignored.

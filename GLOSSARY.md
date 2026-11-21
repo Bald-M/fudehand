@@ -25,6 +25,8 @@ _Avoid_: element (元素), component (组件) (components mean something else an
 **Frame (画框 / 畫框)**: A layer that can contain child layers, with fill, corner radius, clip content, auto layout, and layout guides. A top-level frame usually represents a screen, and the canvas shows a name label above it.
 _Avoid_: device simulator (设备模拟器), web frame (网页框)
 
+**Duplicate (创建副本 / 複製)**: Copying the selected layers in place in one step, without the clipboard. Copy (复制 / 拷貝) and Paste (粘贴 / 貼上) go through the clipboard, which also reaches another document.
+
 **Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
 _Avoid_: version history, backup (a snapshot never restores the frame), snapshot alone (`design_snapshot` is the Agent's own PNG capture, which adds nothing to the document)
 

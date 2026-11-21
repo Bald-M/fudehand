@@ -107,6 +107,10 @@
 "Send to Back" = "Send to Back";
 "Zoom to Layer" = "Zoom to Layer";
 "Delete" = "Delete";
+"Copy" = "Copy";
+"Cut" = "Cut";
+"Paste" = "Paste";
+"Duplicate" = "Duplicate";
 
 /* Properties panel */
 "Design" = "Design";
@@ -297,6 +301,9 @@
 "Create layer" = "Create layer";
 "Update layer" = "Update layer";
 "Delete layers" = "Delete layers";
+"Copy layers" = "Copy layers";
+"Paste layers" = "Paste layers";
+"Duplicate layers" = "Duplicate layers";
 "Move layer" = "Move layer";
 "Select layers" = "Select layers";
 "Create document" = "Create document";

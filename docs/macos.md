@@ -57,6 +57,17 @@ Interaction follows Figma.
 - With a single selection (except groups), 8 resize handles appear; dragging one changes the size and sets the sizing mode in that direction to fixed. For text, changing the width switches it to Auto Height (自动高度), and changing the height switches it to Fixed (固定).
 - Arrow keys move by 1 and Shift + arrow keys by 10, each key press being one undo step. Delete removes the selected layers.
 
+**Copy and Paste**
+
+- With the canvas focused, Edit › Copy (⌘C) puts the selected layers on the clipboard with everything they hold: child layers, image data, effects, and prototype settings. A layer selected together with its ancestor goes with the ancestor. Edit › Cut (⌘X) also deletes them. When a text field has focus, ⌘C, ⌘X, and ⌘V act on its text instead.
+- Edit › Paste (⌘V) inserts a copy with new ids and selects it; the clipboard stays the same, so pasting again makes another copy. Layers can be pasted into another document opened in the same App. Where the copy goes:
+  1. With one frame selected that is not one of the copied layers or a copy pasted from this clipboard, into that frame, on top: at the offset from it the layers had from their own parent when that fits inside the frame (so with the layers' own parent selected, right on top of the originals), otherwise centered in it.
+  2. Otherwise into the parent the layers came from (the top level when they came from different parents or the document no longer has that parent), just above the topmost original or earlier copy there, moved 10 pt down and right with each paste since the copy, all copies together in their original order. The first paste after a cut goes back to the position the layers had, on top of their parent.
+  3. When that place would not be visible on the canvas, at the top level instead, centered in the viewport.
+- Edit › Duplicate (⌘D) copies the selected layers in place: each copy goes just above its original in the same parent, 10 pt down and right, and the copies are selected. It does not change the clipboard.
+- In the copies, a toggle-visibility interaction pointing at a layer inside the copy points at that layer's copy. Interactions pointing at layers or frames the document does not have (after pasting into another document) are removed; those pointing at frames it has are kept.
+- Paste, Cut, and Duplicate are each one undo step. The layers panel's context menu offers Copy, Cut, Paste, and Duplicate for the row (for the whole selection when the row is part of it); its Paste treats the row as the selection.
+
 **Layout Guides**
 
 - A frame can hold any number of layout guides, drawn in the order they were added: a **grid** (lines every *size* points across the frame), **columns**, or **rows**. Columns and rows have a count, an alignment, a gutter between them, and a margin from the frame's edge: *stretch* divides the space between the margins, and *start*, *center*, and *end* keep each band's width (a row's height) and place the block at that side (center ignores the margin). Each guide has its own color (default translucent red) and can be shown or hidden.

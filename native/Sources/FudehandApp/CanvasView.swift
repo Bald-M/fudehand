@@ -27,6 +27,12 @@ protocol CanvasHost: AnyObject {
     func canvasAnnotate(_ node: String, at point: Point)
     /// A press elsewhere on the canvas collapses the expanded annotation.
     func canvasCollapseAnnotation()
+    /// Edit › Copy or Cut with the canvas focused.
+    func canvasCopy(_ ids: Set<String>, cut: Bool)
+    /// Edit › Paste with the canvas focused.
+    func canvasPaste()
+    /// Whether the pasteboard holds layers to paste.
+    var canvasCanPaste: Bool { get }
 }
 
 /// The annotation whose thread is expanded on the canvas: an existing one, or a new one being written that is not added until
@@ -649,6 +655,21 @@ final class FudehandCanvasView: NSView {
         action()
     }
 
+    // MARK: Edit menu
+
+    // The Edit menu's Cut, Copy, and Paste reach these only while the canvas has focus; a focused text field takes them first.
+    @objc func copy(_ sender: Any?) { host?.canvasCopy(selection, cut: false) }
+    @objc func cut(_ sender: Any?) { host?.canvasCopy(selection, cut: true) }
+    @objc func paste(_ sender: Any?) { commitPendingZoom(); host?.canvasPaste() }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(copy(_:)), #selector(cut(_:)): return !selection.isEmpty && interaction.isIdle
+        case #selector(paste(_:)): return interaction.isIdle && host?.canvasCanPaste == true
+        default: return true
+        }
+    }
+
     private func report(_ next: Set<String>) {
         selection = next
         host?.canvasSelect(next)
@@ -751,3 +772,5 @@ final class CanvasAnnotationElement: NSAccessibilityElement {
         }
     }
 }
+
+extension FudehandCanvasView: NSMenuItemValidation {}

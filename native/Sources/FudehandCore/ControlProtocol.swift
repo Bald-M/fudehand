@@ -8,6 +8,12 @@ public enum ControlCommand: Equatable, Sendable {
     case createNode(parent: String?, index: Int?, node: JSONObject)
     case updateNode(String, changes: JSONObject)
     case deleteNodes([String])
+    /// Copies layers (the selection when `ids` is nil) to the pasteboard; `cut` also deletes them.
+    case copyNodes(ids: [String]?, cut: Bool)
+    /// Pastes the layers on the pasteboard, as Edit › Paste does with the current selection.
+    case paste
+    /// Duplicates layers (the selection when `ids` is nil).
+    case duplicateNodes(ids: [String]?)
     case moveNode(String, parent: String?, index: Int?)
     case select([String])
     case undo
@@ -316,6 +322,9 @@ public enum ControlProtocol {
             let ids = try strings("ids")
             guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
             return .deleteNodes(ids)
+        case "copy_nodes": return .copyNodes(ids: try layers(), cut: try flag("cut"))
+        case "paste": return .paste
+        case "duplicate_nodes": return .duplicateNodes(ids: try layers())
         case "move_node": return .moveNode(try string("id"), parent: try optionalString("parent"), index: try optionalIndex("index"))
         case "select": return .select(try strings("ids"))
         case "undo": return .undo
