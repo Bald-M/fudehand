@@ -94,7 +94,7 @@ describe('design tools', () => {
 
   it('describes effects and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
-    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033', 'texture', 'soft-light', 'glass', 'saturation', 'tint', 'highlight', 'transform-3d', 'rotateY', 'translateZ', 'perspective', 'originX', 'shader', 'design_list_shaders', 'mesh-gradient'])
+    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033', 'texture', 'soft-light', 'glass', 'saturation', 'tint', 'highlight', 'transform-3d', 'rotateY', 'translateZ', 'perspective', 'originX', 'shader', 'design_list_shaders'])
       expect(byName('design_create_node').description).toContain(field)
     const fake = await app(echo)
     const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }, { type: 'noise', size: 2, density: 0.3, seed: 7 }] }

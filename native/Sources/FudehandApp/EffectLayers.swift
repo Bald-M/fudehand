@@ -117,7 +117,7 @@ enum EffectLayers {
                 let shaded = ShaderLayer()
                 shaded.actions = DesignRenderer.noActions
                 shaded.frame = bounds
-                shaded.contentsScale = scale
+                shaded.contentsScale = DesignRenderer.rasterScale(scale, for: bounds.size)
                 shaded.effect = effect
                 shaded.opacity = Float(effect.opacity)
                 shaded.compositingFilter = TextureLayer.blendFilter(effect.blend)

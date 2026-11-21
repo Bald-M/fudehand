@@ -4,7 +4,8 @@ import Metal
 
 /// Draws a shader effect: the `ShaderCatalog` entry's Metal function, run once per change over the layer's pixels (its size ×
 /// raster scale, within `maximumPixels`), shown as the layer's contents. Shaders are static, so nothing redraws per frame; a
-/// new zoom (`contentsScale`) or size draws again. The layer carries the effect's opacity and blend.
+/// new zoom (`contentsScale`) or size draws again. While a resize rebuilds the layer every frame, each new layer shows the
+/// previous bitmap stretched (`carryOver`) and renders once the size has settled. The layer carries the effect's opacity and blend.
 final class ShaderLayer: CALayer {
     /// The longest side of a rendered bitmap in pixels.
     static let maximumPixels: CGFloat = 4096
@@ -23,17 +24,37 @@ final class ShaderLayer: CALayer {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func display() {
-        let scale = min(contentsScale, Self.maximumPixels / max(bounds.width, bounds.height, 1))
-        let pixels = (width: Int((bounds.width * scale).rounded(.up)), height: Int((bounds.height * scale).rounded(.up)))
-        contents = Self.image(effect, size: bounds.size, pixels: pixels)
+    /// Set while the layer shows a predecessor's bitmap and waits for its size to settle.
+    private var waiting = false
+    /// How long a resize must pause before the layer renders at its new size.
+    static let settle: TimeInterval = 0.15
+
+    /// Takes over `old`'s bitmap when it drew the same effect, stretched to this layer's size, and renders only after
+    /// `settle` passes without this layer being replaced in turn.
+    func carryOver(from old: ShaderLayer) {
+        guard old.effect == effect, let shown = old.contents else { return }
+        contents = shown
+        waiting = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.settle) { [weak self] in
+            guard let self, self.superlayer != nil else { return }
+            self.waiting = false
+            self.setNeedsDisplay()
+        }
     }
 
-    /// Layers display on the main thread, the only user of these caches.
-    nonisolated(unsafe) private static var cache: [String: CGImage] = [:]
+    override func display() {
+        guard !waiting else { return }
+        let scale = min(contentsScale, Self.maximumPixels / max(bounds.width, bounds.height, 1))
+        let pixels = (width: Int((bounds.width * scale).rounded(.up)), height: Int((bounds.height * scale).rounded(.up)))
+        let (effect, size) = (effect, bounds.size)
+        contents = MainActor.assumeIsolated { Self.image(effect, size: size, pixels: pixels) }
+    }
+
+    /// The last two bitmaps: enough for undo or a toggle to come back without rendering, and a bounded amount of memory.
+    @MainActor private static var cache: [(key: String, image: CGImage)] = []
 
     /// The effect's shader rendered at `pixels`, for a layer of `size` points; nil when there is nothing to draw or no GPU.
-    static func image(_ effect: DesignEffect, size: CGSize, pixels: (width: Int, height: Int)) -> CGImage? {
+    @MainActor static func image(_ effect: DesignEffect, size: CGSize, pixels: (width: Int, height: Int)) -> CGImage? {
         guard pixels.width > 0, pixels.height > 0, let entry = ShaderCatalog.entry(effect.shader) else { return nil }
         // The bitmap depends on the entry, its parameters, the size in points, and the pixel count.
         var values: [Float] = [Float(size.width), Float(size.height), Float(CGFloat(pixels.width) / max(size.width, 1))]
@@ -44,10 +65,9 @@ final class ShaderLayer: CALayer {
             }
         }
         let key = "\(entry.id) \(values) \(pixels.width)×\(pixels.height)"
-        if let cached = cache[key] { return cached }
+        if let cached = cache.first(where: { $0.key == key }) { return cached.image }
         guard let image = render(function: entry.id.replacingOccurrences(of: "-", with: "_"), values: values, pixels: pixels) else { return nil }
-        if cache.count >= 8 { cache.removeAll() }
-        cache[key] = image
+        cache = [(key, image)] + cache.prefix(1)
         return image
     }
 
@@ -55,9 +75,9 @@ final class ShaderLayer: CALayer {
     private static let queue = device?.makeCommandQueue()
     /// Compiled on first use from `source`: the Command Line Tools have no offline Metal compiler, and the source is Fudehand's own.
     private static let library: MTLLibrary? = try? device?.makeLibrary(source: source, options: nil)
-    nonisolated(unsafe) private static var pipelines: [String: MTLComputePipelineState] = [:]
+    @MainActor private static var pipelines: [String: MTLComputePipelineState] = [:]
 
-    private static func render(function name: String, values: [Float], pixels: (width: Int, height: Int)) -> CGImage? {
+    @MainActor private static func render(function name: String, values: [Float], pixels: (width: Int, height: Int)) -> CGImage? {
         guard let device, let queue, let library else { return nil }
         let pipeline: MTLComputePipelineState
         if let cached = pipelines[name] {

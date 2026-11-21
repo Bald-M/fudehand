@@ -82,8 +82,8 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
 ### Performance
 
-- Pixel bitmaps (Noise tile, Texture tile, Shader output) are cached on the layer's record in `DesignRenderer` by `(effect parameters, layer size, raster scale)`. Moving, panning, and selecting never re-render them. Zooming keeps the old bitmap during the gesture and re-renders once when the zoom commits, the rule text and SVG images already follow.
-- While a continuous gesture resizes a layer, Noise and Texture redraw (they are tiles, cheap); Shader output is stretched and rendered once when the gesture ends, and renders off the main thread with the old bitmap shown until the new one is ready.
+- Pixel bitmaps are cached by what they depend on: the Noise tile by color, density, and seed; the Texture block by image and tile size; the Shader output by entry, parameters, and pixel size (the last two only, to bound memory). Moving, panning, and selecting never re-render them. Zooming keeps the old bitmap during the gesture and re-renders once when the zoom commits, the rule text and SVG images already follow.
+- While a continuous gesture resizes a layer, Noise and Texture redraw (they are tiles, cheap); Shader output is stretched: each rebuilt shader layer takes over the previous bitmap (`ShaderLayer.carryOver`) and renders, on the main thread, once its size has not changed for 0.15 s. A render of a 1440 × 1024 frame at 2× takes about 24 ms in a debug build, too long for every frame of a drag but fine once.
 - Glass, 3D transform, and Perspective are Core Animation filters and transforms: GPU work per composited frame, with no main-thread cost, like #214's blurs.
 - **Gate:** `pnpm bench:native` gains a case where 10% of the layers carry a Noise, a Texture, a Glass, a Shader, and a 3D transform; drag and hover times stay within 10% of the same benchmark without them.
 

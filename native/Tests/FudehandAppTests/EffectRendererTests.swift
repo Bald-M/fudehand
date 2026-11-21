@@ -414,3 +414,23 @@ private func shaded(_ id: String, _ params: [String: ShaderValue] = [:], opacity
     layer.displayIfNeeded()
     #expect((layer.contents as! CGImage).width == before * 2)
 }
+
+@Test @MainActor func resizingAShadedLayerStretchesTheOldBitmapUntilTheSizeSettles() async throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 100, height: 100)
+    frame.effects = [shaded("waves")]
+    renderer.sync([frame])
+    let first = try #require(renderer.contentLayer(for: "f")?.sublayers?.first as? ShaderLayer)
+    first.displayIfNeeded()
+    let rendered = try #require(first.contents)
+    // Each resize frame rebuilds the layer; it shows the previous bitmap rather than rendering again.
+    frame.width = 140
+    renderer.sync([frame])
+    let resized = try #require(renderer.contentLayer(for: "f")?.sublayers?.first as? ShaderLayer)
+    resized.displayIfNeeded()
+    #expect(resized !== first && (resized.contents as AnyObject?) === (rendered as AnyObject))
+    // Once the size has not changed for a moment, it renders at the new size.
+    try await Task.sleep(for: .milliseconds(400))
+    resized.displayIfNeeded()
+    #expect((resized.contents as! CGImage).width > (rendered as! CGImage).width)
+}
