@@ -5,9 +5,10 @@ public enum ConnectorStatus: Equatable, Sendable {
     /// The corresponding CLI cannot be found on this machine.
     case unavailable
     case disconnected
-    /// Registered and pointing at this checkout's MCP server.
+    /// Registered and pointing at this App's MCP server.
     case connected
-    /// `fudehand` is registered, but the command points elsewhere; the associated value is the registered command.
+    /// `fudehand` is registered, but the command points elsewhere (another checkout, an earlier location of the App) or at a Node that no
+    /// longer exists; the associated value is the registered command. Connecting again replaces it.
     case elsewhere(String)
 }
 
@@ -34,9 +35,10 @@ public enum AgentConnector: String, CaseIterable, Sendable {
     }
 
     /// Claude Code and Codex only: DeepSeek Harness has no `mcp` subcommand and is configured through its home patch file (see `deepseekConnecting`).
-    public func addArguments(script: String) -> [String] {
+    /// `node` is an absolute path: an Agent started from Finder or the Dock may not have Node on its PATH.
+    public func addArguments(node: String, script: String) -> [String] {
         let scope = self == .claude ? ["--scope", "user"] : []
-        return ["mcp", "add"] + scope + [Self.serverName, "--", "node", script]
+        return ["mcp", "add"] + scope + [Self.serverName, "--", node, script]
     }
 
     public var removeArguments: [String] {
@@ -54,17 +56,18 @@ public enum AgentConnector: String, CaseIterable, Sendable {
     }
 
     /// Parses the top-level (user-level) `mcpServers` of `~/.claude.json`.
-    public static func claudeStatus(config: Data?, script: String) -> ConnectorStatus {
+    /// `commandExists` checks an absolute command path; a registration whose Node is gone needs updating.
+    public static func claudeStatus(config: Data?, script: String, commandExists: (String) -> Bool = { _ in true }) -> ConnectorStatus {
         guard let config, let root = (try? JSONSerialization.jsonObject(with: config)) as? [String: Any],
               let server = (root["mcpServers"] as? [String: Any])?[serverName] as? [String: Any] else { return .disconnected }
-        return status(command: server["command"] as? String, args: server["args"] as? [String], script: script)
+        return status(command: server["command"] as? String, args: server["args"] as? [String], script: script, commandExists: commandExists)
     }
 
     /// Parses `codex mcp get fudehand --json`; when not registered the command exits with a non-zero status.
-    public static func codexStatus(output: Data, exitCode: Int32, script: String) -> ConnectorStatus {
+    public static func codexStatus(output: Data, exitCode: Int32, script: String, commandExists: (String) -> Bool = { _ in true }) -> ConnectorStatus {
         guard exitCode == 0, let root = (try? JSONSerialization.jsonObject(with: output)) as? [String: Any] else { return .disconnected }
         let transport = root["transport"] as? [String: Any]
-        return status(command: transport?["command"] as? String, args: transport?["args"] as? [String], script: script)
+        return status(command: transport?["command"] as? String, args: transport?["args"] as? [String], script: script, commandExists: commandExists)
     }
 
     // MARK: DeepSeek Harness
@@ -108,7 +111,7 @@ public enum AgentConnector: String, CaseIterable, Sendable {
         return rest + (rest.utf8.last == UInt8(ascii: "\n") ? "" : "\n") + "[]\n"
     }
 
-    public static func deepseekStatus(patch: String?, script: String) -> ConnectorStatus {
+    public static func deepseekStatus(patch: String?, script: String, commandExists: (String) -> Bool = { _ in true }) -> ConnectorStatus {
         let lines = deepseekLines(patch ?? "")
         guard let block = deepseekBlock(lines).map({ lines[$0] }) else { return .disconnected }
         // Both values are written as JSON, which is also valid YAML.
@@ -116,7 +119,7 @@ public enum AgentConnector: String, CaseIterable, Sendable {
             guard let line = block.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }).first(where: { $0.hasPrefix(key) }) else { return nil }
             return (try? JSONSerialization.jsonObject(with: Data(line.dropFirst(key.count).utf8), options: .fragmentsAllowed)).flatMap { $0 as? [String] ?? ($0 as? String).map { [$0] } }
         }
-        return status(command: value("command: ")?.first, args: value("args: "), script: script)
+        return status(command: value("command: ")?.first, args: value("args: "), script: script, commandExists: commandExists)
     }
 
     /// Splits at line feeds only, so a carriage return stays on its line and Windows line endings survive the edit (Swift treats "\r\n" as one Character).
@@ -148,9 +151,10 @@ public enum AgentConnector: String, CaseIterable, Sendable {
         String(decoding: (try? JSONSerialization.data(withJSONObject: values, options: .withoutEscapingSlashes)) ?? Data(), as: UTF8.self)
     }
 
-    private static func status(command: String?, args: [String]?, script: String) -> ConnectorStatus {
+    private static func status(command: String?, args: [String]?, script: String, commandExists: (String) -> Bool) -> ConnectorStatus {
         let args = args ?? []
-        if args.contains(script) { return .connected }
+        // A bare command such as `node` is looked up on the Agent's own PATH, which the App cannot see.
+        if args.contains(script), command.map({ !$0.hasPrefix("/") || commandExists($0) }) ?? true { return .connected }
         return .elsewhere(([command ?? ""] + args).filter { !$0.isEmpty }.joined(separator: " "))
     }
 }

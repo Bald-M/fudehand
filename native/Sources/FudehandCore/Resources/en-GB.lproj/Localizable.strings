@@ -331,9 +331,13 @@
 "The %1$@ command was not found. Install %2$@ first." = "The %1$@ command was not found. Install %2$@ first.";
 "Not connected" = "Not connected";
 "Connected" = "Connected";
-"Registered to another directory: %@. Disconnect to reconnect it to this one." = "Registered to another directory: %@. Disconnect to reconnect it to this one.";
+"Registered to another location: %@. Update points it at this App." = "Registered to another location: %@. Update points it at this App.";
 "Connect" = "Connect";
 "Disconnect" = "Disconnect";
+"Update" = "Update";
+"Fudehand’s MCP server needs Node.js %@ or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then click Refresh." = "Fudehand’s MCP server needs Node.js %@ or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then click Refresh.";
+"Fudehand’s MCP server needs Node.js %1$@ or later, but %2$@ is version %3$@. Update Node.js, then click Refresh." = "Fudehand’s MCP server needs Node.js %1$@ or later, but %2$@ is version %3$@. Update Node.js, then click Refresh.";
+"Node.js was not found." = "Node.js was not found.";
 "A quick question" = "A quick question";
 "Recommended" = "Recommended";
 "Other: write your own answer" = "Other: write your own answer";

@@ -18,6 +18,7 @@ Requires macOS 14+, Swift 6 (the Xcode Command Line Tools are enough; no full Xc
 pnpm install
 pnpm dev               # build the app in debug and open it
 pnpm build:native      # release build + ad-hoc signing → dist/Fudehand.app
+pnpm package:native    # distributable App without workspace.json → dist/Fudehand-<version>.dmg
 pnpm test:native       # run swift test on native/ (FudehandCoreTests + FudehandAppTests)
 pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness
 pnpm mcp               # start the Fudehand MCP server over stdio (usually launched by the agent)
@@ -122,7 +123,7 @@ A release goes through its own PR, titled `chore(release): 发布 vX.Y.Z` (e.g. 
 3. Update the current version at the top of [README.md](README.md) and [README.zh-CN.md](README.zh-CN.md).
 4. Pass the full verification gate, including `pnpm build:native`, and smoke-test the built App in light and dark appearance.
 
-After the PR is merged, tag the merge commit `vX.Y.Z` and create a GitHub Release with the same name, using that version's CHANGELOG section as the notes. See "Releasing" in the [README](README.md) for what each version location controls.
+After the PR is merged, tag the merge commit `vX.Y.Z`, build the disk image from it with `pnpm package:native`, and create a GitHub Release with the same name, using that version's CHANGELOG section as the notes and attaching `dist/Fudehand-X.Y.Z.dmg`. Do not attach a `pnpm build:native` App: it names this checkout in `workspace.json`. See "Releasing" in the [README](README.md) for what each version location controls.
 
 ## Security
 

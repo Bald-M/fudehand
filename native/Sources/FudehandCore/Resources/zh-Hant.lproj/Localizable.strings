@@ -331,9 +331,13 @@
 "The %1$@ command was not found. Install %2$@ first." = "找不到 %1$@ 指令，請先安裝 %2$@。";
 "Not connected" = "未連線";
 "Connected" = "已連線";
-"Registered to another directory: %@. Disconnect to reconnect it to this one." = "已註冊到其他目錄：%@。中斷後可重新連線到本目錄。";
+"Registered to another location: %@. Update points it at this App." = "已註冊到其他位置：%@。按「更新」可改為指向本 App。";
 "Connect" = "連線";
 "Disconnect" = "中斷連線";
+"Update" = "更新";
+"Fudehand’s MCP server needs Node.js %@ or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then click Refresh." = "Fudehand 的 MCP 服務需要 Node.js %@ 或更新版本，但這台 Mac 上找不到。請從 nodejs.org 下載安裝，或用 Homebrew 安裝（brew install node），然後按「重新整理」。";
+"Fudehand’s MCP server needs Node.js %1$@ or later, but %2$@ is version %3$@. Update Node.js, then click Refresh." = "Fudehand 的 MCP 服務需要 Node.js %1$@ 或更新版本，但 %2$@ 的版本是 %3$@。請更新 Node.js，然後按「重新整理」。";
+"Node.js was not found." = "找不到 Node.js。";
 "A quick question" = "AI 想先確認一下";
 "Recommended" = "推薦";
 "Other: write your own answer" = "其他：自己寫回答";
