@@ -10,9 +10,17 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Added
+
+- `pnpm package:native` builds `dist/Fudehand-<version>.dmg`, an App that does not depend on the source checkout (#236).
+
 ### Changed
 
 - Edits stay fast in large documents: an edit lays out only the top-level layers it changed, the canvas skips layers whose children did not change, and the layers panel, the window title, and the toolbar update only when what they show changes. On a 5,100-layer document, nudging 50 layers with an arrow key drops from about 65 ms to under 3 ms, and undo, redo, and releasing a drag from about 25 ms to under 3 ms; `pnpm bench:native` now measures them (#228).
+
+### Fixed
+
+- The App installed from a disk image can connect Claude Code, Codex, and DeepSeek Harness: it carries its MCP server and the chat panel's Agent harness, copies them to `~/Library/Application Support/fudehand/tools`, and finds Node.js and the agents' commands when opened from Finder. *MCP Connectors* explains a missing or too old Node.js, and *Update* points a registration made elsewhere at this App (#236).
 
 ## [0.0.5] - 2026-11-21
 

@@ -101,6 +101,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Play the prototype, play from the start, close the prototype window | `prototype_play`, `prototype_close`; `prototype_get_playback` reads whether the window is open and the frame on show |
 | Preview a layer's animation in the properties panel | Exception: previewing changes nothing and leaves no result to return — the motion only exists on screen while it plays, and a still snapshot cannot show it. The Agent reads and sets the animation itself with `design_get_node` / `design_update_node`. |
 | Show the launch window | `app_show_launch_window` |
+| Close the editor window and return to the launch window | `app_close_editor_window` |
 | List, open, remove, clear recent files | `app_list_recents`, `app_open_recent`, `app_remove_recent`, `app_clear_recents` |
 | List templates, create a document from a template | `app_list_templates`, `app_new_document_from_template` |
 
@@ -111,7 +112,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | UI language, appearance (System, Light, Dark) | `settings_get_interface`, `settings_update_interface` |
 | Model provider settings: base URL, model, default model, the provider in use; list models | `settings_get_models`, `settings_update_model_provider`, `settings_list_models` |
 | Set or delete an API key; test the connection | `settings_set_api_key`, `settings_delete_api_key`; testing is `settings_list_models` with the saved key, as the sheet's *Test* lists the models |
-| MCP connector status, connect, disconnect | `settings_get_connectors`, `settings_set_connector` |
+| MCP connector status, Node.js status, connect, update, disconnect | `settings_get_connectors`, `settings_set_connector` |
 
 ### Chat panel
 

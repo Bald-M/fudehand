@@ -351,7 +351,9 @@ final class ChatSession: ObservableObject {
     nonisolated static func launch(root: URL, runtime: WorkspaceLocation?, settings: ChatSettings, apiKey: String?, environment inherited: [String: String],
                                    conversation: UUID? = nil, listModels: Bool = false) -> Launch {
         var environment = inherited.filter { !$0.key.hasPrefix("FUDEHAND_") || $0.key == "FUDEHAND_CONTROL_SOCKET" }
-        environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"].compactMap { $0 }.joined(separator: ":")
+        let home = NSHomeDirectory()
+        let nvm = (try? FileManager.default.contentsOfDirectory(atPath: home + "/.nvm/versions/node")) ?? []
+        environment["PATH"] = ToolSearchPath.compose(recorded: runtime?.path, login: nil, inherited: inherited["PATH"], home: home, nvmVersions: nvm)
         environment["FUDEHAND_PROVIDER"] = settings.provider
         if !settings.model.isEmpty { environment["FUDEHAND_MODEL"] = settings.model }
         if !settings.baseUrl.isEmpty { environment["FUDEHAND_BASE_URL"] = settings.baseUrl }

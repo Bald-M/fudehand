@@ -5,9 +5,11 @@ import FudehandCore
 private let script = "/repo/scripts/mcp-server.mjs"
 
 @Test func agentConnectorBuildsUserScopeCommands() {
-    #expect(AgentConnector.claude.addArguments(script: script) == ["mcp", "add", "--scope", "user", "fudehand", "--", "node", script])
+    #expect(AgentConnector.claude.addArguments(node: "/opt/homebrew/bin/node", script: script)
+            == ["mcp", "add", "--scope", "user", "fudehand", "--", "/opt/homebrew/bin/node", script])
     #expect(AgentConnector.claude.removeArguments == ["mcp", "remove", "--scope", "user", "fudehand"])
-    #expect(AgentConnector.codex.addArguments(script: script) == ["mcp", "add", "fudehand", "--", "node", script])
+    #expect(AgentConnector.codex.addArguments(node: "/opt/homebrew/bin/node", script: script)
+            == ["mcp", "add", "fudehand", "--", "/opt/homebrew/bin/node", script])
     #expect(AgentConnector.codex.removeArguments == ["mcp", "remove", "fudehand"])
     #expect(AgentConnector.codex.statusArguments == ["mcp", "get", "fudehand", "--json"])
     #expect(AgentConnector.allCases.map(\.title) == ["Claude Code", "Codex", "DeepSeek Harness"])
@@ -122,4 +124,17 @@ private let deepseekBlock = """
     let orphan = "# >>> fudehand MCP connector >>>\n- id: locale\n"
     #expect(AgentConnector.deepseekStatus(patch: orphan, script: script) == .disconnected)
     #expect(AgentConnector.deepseekDisconnecting(patch: orphan + deepseekBlock) == orphan)
+}
+
+@Test func registrationWithAMissingNodeNeedsUpdating() {
+    // Registered with this script but an absolute Node path that no longer exists (an uninstalled nvm version, say): not connected.
+    let gone = Data(#"{"mcpServers":{"fudehand":{"command":"/gone/node","args":["/repo/scripts/mcp-server.mjs"]}}}"#.utf8)
+    #expect(AgentConnector.claudeStatus(config: gone, script: script, commandExists: { $0 != "/gone/node" })
+        == .elsewhere("/gone/node /repo/scripts/mcp-server.mjs"))
+    #expect(AgentConnector.claudeStatus(config: gone, script: script, commandExists: { _ in true }) == .connected)
+    // A bare `node` (as older builds registered) is looked up on the Agent's PATH, so it is not checked.
+    let bare = Data(#"{"mcpServers":{"fudehand":{"command":"node","args":["/repo/scripts/mcp-server.mjs"]}}}"#.utf8)
+    #expect(AgentConnector.claudeStatus(config: bare, script: script, commandExists: { _ in false }) == .connected)
+    #expect(AgentConnector.deepseekStatus(patch: deepseekBlock, script: script, commandExists: { _ in false })
+        == .elsewhere("/opt/node/bin/node /repo/scripts/mcp-server.mjs"))
 }

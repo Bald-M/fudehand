@@ -52,9 +52,11 @@ With the `fudehand` MCP server connected, Claude Code builds the screen in the o
 
 Node is used only for the MCP server and the Agent harness behind the chat panel. The App has no third-party Swift dependencies.
 
+To only use the App, the disk image (`Fudehand-<version>.dmg`) is enough: drag Fudehand into Applications. It needs macOS 14 or later, plus Node.js 22.12 or later for the MCP connectors and the chat panel (from [nodejs.org](https://nodejs.org) or `brew install node`); Swift, pnpm, and this source code are not needed. The App carries its MCP server and the chat panel's Agent harness, and copies them to `~/Library/Application Support/fudehand/tools` when it starts, so agent connections keep working when the App is moved or updated. The disk image is built with `pnpm package:native` and is signed ad hoc only, so the first launch needs a right-click → *Open*.
+
 ## Quick start
 
-There is no prebuilt installer; build the App from source on your own Mac.
+Build the App from source on your own Mac:
 
 ```bash
 pnpm install
@@ -62,7 +64,7 @@ pnpm build:native        # release build with ad-hoc signing → dist/Fudehand.a
 open dist/Fudehand.app
 ```
 
-You can drag `dist/Fudehand.app` into the Applications folder. Keep this checkout, though: the chat panel and the MCP connector use the source directory the App was built from.
+You can drag `dist/Fudehand.app` into the Applications folder. An App built this way uses the scripts in this checkout while the checkout exists, so changes to them apply without rebuilding; without it, the App uses the copy it carries.
 
 ## Using the App
 
@@ -85,7 +87,7 @@ Agents work through a set of design tools that the MCP server and the in-app cha
 
 ### Connect an agent
 
-The quickest way is *Fudehand → MCP Connector…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. An agent that is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
+The quickest way is *Fudehand → MCP Connectors…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers the App's MCP server, started with the absolute path of the Node.js it found, in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. The App looks for the agents' commands and for Node.js on your login shell's `PATH` and in the usual install locations (Homebrew, `/usr/local/bin`, `~/.local/bin`, nvm, Volta, and the DeepSeek Harness app), so it finds them when opened from Finder too. An agent that is not installed is shown as unavailable; when Node.js is missing or older than 22.12, the window says so and what to install. A registration that points somewhere else — another checkout, or a Node.js that no longer exists — is shown in orange with *Update*, which points it at this App. A new connection takes effect in agent sessions opened afterwards.
 
 ![The MCP Connectors window listing Claude Code, Codex, and DeepSeek Harness, each with its icon, connection status, and a Connect or Disconnect button](docs/evidence/readme-mcp-connectors-en-light.jpg)
 
@@ -202,6 +204,7 @@ Fudehand does not import or export Figma files.
 ```bash
 pnpm dev               # debug build, then open the App
 pnpm build:native      # release build with ad-hoc signing → dist/Fudehand.app
+pnpm package:native    # an App that does not need this checkout, as dist/Fudehand-<version>.dmg
 pnpm test:native       # Swift tests: FudehandCoreTests and FudehandAppTests
 pnpm bench:native      # canvas drag, hover, layer selection, and edit benchmarks on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness

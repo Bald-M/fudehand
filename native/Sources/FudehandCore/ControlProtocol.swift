@@ -40,6 +40,8 @@ public enum ControlCommand: Equatable, Sendable {
     case getPrototypePlayback
     case closePrototype
     case showLaunchWindow
+    /// Closes the editor window as its close button does, returning to the launch window with a new empty document.
+    case closeEditorWindow(discard: Bool)
     case listRecents
     case openRecent(String, discard: Bool)
     case removeRecent(String)
@@ -378,6 +380,7 @@ public enum ControlProtocol {
         case "get_playback": return .getPrototypePlayback
         case "close": return .closePrototype
         case "show_launch_window": return .showLaunchWindow
+        case "close_editor_window": return .closeEditorWindow(discard: try flag("discard"))
         case "list_recents": return .listRecents
         case "open_recent": return .openRecent(try string("path"), discard: try flag("discard"))
         case "remove_recent": return .removeRecent(try string("path"))

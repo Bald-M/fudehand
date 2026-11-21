@@ -70,7 +70,9 @@ final class FudehandStore: ObservableObject {
     @Published private(set) var fontFamilies: [FontFamily]
     let zoomIndicator = ZoomIndicator()
     let chat: ChatSession
-    /// The source directory: the chat panel starts `scripts/agent-chat.mjs` from here. Set by `bootstrap()`, or by a test.
+    /// The directory holding the Node tools: the chat panel starts `scripts/agent-chat.mjs` from here and the MCP connectors register its
+    /// `scripts/mcp-server.mjs`. The source checkout for a source build, otherwise the installed copy of the tools bundled with the App.
+    /// Set by `bootstrap()`, or by a test.
     var toolsRoot: URL?
     private(set) var runtime: WorkspaceLocation?
     /// The model of the "MCP Connectors" window; the window may open before the main window, so the source location is read on demand.
@@ -113,6 +115,9 @@ final class FudehandStore: ObservableObject {
     var prototypeWindowOpen = false
     /// Shows the launch window, as Window › Launch Window does; registered the same way as `presentEditor`.
     var presentLaunch: () -> Void = {}
+    /// Closes the editor window; registered the same way as `presentEditor`. Used only by the Agent: a person closes it
+    /// with the close button or ⌘W, which asks `closeEditor` first.
+    var dismissEditor: () -> Void = {}
     /// The templates offered in the launch window.
     let templates: [Template]
 
@@ -155,7 +160,7 @@ final class FudehandStore: ObservableObject {
     var canUndo: Bool { editor.canUndo }
     var canRedo: Bool { editor.canRedo }
 
-    /// Reads the source location written at build time; starts no child process.
+    /// Reads the source location written at build time, or installs the bundled tools when there is no source checkout; starts no child process.
     func bootstrap() {
         if let url = Bundle.main.url(forResource: "workspace", withExtension: "json"),
            let data = try? Data(contentsOf: url) { runtime = try? JSONDecoder().decode(WorkspaceLocation.self, from: data) }
@@ -164,6 +169,16 @@ final class FudehandStore: ObservableObject {
         let candidates = [argumentRoot, runtime?.root, FileManager.default.currentDirectoryPath].compactMap { $0 }
         toolsRoot = candidates.map { URL(fileURLWithPath: $0) }
             .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("scripts/agent-chat.mjs").path) }
+        if toolsRoot == nil, let bundled = Bundle.main.url(forResource: "Tools", withExtension: nil) {
+            // Outside the bundle, at a path that stays the same when the App is moved, updated, or run from the disk image.
+            let installed = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/fudehand/tools")
+            do {
+                try BundledTools.install(from: bundled, to: installed)
+                toolsRoot = installed
+            } catch {
+                NSLog("Fudehand: cannot install the bundled tools to %@: %@", installed.path, error.localizedDescription)
+            }
+        }
     }
 
     // MARK: Document changes
@@ -517,6 +532,22 @@ final class FudehandStore: ObservableObject {
 
     /// Replaces the current document and enters the editor window; New, Open, templates, and Agent commands all go through here.
     func replace(_ next: DesignDocument, url: URL?) {
+        load(next, url: url)
+        presentEditor()
+    }
+
+    /// The editor window is closing. `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the
+    /// Agent passes `discard`); when they may, the prototype window closes, the store holds a new empty document, and the
+    /// launch window shows. Returns whether the editor window may close.
+    func closeEditor(discarding: () throws -> Bool) rethrows -> Bool {
+        guard try !isDirty || discarding() else { return false }
+        if prototypeWindowOpen { closePrototype() }
+        load(DesignDocument(), url: nil)
+        presentLaunch()
+        return true
+    }
+
+    private func load(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         expandAnnotation(nil)
         editor.replace(next)
@@ -531,7 +562,6 @@ final class FudehandStore: ObservableObject {
         fitAll(animated: false)
         if canvas == nil { fitWhenCanvasSized = true }
         if let url { recordRecent(url) }
-        presentEditor()
     }
 
     // MARK: Recent documents

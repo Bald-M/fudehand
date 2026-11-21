@@ -8,6 +8,7 @@
 "Clear Recents" = "清除记录";
 "Save" = "保存";
 "Save As…" = "另存为…";
+"Close" = "关闭";
 "Undo" = "撤销";
 "Redo" = "重做";
 "Canvas" = "画布";
@@ -330,9 +331,13 @@
 "The %1$@ command was not found. Install %2$@ first." = "未找到 %1$@ 命令，请先安装 %2$@。";
 "Not connected" = "未连接";
 "Connected" = "已连接";
-"Registered to another directory: %@. Disconnect to reconnect it to this one." = "已注册到其他目录：%@。断开后可重新连接到本目录。";
+"Registered to another location: %@. Update points it at this App." = "已注册到其他位置：%@。点“更新”可改为指向本 App。";
 "Connect" = "连接";
 "Disconnect" = "断开连接";
+"Update" = "更新";
+"Fudehand’s MCP server needs Node.js %@ or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then click Refresh." = "Fudehand 的 MCP 服务需要 Node.js %@ 或更高版本，但这台 Mac 上没有找到。请从 nodejs.org 下载安装，或用 Homebrew 安装（brew install node），然后点“刷新”。";
+"Fudehand’s MCP server needs Node.js %1$@ or later, but %2$@ is version %3$@. Update Node.js, then click Refresh." = "Fudehand 的 MCP 服务需要 Node.js %1$@ 或更高版本，但 %2$@ 的版本是 %3$@。请更新 Node.js，然后点“刷新”。";
+"Node.js was not found." = "未找到 Node.js。";
 "A quick question" = "AI 想先确认一下";
 "Recommended" = "推荐";
 "Other: write your own answer" = "其他：自己写回答";

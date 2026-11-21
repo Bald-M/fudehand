@@ -28,7 +28,7 @@ describe('design tools', () => {
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_shaders', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
       'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
-      'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
+      'app_show_launch_window', 'app_close_editor_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
       'chat_list_conversations', 'chat_get_conversation', 'chat_open_conversation', 'chat_new_conversation', 'chat_close_conversation',
       'chat_delete_conversation', 'chat_clear_conversation', 'chat_send_message', 'chat_set_mode', 'chat_run_plan', 'chat_stop_reply', 'chat_regenerate_reply',
@@ -248,6 +248,7 @@ describe('design tools', () => {
     const fake = await app(echo)
     const ctx = { root: '/repo', socketPath: fake.socketPath }
     await callTool('app_show_launch_window', {}, ctx)
+    await callTool('app_close_editor_window', { discard: true }, ctx)
     await callTool('app_list_recents', {}, ctx)
     await callTool('app_open_recent', { path: '/Users/a/Home.fudehand' }, ctx)
     await callTool('app_open_recent', { path: '/Users/a/Home.fudehand', discard: true }, ctx)
@@ -257,6 +258,7 @@ describe('design tools', () => {
     await callTool('app_new_document_from_template', { name: 'Mobile', discard: true }, ctx)
     expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
       { command: 'show_launch_window', args: {} },
+      { command: 'close_editor_window', args: { discard: true } },
       { command: 'list_recents', args: {} },
       { command: 'open_recent', args: { path: '/Users/a/Home.fudehand' } },
       { command: 'open_recent', args: { path: '/Users/a/Home.fudehand', discard: true } },
