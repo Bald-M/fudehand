@@ -52,7 +52,7 @@ With the `fudehand` MCP server connected, Claude Code builds the screen in the o
 
 Node is used only for the MCP server and the Agent harness behind the chat panel. The App has no third-party Swift dependencies.
 
-To only use the App, the disk image (`Fudehand-<version>.dmg`) is enough: drag Fudehand into Applications. It needs macOS 14 or later, plus Node.js 22.12 or later for the MCP connectors and the chat panel (from [nodejs.org](https://nodejs.org) or `brew install node`); Swift, pnpm, and this source code are not needed. The App carries its MCP server and the chat panel's Agent harness, and copies them to `~/Library/Application Support/fudehand/tools` when it starts, so agent connections keep working when the App is moved or updated. The disk image is built with `pnpm package:native` and is signed ad hoc only, so the first launch needs a right-click → *Open*.
+To use the App, download the disk image (`Fudehand-<version>.dmg`) from [GitHub Releases](https://github.com/Bald-M/fudehand/releases) and drag Fudehand into Applications. It needs macOS 14 or later, plus Node.js 22.12 or later for the MCP connectors and the chat panel (from [nodejs.org](https://nodejs.org) or `brew install node`); Swift, pnpm, and this source code are not needed. The App carries its MCP server and the chat panel's Agent harness, and copies them to `~/Library/Application Support/fudehand/tools` when it starts, so agent connections keep working when the App is moved or updated. The disk image is built with `pnpm package:native` and contains an ad-hoc-signed App. If Gatekeeper blocks the first launch, use *Privacy & Security → Open Anyway* in System Settings.
 
 ## Quick start
 
