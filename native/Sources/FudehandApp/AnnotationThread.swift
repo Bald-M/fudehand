@@ -48,7 +48,7 @@ extension FudehandStore {
     func expandAnnotation(_ target: AnnotationTarget?) {
         if annotation != target { annotation = target }
         canvas?.showAnnotation(target) {
-            let controller = NSHostingController(rootView: AnnotationThread(store: self).environment(\.locale, language.locale))
+            let controller = NSHostingController(rootView: AnnotationThread(store: self, displayed: displayed).environment(\.locale, language.locale))
             controller.sizingOptions = .preferredContentSize
             return controller
         }
@@ -81,6 +81,7 @@ extension FudehandStore {
 /// The expanded annotation: its thread with replies, or the field for writing a new one.
 struct AnnotationThread: View {
     @ObservedObject var store: FudehandStore
+    @ObservedObject var displayed: DisplayedDocument
     @State private var reply = ""
     @State private var editing: String?
     @State private var editText = ""
@@ -93,7 +94,7 @@ struct AnnotationThread: View {
                 header(node)
                 composer(L("Add an annotation"), action: L("Add")) { try store.submitAnnotationDraft($0) }
             case .thread(let id):
-                if let annotation = store.document.annotations.first(where: { $0.id == id }) {
+                if let annotation = displayed.document.annotations.first(where: { $0.id == id }) {
                     header(annotation.node)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -120,7 +121,7 @@ struct AnnotationThread: View {
     private func header(_ node: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(L("Annotation")).font(.headline)
-            Text(store.document.node(node)?.name ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(displayed.document.node(node)?.name ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
     }
 

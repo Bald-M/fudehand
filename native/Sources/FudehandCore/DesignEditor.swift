@@ -168,6 +168,8 @@ public struct DesignEditor {
     private struct Step {
         let name: String
         let before: DesignDocument
+        /// The `measured` generation `before` was laid out in.
+        let measured: Int
         let coalescing: String?
         var time = Date()
     }
@@ -180,7 +182,11 @@ public struct DesignEditor {
     private let measure: TextMeasure
     private var undoStack: [Step] = []
     private var redoStack: [Step] = []
-    private var gesture: (name: String, start: DesignDocument)?
+    private var gesture: (name: String, start: DesignDocument, measured: Int)?
+    /// Counts `layOutAgain` calls: text measured differently from then on. A document laid out in an earlier generation (one
+    /// undo or redo brings back) is laid out whole by the next edit, not only where the edit changed it (#228).
+    private var measured = 0
+    private var documentMeasured = 0
     public static let historyLimit = 200
 
     public init(document: DesignDocument = DesignDocument(), measure: @escaping TextMeasure) {
@@ -201,21 +207,22 @@ public struct DesignEditor {
     public mutating func perform<T>(_ name: String, coalescing: String? = nil, _ change: (inout DesignDocument) throws -> T) rethrows -> T {
         let open = gesture?.name
         endGesture()
-        defer { if let open { gesture = (open, document) } }
+        defer { if let open { gesture = (open, document, documentMeasured) } }
         var next = document
         let result = try change(&next)
         next.pruneAnnotations()
-        DesignLayout.apply(to: &next.nodes, measure: measure)
+        DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: documentMeasured == measured ? document.nodes : [])
         guard next != document else { return result }
         let now = Date()
         if coalescing == nil || undoStack.last?.coalescing != coalescing || !redoStack.isEmpty
             || now.timeIntervalSince(undoStack.last?.time ?? .distantPast) > Self.coalescingWindow {
-            push(Step(name: name, before: document, coalescing: coalescing, time: now))
+            push(Step(name: name, before: document, measured: documentMeasured, coalescing: coalescing, time: now))
         } else {
             undoStack[undoStack.count - 1].time = now
         }
         redoStack.removeAll()
         document = next
+        documentMeasured = measured
         revision += 1
         return result
     }
@@ -223,14 +230,27 @@ public struct DesignEditor {
     /// A continuous gesture such as a canvas drag: a snapshot is recorded at the start, `applyLive` modifies during it, and it is recorded as one step at the end.
     public mutating func beginGesture(_ name: String) {
         endGesture()
-        gesture = (name, document)
+        gesture = (name, document, documentMeasured)
     }
 
     public mutating func applyLive(_ change: (inout DesignDocument) -> Void) {
+        applyLive(change, layingOutAll: false)
+    }
+
+    /// Lays out the whole document again, for when text measures differently (fonts were imported); like `applyLive`, it is
+    /// not an undo step of its own.
+    public mutating func layOutAgain() {
+        measured += 1
+        applyLive({ _ in }, layingOutAll: true)
+        documentMeasured = measured
+    }
+
+    private mutating func applyLive(_ change: (inout DesignDocument) -> Void, layingOutAll: Bool) {
         var next = document
         change(&next)
         next.pruneAnnotations()
-        DesignLayout.apply(to: &next.nodes, measure: measure)
+        DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: layingOutAll || documentMeasured != measured ? [] : document.nodes)
+        documentMeasured = measured
         guard next != document else { return }
         document = next
         revision += 1
@@ -240,7 +260,7 @@ public struct DesignEditor {
         guard let gesture else { return }
         self.gesture = nil
         guard gesture.start != document else { return }
-        push(Step(name: gesture.name, before: gesture.start, coalescing: nil))
+        push(Step(name: gesture.name, before: gesture.start, measured: gesture.measured, coalescing: nil))
         redoStack.removeAll()
     }
 
@@ -248,8 +268,9 @@ public struct DesignEditor {
     public mutating func undo() -> Bool {
         endGesture()
         guard let step = undoStack.popLast() else { return false }
-        redoStack.append(Step(name: step.name, before: document, coalescing: nil))
+        redoStack.append(Step(name: step.name, before: document, measured: documentMeasured, coalescing: nil))
         document = step.before
+        documentMeasured = step.measured
         revision += 1
         return true
     }
@@ -258,8 +279,9 @@ public struct DesignEditor {
     public mutating func redo() -> Bool {
         endGesture()
         guard let step = redoStack.popLast() else { return false }
-        undoStack.append(Step(name: step.name, before: document, coalescing: nil))
+        undoStack.append(Step(name: step.name, before: document, measured: documentMeasured, coalescing: nil))
         document = step.before
+        documentMeasured = step.measured
         revision += 1
         return true
     }
@@ -272,6 +294,7 @@ public struct DesignEditor {
         var laidOut = next
         DesignLayout.apply(to: &laidOut.nodes, measure: measure)
         document = laidOut
+        documentMeasured = measured
         revision += 1
     }
 

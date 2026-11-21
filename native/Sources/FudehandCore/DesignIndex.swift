@@ -50,6 +50,9 @@ public struct DesignIndex {
 
     public func contains(_ id: String) -> Bool { entries[id] != nil }
 
+    /// The number of layers in the document.
+    public var count: Int { entries.count }
+
     /// The absolute rectangle of a node on the canvas.
     public func worldRect(_ id: String) -> Rect? { entries[id]?.rect }
 

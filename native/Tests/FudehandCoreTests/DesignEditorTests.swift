@@ -156,3 +156,61 @@ private func reopened(_ e: DesignEditor) throws -> DesignDocument {
     e.endGesture()
     #expect(try reopened(e) == e.document)
 }
+
+/// An edit lays out only the top-level layers it changed, which keeps edits cheap in large documents; `layOutAgain` lays out
+/// every layer, for when text measures differently (#228).
+@Test func editsLayOutOnlyTheTopLevelLayersTheyChange() throws {
+    final class Log { var measured: [String] = [] }
+    let log = Log()
+    let measure: TextMeasure = { text, maxWidth in
+        log.measured.append(text.content)
+        return fakeMeasure(text, maxWidth)
+    }
+    func frame(_ id: String) -> DesignNode {
+        var label = DesignNode(id: "\(id)-label", type: .text)
+        label.text = DesignText(content: id, autoResize: .widthAndHeight)
+        var frame = DesignNode(id: id, type: .frame, width: 300, height: 300)
+        frame.children = [label]
+        return frame
+    }
+    var e = DesignEditor(document: DesignDocument(nodes: [frame("one"), frame("two")]), measure: measure)
+    #expect(Set(log.measured) == ["one", "two"])
+
+    log.measured = []
+    try e.perform("Edit Text") { try $0.update("one-label") { $0.text?.content = "first" } }
+    #expect(Set(log.measured) == ["first"])
+    #expect(e.document.node("one-label")?.width == 50 && e.document.node("two-label")?.width == 30)
+
+    log.measured = []
+    e.beginGesture("Move Layers")
+    e.applyLive { try? $0.update("two") { $0.x = 40 } }
+    e.endGesture()
+    #expect(Set(log.measured) == ["two"])
+
+    log.measured = []
+    e.layOutAgain()
+    #expect(Set(log.measured) == ["first", "two"])
+    #expect(e.undoName == "Move Layers")
+}
+
+/// A document undo brings back from before `layOutAgain` was measured differently, so the next edit lays out every layer
+/// rather than only the ones it changed (#228).
+@Test func editsAfterUndoingPastLayOutAgainLayOutEveryLayer() throws {
+    final class Scale { var factor = 1.0 }
+    let scale = Scale()
+    let measure: TextMeasure = { text, maxWidth in
+        let size = fakeMeasure(text, maxWidth)
+        return Size(width: size.width * scale.factor, height: size.height)
+    }
+    var label = DesignNode(id: "label", type: .text)
+    label.text = DesignText(content: "abc", autoResize: .widthAndHeight)
+    var e = DesignEditor(document: DesignDocument(nodes: [label, DesignNode(id: "box", type: .rectangle)]), measure: measure)
+    try e.perform("Rename") { try $0.update("label") { $0.name = "Title" } }
+    // The fonts change: text now measures twice as wide.
+    scale.factor = 2
+    e.layOutAgain()
+    #expect(e.document.node("label")?.width == 60)
+    #expect(e.undo() && e.document.node("label")?.width == 30)
+    try e.perform("Move") { try $0.update("box") { $0.x = 10 } }
+    #expect(e.document.node("label")?.width == 60)
+}

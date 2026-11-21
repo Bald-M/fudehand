@@ -16,45 +16,70 @@ extension NodeType {
     }
 }
 
+/// The rows of the layers panel, published apart from the store. The store updates them after every edit, and they change
+/// only with what the rows show: moving or restyling layers on the canvas leaves the panel alone (#228).
+final class LayerOutline: ObservableObject {
+    /// A row carries only what it shows, so an edit that changes nothing shown leaves the rows equal.
+    struct Row: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let type: NodeType
+        let hasLayout: Bool
+        let visible: Bool
+        let locked: Bool
+        let hasChildren: Bool
+        let collapsed: Bool
+        let depth: Int
+    }
+
+    @Published private(set) var rows: [Row] = []
+    /// The number of layers, collapsed ones included.
+    @Published private(set) var count = 0
+
+    func update(_ index: DesignIndex, collapsed: Set<String>) {
+        var next: [Row] = []
+        next.reserveCapacity(rows.count)
+        func visit(_ nodes: [DesignNode], depth: Int) {
+            // Upper layers come first in the list.
+            for node in nodes.reversed() {
+                let isCollapsed = collapsed.contains(node.id)
+                next.append(Row(id: node.id, name: node.name, type: node.type, hasLayout: node.layout != nil, visible: node.visible,
+                                locked: node.locked, hasChildren: !node.children.isEmpty, collapsed: isCollapsed, depth: depth))
+                if !isCollapsed { visit(node.children, depth: depth + 1) }
+            }
+        }
+        visit(index.document.nodes, depth: 0)
+        if next != rows { rows = next }
+        if index.count != count { count = index.count }
+    }
+}
+
 /// The layers panel: the hierarchy tree (upper layers first, matching the canvas stacking order), show/hide, lock, rename, kept in sync with the canvas selection.
 struct LayersPanel: View {
-    @ObservedObject var store: FudehandStore
+    let store: FudehandStore
+    @ObservedObject private var outline: LayerOutline
+    @Environment(\.locale) private var locale
     @State private var renaming: String?
     @State private var draftName = ""
     @FocusState private var renameFocused: Bool
 
-    /// A row carries only its own properties (not the subtree), so the cost of comparing the list is linear in the number of layers.
-    private struct Row: Identifiable {
-        let node: DesignNode
-        let hasChildren: Bool
-        let depth: Int
-        var id: String { node.id }
+    init(store: FudehandStore) {
+        self.store = store
+        outline = store.layerOutline
     }
 
-    private var rows: [Row] {
-        var result: [Row] = []
-        func visit(_ nodes: [DesignNode], depth: Int) {
-            // Upper layers come first in the list.
-            for node in nodes.reversed() {
-                var shallow = node
-                shallow.children = []
-                result.append(Row(node: shallow, hasChildren: !node.children.isEmpty, depth: depth))
-                if !store.collapsedLayers.contains(node.id) { visit(node.children, depth: depth + 1) }
-            }
-        }
-        visit(store.document.nodes, depth: 0)
-        return result
-    }
+    private typealias Row = LayerOutline.Row
 
     var body: some View {
+        let _ = locale // Re-render when the UI language changes: the panel does not observe the store.
         VStack(spacing: 0) {
             HStack {
                 Text(L("Layers")).font(.headline)
                 Spacer()
-                Text("\(store.document.nodeCount)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                Text("\(outline.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }.padding(.horizontal, 14).padding(.vertical, 10)
             Divider()
-            if store.document.nodes.isEmpty {
+            if outline.rows.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "square.3.layers.3d").font(.title2).foregroundStyle(.secondary)
                     Text(L("No layers yet")).font(.callout)
@@ -64,7 +89,7 @@ struct LayersPanel: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(rows) { row in rowView(row) }
+                        ForEach(outline.rows) { row in rowView(row) }
                     }.padding(.vertical, 4)
                 }
             }
@@ -75,18 +100,17 @@ struct LayersPanel: View {
         SelectionReader(selection: store.layerSelection, id: row.id) { selected in rowView(row, selected: selected) }
     }
 
-    private func rowView(_ row: Row, selected: Bool) -> some View {
-        let node = row.node
-        return HStack(spacing: 4) {
-            Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
-            Button { store.setCollapsed(node.id, !store.collapsedLayers.contains(node.id)) } label: {
-                Image(systemName: store.collapsedLayers.contains(node.id) ? "chevron.right" : "chevron.down")
+    private func rowView(_ node: Row, selected: Bool) -> some View {
+        HStack(spacing: 4) {
+            Color.clear.frame(width: CGFloat(node.depth) * 14, height: 1)
+            Button { store.setCollapsed(node.id, !node.collapsed) } label: {
+                Image(systemName: node.collapsed ? "chevron.right" : "chevron.down")
                     .font(.system(size: 10, weight: .semibold)).frame(width: 16, height: 20).contentShape(Rectangle())
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
-            .opacity(row.hasChildren ? 1 : 0).disabled(!row.hasChildren)
-            .accessibilityLabel(store.collapsedLayers.contains(node.id) ? L("Expand") : L("Collapse"))
-            Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
+            .opacity(node.hasChildren ? 1 : 0).disabled(!node.hasChildren)
+            .accessibilityLabel(node.collapsed ? L("Expand") : L("Collapse"))
+            Image(systemName: node.hasLayout ? "square.split.1x2" : node.type.symbol)
                 .font(.system(size: 11)).frame(width: 16).foregroundStyle(selected ? Color.accentColor : .secondary)
             if renaming == node.id {
                 TextField(L("Name"), text: $draftName)
@@ -143,12 +167,12 @@ struct LayersPanel: View {
     }
 
     /// What Copy, Cut, and Duplicate in a row's context menu act on: the selection when the row is part of it, otherwise the row.
-    private func targets(_ node: DesignNode) -> Set<String> {
+    private func targets(_ node: Row) -> Set<String> {
         store.selection.contains(node.id) ? store.selection : [node.id]
     }
 
     /// Acts when the button goes down; the drag updates that follow the press are ignored.
-    private func press(_ node: DesignNode) {
+    private func press(_ node: Row) {
         guard let event = NSApp.currentEvent, event.type == .leftMouseDown else { return }
         let flags = event.modifierFlags
         switch LayerRowPress.resolve(id: node.id, selection: store.selection, clickCount: event.clickCount,
@@ -158,7 +182,7 @@ struct LayersPanel: View {
         }
     }
 
-    private func beginRename(_ node: DesignNode) {
+    private func beginRename(_ node: Row) {
         draftName = node.name
         renaming = node.id
         renameFocused = true

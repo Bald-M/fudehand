@@ -509,8 +509,8 @@ private func temporaryFile() -> URL {
     #expect(after["open"] as? Bool == false && after["frame"] is NSNull && dismissed == 1)
 }
 
-/// Selecting notifies only the views that observe the selection; the workspace and the layers panel body, which observe the store,
-/// are not recomputed (#142).
+/// Selecting notifies only the views that observe the selection; the workspace, which observes the store, is not recomputed
+/// (#142).
 @Test @MainActor func selectingNotifiesTheSelectionWithoutInvalidatingTheStore() {
     let store = makeStore()
     store.replace(DesignDocument(nodes: [DesignNode(id: "a", type: .rectangle), DesignNode(id: "b", type: .rectangle)]), url: nil)
@@ -523,6 +523,36 @@ private func temporaryFile() -> URL {
     #expect(store.selection == ["a", "b"] && store.layerSelection.ids == ["a", "b"])
     #expect(selectionChanges == 2)
     #expect(storeChanges == 0)
+    _ = observers
+}
+
+/// An edit notifies the views that show the document, but not the store's observers (the editor window and its toolbar), and
+/// notifies the layers panel only when its rows change (#228).
+@Test @MainActor func editsNotifyOnlyTheViewsShowingWhatChanged() throws {
+    let store = makeStore()
+    store.replace(DesignDocument(nodes: [DesignNode(id: "a", type: .rectangle, name: "A"), DesignNode(id: "b", type: .rectangle, name: "B")]),
+                  url: nil)
+    #expect(store.layerOutline.rows.map(\.name) == ["B", "A"] && store.layerOutline.count == 2)
+    // The first edit marks the document edited, which the window title shows.
+    var storeChanges = 0, documentChanges = 0, outlineChanges = 0
+    let observers = [store.objectWillChange.sink { storeChanges += 1 },
+                     store.displayed.objectWillChange.sink { documentChanges += 1 },
+                     store.layerOutline.objectWillChange.sink { outlineChanges += 1 }]
+    store.canvasNudge(["a"], by: Point(x: 1, y: 0))
+    #expect(store.isDirty && storeChanges == 1 && documentChanges == 1 && outlineChanges == 0)
+
+    store.canvasNudge(["a"], by: Point(x: 1, y: 0))
+    store.undo()
+    #expect(store.document.node("a")?.x == 1)
+    #expect(storeChanges == 1 && documentChanges == 3 && outlineChanges == 0)
+
+    store.updateNode("b", "Rename Layer") { $0.name = "Second" }
+    #expect(store.layerOutline.rows.map(\.name) == ["Second", "A"] && outlineChanges == 1)
+    store.setCollapsed("b", true)
+    #expect(store.layerOutline.rows.first?.collapsed == true && outlineChanges == 2)
+    store.undo()
+    store.undo()
+    #expect(!store.isDirty && storeChanges >= 2)
     _ = observers
 }
 
