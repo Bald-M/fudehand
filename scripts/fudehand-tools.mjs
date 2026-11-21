@@ -292,9 +292,9 @@ export const tools = [
     'Delete a provider\'s API key from the Keychain. If the selected conversation used that provider, it switches to another provider that has a key. Returns the previous masked hint; applies from the next message.',
     provider),
   controlTool('settings_get_connectors', 'get_connectors',
-    'Check and read the MCP connectors: whether the Fudehand MCP server is registered with Claude Code, Codex, and DeepSeek Harness (connected, disconnected, registered to another checkout, or the Agent is not installed).'),
+    'Check and read the MCP connectors: whether the Fudehand MCP server is registered with Claude Code, Codex, and DeepSeek Harness (connected, disconnected, registered to another location or with a Node.js that no longer exists, or the Agent is not installed), and the Node.js the server runs on (found, too old, or missing, with what to install).'),
   controlTool('settings_set_connector', 'set_connector',
-    'Connect or disconnect an MCP connector: register the Fudehand MCP server in that Agent\'s user-level configuration, or remove it. Returns the new and previous status and the command run or file changed; the Agent picks the change up in new sessions.',
+    'Connect or disconnect an MCP connector: register the Fudehand MCP server in that Agent\'s user-level configuration, or remove it. Connecting a connector registered to another location points it at this App instead. Needs Node.js (see settings_get_connectors). Returns the new and previous status and the command run or file changed; the Agent picks the change up in new sessions.',
     {
       connector: { type: 'string', enum: ['claude', 'codex', 'deepseek'], description: 'claude (Claude Code), codex (Codex), or deepseek (DeepSeek Harness)' },
       connected: { type: 'boolean', description: 'true to connect, false to disconnect' },

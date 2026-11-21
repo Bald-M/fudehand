@@ -25,12 +25,18 @@ private actor FakeCodex {
         }
     }
     func failAdd() { failNextAdd = true }
+    func register(_ command: [String]) { registered = command }
 }
 
+/// `node --version` of a Node.js that the connectors accept.
+private let nodeVersion = CommandResult(exitCode: 0, output: Data("v22.14.0\n".utf8), error: "")
+
 @MainActor
-private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(fileURLWithPath: "/repo")) -> ConnectorsModel {
+private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(fileURLWithPath: "/repo"), hasNode: Bool = true) -> ConnectorsModel {
     ConnectorsModel(root: root, runtime: WorkspaceLocation(root: "/repo", node: nil, path: "/tools"), inherited: ["PATH": "/usr/bin"],
-                    claudeConfig: claudeConfig, isExecutable: { $0 == "/tools/codex" }) { executable, arguments, environment in
+                    home: "/nonexistent-home", claudeConfig: claudeConfig, isExecutable: { $0 == "/tools/codex" || (hasNode && $0 == "/tools/node") },
+                    loginPath: { nil }) { executable, arguments, environment in
+        if executable == "/tools/node" { return nodeVersion }
         precondition(executable == "/tools/codex" && environment["PATH"]?.hasPrefix("/tools:/usr/bin") == true)
         return await codex.run(arguments)
     }
@@ -45,7 +51,9 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
 
     await model.connect(.codex)
     #expect(model.entries[.codex] == .init(status: .connected, busy: false, error: nil))
-    #expect(await codex.calls.contains(["mcp", "add", "fudehand", "--", "node", "/repo/scripts/mcp-server.mjs"]))
+    // Registered with the absolute Node path found on the search path.
+    #expect(await codex.calls.contains(["mcp", "add", "fudehand", "--", "/tools/node", "/repo/scripts/mcp-server.mjs"]))
+    #expect(model.node == .found(path: "/tools/node", version: "22.14.0"))
 
     await model.disconnect(.codex)
     #expect(model.entries[.codex]?.status == .disconnected)
@@ -68,8 +76,8 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
     defer { try? FileManager.default.removeItem(at: directory) }
     let config = directory.appendingPathComponent(".claude.json")
     try Data(#"{"mcpServers":{"fudehand":{"command":"node","args":["/repo/scripts/mcp-server.mjs"]}}}"#.utf8).write(to: config)
-    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools"], claudeConfig: config,
-                                isExecutable: { $0 == "/tools/claude" }) { _, _, _ in CommandResult(exitCode: 0, output: Data(), error: "") }
+    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools"], home: "/nonexistent-home", claudeConfig: config,
+                                isExecutable: { $0 == "/tools/claude" }, loginPath: { nil }) { _, _, _ in CommandResult(exitCode: 0, output: Data(), error: "") }
     await model.refresh()
     #expect(model.entries[.claude]?.status == .connected)
     #expect(model.entries[.codex]?.status == .unavailable)
@@ -77,7 +85,8 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
 
 @Test @MainActor func connectorsShowCodexDetectionFailures() async {
     let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools"],
-                                claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), isExecutable: { $0 == "/tools/codex" }) { _, _, _ in
+                                home: "/nonexistent-home", claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), isExecutable: { $0 == "/tools/codex" },
+                                loginPath: { nil }) { _, _, _ in
         CommandResult(exitCode: 1, output: Data(), error: "Error: invalid config.toml")
     }
     await model.refresh()
@@ -92,7 +101,9 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
     try Data(#"{"mcpServers":{"fudehand":{"command":"node","args":["/repo/scripts/mcp-server.mjs"]}}}"#.utf8)
         .write(to: directory.appendingPathComponent(".claude.json"))
     let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools", "CLAUDE_CONFIG_DIR": directory.path],
-                                isExecutable: { $0 == "/tools/claude" }) { _, _, _ in CommandResult(exitCode: 0, output: Data(), error: "") }
+                                home: "/nonexistent-home", isExecutable: { $0 == "/tools/claude" }, loginPath: { nil }) { _, _, _ in
+        CommandResult(exitCode: 0, output: Data(), error: "")
+    }
     await model.refresh()
     #expect(model.entries[.claude]?.status == .connected)
 }
@@ -100,9 +111,10 @@ private func makeModel(_ codex: FakeCodex, claudeConfig: URL, root: URL? = URL(f
 @MainActor
 private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", installed: Bool = true) -> ConnectorsModel {
     ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: WorkspaceLocation(root: "/repo", node: node, path: "/tools"),
-                    inherited: ["PATH": "/usr/bin", "DSH_HOME": home.path], claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"),
-                    isExecutable: { installed && $0 == "/tools/dsh" }) { _, _, _ in
-        preconditionFailure("DeepSeek Harness is configured through its patch file, not a command")
+                    inherited: ["PATH": "/usr/bin", "DSH_HOME": home.path], home: "/nonexistent-home", claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"),
+                    isExecutable: { (installed && $0 == "/tools/dsh") || $0 == node || $0 == "/tools/node" }, loginPath: { nil }) { executable, _, _ in
+        precondition(executable.hasSuffix("/node"), "DeepSeek Harness is configured through its patch file, not a command")
+        return nodeVersion
     }
 }
 
@@ -141,11 +153,11 @@ private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", 
     let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: home) }
     let patch = home.appendingPathComponent("cordis.patch.yml")
-    // Without a recorded Node path the entry falls back to `node`.
+    // Without a recorded Node path, the Node found on the search path is written.
     let model = makeDeepseekModel(home: home, node: nil)
     await model.connect(.deepseek)
     #expect(model.entries[.deepseek]?.status == .connected)
-    #expect(try String(contentsOf: patch, encoding: .utf8).contains(#"command: "node""#))
+    #expect(try String(contentsOf: patch, encoding: .utf8).contains(#"command: "/tools/node""#))
     #expect(try FileManager.default.attributesOfItem(atPath: patch.path)[.posixPermissions] as? Int == 0o600)
 
     await model.disconnect(.deepseek)
@@ -203,4 +215,53 @@ private func makeDeepseekModel(home: URL, node: String? = "/opt/node/bin/node", 
         #expect(painted > 48 * 48 / 10, "\(name)")
         #expect(painted < 48 * 48, "\(name)")
     }
+}
+
+
+@Test @MainActor func connectorsExplainMissingNodeAndRefuseToConnect() async {
+    let codex = FakeCodex()
+    let model = makeModel(codex, claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), hasNode: false)
+    await model.refresh()
+    #expect(model.node == .missing)
+    #expect(model.nodeProblem?.english.hasPrefix("Fudehand's MCP server needs Node.js 22.12 or later, which was not found") == true)
+    let outcome = await model.connect(.codex)
+    #expect(outcome.error == model.nodeProblem?.english)
+    #expect(model.entries[.codex]?.status == .disconnected)
+    #expect(await !codex.calls.contains { $0.starts(with: ["mcp", "add"]) })
+}
+
+@Test @MainActor func connectorsReportANodeThatIsTooOld() async {
+    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/old:/tools"], home: "/nonexistent-home",
+                                claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), isExecutable: { $0 == "/old/node" },
+                                loginPath: { nil }) { _, _, _ in CommandResult(exitCode: 0, output: Data("v20.11.1\n".utf8), error: "") }
+    await model.refresh()
+    #expect(model.node == .tooOld(path: "/old/node", version: "20.11.1"))
+    #expect(model.nodeProblem?.english == "Fudehand's MCP server needs Node.js 22.12 or later, but /old/node is version 20.11.1. Update Node.js, then refresh.")
+}
+
+@Test @MainActor func connectorsFindNodeAndClisOnTheLoginShellPath() async {
+    // Opened from Finder: the inherited PATH is minimal, and Node and codex are only on the login shell's PATH.
+    let codex = FakeCodex()
+    let model = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/usr/bin:/bin"], home: "/nonexistent-home",
+                                claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"),
+                                isExecutable: { $0 == "/custom/bin/node" || $0 == "/custom/bin/codex" }, loginPath: { "/custom/bin:/usr/bin" }) { executable, arguments, _ in
+        executable == "/custom/bin/node" ? nodeVersion : await codex.run(arguments)
+    }
+    await model.refresh()
+    #expect(model.node == .found(path: "/custom/bin/node", version: "22.14.0"))
+    #expect(model.entries[.codex]?.status == .disconnected)
+}
+
+@Test @MainActor func connectorsPointARegistrationElsewhereAtThisApp() async {
+    let codex = FakeCodex()
+    await codex.register(["node", "/old/Fudehand.app/scripts/mcp-server.mjs"])
+    let model = makeModel(codex, claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"))
+    await model.refresh()
+    #expect(model.entries[.codex]?.status == .elsewhere("node /old/Fudehand.app/scripts/mcp-server.mjs"))
+    let outcome = await model.connect(.codex)
+    #expect(outcome.error == nil)
+    #expect(model.entries[.codex]?.status == .connected)
+    // `mcp add` refuses an existing name, so the old registration is removed first.
+    #expect(await codex.calls.suffix(3) == [["mcp", "remove", "fudehand"], ["mcp", "add", "fudehand", "--", "/tools/node", "/repo/scripts/mcp-server.mjs"],
+                                            ["mcp", "get", "fudehand", "--json"]])
 }

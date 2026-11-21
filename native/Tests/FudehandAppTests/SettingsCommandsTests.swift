@@ -166,19 +166,23 @@ private actor FakeCodex {
 @Test @MainActor func settingsToolsConnectAndDisconnectConnectorsAndReportWhatChanged() async throws {
     let codex = FakeCodex()
     let connectors = ConnectorsModel(root: URL(fileURLWithPath: "/repo"), runtime: nil, inherited: ["PATH": "/tools", "DSH_HOME": "/nonexistent"],
-                                     claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"), isExecutable: { $0 == "/tools/codex" }) { _, arguments, _ in
-        await codex.run(arguments)
+                                     home: "/nonexistent-home", claudeConfig: URL(fileURLWithPath: "/nonexistent/.claude.json"),
+                                     isExecutable: { $0 == "/tools/codex" || $0 == "/tools/node" }, loginPath: { nil }) { executable, arguments, _ in
+        executable == "/tools/node" ? CommandResult(exitCode: 0, output: Data("v22.14.0".utf8), error: "") : await codex.run(arguments)
     }
     let fixture = Fixture(connectors: connectors)
 
     let read = try await fixture.run(.getConnectors)
     let states = try #require(read["connectors"] as? [[String: Any]])
     #expect(states.map { $0["status"] as? String } == ["unavailable", "disconnected", "unavailable"])
+    let node = try #require(read["node"] as? [String: Any])
+    #expect(node["status"] as? String == "found" && node["path"] as? String == "/tools/node" && node["version"] as? String == "22.14.0")
+    #expect(node["minimumVersion"] as? String == "22.12" && node["problem"] == nil)
 
     let connected = try await fixture.run(.setConnector(.codex, connected: true))
     #expect((connected["connector"] as? [String: Any])?["status"] as? String == "connected")
     #expect((connected["previous"] as? [String: Any])?["status"] as? String == "disconnected")
-    #expect(connected["command"] as? [String] == ["/tools/codex", "mcp", "add", "fudehand", "--", "node", "/repo/scripts/mcp-server.mjs"])
+    #expect(connected["command"] as? [String] == ["/tools/codex", "mcp", "add", "fudehand", "--", "/tools/node", "/repo/scripts/mcp-server.mjs"])
     // The window shows the same state.
     #expect(connectors.entries[.codex]?.status == .connected)
 
@@ -188,6 +192,6 @@ private actor FakeCodex {
 
     await codex.failNextAdds()
     #expect(await fixture.failure(.setConnector(.codex, connected: true))
-            == "Connection failed: Error: config is read-only (ran: /tools/codex mcp add fudehand -- node /repo/scripts/mcp-server.mjs)")
+            == "Connection failed: Error: config is read-only (ran: /tools/codex mcp add fudehand -- /tools/node /repo/scripts/mcp-server.mjs)")
     #expect(await fixture.failure(.setConnector(.claude, connected: true)) == "The claude command was not found; install Claude Code first")
 }

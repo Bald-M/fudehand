@@ -94,6 +94,8 @@ _Avoid_: example (示例), work template (作品模板) (these refer to the remo
 _Avoid_: design system (设计系统) for the docs page (the "Design system" frame shows the foundations), theme (主题)
 
 **MCP connector (MCP 连接器 / MCP 連接器)**: The window opened from the app menu's *MCP Connectors… (MCP 连接器…)*. It detects whether the MCP server is registered in the user-level configuration of Claude Code, Codex, and DeepSeek Harness, and connects or disconnects it with one click (through the CLI for Claude Code and Codex; for DeepSeek Harness, which has no such command, by editing a marked block in its home patch file `~/.dsh/cordis.patch.yml`).
+
+**Bundled tools (内置工具 / 內建工具)**: The Node scripts a built App carries in `Contents/Resources/Tools` (the MCP server, the Agent harness, the scripts they import, `styles/`, and production `node_modules`). Without a source checkout the App copies them to `~/Library/Application Support/fudehand/tools` and runs them from there with the Node.js installed on the Mac; Node itself is not bundled.
 _Avoid_: plugin (插件), integration (集成)
 
 **Control channel (控制通道 / 控制通道)**: A local Unix socket, open only to the current user while the App is running, through which external processes read and edit the design document, control the viewport, and take screenshots.

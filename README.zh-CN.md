@@ -54,7 +54,9 @@ Node 只用于 MCP server 和对话面板背后的 Agent harness。App 没有第
 
 ## 快速开始
 
-没有预编译安装包，需要在自己的 Mac 上从源码构建。
+只想使用 App 的话，用磁盘映像（`Fudehand-<版本>.dmg`）即可：把 Fudehand 拖进“应用程序”。需要 macOS 14 或更高版本；MCP 连接器和对话面板还需要 Node.js 22.12 或更高版本（从 [nodejs.org](https://nodejs.org) 下载，或 `brew install node`），不需要 Swift、pnpm 和源码。App 自带 MCP server 和对话面板的 Agent harness，启动时复制到 `~/Library/Application Support/fudehand/tools`，所以移动或升级 App 后 Agent 连接仍然可用。磁盘映像用 `pnpm package:native` 构建，只做了临时签名，第一次打开需要右键 → *打开*。
+
+从源码构建：
 
 ```bash
 pnpm install
@@ -62,7 +64,7 @@ pnpm build:native        # Release 构建并 ad-hoc 签名 → dist/Fudehand.app
 open dist/Fudehand.app
 ```
 
-`dist/Fudehand.app` 可以拖进“应用程序”文件夹。但请保留本检出目录：对话面板和 MCP 连接器要用到构建时的源码目录。
+`dist/Fudehand.app` 可以拖进“应用程序”文件夹。这样构建的 App 在本检出目录存在时使用其中的脚本，改了脚本不用重新构建；检出目录不在时，使用 App 自带的副本。
 
 ## 使用 App
 
@@ -85,7 +87,7 @@ Agent 通过一组设计工具工作，MCP server 和 App 内的对话面板共�
 
 ### 连接 Agent
 
-最快的方式是应用菜单的 *Fudehand → MCP 连接器…*。窗口里显示 Claude Code 和 Codex 是否已连接；点“连接”，App 会把本检出目录的 MCP server 注册到该 Agent 的用户级配置里（通过 `claude mcp add --scope user` 或 `codex mcp add`），点“断开连接”则移除注册。本机没有安装对应 CLI 的 Agent 会显示为不可用。新建立的连接在之后打开的 Agent 会话中生效。
+最快的方式是应用菜单的 *Fudehand → MCP 连接器…*。窗口里显示 Claude Code、Codex 和 DeepSeek Harness 是否已连接；点“连接”，App 会把自己的 MCP server（用找到的 Node.js 的绝对路径启动）注册到该 Agent 的用户级配置里（通过 `claude mcp add --scope user` 或 `codex mcp add`；DeepSeek Harness 则在 `~/.dsh/cordis.patch.yml` 中加入一段带标记的配置，文件其余部分保持不变），点“断开连接”则移除注册。App 会在登录 shell 的 `PATH` 和常见安装位置（Homebrew、`/usr/local/bin`、`~/.local/bin`、nvm、Volta 以及 DeepSeek Harness 应用包内）查找各 Agent 的命令和 Node.js，所以从访达打开也能找到。本机没有安装的 Agent 显示为不可用；没有 Node.js 或版本低于 22.12 时，窗口会说明缺什么、怎么装。指向其他位置（其他检出目录，或已不存在的 Node.js）的注册显示为橙色，点“更新”即可改为指向本 App。新建立的连接在之后打开的 Agent 会话中生效。
 
 ![MCP 连接器窗口：列出 Claude Code、Codex 与 DeepSeek Harness，各自带图标、连接状态和连接或断开连接按钮](docs/evidence/readme-mcp-connectors-zh-light.jpg)
 
@@ -187,6 +189,7 @@ Fudehand 不能导入或导出 Figma 文件。
 ```bash
 pnpm dev               # Debug 构建并打开 App
 pnpm build:native      # Release 构建并 ad-hoc 签名 → dist/Fudehand.app
+pnpm package:native    # 不依赖本检出目录的 App，打包为 dist/Fudehand-<版本>.dmg
 pnpm test:native       # Swift 测试：FudehandCoreTests 与 FudehandAppTests
 pnpm bench:native      # 大文档下的画布拖动与悬停基准（release 构建）
 pnpm check             # Vitest：MCP 工具、MCP server 与对话 harness

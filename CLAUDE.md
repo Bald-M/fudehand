@@ -29,6 +29,7 @@ Requires macOS 14+, Swift 6 (the Command Line Tools are enough; no third-party S
 pnpm install
 pnpm dev               # build the app in debug and open it
 pnpm build:native      # release build + ad-hoc signing → dist/Fudehand.app
+pnpm package:native    # distributable App (no workspace.json, carries the Node tools) → dist/Fudehand-<version>.dmg
 pnpm test:native       # run swift test on native/ (FudehandCoreTests + FudehandAppTests)
 pnpm bench:native      # release-build canvas drag/hover and layer selection benchmarks on 510–5100 layers (prints [bench] lines)
 pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness

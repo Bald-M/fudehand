@@ -66,7 +66,7 @@ extension FudehandStore {
             return ["provider": providerSettings(id), "previous": previous, "inUse": chat.settings.provider, "note": nextMessageNote]
         case .getConnectors:
             await connectors.refresh()
-            return ["connectors": AgentConnector.allCases.map(connectorState)]
+            return ["connectors": AgentConnector.allCases.map(connectorState), "node": nodeState()]
         case .setConnector(let connector, let connected):
             await connectors.refresh()
             let previous = connectorState(connector)
@@ -124,6 +124,20 @@ extension FudehandStore {
 
     private func modelSettings() -> [String: Any] {
         ["inUse": chat.settings.provider, "providers": ChatSettings.providers.map { providerSettings($0.id) }]
+    }
+
+    /// The Node.js the MCP server runs on, as the MCP Connectors window shows it.
+    private func nodeState() -> [String: Any] {
+        var state: [String: Any]
+        switch connectors.node {
+        case .found(let path, let version): state = ["status": "found", "path": path, "version": version]
+        case .tooOld(let path, let version): state = ["status": "tooOld", "path": path, "version": version]
+        case .missing: state = ["status": "missing"]
+        case nil: state = ["status": "checking"]
+        }
+        state["minimumVersion"] = NodeRuntime.minimumText
+        if let problem = connectors.nodeProblem { state["problem"] = problem.english }
+        return state
     }
 
     private func connectorState(_ connector: AgentConnector) -> [String: Any] {

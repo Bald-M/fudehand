@@ -30,39 +30,50 @@ final class ConnectorsModel: ObservableObject {
     }
 
     @Published private(set) var entries: [AgentConnector: Entry] = Dictionary(uniqueKeysWithValues: AgentConnector.allCases.map { ($0, Entry()) })
+    /// The Node.js the MCP server runs on; nil until the first refresh has looked for it.
+    @Published private(set) var node: NodeStatus?
 
-    /// This checkout's `scripts/mcp-server.mjs`; nil when the source directory cannot be found.
+    /// The App's `scripts/mcp-server.mjs` (in the source checkout, or the installed copy of the bundled tools); nil when neither is found.
     let script: String?
-    private let environment: [String: String]
+    private var environment: [String: String]
     private let claudeConfig: URL
-    /// DeepSeek Harness's home patch file, and the Node the entry written there starts the MCP server with.
+    /// DeepSeek Harness's home patch file.
     private let deepseekPatch: URL
-    private let node: String
+    /// The Node recorded at build time (source builds only); tried first.
+    private let recordedNode: String?
+    private let searchPath: (_ login: String?) -> String
+    private var loginPathRead = false
+    private let loginPath: @Sendable () async -> String?
     private let isExecutable: (String) -> Bool
     private let run: Runner
 
     init(root: URL?, runtime: WorkspaceLocation?, inherited: [String: String] = ProcessInfo.processInfo.environment,
-         claudeConfig: URL? = nil,
+         home: String = NSHomeDirectory(), claudeConfig: URL? = nil,
          isExecutable: @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
+         loginPath: @escaping @Sendable () async -> String? = ConnectorsModel.readLoginShellPath,
          run: @escaping Runner = ConnectorsModel.runProcess) {
         script = root?.appendingPathComponent("scripts/mcp-server.mjs").path
-        var environment = inherited
-        // PATH is very short when opened from Finder; add the PATH recorded at build time so Node CLIs such as claude can find node.
-        environment["PATH"] = [runtime?.path, inherited["PATH"], "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
-            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ":")
-        self.environment = environment
+        // PATH is very short when opened from Finder: search the PATH recorded at build time, the login shell's PATH, and the usual install
+        // locations, for the Agent CLIs, for Node, and for Node CLIs such as claude that look for node on the PATH.
+        let nvm = (try? FileManager.default.contentsOfDirectory(atPath: home + "/.nvm/versions/node")) ?? []
+        searchPath = { ToolSearchPath.compose(recorded: runtime?.path, login: $0, inherited: inherited["PATH"], home: home, nvmVersions: nvm) }
+        environment = inherited
+        environment["PATH"] = searchPath(nil)
         // When CLAUDE_CONFIG_DIR is set, the claude CLI writes the user-level configuration under that directory.
-        self.claudeConfig = claudeConfig ?? URL(fileURLWithPath: inherited["CLAUDE_CONFIG_DIR"] ?? FileManager.default.homeDirectoryForCurrentUser.path)
-            .appendingPathComponent(".claude.json")
-        // DeepSeek Harness starts MCP servers with the PATH it was launched with, which from Finder does not include Node: write the absolute path.
-        node = runtime?.node ?? "node"
-        deepseekPatch = URL(fileURLWithPath: inherited["DSH_HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh").path)
-            .appendingPathComponent("cordis.patch.yml")
+        self.claudeConfig = claudeConfig ?? URL(fileURLWithPath: inherited["CLAUDE_CONFIG_DIR"] ?? home).appendingPathComponent(".claude.json")
+        recordedNode = runtime?.node
+        deepseekPatch = URL(fileURLWithPath: inherited["DSH_HOME"] ?? home + "/.dsh").appendingPathComponent("cordis.patch.yml")
+        self.loginPath = loginPath
         self.isExecutable = isExecutable
         self.run = run
     }
 
     func refresh() async {
+        if !loginPathRead {
+            loginPathRead = true
+            if let login = await loginPath() { environment["PATH"] = searchPath(login) }
+        }
+        await findNode()
         for connector in AgentConnector.allCases where entries[connector]?.busy == false {
             fail(connector, nil)
             await refresh(connector)
@@ -75,11 +86,47 @@ final class ConnectorsModel: ObservableObject {
             fail(connector, (L("Cannot find the Fudehand source directory, so it cannot connect"), "Cannot find the Fudehand source directory, so it cannot connect"))
             return ConnectorOutcome(error: entries[connector]?.englishError)
         }
+        if node == nil { await findNode() }
+        // Registered with the absolute path: an Agent opened from Finder or the Dock may not have Node on its PATH.
+        guard let node = node?.path else {
+            let message = nodeProblem ?? (L("Node.js was not found."), "Node.js was not found.")
+            fail(connector, message)
+            return ConnectorOutcome(error: message.english)
+        }
         if connector == .deepseek {
-            let node = node
             return await editDeepseekPatch(failure: (L("Connection failed"), "Connection failed")) { AgentConnector.deepseekConnecting(patch: $0, node: node, script: script) }
         }
-        return await perform(connector, connector.addArguments(script: script), failure: (L("Connection failed"), "Connection failed"))
+        // `mcp add` refuses a name that is already registered: an old registration is removed first.
+        var commands = [connector.addArguments(node: node, script: script)]
+        if case .elsewhere = entries[connector]?.status { commands.insert(connector.removeArguments, at: 0) }
+        return await perform(connector, commands, failure: (L("Connection failed"), "Connection failed"))
+    }
+
+    /// Why the MCP server cannot run, localized for the window and in English for the Agent tools; nil when a supported Node was found.
+    var nodeProblem: (local: String, english: String)? {
+        switch node {
+        case .missing:
+            (L("Fudehand’s MCP server needs Node.js %@ or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then click Refresh.", NodeRuntime.minimumText),
+             "Fudehand's MCP server needs Node.js \(NodeRuntime.minimumText) or later, which was not found on this Mac. Install it from nodejs.org or with Homebrew (brew install node), then refresh.")
+        case .tooOld(let path, let version):
+            (L("Fudehand’s MCP server needs Node.js %1$@ or later, but %2$@ is version %3$@. Update Node.js, then click Refresh.", NodeRuntime.minimumText, path, version),
+             "Fudehand's MCP server needs Node.js \(NodeRuntime.minimumText) or later, but \(path) is version \(version). Update Node.js, then refresh.")
+        case .found, nil: nil
+        }
+    }
+
+    /// Looks for a supported Node on the search path, preferring the one recorded at build time.
+    private func findNode() async {
+        var seen = Set<String>()
+        let candidates = ([recordedNode].compactMap { $0 } + (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/node" })
+            .filter { seen.insert($0).inserted && isExecutable($0) }
+        var results: [(path: String, output: String?)] = []
+        for candidate in candidates {
+            let result = await run(candidate, ["--version"], environment)
+            results.append((candidate, result.exitCode == 0 ? String(decoding: result.output, as: UTF8.self) : nil))
+            if case .found = NodeRuntime.pick(results) { break }
+        }
+        node = NodeRuntime.pick(results)
     }
 
     @discardableResult
@@ -87,7 +134,7 @@ final class ConnectorsModel: ObservableObject {
         if connector == .deepseek {
             return await editDeepseekPatch(failure: (L("Disconnect failed"), "Disconnect failed")) { $0.flatMap(AgentConnector.deepseekDisconnecting) }
         }
-        return await perform(connector, connector.removeArguments, failure: (L("Disconnect failed"), "Disconnect failed"))
+        return await perform(connector, [connector.removeArguments], failure: (L("Disconnect failed"), "Disconnect failed"))
     }
 
     /// The connector's CLI, or why the connector cannot be changed now, in English.
@@ -99,8 +146,9 @@ final class ConnectorsModel: ObservableObject {
 
     private struct ConnectorUnavailable: Error { let reason: String }
 
+    /// Runs `commands` in order, stopping at the first that fails; the outcome names the last one run.
     /// `failure` is the message's start, localized for the window and in English for the Agent tool.
-    private func perform(_ connector: AgentConnector, _ arguments: [String], failure: (local: String, english: String)) async -> ConnectorOutcome {
+    private func perform(_ connector: AgentConnector, _ commands: [[String]], failure: (local: String, english: String)) async -> ConnectorOutcome {
         let executable: String
         switch available(connector) {
         case .success(let found): executable = found
@@ -108,13 +156,16 @@ final class ConnectorsModel: ObservableObject {
         }
         entries[connector]?.busy = true
         fail(connector, nil)
-        let result = await run(executable, arguments, environment)
-        var outcome = ConnectorOutcome(command: [executable] + arguments)
-        if result.exitCode != 0 {
+        var outcome = ConnectorOutcome()
+        for arguments in commands {
+            let result = await run(executable, arguments, environment)
+            outcome.command = [executable] + arguments
+            guard result.exitCode != 0 else { continue }
             let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
             fail(connector, detail.isEmpty ? (L("%1$@ (%2$d)", failure.local, result.exitCode), "\(failure.english) (\(result.exitCode))")
                                            : (L("%1$@: %2$@", failure.local, detail), "\(failure.english): \(detail)"))
             outcome.error = entries[connector]?.englishError
+            break
         }
         await refresh(connector)
         entries[connector]?.busy = false
@@ -158,14 +209,15 @@ final class ConnectorsModel: ObservableObject {
     private func refresh(_ connector: AgentConnector) async {
         guard let executable = locate(connector) else { entries[connector]?.status = .unavailable; return }
         let script = script ?? ""
+        let exists = isExecutable
         switch connector {
         case .claude:
             let config = claudeConfig
             let data = await Task.detached { try? Data(contentsOf: config) }.value
-            entries[connector]?.status = AgentConnector.claudeStatus(config: data, script: script)
+            entries[connector]?.status = AgentConnector.claudeStatus(config: data, script: script, commandExists: exists)
         case .codex:
             let result = await run(executable, connector.statusArguments ?? [], environment)
-            entries[connector]?.status = AgentConnector.codexStatus(output: result.output, exitCode: result.exitCode, script: script)
+            entries[connector]?.status = AgentConnector.codexStatus(output: result.output, exitCode: result.exitCode, script: script, commandExists: exists)
             // When not registered, codex reports "No MCP server named"; other failures (such as a corrupted configuration file) must be shown rather than only showing not connected.
             if result.exitCode != 0, !result.error.contains("No MCP server named"), entries[connector]?.error == nil {
                 let detail = result.error.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -176,7 +228,7 @@ final class ConnectorsModel: ObservableObject {
         case .deepseek:
             let file = deepseekPatch
             let patch = await Task.detached { try? String(contentsOf: file, encoding: .utf8) }.value
-            entries[connector]?.status = AgentConnector.deepseekStatus(patch: patch, script: script)
+            entries[connector]?.status = AgentConnector.deepseekStatus(patch: patch, script: script, commandExists: exists)
         }
     }
 
@@ -190,7 +242,19 @@ final class ConnectorsModel: ObservableObject {
         connector.locate(path: environment["PATH"] ?? "", isExecutable: isExecutable)
     }
 
+    /// The login shell's PATH, which holds what the user's profile adds (Homebrew, a custom npm prefix); nil when it does not answer in time.
+    nonisolated static func readLoginShellPath() async -> String? {
+        let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.hasPrefix("/") ? $0 : nil } ?? "/bin/zsh"
+        let result = await runProcess(shell, ToolSearchPath.shellArguments, ProcessInfo.processInfo.environment, timeout: 5)
+        return result.exitCode == 0 ? ToolSearchPath.loginPath(fromShellOutput: String(decoding: result.output, as: UTF8.self)) : nil
+    }
+
     nonisolated static func runProcess(_ executable: String, _ arguments: [String], _ environment: [String: String]) async -> CommandResult {
+        await runProcess(executable, arguments, environment, timeout: nil)
+    }
+
+    /// `timeout`: seconds after which the child is terminated.
+    nonisolated static func runProcess(_ executable: String, _ arguments: [String], _ environment: [String: String], timeout: TimeInterval?) async -> CommandResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let child = Process()
@@ -205,6 +269,9 @@ final class ConnectorsModel: ObservableObject {
                 do { try child.run() } catch {
                     continuation.resume(returning: CommandResult(exitCode: -1, output: Data(), error: error.localizedDescription))
                     return
+                }
+                if let timeout {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if child.isRunning { child.terminate() } }
                 }
                 // Read all of stderr in the background first, so the child process does not block when either pipe fills up.
                 var errorData = Data()
@@ -231,6 +298,11 @@ struct ConnectorsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L("Connect Fudehand’s design tools to external Agents. Once connected, an Agent can read and edit the design document open in the App."))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if model.script != nil, let problem = model.nodeProblem {
+                Label(problem.local, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.primary).symbolRenderingMode(.multicolor)
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
             VStack(spacing: 0) {
                 ForEach(Array(AgentConnector.allCases.enumerated()), id: \.element) { index, connector in
                     if index > 0 { Divider() }
@@ -273,9 +345,13 @@ private struct ConnectorRow: View {
             Spacer(minLength: 12)
             if entry.busy || entry.status == nil {
                 ProgressView().controlSize(.small).frame(height: 22)
-            } else if let action {
-                Button(action.title) { Task { await action.run() } }
-                    .disabled(entry.status == .disconnected && model.script == nil)
+            } else {
+                HStack(spacing: 6) {
+                    ForEach(actions, id: \.title) { action in
+                        Button(action.title) { Task { await action.run() } }
+                            .disabled(action.connects && (model.script == nil || model.node?.path == nil))
+                    }
+                }
             }
         }
         .padding(12)
@@ -304,7 +380,7 @@ private struct ConnectorRow: View {
         case .unavailable: L("The %1$@ command was not found. Install %2$@ first.", connector.executable, connector.title)
         case .disconnected: L("Not connected")
         case .connected: L("Connected")
-        case .elsewhere(let command): L("Registered to another directory: %@. Disconnect to reconnect it to this one.", command)
+        case .elsewhere(let command): L("Registered to another location: %@. Update points it at this App.", command)
         }
     }
 
@@ -316,11 +392,14 @@ private struct ConnectorRow: View {
         }
     }
 
-    private var action: (title: String, run: () async -> Void)? {
-        switch entry.status {
-        case .disconnected: (L("Connect"), { await model.connect(connector) })
-        case .connected, .elsewhere: (L("Disconnect"), { await model.disconnect(connector) })
-        default: nil
+    /// `connects`: the action registers this App's MCP server, so it needs the server and Node.
+    private var actions: [(title: String, connects: Bool, run: () async -> Void)] {
+        let connect: () async -> Void = { await model.connect(connector) }, disconnect: () async -> Void = { await model.disconnect(connector) }
+        return switch entry.status {
+        case .disconnected: [(L("Connect"), true, connect)]
+        case .connected: [(L("Disconnect"), false, disconnect)]
+        case .elsewhere: [(L("Update"), true, connect), (L("Disconnect"), false, disconnect)]
+        default: []
         }
     }
 }

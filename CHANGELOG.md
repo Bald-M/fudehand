@@ -10,6 +10,14 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- The App installed from a disk image can connect Claude Code, Codex, and DeepSeek Harness: it carries its MCP server and the chat panel's Agent harness, copies them to `~/Library/Application Support/fudehand/tools`, and finds Node.js and the agents' commands when opened from Finder. *MCP Connectors* explains a missing or too old Node.js, and *Update* points a registration made elsewhere at this App (#236).
+
+### Added
+
+- `pnpm package:native` builds `dist/Fudehand-<version>.dmg`, an App that does not depend on the source checkout (#236).
+
 ## [0.0.5] - 2026-11-21
 
 ### Summary

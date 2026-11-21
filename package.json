@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "node scripts/native-dev.mjs",
     "build:native": "node scripts/native-build.mjs",
+    "package:native": "node scripts/native-package.mjs",
     "test:native": "node scripts/native-test.mjs",
     "bench:native": "node scripts/native-bench.mjs",
     "mcp": "node scripts/mcp-server.mjs",
