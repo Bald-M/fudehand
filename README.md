@@ -16,7 +16,7 @@
 
 Fudehand runs entirely on your own Mac. A design is a document made of layers, shown on a canvas you can pan and zoom, with Figma-style interaction. AI agents edit that same document through MCP or the in-app chat panel, and every change appears on the canvas immediately. Designs are saved as `.fudehand` project files, which are plain JSON.
 
-The current version is v0.0.4; see the [CHANGELOG](CHANGELOG.md) for changes.
+The current version is v0.0.5; see the [CHANGELOG](CHANGELOG.md) for changes.
 
 ## See it in action
 
@@ -87,6 +87,8 @@ Agents work through a set of design tools that the MCP server and the in-app cha
 
 The quickest way is *Fudehand → MCP Connector…*. It shows whether Claude Code, Codex, and DeepSeek Harness are connected, and *Connect* registers this checkout's MCP server in that agent's user-level configuration (through `claude mcp add --scope user` or `codex mcp add`; for DeepSeek Harness, by adding a marked block to `~/.dsh/cordis.patch.yml`, leaving the rest of that file untouched). *Disconnect* removes the registration. An agent that is not installed is shown as unavailable. A new connection takes effect in agent sessions opened afterwards.
 
+![The MCP Connectors window listing Claude Code, Codex, and DeepSeek Harness, each with its icon, connection status, and a Connect or Disconnect button](docs/evidence/readme-mcp-connectors-en-light.jpg)
+
 You can also set it up by hand:
 
 - **Claude Code.** The `.mcp.json` at the repository root already registers `fudehand`. Start `claude` from the repository root and approve the project MCP server when asked; it then appears in `/mcp`.
@@ -154,6 +156,8 @@ The page is a reference, not production code. Prototype interactions are not exp
 Open the *Chat* tab of the inspector (⇧⌘A) to have a model build or change the UI directly. Each tool call and its result is shown in the panel and can be expanded. You can stop a reply while it is in progress; no further tool calls run after that.
 
 In *Model Settings*, every model provider is listed with its own key, base URL, and model; enter an API key for a provider, test it with *Test*, and press *Use for Chat* to make it the one the chat uses (the model menu under the input also switches between providers that have a key). Changes apply when you press *Save*. ChatGPT needs an OpenAI API key; a ChatGPT subscription does not include one.
+
+![The Model Settings sheet: DeepSeek, Claude, and ChatGPT listed with their icons, and the selected provider's API key, base URL, and model fields](docs/evidence/readme-model-settings-en-light.jpg)
 
 | Model provider | API | Default base URL | Default model |
 | --- | --- | --- | --- |

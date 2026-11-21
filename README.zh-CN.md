@@ -16,7 +16,7 @@
 
 Fudehand 完全运行在你自己的 Mac 上。设计稿是一份由图层组成的文档，显示在可平移、可缩放的画布上，交互参照 Figma。AI Agent 通过 MCP 或 App 内的对话面板编辑同一份文档，每次修改都立即显示在画布上。设计稿保存为 `.fudehand` 工程文件，内容是普通 JSON。
 
-当前版本 v0.0.4，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
+当前版本 v0.0.5，变更记录见 [CHANGELOG](CHANGELOG.md)（英文）。
 
 ## 演示
 
@@ -87,6 +87,8 @@ Agent 通过一组设计工具工作，MCP server 和 App 内的对话面板共�
 
 最快的方式是应用菜单的 *Fudehand → MCP 连接器…*。窗口里显示 Claude Code 和 Codex 是否已连接；点“连接”，App 会把本检出目录的 MCP server 注册到该 Agent 的用户级配置里（通过 `claude mcp add --scope user` 或 `codex mcp add`），点“断开连接”则移除注册。本机没有安装对应 CLI 的 Agent 会显示为不可用。新建立的连接在之后打开的 Agent 会话中生效。
 
+![MCP 连接器窗口：列出 Claude Code、Codex 与 DeepSeek Harness，各自带图标、连接状态和连接或断开连接按钮](docs/evidence/readme-mcp-connectors-zh-light.jpg)
+
 也可以手动配置：
 
 - **Claude Code。** 仓库根目录的 `.mcp.json` 已经注册了 `fudehand`。在仓库根目录启动 `claude`，按提示同意启用项目 MCP server，之后就能在 `/mcp` 里看到它。
@@ -139,6 +141,8 @@ MCP server 默认使用脚本所在的仓库。追加 `--root <目录>` 可以�
 打开右侧检查器的“对话”标签（⇧⌘A），就可以直接让模型搭建或修改界面。每次工具调用及其结果都显示在面板里，可以展开查看。回复进行中可以随时停止，停止后不会再执行工具调用。
 
 在“模型设置”里，每个模型提供方都单独列出，各有自己的 key、接口地址和模型；为某个提供方填入 API key，用“测试”检查它，再按“用于对话”让对话使用它（输入框下方的模型菜单也能在已有 key 的提供方之间切换）。修改在按下“保存”后生效。ChatGPT 需要 OpenAI API key；ChatGPT 订阅不包含 API key。
+
+![模型设置：左侧列出 DeepSeek、Claude、ChatGPT 及其图标，右侧是所选提供方的 API key、接口地址和模型](docs/evidence/readme-model-settings-zh-light.jpg)
 
 | 模型提供方 | 接口 | 默认接口地址 | 默认模型 |
 | --- | --- | --- | --- |

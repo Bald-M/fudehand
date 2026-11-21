@@ -10,6 +10,12 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-11-21
+
+### Summary
+
+Every App feature now has an Agent tool, including the launch window and templates, the prototype window, the chat panel's conversations, the canvas view, and settings. The properties panel is redesigned, with *Design*, *Prototype*, and *Chat* tabs and a *Selection Colors* section. Layers gain effects: shadows, blurs, noise, texture, glass, built-in shaders, and 3D transforms. The canvas adds copy, cut, paste, and duplicate, annotations, version snapshots, and layout guides; the launch window offers starter templates; and *Export as HTML…* hands a design to an agent as a reference web page. Project files are now format version 9; older files still open.
+
 ### Added
 
 - Selection colors: the properties panel gains a *Selection Colors* section listing every color the selected layers and all their child layers use — fills, strokes, text colors, and icon colors — merged and ordered by how often each is used, with a *+N* tile that shows the rest. Changing a color replaces it everywhere in the selection as one undo step. Agents read and replace them with `design_list_colors` and `design_replace_color` (#191).
@@ -27,6 +33,9 @@ names from [GLOSSARY.md](GLOSSARY.md).
 - *Glass* effect: frames, rectangles, and ellipses can add *Glass* from the *Effects* `+` menu, frosted glass in one effect: it blurs and saturates the layers under it in the same parent, then draws a *Tint* and a *Highlight* along the inside of its top edge. A layer has at most one, and not together with a *Background Blur*. Agents set it in `effects` (#193).
 - *Shader* effect: frames, rectangles, and ellipses can add *Shader* from the *Effects* `+` menu, one of Fudehand's built-in shaders (*Waves*, *Mesh Gradient*, *Halftone*) drawn over the fill and under the child layers, with its own parameters, an opacity, and a blend mode. Shaders are static and run on the GPU once per change; there is no way to supply shader code. Agents list them with `design_list_shaders` and set them in `effects` (#193).
 - *3D Transform* and *Perspective* effects (Beta): any layer but a group can be turned in 3D (X and Y rotation, Z depth), and a frame's *Perspective* (distance and origin) sets how its children are seen, as in CSS. They are visual only: layout, selection, and hit testing still use the unturned rectangle. Prototype animations such as *Scale In* and *Spin* play on top of the turn. Agents set them in `effects` (#193).
+- Copy, cut, and paste layers: with the canvas focused, *Edit → Copy* (⌘C), *Cut* (⌘X), and *Paste* (⌘V) act on the selected layers, and the new *Edit → Duplicate* (⌘D) places a copy above each one; the layers panel's context menu offers the same four. Pasted layers get new ids and keep their child layers, images, effects, and prototype settings, and can be pasted into another open document. Pasting into a selected frame puts the layers inside it; otherwise they go back into their original parent, offset by 10 pt each time, or to the viewport center when that place is out of view. Each paste, cut, and duplicate is one undo step. Agents use `design_copy_nodes` (with `cut`), `design_paste`, and `design_duplicate_nodes` (#226).
+- Agent tools for the prototype window: `prototype_play` opens it and plays from the selected top-level frame or a given one, `prototype_get_playback` reports whether it is open and which frame is on show, and `prototype_close` closes it (#178).
+- Agent tools for the canvas view and editor panels: `canvas_set_view` chooses the canvas tool, shows or hides the inspector and switches its tab, and expands or collapses layers in the layers panel, and `design_get_state` reports these under `view`; `canvas_focus_node` takes `ids` to zoom to several layers, like *Zoom to Selection* (#177).
 
 ### Changed
 
@@ -37,6 +46,8 @@ names from [GLOSSARY.md](GLOSSARY.md).
 ### Fixed
 
 - The *Appearance* setting (System, Light, Dark) now also applies to open and save panels (*File → Open…*, *Save As…*, *Insert Image…*, font import) and alerts, which used to follow the system appearance (#216).
+- Selecting many layers, ⌘A, and nudging no longer stall the properties panel: it looks the selected layers up in the shared layer index instead of searching the whole tree for each one (#227).
+- Launching no longer restores windows from the last session, such as an empty prototype window or the editor window on another desktop Space: the launch window, or the editor window when a file opens Fudehand, now appears on the current Space (#229).
 
 ## [0.0.4] - 2026-11-20
 
@@ -204,7 +215,8 @@ The first release of ui-atlas: a native macOS AI design tool that runs locally. 
 - After the rename, the app bundle is `dist/ui-atlas.app`, the control channel lives at `~/Library/Application Support/ui-atlas/control.sock`, and the Keychain service name is `ui-atlas.agent`. A chat panel API key saved in the Keychain before the rename must be entered again (#45).
 - See the [README](README.md) for Codex approval settings for MCP tool calls (#33); see [ADR 0003](docs/adr/0003-agent-mcp.md) for the design of MCP, the control channel, and the chat panel (#27).
 
-[Unreleased]: https://github.com/Bald-M/fudehand/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/Bald-M/fudehand/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/Bald-M/fudehand/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/Bald-M/fudehand/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/Bald-M/ui-atlas/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Bald-M/ui-atlas/compare/v0.0.1...v0.0.2
