@@ -333,3 +333,28 @@ private func redSpan(_ image: NSBitmapImageRep) -> (Int, Int) {
     renderer.sync([node])
     #expect(CATransform3DIsIdentity(try #require(renderer.layer(for: "c")).transform))
 }
+
+@Test @MainActor func perspectiveOriginMovesThePointDepthGrowsFrom() throws {
+    // Brought 100 pt closer and seen from 300 pt, the card grows by half. Seen from the frame's center it grows evenly about
+    // x = 100; seen from the frame's left edge it grows away from x = 0, so its left edge moves right to about 90.
+    let centered = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100)))
+    let fromLeft = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100),
+                                            perspective: DesignEffect(type: .perspective, distance: 300, originX: 0)))
+    #expect(abs(redSpan(centered).0 - 40) <= 3, "\(redSpan(centered))")
+    #expect(abs(redSpan(fromLeft).0 - 90) <= 3, "\(redSpan(fromLeft))")
+}
+
+@Test @MainActor func removingPerspectiveResetsTheFramesChildren() throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 100, height: 100)
+    frame.effects = [DesignEffect(type: .perspective), DesignEffect(type: .layerBlur)]
+    renderer.sync([frame])
+    let content = try #require(renderer.contentLayer(for: "f"))
+    #expect(content.sublayerTransform.m34 != 0)
+    frame.effects = [DesignEffect(type: .layerBlur)]
+    renderer.sync([frame])
+    #expect(CATransform3DIsIdentity(content.sublayerTransform))
+    frame.effects = [DesignEffect(type: .perspective, visible: false)]
+    renderer.sync([frame])
+    #expect(CATransform3DIsIdentity(content.sublayerTransform))
+}
