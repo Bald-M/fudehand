@@ -269,3 +269,92 @@ private func glassStage(_ glass: DesignEffect) -> DesignNode {
     #expect(pixel(lit, 85, 40)[1] > 200, "\(pixel(lit, 85, 40))")
     #expect(pixel(lit, 70, 95)[1] < 20, "\(pixel(lit, 70, 95))")
 }
+
+/// A white 200 × 160 frame seen with `perspective`, holding an 80 × 80 red card at (60, 40) turned by `turn`.
+private func turnedStage(_ turn: DesignEffect, perspective: DesignEffect? = DesignEffect(type: .perspective, distance: 300)) -> DesignNode {
+    var frame = DesignNode(id: "f", type: .frame, width: 200, height: 160)
+    frame.fill = .white
+    if let perspective { frame.effects = [perspective] }
+    var card = DesignNode(id: "c", type: .rectangle, x: 60, y: 40, width: 80, height: 80)
+    card.fill = DesignColor(r: 1, g: 0, b: 0)
+    card.effects = [turn]
+    frame.children = [card]
+    return frame
+}
+
+/// How many red pixels a column (or a row) has.
+private func redRun(_ image: NSBitmapImageRep, column: Int? = nil, row: Int? = nil) -> Int {
+    if let column { return (0..<image.pixelsHigh).filter { pixel(image, column, $0)[1] < 100 && pixel(image, column, $0)[0] > 150 }.count }
+    return (0..<image.pixelsWide).filter { pixel(image, $0, row!)[1] < 100 && pixel(image, $0, row!)[0] > 150 }.count
+}
+
+/// The first and last columns with any red.
+private func redSpan(_ image: NSBitmapImageRep) -> (Int, Int) {
+    let columns = (0..<image.pixelsWide).filter { redRun(image, column: $0) > 0 }
+    return (columns.first ?? -1, columns.last ?? -1)
+}
+
+@Test @MainActor func rotateYTurnsTheRightEdgeAwayInPerspective() throws {
+    let image = try snapshot(turnedStage(DesignEffect(type: .transform3D, rotateY: 40)))
+    let (left, right) = redSpan(image)
+    // Narrower than 80 pt, and the receding right edge is shorter than the near left edge.
+    #expect(right - left < 70)
+    #expect(redRun(image, column: right - 1) < redRun(image, column: left + 1) - 6, "left \(redRun(image, column: left + 1)) right \(redRun(image, column: right - 1))")
+}
+
+@Test @MainActor func rotateXTipsTheTopEdgeAwayInPerspective() throws {
+    let image = try snapshot(turnedStage(DesignEffect(type: .transform3D, rotateX: 40)))
+    let rows = (0..<image.pixelsHigh).filter { redRun(image, row: $0) > 0 }
+    let top = try #require(rows.first), bottom = try #require(rows.last)
+    #expect(redRun(image, row: top + 1) < redRun(image, row: bottom - 1) - 6, "top \(redRun(image, row: top + 1)) bottom \(redRun(image, row: bottom - 1))")
+}
+
+@Test @MainActor func translateZBringsTheLayerCloserAndPerspectiveIsNeededForDepth() throws {
+    let near = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100)))
+    #expect(redRun(near, row: 80) > 90)
+    // Without a perspective on the frame the projection is flat: depth changes nothing, and a turn narrows evenly.
+    let flat = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100), perspective: nil))
+    #expect(abs(redRun(flat, row: 80) - 80) <= 1)
+    let narrowed = try snapshot(turnedStage(DesignEffect(type: .transform3D, rotateY: 60), perspective: nil))
+    let (left, right) = redSpan(narrowed)
+    #expect(abs((right - left + 1) - 40) <= 2)
+    #expect(abs(redRun(narrowed, column: left + 1) - redRun(narrowed, column: right - 1)) <= 1)
+}
+
+@Test @MainActor func turningMovesTheLayersBackgroundBlurWithIt() throws {
+    let renderer = DesignRenderer()
+    var node = DesignNode(id: "c", type: .rectangle, width: 80, height: 80)
+    node.effects = [DesignEffect(type: .backgroundBlur), DesignEffect(type: .transform3D, rotateY: 30)]
+    renderer.sync([node])
+    let layer = try #require(renderer.layer(for: "c"))
+    #expect(!CATransform3DIsIdentity(layer.transform))
+    #expect(renderer.backdrops(for: "c").allSatisfy { CATransform3DEqualToTransform($0.transform, layer.transform) })
+    node.effects = [DesignEffect(type: .backgroundBlur)]
+    renderer.sync([node])
+    #expect(CATransform3DIsIdentity(try #require(renderer.layer(for: "c")).transform))
+}
+
+@Test @MainActor func perspectiveOriginMovesThePointDepthGrowsFrom() throws {
+    // Brought 100 pt closer and seen from 300 pt, the card grows by half. Seen from the frame's center it grows evenly about
+    // x = 100; seen from the frame's left edge it grows away from x = 0, so its left edge moves right to about 90.
+    let centered = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100)))
+    let fromLeft = try snapshot(turnedStage(DesignEffect(type: .transform3D, translateZ: 100),
+                                            perspective: DesignEffect(type: .perspective, distance: 300, originX: 0)))
+    #expect(abs(redSpan(centered).0 - 40) <= 3, "\(redSpan(centered))")
+    #expect(abs(redSpan(fromLeft).0 - 90) <= 3, "\(redSpan(fromLeft))")
+}
+
+@Test @MainActor func removingPerspectiveResetsTheFramesChildren() throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 100, height: 100)
+    frame.effects = [DesignEffect(type: .perspective), DesignEffect(type: .layerBlur)]
+    renderer.sync([frame])
+    let content = try #require(renderer.contentLayer(for: "f"))
+    #expect(content.sublayerTransform.m34 != 0)
+    frame.effects = [DesignEffect(type: .layerBlur)]
+    renderer.sync([frame])
+    #expect(CATransform3DIsIdentity(content.sublayerTransform))
+    frame.effects = [DesignEffect(type: .perspective, visible: false)]
+    renderer.sync([frame])
+    #expect(CATransform3DIsIdentity(content.sublayerTransform))
+}

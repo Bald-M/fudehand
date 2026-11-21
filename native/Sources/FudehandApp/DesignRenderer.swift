@@ -156,6 +156,9 @@ final class DesignRenderer {
             record.backdrops = built.backdrops
             record.copies = built.copies
             record.layer.filters = built.filters.isEmpty ? nil : built.filters
+            record.layer.transform = built.transform
+            for backdrop in built.backdrops { backdrop.transform = built.transform }
+            record.content.sublayerTransform = built.sublayerTransform
             if wanted { record.layer.sublayers = built.behind + [record.content] }
         }
         guard wanted else { return }

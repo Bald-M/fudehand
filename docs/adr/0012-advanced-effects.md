@@ -65,18 +65,18 @@ This ADR keeps that model: **every new effect is more layers from `EffectLayers.
 
 ### 3D transform (Beta)
 
-`{ "type": "transform-3d", "rotateX": 0, "rotateY": 20, "translateZ": 0 }`
+`{ "type": "transform-3d", "rotateX": 0, "rotateY": 20, "translateZ": 0 }` (implemented with Perspective in #193's 3D PR)
 
 - `rotateX` / `rotateY`: degrees, −80–80 (past that the layer turns edge-on and vanishes). `translateZ`: pt, −1000–1000. No `rotateZ`: the document has no 2D rotation (ADR 0006), and that belongs with rotation as a whole.
 - Rendering: the node layer's `transform`, about its center (layers are anchored there since ADR 0008). The effect layers #214 puts next to the node in its parent (`backdrops`) get the same transform so a blur stays under its layer. Children are flattened into the layer's plane (a plain `CALayer` does this, like CSS `transform-style: flat`); nested 3D transforms do not share one 3D space.
 - Without a Perspective on an ancestor frame, the projection is orthographic, as in CSS: a Y rotation narrows the layer without foreshortening.
-- Prototype animations: `LayerAnimationPlayer` animates the `transform.scale` and `transform.rotation.z` key paths, which should compose with the base transform. Implementation tests a 3D-transformed layer with Scale In and Spin; if they fight, the 3D transform moves to a wrapper layer.
+- Prototype animations: `LayerAnimationPlayer` animates the `transform.scale` and `transform.rotation.z` key paths. Checked with `CARenderer` before implementing: they compose with the base 3D transform (a layer turned 60° about Y, 50 pt wide, renders 24 pt wide at a 0.5 scale and keeps its turn under a z rotation), so the transform stays on the layer's wrapper and no extra layer is needed.
 
 ### Perspective (Beta)
 
 `{ "type": "perspective", "distance": 800, "originX": 0.5, "originY": 0.5 }`
 
-- On a frame: its descendants' 3D transforms are seen from `distance` pt (100–10 000) in front of the point `originX`, `originY` (fractions of the frame's size). Rendering: the frame layer's `sublayerTransform` with `m34 = −1 / distance`, translated to the origin — what CSS `perspective` and `perspective-origin` mean. It applies to direct children; deeper descendants are flattened by their own parents, as in CSS.
+- On a frame (at most one; likewise at most one 3D transform per layer, hidden ones included): its direct children's 3D transforms are seen from `distance` pt (100–10 000) in front of the point `originX`, `originY` (fractions of the frame's size). Rendering: the frame layer's `sublayerTransform` with `m34 = −1 / distance`, translated to the origin — what CSS `perspective` and `perspective-origin` mean. It applies to direct children; deeper descendants are flattened by their own parents, as in CSS. A group is a plain layer too, so a turned layer inside a group in a frame with perspective is drawn flat; put turned layers directly in the frame. A snapshot of a turned child taken on its own has no parent perspective and is drawn flat.
 - **Both Beta effects are visual only.** Layout, `DesignIndex` rectangles, hit testing, snapping, selection boxes, and the layers panel use the untransformed rectangle, so clicking where a turned layer *looks* like it is may miss it. That is why they are Beta; fixing it means carrying a projected quad through `DesignIndex`, `DesignHitTest`, snapping, and the overlay, deferred until the effects are used.
 - Snapshots get both for free through `CARenderer`; an `EffectRendererTests`-style pixel test proves it.
 
