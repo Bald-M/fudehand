@@ -60,6 +60,8 @@ private func object(_ data: Data) throws -> [String: Any] {
         (##"{"id":30,"command":"replace_color","args":{"from":"#FF0000","to":"#000000","ids":["a","b"]}}"##,
          .replaceColor(from: DesignColor(r: 1, g: 0, b: 0), to: .black, ids: ["a", "b"])),
         (#"{"id":27,"command":"show_launch_window"}"#, .showLaunchWindow),
+        (#"{"id":27,"command":"close_editor_window"}"#, .closeEditorWindow(discard: false)),
+        (#"{"id":27,"command":"close_editor_window","args":{"discard":true}}"#, .closeEditorWindow(discard: true)),
         (#"{"id":28,"command":"list_recents"}"#, .listRecents),
         (#"{"id":29,"command":"open_recent","args":{"path":"/tmp/a.fudehand"}}"#, .openRecent("/tmp/a.fudehand", discard: false)),
         (#"{"id":30,"command":"open_recent","args":{"path":"/tmp/a.fudehand","discard":true}}"#, .openRecent("/tmp/a.fudehand", discard: true)),

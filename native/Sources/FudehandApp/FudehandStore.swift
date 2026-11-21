@@ -105,6 +105,9 @@ final class FudehandStore: ObservableObject {
     var prototypeWindowOpen = false
     /// Shows the launch window, as Window › Launch Window does; registered the same way as `presentEditor`.
     var presentLaunch: () -> Void = {}
+    /// Closes the editor window; registered the same way as `presentEditor`. Used only by the Agent: a person closes it
+    /// with the close button or ⌘W, which asks `closeEditor` first.
+    var dismissEditor: () -> Void = {}
     /// The templates offered in the launch window.
     let templates: [Template]
 
@@ -496,6 +499,22 @@ final class FudehandStore: ObservableObject {
 
     /// Replaces the current document and enters the editor window; New, Open, templates, and Agent commands all go through here.
     func replace(_ next: DesignDocument, url: URL?) {
+        load(next, url: url)
+        presentEditor()
+    }
+
+    /// The editor window is closing. `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the
+    /// Agent passes `discard`); when they may, the prototype window closes, the store holds a new empty document, and the
+    /// launch window shows. Returns whether the editor window may close.
+    func closeEditor(discarding: () throws -> Bool) rethrows -> Bool {
+        guard try !isDirty || discarding() else { return false }
+        if prototypeWindowOpen { closePrototype() }
+        load(DesignDocument(), url: nil)
+        presentLaunch()
+        return true
+    }
+
+    private func load(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         expandAnnotation(nil)
         editor.replace(next)
@@ -510,7 +529,6 @@ final class FudehandStore: ObservableObject {
         fitAll(animated: false)
         if canvas == nil { fitWhenCanvasSized = true }
         if let url { recordRecent(url) }
-        presentEditor()
     }
 
     // MARK: Recent documents

@@ -138,6 +138,10 @@ extension FudehandStore {
         case .showLaunchWindow:
             presentLaunch()
             return controlState()
+        case .closeEditorWindow(let discard):
+            try closeEditor { try requireDiscardable(discard); return true }
+            dismissEditor()
+            return controlState()
         case .listRecents:
             return ["recents": recentsState()]
         case .openRecent(let path, let discard):
