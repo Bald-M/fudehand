@@ -212,6 +212,8 @@ export const tools = [
     ['id', 'directory'],
     async (args, root) => ({ ...args, directory: absolute(args.directory, root) })),
   controlTool('app_show_launch_window', 'show_launch_window', 'Show the launch window (New, Recent, Templates) in front, as Window > Launch Window does; the editor window and the document stay as they are. Returns the document overview.'),
+  controlTool('app_close_editor_window', 'close_editor_window', 'Close the editor window, as its close button or File > Close does: the prototype window closes too, the launch window shows, and the App keeps running with a new, empty, untitled document. Refused when the current document has unsaved changes, unless discard is true. Returns the document overview.',
+    discard, []),
   controlTool('app_list_recents', 'list_recents', 'List the recent files shown in the launch window and File > Open Recent, newest first: path, name, openedAt (ISO 8601), and available (false when the file was deleted or moved).'),
   controlTool('app_open_recent', 'open_recent', 'Open a project file from the recent files, by its path as app_list_recents returns it. Refused when the file was deleted or moved, or when the current document has unsaved changes, unless discard is true. Returns the document overview.',
     { ...path('Path of a recent file, as returned by app_list_recents'), ...discard }, ['path'],

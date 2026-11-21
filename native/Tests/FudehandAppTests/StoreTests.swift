@@ -735,6 +735,50 @@ private func colorList(_ result: [String: Any]) -> [String] {
     #expect(shown == 1 && result["dirty"] as? Bool == false)
 }
 
+@Test @MainActor func closingTheEditorReturnsToTheLaunchWindowWithAnEmptyDocument() async throws {
+    let store = makeStore()
+    var launched = 0, prototypeDismissed = 0
+    store.presentLaunch = { launched += 1 }
+    store.dismissPrototype = { prototypeDismissed += 1 }
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "f", "type": "frame", "width": 100, "height": 100])))
+    let url = temporaryFile()
+    _ = try await control(store, .saveDocument(url.path))
+    try store.playPrototype(from: "f")
+
+    #expect(store.closeEditor(discarding: { Issue.record("a clean document needs no confirmation"); return false }))
+    #expect(launched == 1 && prototypeDismissed == 1 && !store.prototypeWindowOpen)
+    #expect(store.editor.document.nodes.isEmpty && store.fileURL == nil && !store.isDirty && store.title == "Untitled")
+}
+
+@Test @MainActor func cancellingTheCloseKeepsTheEditorAndItsUnsavedChanges() async throws {
+    let store = makeStore()
+    var launched = 0
+    store.presentLaunch = { launched += 1 }
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+    let before = store.editor.document
+
+    #expect(!store.closeEditor(discarding: { false }))
+    #expect(launched == 0 && store.editor.document == before && store.isDirty)
+
+    #expect(store.closeEditor(discarding: { true }))
+    #expect(launched == 1 && store.editor.document.nodes.isEmpty && !store.isDirty)
+}
+
+@Test @MainActor func agentClosesTheEditorWindowOnlyWithDiscardWhenUnsaved() async throws {
+    let store = makeStore()
+    var launched = 0, editorDismissed = 0
+    store.presentLaunch = { launched += 1 }
+    store.dismissEditor = { editorDismissed += 1 }
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
+
+    #expect(await failure(store, .closeEditorWindow(discard: false))?.contains("discard") == true)
+    #expect(launched == 0 && editorDismissed == 0 && store.editor.document.node("r") != nil)
+
+    let result = try await control(store, .closeEditorWindow(discard: true))
+    #expect(launched == 1 && editorDismissed == 1 && result["dirty"] as? Bool == false)
+    #expect(store.editor.document.nodes.isEmpty)
+}
+
 @Test @MainActor func agentListsOpensRemovesAndClearsRecents() async throws {
     let store = makeStore()
     let kept = temporaryFile().resolvingSymlinksInPath(), gone = temporaryFile().resolvingSymlinksInPath()

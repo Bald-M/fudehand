@@ -124,6 +124,8 @@ struct FudehandApp: App {
                 }
             }
             CommandGroup(replacing: .saveItem) {
+                // Replacing this group also drops the system's Close item, so it is added back.
+                Button(L("Close")) { NSApp.keyWindow?.performClose(nil) }.keyboardShortcut("w")
                 Button(L("Save")) { store.save() }.keyboardShortcut("s")
                 Button(L("Save As…")) { store.saveAs() }.keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
@@ -153,6 +155,8 @@ struct FudehandApp: App {
         Window("Fudehand", id: Self.editorWindowID) {
             WorkspaceView(store: store)
                 .frame(minWidth: 960, minHeight: 620)
+                // Closing the editor window returns to the launch window instead of quitting.
+                .background(WindowCloseGuard { store.closeEditor(discarding: store.confirmDiscard) })
                 .environment(\.locale, store.language.locale)
                 .modifier(WindowActions(store: store, start: start))
         }
@@ -218,6 +222,8 @@ private struct WindowActions: ViewModifier {
             store.presentPrototype = { [openWindow] in openWindow(id: FudehandApp.prototypeWindowID) }
             store.dismissPrototype = { [dismissWindow] in dismissWindow(id: FudehandApp.prototypeWindowID) }
             store.presentLaunch = { [openWindow] in openWindow(id: FudehandApp.launchWindowID) }
+            // Closed after the launch window appears, as in presentEditor, so the App never has a moment with no windows.
+            store.dismissEditor = { [dismissWindow] in DispatchQueue.main.async { dismissWindow(id: FudehandApp.editorWindowID) } }
             start()
         }
     }
