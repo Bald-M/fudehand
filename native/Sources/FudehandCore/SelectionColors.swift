@@ -23,10 +23,20 @@ public enum SelectionColors {
     /// The colors used under `ids`, most used first (ties keep the order they are first met in, depth first through the
     /// document). A layer selected together with one of its ancestors is counted once. Unknown ids are ignored.
     public static func collect(_ ids: Set<String>, in document: DesignDocument) -> [SelectionColor] {
+        collect(roots(ids, in: document))
+    }
+
+    /// `collect(_:in:)` that finds the selected layers through `index` instead of searching the whole tree, for panels that
+    /// update on every selection change (#227).
+    public static func collect(_ ids: Set<String>, in index: DesignIndex) -> [SelectionColor] {
+        collect(roots(ids, in: index))
+    }
+
+    private static func collect(_ roots: [DesignNode]) -> [SelectionColor] {
         var result: [SelectionColor] = []
-        var position: [String: Int] = [:]
-        visit(ids, in: document) { _, _, color in
-            let key = color.hex
+        var position: [UInt32: Int] = [:]
+        visit(roots) { _, _, color in
+            let key = self.key(color)
             if let index = position[key] { result[index].count += 1 } else {
                 position[key] = result.count
                 result.append(SelectionColor(color: color, count: 1))
@@ -38,10 +48,10 @@ public enum SelectionColors {
 
     /// The properties under `ids` that use `color` (matched by hex value), depth first.
     public static func uses(of color: DesignColor, under ids: Set<String>, in document: DesignDocument) -> [ColorUse] {
-        let key = color.hex
+        let key = self.key(color)
         var result: [ColorUse] = []
-        visit(ids, in: document) { node, property, value in
-            if value.hex == key { result.append(ColorUse(id: node.id, property: property)) }
+        visit(roots(ids, in: document)) { node, property, value in
+            if self.key(value) == key { result.append(ColorUse(id: node.id, property: property)) }
         }
         return result
     }
@@ -49,6 +59,11 @@ public enum SelectionColors {
     /// The color a use holds now; nil when its layer is gone or no longer has that property.
     public static func color(of use: ColorUse, in document: DesignDocument) -> DesignColor? {
         document.node(use.id).flatMap { color(use.property, of: $0) }
+    }
+
+    /// `color(of:in:)` that finds the layer through `index`.
+    public static func color(of use: ColorUse, in index: DesignIndex) -> DesignColor? {
+        index.node(use.id).flatMap { color(use.property, of: $0) }
     }
 
     /// Sets `color` on each of `uses` in one pass over the document, and returns how many properties changed. Uses whose
@@ -90,15 +105,40 @@ public enum SelectionColors {
         return true
     }
 
-    /// Calls `body` for each color property of the layers under `ids`, depth first; a layer under two selected ids is visited once.
-    private static func visit(_ ids: Set<String>, in document: DesignDocument, _ body: (DesignNode, ColorProperty, DesignColor) -> Void) {
+    /// The color's hex value as its four rounded bytes: equal exactly when the hex values are, without formatting a string for
+    /// every use (#227).
+    private static func key(_ color: DesignColor) -> UInt32 {
+        func byte(_ v: Double) -> UInt32 { UInt32((min(max(v, 0), 1) * 255).rounded()) }
+        return byte(color.r) << 24 | byte(color.g) << 16 | byte(color.b) << 8 | byte(color.a)
+    }
+
+    /// The outermost selected layers, depth first: a layer under another selected id is left out, so it is visited once.
+    private static func roots(_ ids: Set<String>, in document: DesignDocument) -> [DesignNode] {
+        var result: [DesignNode] = []
+        func search(_ nodes: [DesignNode]) {
+            for node in nodes { if ids.contains(node.id) { result.append(node) } else { search(node.children) } }
+        }
+        search(document.nodes)
+        return result
+    }
+
+    /// `roots(_:in:)` through the index: unknown ids and ids under another selected id are dropped, and the rest are put in
+    /// depth-first order by index path.
+    private static func roots(_ ids: Set<String>, in index: DesignIndex) -> [DesignNode] {
+        ids.compactMap { id -> (path: [Int], id: String)? in
+            guard !index.ancestry(of: id).dropLast().contains(where: ids.contains), let path = index.indexPath(of: id) else { return nil }
+            return (path, id)
+        }
+        .sorted { $0.path.lexicographicallyPrecedes($1.path) }
+        .compactMap { index.node($0.id) }
+    }
+
+    /// Calls `body` for each color property of `roots` and all their children, depth first.
+    private static func visit(_ roots: [DesignNode], _ body: (DesignNode, ColorProperty, DesignColor) -> Void) {
         func each(_ node: DesignNode) {
             for property in ColorProperty.allCases { if let value = color(property, of: node) { body(node, property, value) } }
             node.children.forEach(each)
         }
-        func search(_ nodes: [DesignNode]) {
-            for node in nodes { if ids.contains(node.id) { each(node) } else { search(node.children) } }
-        }
-        search(document.nodes)
+        roots.forEach(each)
     }
 }

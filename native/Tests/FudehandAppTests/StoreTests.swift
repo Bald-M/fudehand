@@ -1012,3 +1012,21 @@ private func temporaryDirectory() -> URL {
     store.undo()
     #expect(store.editor.document.node("r")?.effects.isEmpty == true)
 }
+
+/// The panels look layers up in `documentIndex` (#227): it always describes `document`, so during a drag it holds the
+/// positions from before the drag, like the panels did, and catches up when the drag ends.
+@Test @MainActor func thePanelIndexFollowsThePublishedDocument() {
+    let store = makeStore()
+    store.replace(DesignDocument(nodes: [DesignNode(id: "a", type: .rectangle, x: 10, y: 20, width: 30, height: 40)]), url: nil)
+    #expect(store.documentIndex.node("a")?.x == 10)
+    store.canvasBeginGesture("Move Layers")
+    store.canvasMove(["a": Point(x: 50, y: 20)])
+    #expect(store.index.node("a")?.x == 50)
+    #expect(store.documentIndex.node("a")?.x == 10 && store.document.node("a")?.x == 10)
+    store.canvasEndGesture()
+    #expect(store.documentIndex.node("a")?.x == 50 && store.document.node("a")?.x == 50)
+    store.updateNode("a", "Rename Layer") { $0.name = "Box" }
+    #expect(store.documentIndex.node("a")?.name == "Box")
+    store.undo()
+    #expect(store.documentIndex.node("a")?.name == store.document.node("a")?.name)
+}

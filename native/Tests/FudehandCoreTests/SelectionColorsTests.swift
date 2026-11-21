@@ -46,6 +46,16 @@ private func summary(_ colors: [SelectionColor]) -> [String] { colors.map { "\($
     #expect(SelectionColors.collect(["missing"], in: document()).isEmpty)
 }
 
+@Test func collectsTheSameColorsThroughTheIndex() {
+    let index = DesignIndex(document())
+    for ids: Set<String> in [["f"], ["t"], ["o", "f"], ["f", "r", "g"], ["r", "t"], ["i", "o", "r"], [], ["missing", "o"]] {
+        #expect(summary(SelectionColors.collect(ids, in: index)) == summary(SelectionColors.collect(ids, in: document())), "\(ids)")
+    }
+    #expect(SelectionColors.color(of: ColorUse(id: "r", property: .stroke), in: index) == blue)
+    #expect(SelectionColors.color(of: ColorUse(id: "o", property: .text), in: index) == nil)
+    #expect(SelectionColors.color(of: ColorUse(id: "missing", property: .fill), in: index) == nil)
+}
+
 @Test func mergesColorsWithTheSameHexValue() {
     var doc = document()
     // A picker can produce components a hair apart that still write the same hex value.
