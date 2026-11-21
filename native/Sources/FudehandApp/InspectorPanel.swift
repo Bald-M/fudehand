@@ -20,10 +20,10 @@ struct InspectorPanel: View {
             switch store.inspectorTab {
             case .design, .prototype: DesignInspector(store: store, selection: selection, page: store.inspectorTab)
             case .chat:
-                let selected = selection.ids.compactMap { store.document.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                let selected = selection.ids.compactMap { store.documentIndex.node($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
                 ChatPanel(chat: store.chat, root: store.toolsRoot, runtime: store.runtime,
                           selection: selected.map { ChatContext(id: $0.id, name: $0.name, type: $0.type.rawValue) },
-                          layerName: { store.document.node($0)?.name })
+                          layerName: { store.documentIndex.node($0)?.name })
             }
         }
     }
@@ -69,7 +69,7 @@ private struct DesignInspector: View {
     let page: InspectorTab
 
     var body: some View {
-        let selected = selection.ids.compactMap { store.document.node($0) }
+        let selected = selection.ids.compactMap { store.documentIndex.node($0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if selected.count == 1, let node = selected.first {
@@ -110,8 +110,8 @@ private struct DesignInspector: View {
     }
 
     private func parentLayout(of id: String) -> AutoLayout? {
-        guard let parent = store.document.parentID(of: id) ?? nil else { return nil }
-        return store.document.node(parent)?.layout
+        guard let parent = store.documentIndex.parentID(of: id) ?? nil else { return nil }
+        return store.documentIndex.node(parent)?.layout
     }
 }
 
@@ -142,8 +142,8 @@ private struct SelectionColorsSection: View {
     private static let collapsedLimit = 7
 
     var body: some View {
-        let colors = SelectionColors.collect(ids, in: store.document)
-        let editedColor = editing.flatMap { edit in edit.uses.lazy.compactMap { SelectionColors.color(of: $0, in: store.document) }.first }
+        let colors = SelectionColors.collect(ids, in: store.documentIndex)
+        let editedColor = editing.flatMap { edit in edit.uses.lazy.compactMap { SelectionColors.color(of: $0, in: store.documentIndex) }.first }
         Group {
             if !colors.isEmpty {
                 let overflow = !expanded && colors.count > Self.collapsedLimit
@@ -358,11 +358,11 @@ private struct NodeInspector: View {
 
     /// A version snapshot's frame, time, and note, and the switch between laying it over its frame and placing it beside.
     private func versionSnapshotSection(_ snapshot: VersionSnapshot) -> some View {
-        let frame = store.document.worldRect(snapshot.frame)
-        let here = store.document.worldRect(node.id)
+        let frame = store.documentIndex.worldRect(snapshot.frame)
+        let here = store.documentIndex.worldRect(node.id)
         let overlaid = frame.map { frame in here.map { abs($0.x - frame.x) < 0.5 && abs($0.y - frame.y) < 0.5 } ?? false } ?? false
         return InspectorSection(L("Version Snapshot")) {
-            LabeledContent(L("Frame")) { Text(store.document.node(snapshot.frame)?.name ?? L("Deleted")) }
+            LabeledContent(L("Frame")) { Text(store.documentIndex.node(snapshot.frame)?.name ?? L("Deleted")) }
             LabeledContent(L("Saved|version snapshot time")) { Text(snapshot.createdAt, format: Self.snapshotTime) }
             TextField(L("Note"), text: $note).textFieldStyle(.roundedBorder)
                 .onSubmit { update("Edit Snapshot Note") { $0.versionSnapshot?.note = note.trimmingCharacters(in: .whitespacesAndNewlines) } }
@@ -606,20 +606,20 @@ private struct NodeInspector: View {
 
     /// The top-level frames an interaction can go to; the frame holding this layer comes last, since going to it is rarely meant.
     private var destinations: [DesignNode] {
-        let own = store.document.ancestry(of: node.id).first
+        let own = store.documentIndex.ancestry(of: node.id).first
         let frames = store.document.nodes.filter { $0.type == .frame }
         return frames.filter { $0.id != own } + frames.filter { $0.id == own }
     }
 
     /// The default destination: the first top-level frame other than the one holding this layer.
     private var otherFrame: String? {
-        let own = store.document.ancestry(of: node.id).first
+        let own = store.documentIndex.ancestry(of: node.id).first
         return store.document.nodes.first { $0.type == .frame && $0.id != own }?.id
     }
 
     /// Layers a visibility toggle can show and hide: the others in the top-level frame holding this layer, depth first.
     private var toggleCandidates: [DesignNode] {
-        guard let top = store.document.ancestry(of: node.id).first.flatMap({ store.document.node($0) }) else { return [] }
+        guard let top = store.documentIndex.ancestry(of: node.id).first.flatMap({ store.documentIndex.node($0) }) else { return [] }
         var result: [DesignNode] = []
         DesignDocument(nodes: top.children).forEach { if $0.id != node.id { result.append($0) } }
         return result
@@ -627,8 +627,8 @@ private struct NodeInspector: View {
 
     /// Whether this layer sits directly in a frame that scrolls during playback.
     private var inScrollingFrame: Bool {
-        guard let parent = store.document.parentID(of: node.id) ?? nil else { return false }
-        return (store.document.node(parent)?.scroll ?? .none) != .none
+        guard let parent = store.documentIndex.parentID(of: node.id) ?? nil else { return false }
+        return (store.documentIndex.node(parent)?.scroll ?? .none) != .none
     }
 
     private static func action(_ interaction: DesignInteraction) -> String {
@@ -786,7 +786,7 @@ private struct NodeInspector: View {
         Text(L("Shows the hidden and hides the shown among:")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         ForEach(targets, id: \.self) { id in
             HStack {
-                Text(store.document.node(id)?.name ?? L("Missing layer")).lineLimit(1)
+                Text(store.documentIndex.node(id)?.name ?? L("Missing layer")).lineLimit(1)
                 Spacer()
                 if targets.count > 1 {
                     Button { setInteraction(.toggleVisibility(targets: targets.filter { $0 != id })) } label: { Image(systemName: "minus").iconHitTarget() }

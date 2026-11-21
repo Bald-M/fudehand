@@ -17,6 +17,9 @@ final class FudehandStore: ObservableObject {
     private(set) var editor = DesignEditor(measure: TextMetrics.measure)
     /// The document the panels display; not updated during a continuous gesture such as a drag, and updated once when it ends.
     @Published private(set) var document = DesignDocument()
+    /// The lookup index of `document`, which the panels read: during a continuous gesture it lags `index` like `document` does.
+    /// Panels look layers up here instead of searching the whole tree on every update (#227).
+    private(set) var documentIndex = DesignIndex()
     /// The selected layers, kept out of the store's published state: selecting in a large document then recomputes only the views
     /// that show the selection, not every view that observes the store (#142).
     let layerSelection = LayerSelection()
@@ -158,7 +161,7 @@ final class FudehandStore: ObservableObject {
         let index = self.index
         canvas?.show(index)
         if !selection.allSatisfy(index.contains) { setSelection(selection.filter(index.contains)) }
-        if !inGesture { document = index.document }
+        if !inGesture { documentIndex = index; document = index.document }
         syncAnnotation()
     }
 
@@ -167,7 +170,7 @@ final class FudehandStore: ObservableObject {
         try editor.perform(name, coalescing: coalescing, change)
         changed()
         // Edits received during a drag (such as Agent commands) are also shown in the panels immediately.
-        if inGesture { document = editor.document }
+        if inGesture { documentIndex = index; document = index.document }
     }
 
     /// An edit from a panel: shows the error on failure.

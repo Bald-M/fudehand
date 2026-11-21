@@ -42,8 +42,25 @@ import Testing
             settle()
         }
 
-        print(String(format: "[bench] layers=%d selectLayer=%.2fms selectFrame=%.2fms (idle frame %.2fms)",
-                     store.document.nodeCount, select, selectFrame, idle))
+        // ⌘A on the canvas selects every top-level frame, and the arrow keys then nudge them all (#227). Only selecting all is
+        // timed; clearing the selection in between is not.
+        let all = Set((0..<frames).map { "f\($0)" })
+        var selectAll = 0.0
+        for run in 0..<24 {
+            store.setSelection([]); settle()
+            let start = CFAbsoluteTimeGetCurrent()
+            store.setSelection(all); settle()
+            if run >= 4 { selectAll += (CFAbsoluteTimeGetCurrent() - start) * 1000 / 20 }
+        }
+        #expect(store.selection == all)
+        for _ in 0..<4 { store.canvasNudge(all, by: Point(x: 1, y: 0)); settle() }
+        let nudge = CanvasBenchmark.time(20) { _ in
+            store.canvasNudge(all, by: Point(x: 1, y: 0))
+            settle()
+        }
+
+        print(String(format: "[bench] layers=%d selectLayer=%.2fms selectFrame=%.2fms selectAllFrames=%.2fms nudgeAllFrames=%.2fms (idle frame %.2fms)",
+                     store.document.nodeCount, select, selectFrame, selectAll, nudge, idle))
         window.contentView = nil
         window.close()
     }
