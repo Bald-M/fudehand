@@ -133,6 +133,9 @@ struct FudehandApp: App {
                 Button(L("Undo")) { undoOrForward(#selector(UndoManager.undo)) { store.undo() } }.keyboardShortcut("z")
                 Button(L("Redo")) { undoOrForward(#selector(UndoManager.redo)) { store.redo() } }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .pasteboard) {
+                DuplicateMenuItem(store: store, selection: store.layerSelection)
+            }
             CommandMenu(L("Canvas")) {
                 Button(L("Zoom In")) { store.zoomIn() }.keyboardShortcut("+")
                 Button(L("Zoom Out")) { store.zoomOut() }.keyboardShortcut("-")
@@ -230,5 +233,21 @@ private struct ExportHTMLMenuItem: View {
         Button(L("Export as HTML…")) { store.exportHTMLWithPanel() }
             .keyboardShortcut("e", modifiers: [.command, .shift])
             .disabled(selection.ids.count != 1)
+    }
+}
+
+/// Edit › Duplicate (⌘D), available with layers selected; a focused text field leaves it alone. It observes the selection itself,
+/// as Export as HTML… does.
+private struct DuplicateMenuItem: View {
+    let store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+
+    var body: some View {
+        Button(L("Duplicate")) {
+            guard !(NSApp.keyWindow?.firstResponder is NSText) else { return }
+            store.duplicateSelection()
+        }
+        .keyboardShortcut("d")
+        .disabled(selection.ids.isEmpty)
     }
 }

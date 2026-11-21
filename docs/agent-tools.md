@@ -73,6 +73,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Rename, show/hide, lock a layer | `design_update_node` |
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
+| Copy, cut, paste, and duplicate layers (Edit menu, layers panel context menu) | `design_copy_nodes`, `design_paste`, `design_duplicate_nodes` |
 | Select layers | `design_select` |
 | Undo, redo | `design_undo`, `design_redo` |
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |

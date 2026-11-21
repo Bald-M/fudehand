@@ -41,6 +41,13 @@ extension FudehandStore {
         case .deleteNodes(let ids):
             try perform("Agent: Delete Layers") { try $0.delete(Set(ids)) }
             return ["deleted": ids]
+        case .copyNodes(let ids, let cut):
+            let copied = try copyLayers(Set(try colorLayers(ids)), cut: cut, step: "Agent: Cut Layers")
+            return ["copied": copied, "cut": cut]
+        case .paste:
+            return try pastedResult(try pasteLayers(step: "Agent: Paste Layers"))
+        case .duplicateNodes(let ids):
+            return try pastedResult(try duplicateLayers(Set(try colorLayers(ids)), step: "Agent: Duplicate Layers"))
         case .moveNode(let id, let parent, let index):
             try perform("Agent: Move Layer") { try $0.move(id, parent: parent, index: index) }
             return DesignJSON.object(try requireNode(id), includeImageData: false)
@@ -242,7 +249,12 @@ extension FudehandStore {
         return object
     }
 
-    /// The layers whose selection colors a command reads or replaces: those named, or else the selection.
+    /// The new layers made by Paste or Duplicate, as `design_create_node` returns a layer.
+    private func pastedResult(_ ids: [String]) throws -> [String: Any] {
+        ["ids": ids, "nodes": try ids.map { DesignJSON.object(try requireNode($0), includeImageData: false) }]
+    }
+
+    /// The layers a command reads or changes (selection colors, copy, duplicate): those named, or else the selection.
     private func colorLayers(_ ids: [String]?) throws -> [String] {
         guard let ids else {
             guard !selection.isEmpty else { throw ControlCommandError("Nothing is selected; select layers or pass ids") }

@@ -24,7 +24,7 @@ describe('design tools', () => {
     const names = tools.map((tool: { name: string }) => tool.name)
     expect(names).toEqual([
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
-      'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
+      'design_delete_nodes', 'design_copy_nodes', 'design_paste', 'design_duplicate_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_shaders', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
       'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
@@ -199,6 +199,9 @@ describe('design tools', () => {
     expect(JSON.parse(text(created))).toEqual({ echo: 'create_node' })
     await callTool('design_update_node', { id: 'a', changes: { opacity: 0.5 } }, ctx)
     await callTool('design_delete_nodes', { ids: ['a', 'b'] }, ctx)
+    await callTool('design_copy_nodes', { ids: ['a'], cut: true }, ctx)
+    await callTool('design_paste', {}, ctx)
+    await callTool('design_duplicate_nodes', {}, ctx)
     await callTool('design_move_node', { id: 'a', index: 0 }, ctx)
     await callTool('design_select', { ids: [] }, ctx)
     await callTool('design_undo', {}, ctx)
@@ -219,6 +222,9 @@ describe('design tools', () => {
       { command: 'create_node', args: { node: { type: 'rectangle', fill: '#FFFFFF' }, parent: 'f' } },
       { command: 'update_node', args: { id: 'a', changes: { opacity: 0.5 } } },
       { command: 'delete_nodes', args: { ids: ['a', 'b'] } },
+      { command: 'copy_nodes', args: { ids: ['a'], cut: true } },
+      { command: 'paste', args: {} },
+      { command: 'duplicate_nodes', args: {} },
       { command: 'move_node', args: { id: 'a', index: 0 } },
       { command: 'select', args: { ids: [] } },
       { command: 'undo', args: {} },

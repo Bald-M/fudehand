@@ -28,6 +28,9 @@ final class RecordingHost: CanvasHost {
     func canvasToggleAnnotation(_ id: String) { store.canvasToggleAnnotation(id) }
     func canvasAnnotate(_ node: String, at point: Point) { store.canvasAnnotate(node, at: point) }
     func canvasCollapseAnnotation() { store.canvasCollapseAnnotation() }
+    func canvasCopy(_ ids: Set<String>, cut: Bool) { store.canvasCopy(ids, cut: cut) }
+    func canvasPaste() { store.canvasPaste() }
+    var canvasCanPaste: Bool { store.canvasCanPaste }
 }
 
 /// Top-level frame a (0,0 400×300, containing card 20,20 100×50) and rectangle b (600,0 300×300); viewport (0, 100) at 100%, with the frame's name label visible on screen.
@@ -564,4 +567,22 @@ final class CanvasHarness {
     // The card lands at canvas x 157, 3 points from the column's left edge at 160.
     h.drag(from: NSPoint(x: 70, y: 145), to: NSPoint(x: 207, y: 145))
     #expect(h.store.editor.document.worldRect("card")?.x == 160)
+}
+
+/// Edit › Copy, Cut, and Paste reach the focused canvas through the responder chain and act on its selection.
+@Test @MainActor func editMenuCopyAndPasteActOnTheCanvasSelection() throws {
+    let h = CanvasHarness()
+    h.store.pasteboard = NSPasteboard(name: NSPasteboard.Name("fudehand-tests-\(UUID().uuidString)"))
+    let copy = NSMenuItem(title: "Copy", action: #selector(FudehandCanvasView.copy(_:)), keyEquivalent: "c")
+    let paste = NSMenuItem(title: "Paste", action: #selector(FudehandCanvasView.paste(_:)), keyEquivalent: "v")
+    #expect(!h.canvas.validateMenuItem(copy) && !h.canvas.validateMenuItem(paste))
+    h.store.setSelection(["card"])
+    #expect(h.canvas.validateMenuItem(copy))
+    h.canvas.copy(nil)
+    #expect(h.canvas.validateMenuItem(paste))
+    h.canvas.paste(nil)
+    let pasted = try #require(h.store.selection.first)
+    #expect(pasted != "card" && h.store.editor.document.parentID(of: pasted) == .some("a"))
+    h.canvas.cut(nil)
+    #expect(h.store.editor.document.node(pasted) == nil && h.store.selection.isEmpty)
 }

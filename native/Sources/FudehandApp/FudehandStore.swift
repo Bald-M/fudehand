@@ -40,6 +40,11 @@ final class FudehandStore: ObservableObject {
     /// The layers the layers panel shows collapsed; every other layer with child layers is expanded.
     @Published private(set) var collapsedLayers: Set<String> = []
     @Published var alert: String?
+    /// Where Copy and Cut put layers and Paste reads them; tests use a private pasteboard.
+    var pasteboard = NSPasteboard.general
+    /// What has been pasted since the last Copy or Cut: the pasteboard's change count then, the next paste's step (see
+    /// `LayerClipboard.paste`), and the ids of the copies pasted so far.
+    var clipboardPastes = (changeCount: -1, step: 1, pasted: Set<String>())
     @Published var theme: String {
         didSet { defaults.set(theme, forKey: "native.theme") }
     }

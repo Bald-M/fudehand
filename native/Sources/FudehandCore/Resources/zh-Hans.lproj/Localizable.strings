@@ -107,6 +107,10 @@
 "Send to Back" = "移到最下层";
 "Zoom to Layer" = "缩放至图层";
 "Delete" = "删除";
+"Copy" = "复制";
+"Cut" = "剪切";
+"Paste" = "粘贴";
+"Duplicate" = "创建副本";
 
 /* Properties panel */
 "Design" = "设计";
@@ -297,6 +301,9 @@
 "Create layer" = "创建图层";
 "Update layer" = "修改图层";
 "Delete layers" = "删除图层";
+"Copy layers" = "复制图层";
+"Paste layers" = "粘贴图层";
+"Duplicate layers" = "创建图层副本";
 "Move layer" = "移动图层";
 "Select layers" = "选中图层";
 "Create document" = "新建文档";
