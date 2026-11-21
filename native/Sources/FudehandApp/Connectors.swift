@@ -42,7 +42,8 @@ final class ConnectorsModel: ObservableObject {
     /// The Node recorded at build time (source builds only); tried first.
     private let recordedNode: String?
     private let searchPath: (_ login: String?) -> String
-    private var loginPathRead = false
+    /// Reads the login shell's PATH once; every refresh waits for the same read.
+    private var loginPathRead: Task<Void, Never>?
     private let loginPath: @Sendable () async -> String?
     private let isExecutable: (String) -> Bool
     private let run: Runner
@@ -69,10 +70,11 @@ final class ConnectorsModel: ObservableObject {
     }
 
     func refresh() async {
-        if !loginPathRead {
-            loginPathRead = true
-            if let login = await loginPath() { environment["PATH"] = searchPath(login) }
+        if loginPathRead == nil {
+            let read = loginPath
+            loginPathRead = Task { if let login = await read() { environment["PATH"] = searchPath(login) } }
         }
+        await loginPathRead?.value
         await findNode()
         for connector in AgentConnector.allCases where entries[connector]?.busy == false {
             fail(connector, nil)
@@ -243,18 +245,45 @@ final class ConnectorsModel: ObservableObject {
     }
 
     /// The login shell's PATH, which holds what the user's profile adds (Homebrew, a custom npm prefix); nil when it does not answer in time.
+    /// Output is collected as it arrives and not read to the end: a command the profile started may outlive the shell and keep the pipe open.
     nonisolated static func readLoginShellPath() async -> String? {
         let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.hasPrefix("/") ? $0 : nil } ?? "/bin/zsh"
-        let result = await runProcess(shell, ToolSearchPath.shellArguments, ProcessInfo.processInfo.environment, timeout: 5)
-        return result.exitCode == 0 ? ToolSearchPath.loginPath(fromShellOutput: String(decoding: result.output, as: UTF8.self)) : nil
+        final class Collected: @unchecked Sendable {
+            let lock = NSLock()
+            var data = Data()
+            var continuation: CheckedContinuation<String?, Never>?
+            func finish() {
+                lock.lock(); let continuation = continuation; self.continuation = nil; let data = data; lock.unlock()
+                continuation?.resume(returning: ToolSearchPath.loginPath(fromShellOutput: String(decoding: data, as: UTF8.self)))
+            }
+        }
+        let collected = Collected()
+        return await withCheckedContinuation { continuation in
+            collected.continuation = continuation
+            let child = Process()
+            child.executableURL = URL(fileURLWithPath: shell)
+            child.arguments = ToolSearchPath.shellArguments
+            child.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+            let output = Pipe()
+            child.standardOutput = output
+            child.standardError = FileHandle.nullDevice
+            child.standardInput = FileHandle.nullDevice
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                collected.lock.lock(); collected.data.append(chunk); collected.lock.unlock()
+                if chunk.isEmpty { handle.readabilityHandler = nil }
+            }
+            // The marker line is printed last, so the shell exiting means it is there (or never will be); give the pipe a moment to drain.
+            child.terminationHandler = { _ in DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { collected.finish() } }
+            do { try child.run() } catch { collected.finish(); return }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if child.isRunning { child.terminate() }
+                collected.finish()
+            }
+        }
     }
 
     nonisolated static func runProcess(_ executable: String, _ arguments: [String], _ environment: [String: String]) async -> CommandResult {
-        await runProcess(executable, arguments, environment, timeout: nil)
-    }
-
-    /// `timeout`: seconds after which the child is terminated.
-    nonisolated static func runProcess(_ executable: String, _ arguments: [String], _ environment: [String: String], timeout: TimeInterval?) async -> CommandResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let child = Process()
@@ -269,9 +298,6 @@ final class ConnectorsModel: ObservableObject {
                 do { try child.run() } catch {
                     continuation.resume(returning: CommandResult(exitCode: -1, output: Data(), error: error.localizedDescription))
                     return
-                }
-                if let timeout {
-                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if child.isRunning { child.terminate() } }
                 }
                 // Read all of stderr in the background first, so the child process does not block when either pipe fills up.
                 var errorData = Data()
@@ -298,7 +324,10 @@ struct ConnectorsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L("Connect Fudehand’s design tools to external Agents. Once connected, an Agent can read and edit the design document open in the App."))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if model.script != nil, let problem = model.nodeProblem {
+            if model.script == nil {
+                Label(L("Cannot find the Fudehand source directory, so it cannot connect"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).symbolRenderingMode(.multicolor).fixedSize(horizontal: false, vertical: true)
+            } else if let problem = model.nodeProblem {
                 Label(problem.local, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout).foregroundStyle(.primary).symbolRenderingMode(.multicolor)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)

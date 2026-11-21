@@ -80,8 +80,8 @@ public enum BundledTools {
         if build != nil, build == (try? Data(contentsOf: target.appendingPathComponent(buildMarker))) { return }
         try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         let staging = target.deletingLastPathComponent().appendingPathComponent(".\(target.lastPathComponent)-\(UUID().uuidString)")
-        try files.copyItem(at: source, to: staging)
         do {
+            try files.copyItem(at: source, to: staging)
             if files.fileExists(atPath: target.path) {
                 _ = try files.replaceItemAt(target, withItemAt: staging)
             } else {
