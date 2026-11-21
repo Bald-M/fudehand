@@ -13,12 +13,12 @@ enum EffectLayers {
         /// Background blurs and glass backdrops. Core Animation's background filters only blur the layers drawn before them in the
         /// same superlayer, so these go next to the node in its parent, just under it.
         var backdrops: [CALayer] = []
-        /// Inner shadows, noise, textures, and glass tints and highlights, drawn inside the node above its fill and below its
+        /// Inner shadows, noise, textures, shaders, and glass tints and highlights, drawn inside the node above its fill and below its
         /// children, in effect order.
         var inner: [CALayer] = []
         /// Layer blurs, applied to the node with its children and its other effects.
         var filters: [CIFilter] = []
-        /// Text or icon copies that need the node's raster scale.
+        /// Text or icon copies and shader layers, which need the node's raster scale.
         var copies: [CALayer] = []
         /// A 3D transform, applied to the node (and its background blurs) about its center.
         var transform = CATransform3DIdentity
@@ -112,6 +112,19 @@ enum EffectLayers {
                 clip(tint, to: node, shape: shape)
                 built.inner.append(tint)
                 if effect.highlight > 0 { built.inner.append(highlight(node, opacity: effect.highlight)) }
+            case .shader:
+                guard let shape = shape(node, spread: 0) else { continue }
+                let shaded = ShaderLayer()
+                shaded.actions = DesignRenderer.noActions
+                shaded.frame = bounds
+                shaded.contentsScale = scale
+                shaded.effect = effect
+                shaded.opacity = Float(effect.opacity)
+                shaded.compositingFilter = TextureLayer.blendFilter(effect.blend)
+                shaded.setNeedsDisplay()
+                clip(shaded, to: node, shape: shape)
+                built.inner.append(shaded)
+                built.copies.append(shaded)
             case .transform3D:
                 built.transform = turn(effect)
             case .perspective:

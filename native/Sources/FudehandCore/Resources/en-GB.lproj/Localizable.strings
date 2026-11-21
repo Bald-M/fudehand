@@ -540,6 +540,16 @@
 "Depth" = "Depth";
 "Origin X" = "Origin X";
 "Origin Y" = "Origin Y";
+"Shader" = "Shader";
+"Waves" = "Waves";
+"Mesh Gradient" = "Mesh Gradient";
+"Halftone" = "Halftone";
+"Scale" = "Scale";
+"Angle" = "Angle";
+"First color" = "First colour";
+"Second color" = "Second colour";
+"Dot spacing" = "Dot spacing";
+"Dot color" = "Dot colour";
 "Move Up" = "Move Up";
 "Move Down" = "Move Down";
 "Shadow color" = "Shadow colour";

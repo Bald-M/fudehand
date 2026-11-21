@@ -358,3 +358,59 @@ private func redSpan(_ image: NSBitmapImageRep) -> (Int, Int) {
     renderer.sync([frame])
     #expect(CATransform3DIsIdentity(content.sublayerTransform))
 }
+
+private func shaded(_ id: String, _ params: [String: ShaderValue] = [:], opacity: Double = 1) -> DesignEffect {
+    var effect = DesignEffect(type: .shader, opacity: opacity)
+    effect.shader = id
+    effect.shaderParams = ShaderCatalog.entry(id)!.defaults.merging(params) { $1 }
+    return effect
+}
+
+@Test @MainActor func meshGradientShowsItsCornerColorsAtTheCorners() throws {
+    let red = DesignColor(r: 1, g: 0, b: 0), green = DesignColor(r: 0, g: 1, b: 0), blue = DesignColor(r: 0, g: 0, b: 1)
+    let image = try snapshot(stage(card([shaded("mesh-gradient", ["topLeft": .color(red), "topRight": .color(green),
+                                                                  "bottomLeft": .color(blue), "bottomRight": .color(.white)])])))
+    // The card spans (40, 40)–(120, 100); one point in from each corner.
+    let topLeft = pixel(image, 41, 41), topRight = pixel(image, 118, 41), bottomLeft = pixel(image, 41, 98)
+    #expect(topLeft[0] > 240 && topLeft[1] < 20 && topLeft[2] < 20, "\(topLeft)")
+    #expect(topRight[1] > 240 && topRight[0] < 20, "\(topRight)")
+    #expect(bottomLeft[2] > 240 && bottomLeft[0] < 20, "\(bottomLeft)")
+    #expect(pixel(image, 118, 98).allSatisfy { $0 > 240 })
+}
+
+@Test @MainActor func halftoneDotsGrowAcrossTheLayer() throws {
+    let image = try snapshot(stage(card([shaded("halftone", ["color": .color(DesignColor(r: 0, g: 0, b: 1)), "angle": .number(0)])])), scale: 2)
+    // Share of blue pixels in the card's left and right fifths, on top of its red fill.
+    func blue(_ columns: Range<Int>) -> Double {
+        let hits = columns.flatMap { x in (80..<200).map { y in pixel(image, x, y) } }.filter { $0[2] > 128 && $0[0] < 128 }.count
+        return Double(hits) / Double(columns.count * 120)
+    }
+    #expect(blue(80..<112) < 0.05)
+    #expect(blue(208..<240) > 0.5)
+}
+
+@Test @MainActor func wavesBlendItsTwoColorsAndOpacityFadesThem() throws {
+    let image = try snapshot(stage(card([shaded("waves", ["colorA": .color(.black), "colorB": .color(.white), "scale": .number(20)])])))
+    let row = (40..<120).map { pixel(image, $0, 70)[0] }
+    #expect(row.min()! < 40 && row.max()! > 215, "\(row.min()!)–\(row.max()!)")
+    // Half-transparent black over the red fill.
+    let faded = try snapshot(stage(card([shaded("mesh-gradient", ["topLeft": .color(.black), "topRight": .color(.black), "bottomLeft": .color(.black),
+                                                                  "bottomRight": .color(.black)], opacity: 0.5)])))
+    #expect(abs(pixel(faded, 80, 70)[0] - 128) < 6)
+}
+
+@Test @MainActor func shaderSitsBelowTheChildLayersAndRedrawsWhenZoomed() throws {
+    let renderer = DesignRenderer()
+    var frame = DesignNode(id: "f", type: .frame, width: 100, height: 100)
+    frame.effects = [shaded("waves")]
+    frame.children = [DesignNode(id: "child", type: .rectangle, width: 10, height: 10)]
+    renderer.sync([frame])
+    let content = try #require(renderer.contentLayer(for: "f"))
+    let layer = try #require(content.sublayers?.first as? ShaderLayer)
+    #expect(content.sublayers?.last === renderer.layer(for: "child"))
+    layer.displayIfNeeded()
+    let before = (layer.contents as! CGImage).width
+    renderer.contentsScale = 4
+    layer.displayIfNeeded()
+    #expect((layer.contents as! CGImage).width == before * 2)
+}

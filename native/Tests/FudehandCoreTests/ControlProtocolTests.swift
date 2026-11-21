@@ -43,6 +43,7 @@ private func object(_ data: Data) throws -> [String: Any] {
         (#"{"id":29,"command":"list_version_snapshots"}"#, .listVersionSnapshots(frame: nil)),
         (#"{"id":30,"command":"list_version_snapshots","args":{"frame":"f"}}"#, .listVersionSnapshots(frame: "f")),
         (#"{"id":23,"command":"list_fonts"}"#, .listFonts),
+        (#"{"id":23,"command":"list_shaders"}"#, .listShaders),
         (#"{"id":24,"command":"import_font","args":{"path":"/tmp/a.ttf"}}"#, .importFont("/tmp/a.ttf")),
         (#"{"id":25,"command":"search_icons","args":{"query":"home"}}"#, .searchIcons(query: "home", library: nil, limit: 50)),
         (#"{"id":26,"command":"search_icons","args":{"query":"home","library":"material-rounded","limit":3}}"#,

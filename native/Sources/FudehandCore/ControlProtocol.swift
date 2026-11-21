@@ -22,6 +22,8 @@ public enum ControlCommand: Equatable, Sendable {
     case saveVersionSnapshot(frame: String, note: String)
     case listVersionSnapshots(frame: String?)
     case listFonts
+    /// The built-in shaders a shader effect can draw, with their parameters (`ShaderCatalog`).
+    case listShaders
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
     /// Selection colors of the given layers, or of the selection when `ids` is nil.
@@ -348,6 +350,7 @@ public enum ControlProtocol {
             return .saveVersionSnapshot(frame: try string("frame"), note: note)
         case "list_version_snapshots": return .listVersionSnapshots(frame: try optionalString("frame"))
         case "list_fonts": return .listFonts
+        case "list_shaders": return .listShaders
         case "import_font": return .importFont(try string("path"))
         case "search_icons":
             var library: IconLibrary?

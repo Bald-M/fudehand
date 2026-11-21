@@ -26,7 +26,7 @@ describe('design tools', () => {
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
       'design_delete_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
-      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
+      'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_shaders', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
       'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
       'app_show_launch_window', 'app_list_recents', 'app_open_recent', 'app_remove_recent', 'app_clear_recents',
       'app_list_templates', 'app_new_document_from_template',
@@ -94,7 +94,7 @@ describe('design tools', () => {
 
   it('describes effects and forwards them unchanged', async () => {
     const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
-    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033', 'texture', 'soft-light', 'glass', 'saturation', 'tint', 'highlight', 'transform-3d', 'rotateY', 'translateZ', 'perspective', 'originX'])
+    for (const field of ['effects', 'drop-shadow', 'inner-shadow', 'layer-blur', 'background-blur', 'radius', 'spread', '#00000040', 'noise', 'density', 'seed', '#00000033', 'texture', 'soft-light', 'glass', 'saturation', 'tint', 'highlight', 'transform-3d', 'rotateY', 'translateZ', 'perspective', 'originX', 'shader', 'design_list_shaders', 'mesh-gradient'])
       expect(byName('design_create_node').description).toContain(field)
     const fake = await app(echo)
     const changes = { effects: [{ type: 'drop-shadow', color: '#00000033', x: 0, y: 8, radius: 24, spread: -4 }, { type: 'background-blur', radius: 20 }, { type: 'noise', size: 2, density: 0.3, seed: 7 }] }
@@ -210,6 +210,7 @@ describe('design tools', () => {
     await callTool('canvas_focus_node', { id: 'a' }, ctx)
     await callTool('canvas_focus_node', { ids: ['a', 'b'] }, ctx)
     await callTool('canvas_set_view', { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] }, ctx)
+    await callTool('design_list_shaders', {}, ctx)
     await callTool('design_list_fonts', {}, ctx)
     await callTool('design_import_font', { path: 'fonts/Brand.otf' }, ctx)
     await callTool('design_export_html', { id: 'f', directory: 'out/home' }, ctx)
@@ -229,6 +230,7 @@ describe('design tools', () => {
       { command: 'focus_node', args: { id: 'a' } },
       { command: 'focus_node', args: { ids: ['a', 'b'] } },
       { command: 'set_view', args: { tool: 'hand', inspector: false, inspectorTab: 'chat', expand: ['a'], collapse: ['b'] } },
+      { command: 'list_shaders', args: {} },
       { command: 'list_fonts', args: {} },
       { command: 'import_font', args: { path: '/repo/fonts/Brand.otf' } },
       { command: 'export_html', args: { id: 'f', directory: '/repo/out/home' } },
