@@ -231,6 +231,12 @@ public enum DesignJSON {
             if let unsupported = node.effects.first(where: { !$0.type.supports(type) }) {
                 throw reader.fail("\(type.rawValue) does not support \(unsupported.type.rawValue) effects")
             }
+            let glass = node.effects.filter { $0.type == .glass }.count
+            if glass > 1 { throw reader.fail("a layer takes at most one glass effect") }
+            // Glass already blurs what is under the layer; a background blur as well would blur it twice.
+            if glass == 1, node.effects.contains(where: { $0.type == .backgroundBlur }) {
+                throw reader.fail("glass and background-blur cannot be on the same layer")
+            }
         }
         if let guides = reader.value("layoutGuides") {
             guard let list = guides as? [[String: Any]] else { throw reader.fail("layoutGuides must be an array of objects") }
@@ -322,7 +328,8 @@ public enum DesignJSON {
         let type: EffectType = try reader.choice("type", default: .dropShadow)
         try reader.checkKeys(type.isShadow ? ["type", "visible", "color", "x", "y", "radius", "spread"]
                              : type == .noise ? ["type", "visible", "color", "size", "density", "seed"]
-                             : type == .texture ? ["type", "visible", "image", "size", "opacity", "blend"] : ["type", "visible", "radius"])
+                             : type == .texture ? ["type", "visible", "image", "size", "opacity", "blend"]
+                             : type == .glass ? ["type", "visible", "radius", "saturation", "tint", "highlight"] : ["type", "visible", "radius"])
         var effect = DesignEffect(type: type)
         effect.visible = try reader.bool("visible", default: true)
         if type == .noise {
@@ -346,6 +353,11 @@ public enum DesignJSON {
             return effect
         }
         effect.radius = try reader.number("radius", default: effect.radius, min: 0, max: DesignEffect.maximumRadius)
+        if type == .glass {
+            effect.saturation = try reader.number("saturation", default: effect.saturation, min: 0, max: 2)
+            effect.color = try reader.color("tint", default: effect.color)!
+            effect.highlight = try reader.number("highlight", default: effect.highlight, min: 0, max: 1)
+        }
         if type.isShadow {
             effect.color = try reader.color("color", default: effect.color)!
             effect.x = try reader.number("x", default: effect.x)
@@ -511,6 +523,9 @@ public enum DesignJSON {
                     value["size"] = effect.size; value["opacity"] = effect.opacity; value["blend"] = effect.blend.rawValue
                 } else {
                     value["radius"] = effect.radius
+                }
+                if effect.type == .glass {
+                    value["saturation"] = effect.saturation; value["tint"] = effect.color.hex; value["highlight"] = effect.highlight
                 }
                 if effect.type.isShadow {
                     value["color"] = effect.color.hex; value["x"] = effect.x; value["y"] = effect.y; value["spread"] = effect.spread

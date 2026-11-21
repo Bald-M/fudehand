@@ -528,6 +528,10 @@
 "Screen|blend" = "滤色";
 "Overlay|blend" = "叠加";
 "Soft Light" = "柔光";
+"Glass" = "玻璃";
+"Tint" = "着色";
+"Saturation" = "饱和度";
+"Highlight" = "高光";
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Shadow color" = "阴影颜色";

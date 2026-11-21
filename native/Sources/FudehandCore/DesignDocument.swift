@@ -177,13 +177,13 @@ public struct LayerStyle: Equatable, Sendable {
 }
 
 public enum EffectType: String, Sendable, CaseIterable {
-    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise, texture
+    case dropShadow = "drop-shadow", innerShadow = "inner-shadow", layerBlur = "layer-blur", backgroundBlur = "background-blur", noise, texture, glass
     public var isShadow: Bool { self == .dropShadow || self == .innerShadow }
 
-    /// Whether a layer of `type` takes this effect. Noise and texture paint over a layer's area, so only frames, rectangles, and
-    /// ellipses do.
+    /// Whether a layer of `type` takes this effect. Noise, texture, and glass paint over a layer's area, so only frames,
+    /// rectangles, and ellipses do.
     public func supports(_ type: NodeType) -> Bool {
-        self == .noise || self == .texture ? (type == .frame || type == .rectangle || type == .ellipse) : type.hasEffects
+        self == .noise || self == .texture || self == .glass ? (type == .frame || type == .rectangle || type == .ellipse) : type.hasEffects
     }
 }
 
@@ -193,7 +193,8 @@ public enum TextureBlend: String, Sendable, CaseIterable {
 }
 
 /// One entry in a layer's effects list. A shadow uses color, offset, radius, and spread; a blur uses only `radius`; noise uses
-/// color, size, density, and seed (see `NoiseTile`); a texture uses its image, size (the tile width), opacity, and blend.
+/// color, size, density, and seed (see `NoiseTile`); a texture uses its image, size (the tile width), opacity, and blend;
+/// glass uses radius (its backdrop blur), saturation, color (the tint drawn over the backdrop), and highlight.
 /// Shadows of frames, rectangles,
 /// ellipses, and images follow the layer's shape (spread grows or shrinks it); those of text and icons follow the glyphs and
 /// ignore spread. A drop shadow is not drawn under the layer itself, so it does not show through a see-through fill.
@@ -218,15 +219,21 @@ public struct DesignEffect: Equatable, Sendable {
     public var opacity: Double
     /// Texture only.
     public var blend: TextureBlend
+    /// Glass only: how much the blurred backdrop's colors are boosted, 0–2 (1 leaves them).
+    public var saturation: Double
+    /// Glass only: the opacity, 0–1, of a light edge along the inside of the shape's top.
+    public var highlight: Double
 
-    /// `color` defaults to black at 25% opacity for a shadow and 20% for noise; `size` to 1 for noise and 64 for a texture.
+    /// `color` defaults to black at 25% opacity for a shadow, black at 20% for noise, and white at 20% for glass; `size` to 1
+    /// for noise and 64 for a texture; `radius` to 4, or 20 for glass.
     public init(type: EffectType, visible: Bool = true, color: DesignColor? = nil, x: Double = 0, y: Double = 4,
-                radius: Double = 4, spread: Double = 0, size: Double? = nil, density: Double = 0.5, seed: Int = 0,
-                texture: Data? = nil, opacity: Double = 1, blend: TextureBlend = .normal) {
-        self.type = type; self.visible = visible; self.x = x; self.y = y; self.radius = radius; self.spread = spread
-        self.color = color ?? DesignColor(r: 0, g: 0, b: 0, a: type == .noise ? 51.0 / 255 : 64.0 / 255)
+                radius: Double? = nil, spread: Double = 0, size: Double? = nil, density: Double = 0.5, seed: Int = 0,
+                texture: Data? = nil, opacity: Double = 1, blend: TextureBlend = .normal, saturation: Double = 1.4, highlight: Double = 0.5) {
+        self.type = type; self.visible = visible; self.x = x; self.y = y; self.radius = radius ?? (type == .glass ? 20 : 4); self.spread = spread
+        self.color = color ?? (type == .glass ? DesignColor(r: 1, g: 1, b: 1, a: 51.0 / 255)
+                               : DesignColor(r: 0, g: 0, b: 0, a: type == .noise ? 51.0 / 255 : 64.0 / 255))
         self.size = size ?? (type == .texture ? 64 : 1); self.density = density; self.seed = seed
-        self.texture = texture; self.opacity = opacity; self.blend = blend
+        self.texture = texture; self.opacity = opacity; self.blend = blend; self.saturation = saturation; self.highlight = highlight
     }
 
     public static let maximumRadius = 250.0
