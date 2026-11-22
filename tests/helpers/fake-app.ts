@@ -14,13 +14,15 @@ export async function fakeApp(respond: (request: ControlRequest) => object, { sp
   const socketPath = join(tmpdir(), `uia-${randomUUID().slice(0, 8)}.sock`)
   const received: ControlRequest[] = []
   const server = net.createServer(socket => {
-    let buffer = ''
-    socket.on('data', chunk => {
-      buffer += chunk
+    // Collect chunks and scan only each new chunk for the newline: rescanning a growing string on every chunk is quadratic for a multi-MB request.
+    let chunks: Buffer[] = []
+    socket.on('data', (chunk: Buffer) => {
       let index
-      while ((index = buffer.indexOf('\n')) >= 0) {
-        const request = JSON.parse(buffer.slice(0, index))
-        buffer = buffer.slice(index + 1)
+      while ((index = chunk.indexOf('\n')) >= 0) {
+        chunks.push(chunk.subarray(0, index))
+        const request = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        chunks = []
+        chunk = chunk.subarray(index + 1)
         received.push(request)
         const line = Buffer.from(JSON.stringify({ id: request.id, ...respond(request) }) + '\n')
         if (!splitInside) { socket.write(line); continue }
@@ -28,6 +30,7 @@ export async function fakeApp(respond: (request: ControlRequest) => object, { sp
         socket.write(line.subarray(0, splitAt))
         setTimeout(() => socket.write(line.subarray(splitAt)), 20)
       }
+      if (chunk.length) chunks.push(chunk)
     })
   })
   await new Promise<void>(resolve => server.listen(socketPath, resolve))
