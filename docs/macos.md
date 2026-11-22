@@ -100,6 +100,7 @@ Interaction follows Figma.
 
 - Scroll wheel or trackpad scrolling, Space + drag, middle-mouse drag, or dragging with the Hand tool pans the canvas. The cursor turns into a hand as soon as Space is pressed, and reverts on release.
 - ⌘ / ⌃ + scroll wheel, or trackpad pinch, zooms anchored at the pointer, within 5%–400%.
+- While the view pans or zooms, each top-level frame with effects is drawn as a picture of itself, so glass and blurs do not have to be computed again on every frame; it looks the same, and the live layers return when the view settles. The pictures are drawn in the background a quarter of a second after the last edit or zoom, for the frames in and around the view; a frame edited since its picture was drawn, one with glass or a background blur of its own, and one with a 3D transform stay live (see [ADR 0012](adr/0012-advanced-effects.md#performance)).
 - The window toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, Fit All, and Play Prototype (see "Prototype" below). Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
 - When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately; with *Reduce motion* on in System Settings › Accessibility › Display they jump straight to the end (see [Accessibility](accessibility.md)).
 
@@ -170,4 +171,4 @@ The Swift tests cover document reading/writing and version checks, field patches
 
 ## Performance Troubleshooting
 
-Launch the App with `FUDEHAND_FRAME_LOG=1` and it prints one line per second to stderr, `[frame] hitches=N frames=M`, for comparing dropped frames while panning and zooming.
+Launch the App with `FUDEHAND_FRAME_LOG=1` and it prints one line per second to stderr, `[frame] hitches=N frames=M`, for comparing dropped frames while panning and zooming. `pnpm bench:native` includes `canvasPanCompositeBenchmark`, which measures the GPU time Core Animation spends on each pan frame (the window server's share, which `[frame]` lines do not show).

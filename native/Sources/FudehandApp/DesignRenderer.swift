@@ -31,10 +31,23 @@ final class DesignRenderer {
         /// unchanged: arrays compare by identity first, so an edit elsewhere in the document costs nothing here (#228).
         var syncedChildren: [DesignNode]?
         var subtreeCount = 0
+        /// For a top-level node, where it and its descendants paint, in world coordinates; nil when that is unbounded.
+        var paint: CGRect?
         init(_ layer: CALayer) { self.layer = layer; content = layer }
     }
     private var records: [String: Record] = [:]
     private var pass = 0
+    /// The top-level node ids, back to front, as of the last sync.
+    private var topLevel: [String] = []
+    /// The part of the world on screen. Top-level layers that paint nothing there are left out of `root`: Core Animation
+    /// would still compute their background filters every frame (#241). Nil keeps every layer (snapshots, playback).
+    var visibleRect: CGRect? {
+        didSet { if visibleRect != oldValue { arrangeRoot() } }
+    }
+    /// Layers drawn instead of a top-level node's own layers, by node id (see `CanvasBitmaps`).
+    var standIns: [String: CALayer] = [:] {
+        didSet { if standIns != oldValue { arrangeRoot() } }
+    }
     /// Text and images are rasterized at this scale: screen scale × canvas zoom.
     var contentsScale: CGFloat = 2 {
         didSet {
@@ -96,6 +109,29 @@ final class DesignRenderer {
                 records[id] = nil
             }
         }
+        arrangeRoot()
+        CATransaction.commit()
+    }
+
+    /// Puts the top-level layers into `root` back to front: each one's stand-in or its background blurs and layer, leaving out
+    /// those whose paint misses `visibleRect`.
+    private func arrangeRoot() {
+        var ordered: [CALayer] = []
+        for id in topLevel {
+            guard let record = records[id] else { continue }
+            if let visibleRect, let paint = record.paint, !paint.intersects(visibleRect) { continue }
+            if let standIn = standIns[id] {
+                ordered.append(standIn)
+            } else {
+                ordered += record.backdrops
+                ordered.append(record.layer)
+            }
+        }
+        let current = root.sublayers ?? []
+        guard current.count != ordered.count || !zip(current, ordered).allSatisfy({ $0 === $1 }) else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        root.sublayers = ordered
         CATransaction.commit()
     }
 
@@ -132,9 +168,17 @@ final class DesignRenderer {
                 current.subtreeCount = syncChildren(of: current.content, node.children, below: current.innerShadows, skipping: skipping)
                 current.syncedChildren = node.children
                 seen += current.subtreeCount
+                if parent === root {
+                    current.paint = node.paintBounds.map { CGRect(x: node.x + $0.x, y: node.y + $0.y, width: $0.width, height: $0.height) }
+                }
             }
             ordered += current.backdrops
             ordered.append(current.layer)
+        }
+        // The top level is arranged by `arrangeRoot`, which leaves out layers off screen and puts in stand-ins.
+        if parent === root {
+            topLevel = nodes.map(\.id)
+            return seen
         }
         let current = parent.sublayers ?? []
         if current.count != ordered.count || !zip(current, ordered).allSatisfy({ $0 === $1 }) {
@@ -288,14 +332,33 @@ final class DesignRenderer {
 
     /// Renders a node (with its children) offscreen and returns a PNG; the node itself sits at the top-left corner of the image.
     static func snapshotPNG(_ node: DesignNode, scale: Double) throws -> Data {
+        let image = try image(of: node, in: CGRect(x: 0, y: 0, width: node.width, height: node.height), scale: scale)
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
+            throw ControlCommandError("Could not encode the snapshot")
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { throw ControlCommandError("Could not encode the snapshot") }
+        return data as Data
+    }
+
+    /// One Metal device and queue for every snapshot and canvas bitmap.
+    private static let gpu: (device: MTLDevice, queue: MTLCommandQueue)? = {
+        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { return nil }
+        return (device, queue)
+    }()
+
+    /// Draws `rect` of the node (in its own coordinates, its top-left corner at 0, 0) at `scale` pixels per point, shown
+    /// wherever it is placed, as the canvas draws it.
+    static func image(of node: DesignNode, in rect: CGRect, scale: Double) throws -> CGImage {
         let renderer = DesignRenderer()
         renderer.contentsScale = scale
         var placed = node
-        placed.x = 0
-        placed.y = 0
+        placed.x = -rect.minX
+        placed.y = -rect.minY
         placed.visible = true
         renderer.sync([placed])
-        let pixels = (width: (node.width * scale).rounded(.up), height: (node.height * scale).rounded(.up))
+        let pixels = (width: (rect.width * scale).rounded(.up), height: (rect.height * scale).rounded(.up))
         guard pixels.width <= 16_384, pixels.height <= 16_384 else {
             throw ControlCommandError("Snapshot is too large (\(Int(pixels.width))×\(Int(pixels.height)) pixels); reduce scale")
         }
@@ -308,13 +371,11 @@ final class DesignRenderer {
         stage.isGeometryFlipped = true
         stage.frame = CGRect(x: 0, y: 0, width: width, height: height)
         renderer.root.anchorPoint = .zero
-        renderer.root.frame = CGRect(x: 0, y: 0, width: node.width, height: node.height)
+        renderer.root.frame = CGRect(origin: .zero, size: rect.size)
         renderer.root.transform = CATransform3DMakeScale(CGFloat(scale), CGFloat(scale), 1)
         stage.addSublayer(renderer.root)
         CATransaction.commit()
-        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
-            throw ControlCommandError("Could not create the snapshot canvas")
-        }
+        guard let (device, queue) = gpu else { throw ControlCommandError("Could not create the snapshot canvas") }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
         descriptor.usage = [.renderTarget, .shaderRead]
         descriptor.storageMode = .managed
@@ -351,13 +412,7 @@ final class DesignRenderer {
                                   provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
             throw ControlCommandError("Snapshot failed")
         }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
-            throw ControlCommandError("Could not encode the snapshot")
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { throw ControlCommandError("Could not encode the snapshot") }
-        return data as Data
+        return image
     }
 }
 

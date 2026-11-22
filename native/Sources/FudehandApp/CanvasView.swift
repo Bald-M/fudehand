@@ -53,6 +53,7 @@ final class FudehandCanvasView: NSView {
     let gridLayer = CanvasGrid()
     let overlay = CanvasOverlay()
     let renderer = DesignRenderer()
+    let bitmaps = CanvasBitmaps()
     /// The document on screen with its lookup index; the store builds it once per document change.
     private(set) var index = DesignIndex()
     var document: DesignDocument { index.document }
@@ -86,6 +87,11 @@ final class FudehandCanvasView: NSView {
     /// Set when the current gesture panned, so its end reports the settled viewport.
     private var gesturePanned = false
     var settleWork: DispatchWorkItem?
+    /// Set from the first viewport change of a pan or zoom until it settles; top-level layers with effects are then drawn as
+    /// their bitmaps (see `CanvasBitmaps`).
+    var viewMoving = false
+    /// The next bitmap to draw, queued on the main thread.
+    var bitmapWork: DispatchWorkItem?
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     /// Holding Space shows the hand right away, before any drag starts.
@@ -219,6 +225,8 @@ final class FudehandCanvasView: NSView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         removeFocusObservers()
         settleWork?.cancel()
+        bitmapWork?.cancel()
+        bitmapWork = nil
         animation = nil
         stopDisplayLink()
     }
@@ -247,6 +255,9 @@ final class FudehandCanvasView: NSView {
     func show(_ next: DesignIndex) {
         index = next
         renderer.sync(next.document.nodes)
+        // An edited layer is shown live until its bitmap is drawn again, once the edits pause.
+        updateStandIns()
+        scheduleBitmaps(restart: true)
         if !selection.allSatisfy(next.contains) {
             selection = selection.filter(next.contains)
             NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
@@ -256,7 +267,10 @@ final class FudehandCanvasView: NSView {
     }
 
     /// The available fonts changed; the store follows with `show`.
-    func fontsChanged() { renderer.fontsChanged() }
+    func fontsChanged() {
+        renderer.fontsChanged()
+        bitmaps.removeAll()
+    }
 
     func setSelection(_ next: Set<String>) {
         guard next != selection else { return }
