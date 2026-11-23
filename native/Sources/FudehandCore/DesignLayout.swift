@@ -43,7 +43,7 @@ public enum DesignLayout {
                 text.autoResize != .none || node.sizing.vertical == .hug)
     }
 
-    /// A text a layout of the nodes as they are measures first: its natural width when it hugs it (`width` nil), then its
+    /// A measurement the first layout pass asks for: a text's natural width when it hugs it (`width` nil), then its
     /// height at that width, or at `width`, when it hugs its height.
     public struct TextRequest: Hashable, Sendable {
         public let text: DesignText

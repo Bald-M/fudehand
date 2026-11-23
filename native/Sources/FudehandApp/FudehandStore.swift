@@ -511,20 +511,28 @@ final class FudehandStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Ask only after the file is chosen: the Agent may have modified the document while choosing.
         guard confirmDiscard() else { return }
-        opening = Task { do { try await open(url) } catch { alert = error.localizedDescription } }
+        opening = Task { do { try await open(url, discarding: confirmDiscard) } catch { alert = error.localizedDescription } }
     }
 
-    /// The open started from the UI (the Open panel, Finder, recent files), which finishes once the file is read.
+    /// The open last started from the UI (the Open panel, Finder, recent files); tests wait for it.
     private(set) var opening: Task<Void, Never>?
+    /// Counts opens, so only the latest one shows its file.
+    private var openRequest = 0
 
     /// Reads and validates a project file away from the main thread, which a large file would hold for hundreds of
-    /// milliseconds (#248); on failure the current document is unchanged.
-    func open(_ url: URL) async throws {
+    /// milliseconds (#248); on failure the current document is unchanged. The caller has already decided the current
+    /// document may be replaced; when it was edited while the file was read, `discarding` decides again. An open
+    /// superseded by a later one while its file was read does nothing.
+    func open(_ url: URL, discarding: () throws -> Bool) async throws {
+        openRequest += 1
+        let request = openRequest, revision = editor.revision
         let document = try await Task.detached(priority: .userInitiated) {
             let data: Data
             do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read file: %@", url.lastPathComponent)) }
             return try DesignDocument.decode(data)
         }.value
+        guard request == openRequest else { return }
+        if editor.revision != revision { guard try discarding() else { return } }
         replace(document, url: url)
     }
 
@@ -557,6 +565,8 @@ final class FudehandStore: ObservableObject {
     private func load(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         expandAnnotation(nil)
+        // The previous document's SVG images and rasters are not kept for the next one.
+        SVGCache.removeAll()
         TextMetrics.prewarm(next.nodes)
         editor.replace(next)
         inGesture = false
@@ -741,7 +751,7 @@ final class FudehandStore: ObservableObject {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
         guard try discarding() else { return }
-        try await open(url)
+        try await open(url, discarding: discarding)
     }
 
     func shutdown() async { await chat.shutdown() }

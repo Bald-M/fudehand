@@ -412,6 +412,6 @@ enum CanvasBenchmark {
     print(String(format: "[bench] layers=%d documentOpen read=%.0fms mainThread=%.0fms commit=%.0fms",
                  decoded.nodeCount, read, open, commit))
     #expect(h.canvas.renderer.layerCount == decoded.nodeCount)
-    // About 400 ms before the text measurements were made in parallel and SVG icons parsed and rasterized once each.
+    // About 400–600 ms before the text measurements were made in parallel and SVG icons parsed and rasterized once each.
     #expect(open < 300)
 }

@@ -431,6 +431,13 @@ final class ImageLayer: CALayer {
     private static var rasters: [RasterKey: CGImage] = [:]
     private static var rasterBytes = 0
 
+    /// Forgets every image and raster; layers keep showing the ones they hold.
+    static func removeAll() {
+        images = [:]
+        rasters = [:]
+        rasterBytes = 0
+    }
+
     /// The SVG the data holds, or nil when it is not one.
     static func image(_ key: Key) -> NSImage? {
         if let cached = images[key] { return cached }

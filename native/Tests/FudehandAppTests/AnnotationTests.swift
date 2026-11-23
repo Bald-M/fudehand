@@ -128,7 +128,7 @@ import Testing
     try h.store.write(to: url)
     h.store.replace(DesignDocument(), url: nil)
     #expect(h.store.editor.document.annotations.isEmpty)
-    try await h.store.open(url)
+    try await h.store.open(url) { true }
     #expect(h.store.editor.document.annotations == [note] && h.canvas.overlay.markerCounts == [note.id: "1"])
 }
 

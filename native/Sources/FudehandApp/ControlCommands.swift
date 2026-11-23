@@ -69,7 +69,7 @@ extension FudehandStore {
             return controlState()
         case .openDocument(let path, let discard):
             try requireDiscardable(discard)
-            try await open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+            try await open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath)) { try requireDiscardable(discard); return true }
             return controlState()
         case .saveDocument(let path):
             guard let url = path.map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }) ?? fileURL else {
