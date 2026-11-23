@@ -118,20 +118,54 @@ enum CanvasBitmapFixture {
     #expect(onCanvas(h, "plain"))
 }
 
-@Test @MainActor func movingViewShowsBitmapOfFrameWithEffectsUntilItSettles() async throws {
+@Test @MainActor func frameWithEffectsIsShownAsItsBitmapOnceDrawn() async throws {
     let h = CanvasHarness(document: CanvasBitmapFixture.document())
     defer { h.dispose() }
-    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g") != nil }
-    #expect(h.canvas.bitmaps.layer(for: "g")?.contents != nil)
+    // Live until its bitmap is drawn, then the bitmap, at rest (#245) as while the view moves (#241).
     #expect(onCanvas(h, "g"))
-
-    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 1), zooming: false)
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
     #expect(standInOnCanvas(h, "g"))
     #expect(!onCanvas(h, "g"))
 
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 1), zooming: false)
+    #expect(standInOnCanvas(h, "g"))
+    h.canvas.settleViewport()
+    #expect(standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func editedFrameAtRestIsShownLiveUntilItsBitmapIsRedrawn() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    // A drag shows its result at once, on the live layers.
+    h.store.canvasBeginGesture("Move Layers")
+    h.store.canvasMove(["spot": Point(x: 60, y: 40)])
+    #expect(onCanvas(h, "g"))
+    h.store.canvasMove(["spot": Point(x: 70, y: 40)])
+    h.store.canvasEndGesture()
+    #expect(onCanvas(h, "g"))
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    #expect(standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func atRestABitmapTooCoarseForTheZoomIsNotShown() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    // Zoomed in: the old bitmap would look soft at rest, so the live layers show until it is drawn again.
+    h.canvas.inputPause = 3600
+    h.canvas.noteInput()
+    h.canvas.setLiveViewport(Viewport(x: 0, y: 100, scale: 3), zooming: true)
+    #expect(standInOnCanvas(h, "g"))
     h.canvas.settleViewport()
     #expect(onCanvas(h, "g"))
-    #expect(!standInOnCanvas(h, "g"))
+    h.canvas.inputPause = 0
+    h.canvas.scheduleBitmaps(restart: true)
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    // Zoomed back out: the sharper bitmap serves at once.
+    h.canvas.setLiveViewport(Viewport(x: 0, y: 100, scale: 1), zooming: true)
+    h.canvas.settleViewport()
+    #expect(standInOnCanvas(h, "g"))
 }
 
 @Test @MainActor func frameWithoutEffectsStaysLiveWhileTheViewMoves() async throws {

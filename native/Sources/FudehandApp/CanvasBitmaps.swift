@@ -1,12 +1,14 @@
 import AppKit
 import FudehandCore
 
-/// Bitmaps of top-level layers with effects, drawn in place of their live layers while the canvas pans or zooms (#241).
+/// Bitmaps of top-level layers with effects, drawn in place of their live layers (#241, #245).
 ///
 /// Core Animation computes every background filter (glass, background blur) and layer blur again on each frame the view
-/// moves, which costs hundreds of milliseconds per frame on a design with a few hundred of them. Moving the view does not
-/// change what a top-level layer looks like, so a bitmap of it, drawn once by Core Animation itself (as snapshots are),
-/// shows the same pixels and only needs moving. Bitmaps are drawn one at a time while the canvas is idle, mostly off the main
+/// moves, which costs hundreds of milliseconds per frame on a design with a few hundred of them, and the window server does
+/// the same at rest whenever anything on the canvas changes (a selection box, a hover outline). Neither changes what a
+/// top-level layer looks like, so a bitmap of it, drawn once by Core Animation itself (as snapshots are), can stand in for it
+/// and only needs moving. It matches a snapshot; the window server blurs a little differently from the offscreen renderer,
+/// so glows and glass spread slightly wider in a bitmap than live, the more so the smaller the zoom (ADR 0012). Bitmaps are drawn one at a time while the canvas is idle, mostly off the main
 /// thread (#243), kept while their node is unchanged and they fit the pixel budget, and drawn again at a new zoom (until
 /// then the old one is shown stretched); one of a node that has changed since is never shown.
 @MainActor
@@ -36,11 +38,14 @@ final class CanvasBitmaps {
         node.effects.contains(where: \.visible) || node.children.contains { $0.visible && hasEffects($0) }
     }
 
-    /// The bitmaps that show the top-level `nodes` as they are now, by node id; drawn at any zoom.
-    func current(_ nodes: [DesignNode]) -> [String: CALayer] {
+    /// The bitmaps that show the top-level `nodes` as they are now, by node id, drawn at `minimumScale` pixels per point or
+    /// more.
+    func current(_ nodes: [DesignNode], minimumScale: CGFloat = 0) -> [String: CALayer] {
         var current: [String: CALayer] = [:]
         for node in nodes {
-            if let entry = entries[node.id], entry.node == node, entry.layer.contents != nil { current[node.id] = entry.layer }
+            if let entry = entries[node.id], entry.node == node, entry.scale >= minimumScale, entry.layer.contents != nil {
+                current[node.id] = entry.layer
+            }
         }
         return current
     }

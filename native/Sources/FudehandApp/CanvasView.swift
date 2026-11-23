@@ -297,6 +297,8 @@ final class FudehandCanvasView: NSView {
     func updateContentsScale() {
         let backing = window?.backingScaleFactor ?? 2
         renderer.contentsScale = backing * CGFloat(Self.rasterZoom(committedViewport.scale))
+        // A bitmap from a coarser zoom no longer stands in at rest.
+        updateStandIns()
     }
 
     static func rasterZoom(_ scale: Double) -> Double {
