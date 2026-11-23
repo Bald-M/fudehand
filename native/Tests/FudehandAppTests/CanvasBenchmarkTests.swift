@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import Metal
+import QuartzCore
 import Testing
 @testable import FudehandApp
 @testable import FudehandCore
@@ -72,5 +74,90 @@ enum CanvasBenchmark {
 
         print(String(format: "[bench] layers=%d effects=%@ dragEvent=%.2fms canvasMove=%.2fms rendererSync=%.2fms hoverHit=%.3fms",
                      document.nodeCount, effects ? "10%" : "none", drag, move, sync, hover))
+    } }
+}
+
+/// Pan compositing cost (#241): Core Animation's GPU time for each frame of a pan, rendered offscreen with `CARenderer` the way
+/// the window server composites the canvas. *live* draws every top-level layer as it is (the canvas before #241); *moving* is
+/// what the canvas shows while the view moves: layers off screen left out and frames with effects drawn as their bitmaps.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasPanCompositeBenchmark() async throws {
+    let device = try #require(MTLCreateSystemDefaultDevice())
+    let queue = try #require(device.makeCommandQueue())
+    for frames in [40, 100] { for effects in [false, true] {
+        let document = CanvasBenchmark.document(frames: frames, effects: effects)
+        let h = CanvasHarness(document: document)
+        defer { h.dispose() }
+        let start = Viewport(x: 0, y: 0, scale: 0.5)
+        h.request(start)
+        let size = h.canvas.bounds.size
+        // Bitmaps are drawn while the canvas is idle; wait for those around the view.
+        let near = h.canvas.visibleWorldRect.insetBy(dx: -size.width, dy: -size.height)
+        let wanted = document.nodes.filter { node in
+            guard CanvasBitmaps.wanted(node), let paint = node.paintBounds else { return false }
+            return CGRect(x: node.x + paint.x, y: node.y + paint.y, width: paint.width, height: paint.height).intersects(near)
+        }
+        for _ in 0..<500 where h.canvas.bitmaps.current(wanted).count < wanted.count {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        // What drawing one bitmap costs the main thread (a frame of 50 layers, rendered offscreen and read back).
+        let draws = CanvasBitmaps()
+        let draw = CanvasBenchmark.time(wanted.count) { _ in
+            _ = draws.drawNext(wanted, near: near, scale: h.canvas.renderer.contentsScale)
+        }
+
+        // The renderer's tree on a stage of its own: a layer can be drawn by one renderer only.
+        let content = h.canvas.renderer.root
+        content.removeFromSuperlayer()
+        let stage = CALayer()
+        stage.isGeometryFlipped = true
+        stage.frame = CGRect(x: 0, y: 0, width: size.width * 2, height: size.height * 2)
+        let world = CALayer()
+        world.anchorPoint = .zero
+        world.frame = stage.bounds
+        stage.addSublayer(world)
+        world.addSublayer(content)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: Int(stage.bounds.width),
+                                                                  height: Int(stage.bounds.height), mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        let compositor = CARenderer(mtlTexture: try #require(device.makeTexture(descriptor: descriptor)),
+                                    options: [kCARendererMetalCommandQueue: queue])
+        compositor.layer = stage
+        compositor.bounds = stage.bounds
+
+        /// Pans 120 frames and returns the 95th-percentile milliseconds per frame.
+        func pan(live: Bool) -> Double {
+            var times: [Double] = []
+            var viewport = start
+            for step in 0..<125 {
+                viewport.x += step / 30 % 2 == 0 ? -8.3 : 8.3
+                viewport.y -= 3.1
+                h.canvas.setLiveViewport(viewport, zooming: false)
+                if live { h.canvas.renderer.visibleRect = nil; h.canvas.renderer.standIns = [:] }
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                world.sublayerTransform = CATransform3DMakeScale(2 * viewport.scale, 2 * viewport.scale, 1)
+                world.bounds = CGRect(x: -viewport.x * 2, y: -viewport.y * 2, width: stage.bounds.width, height: stage.bounds.height)
+                CATransaction.commit()
+                CATransaction.flush()
+                let begin = CACurrentMediaTime()
+                compositor.beginFrame(atTime: begin, timeStamp: nil)
+                compositor.addUpdate(compositor.bounds)
+                compositor.render()
+                compositor.endFrame()
+                let fence = queue.makeCommandBuffer()!
+                fence.commit()
+                fence.waitUntilCompleted()
+                // The first frames warm caches up.
+                if step >= 5 { times.append((CACurrentMediaTime() - begin) * 1000) }
+            }
+            h.canvas.settleViewport()
+            return times.sorted()[times.count * 95 / 100]
+        }
+        let live = pan(live: true)
+        let moving = pan(live: false)
+        print(String(format: "[bench] layers=%d effects=%@ panComposite p95 live=%.1fms moving=%.1fms bitmaps=%d bitmapDraw=%.1fms",
+                     document.nodeCount, effects ? "10%" : "none", live, moving, wanted.count, wanted.isEmpty ? 0 : draw))
+        // The gate in ADR 0012: one 60 Hz frame while the view moves.
+        #expect(moving < 1000.0 / 60)
     } }
 }

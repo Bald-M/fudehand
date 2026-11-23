@@ -53,8 +53,49 @@ extension FudehandCanvasView {
         if world.bounds != committedBounds { world.bounds = committedBounds }
         zoomHost.layer?.sublayerTransform = zoomTransform()
         gridLayer.update(viewport: liveViewport, bounds: bounds)
+        // A few points of margin for soft edges that reach past the paint bounds' estimate.
+        renderer.visibleRect = visibleWorldRect.insetBy(dx: -4 / liveViewport.scale, dy: -4 / liveViewport.scale)
+        updateStandIns()
         CATransaction.commit()
         refreshOverlay()
+        if viewMoving { scheduleBitmaps(restart: false) }
+    }
+
+    /// The part of the world the live viewport shows.
+    var visibleWorldRect: CGRect {
+        let v = liveViewport
+        return CGRect(x: -v.x / v.scale, y: -v.y / v.scale, width: bounds.width / v.scale, height: bounds.height / v.scale)
+    }
+
+    /// While the view moves, top-level layers with a bitmap of them as they are now are drawn as it, even one drawn at another
+    /// zoom (stretched until it is drawn again): any bitmap is far cheaper to show than the live layers.
+    func updateStandIns() {
+        renderer.standIns = viewMoving ? bitmaps.current(document.nodes) : [:]
+    }
+
+    /// Queues drawing the missing bitmaps, one per main-thread turn. `restart` (after an edit or a settled view) waits for a
+    /// pause first, so a drag does not redraw the bitmap of the frame it edits on every event.
+    func scheduleBitmaps(restart: Bool) {
+        if let pending = bitmapWork {
+            guard restart else { return }
+            pending.cancel()
+        }
+        let work = DispatchWorkItem { [weak self] in self?.drawNextBitmap() }
+        bitmapWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (restart ? Self.bitmapPause : 0), execute: work)
+    }
+
+    static let bitmapPause = 0.25
+
+    private func drawNextBitmap() {
+        bitmapWork = nil
+        guard window != nil else { return }
+        // Bitmaps cover the view and half a view around it, where a pan goes next.
+        let visible = visibleWorldRect
+        let near = visible.insetBy(dx: -visible.width / 2, dy: -visible.height / 2)
+        guard bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving) else { return }
+        if viewMoving { updateStandIns() }
+        scheduleBitmaps(restart: false)
     }
 
     /// Maps the committed world rendering onto the live viewport: screen' = k·screen + (live − k·committed).
@@ -74,6 +115,7 @@ extension FudehandCanvasView {
     /// Shows `next`. A zoom, or any change while a zoom is pending, stays a transform; a pan moves the world directly.
     func setLiveViewport(_ next: Viewport, zooming: Bool) {
         let transform = zooming || isZoomPending
+        viewMoving = true
         liveViewport = next
         if !transform { committedViewport = next }
         applyViewport()
@@ -84,9 +126,11 @@ extension FudehandCanvasView {
     /// Commits the live viewport to `world.bounds` and reports it.
     func settleViewport() {
         committedViewport = liveViewport
+        viewMoving = false
         applyViewport()
         updateIndicator(force: true)
         updateContentsScale()
+        scheduleBitmaps(restart: true)
         host?.canvasViewportSettled(liveViewport)
         // The layers' VoiceOver frames moved.
         NSAccessibility.post(element: self, notification: .layoutChanged)
@@ -120,9 +164,11 @@ extension FudehandCanvasView {
         } else {
             liveViewport = request.viewport
             committedViewport = request.viewport
+            viewMoving = false
             applyViewport()
             updateIndicator(force: true)
             updateContentsScale()
+            scheduleBitmaps(restart: true)
             NSAccessibility.post(element: self, notification: .layoutChanged)
         }
     }
