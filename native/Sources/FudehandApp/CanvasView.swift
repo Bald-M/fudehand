@@ -236,6 +236,8 @@ final class FudehandCanvasView: NSView {
         settleWork?.cancel()
         bitmapWork?.cancel()
         bitmapWork = nil
+        buildWork?.cancel()
+        buildWork = nil
         animation = nil
         stopDisplayLink()
     }
@@ -267,13 +269,21 @@ final class FudehandCanvasView: NSView {
         if showsNewDocument {
             showsNewDocument = false
             renderer.withoutEffects = bitmaps.awaiting(next.document.nodes)
-        } else if !renderer.withoutEffects.isEmpty {
-            // A layer edited before its bitmap is drawn shows its effects, live.
-            func byID(_ nodes: [DesignNode]) -> [String: DesignNode] { Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
-            let before = byID(previous.document.nodes), after = byID(next.document.nodes)
-            renderer.withoutEffects = renderer.withoutEffects.filter { after[$0] != nil && after[$0] == before[$0] }
+            buildWork?.cancel()
+            buildWork = nil
+            unbuilt = next.document.nodeCount > Self.buildAtOnce ? Set(next.document.nodes.map(\.id)) : []
+            if !unbuilt.isEmpty { scheduleBuild() }
+        } else {
+            // A deleted layer is not built later; one added since is built now, as it was never waiting.
+            if !unbuilt.isEmpty { unbuilt.formIntersection(next.document.nodes.map(\.id)) }
+            if !renderer.withoutEffects.isEmpty {
+                // A layer edited before its bitmap is drawn shows its effects, live.
+                func byID(_ nodes: [DesignNode]) -> [String: DesignNode] { Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+                let before = byID(previous.document.nodes), after = byID(next.document.nodes)
+                renderer.withoutEffects = renderer.withoutEffects.filter { after[$0] != nil && after[$0] == before[$0] }
+            }
         }
-        renderer.sync(next.document.nodes)
+        syncRenderer()
         // An edited layer is shown live until its bitmap is drawn again, once the edits pause.
         updateStandIns()
         scheduleBitmaps(restart: true)
@@ -283,6 +293,46 @@ final class FudehandCanvasView: NSView {
         }
         if let hover, !next.contains(hover) { self.hover = nil; host?.canvasHover(nil) }
         refreshOverlay()
+    }
+
+    /// Documents with up to this many layers are built in full when shown; larger ones a part at a time (#248).
+    static let buildAtOnce = 6000
+    /// About how many layers each run loop turn builds of a large document.
+    static let layersPerTurn = 1500
+    /// The top-level layers of a large document just shown that are not built yet. Building 16,000 layers at once held the
+    /// main thread for half a second, and drawing their text in the next commit as long again; built a part per turn, the
+    /// canvas shows at once and stays responsive while the rest fills in (#248).
+    private(set) var unbuilt: Set<String> = []
+    private var buildWork: DispatchWorkItem?
+
+    /// Syncs the layers with the document, leaving out the top-level layers not built yet.
+    func syncRenderer() {
+        renderer.sync(unbuilt.isEmpty ? document.nodes : document.nodes.filter { !unbuilt.contains($0.id) })
+    }
+
+    private func scheduleBuild() {
+        let work = DispatchWorkItem { [weak self] in self?.buildNext() }
+        buildWork = work
+        DispatchQueue.main.async(execute: work)
+    }
+
+    /// Builds the waiting top-level layers nearest the middle of the view, about `layersPerTurn` layers with their
+    /// descendants, and queues the rest for the next turn.
+    private func buildNext() {
+        buildWork = nil
+        let view = visibleWorldRect
+        func distance(_ node: DesignNode) -> Double {
+            hypot(node.x + node.width / 2 - view.midX, node.y + node.height / 2 - view.midY)
+        }
+        func layers(_ node: DesignNode) -> Int { node.children.reduce(1) { $0 + layers($1) } }
+        var count = 0
+        for node in document.nodes.filter({ unbuilt.contains($0.id) }).sorted(by: { distance($0) < distance($1) }) {
+            guard count < Self.layersPerTurn else { break }
+            unbuilt.remove(node.id)
+            count += layers(node)
+        }
+        syncRenderer()
+        if !unbuilt.isEmpty { scheduleBuild() }
     }
 
     /// Set until the canvas first shows a document, and when the store loads another: its top-level layers with effects are
