@@ -101,8 +101,10 @@ extension FudehandCanvasView {
         bitmapWork = nil
         // The bitmap being drawn queues the next when it is done.
         guard window != nil, !bitmaps.drawing else { return }
+        // While the view moves only bitmaps that are missing altogether are drawn (see `drawNext`), and those are worth a few
+        // milliseconds of the main thread even mid-gesture: the layer is composited live until then.
         let quiet = CACurrentMediaTime() - lastInput
-        guard quiet >= inputPause else { return scheduleBitmaps(after: inputPause - quiet, replacing: false) }
+        guard viewMoving || quiet >= inputPause else { return scheduleBitmaps(after: inputPause - quiet, replacing: false) }
         // Bitmaps cover the view and half a view around it, where a pan goes next.
         let visible = visibleWorldRect
         let near = visible.insetBy(dx: -visible.width / 2, dy: -visible.height / 2)

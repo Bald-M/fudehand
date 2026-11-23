@@ -16,17 +16,22 @@ final class OffscreenImage: @unchecked Sendable {
         return (device, queue)
     }()
 
-    /// Sets up the GPU device and Core Animation's offscreen renderer on a background queue, so the first bitmap or snapshot
-    /// does not pay for it on the main thread (about 40 ms).
-    static func warmUp() {
+    /// Sets up the GPU device and Core Animation's offscreen renderer on a background queue, once, so the first bitmap or
+    /// snapshot does not pay for it on the main thread (about 40 ms).
+    static func warmUp() { _ = warmedUp }
+
+    private static let warmedUp: Void = {
         DispatchQueue.global(qos: .utility).async {
             guard let (device, queue) = gpu else { return }
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 8, height: 8, mipmapped: false)
             descriptor.usage = [.renderTarget, .shaderRead]
             guard let texture = device.makeTexture(descriptor: descriptor) else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             let stage = CALayer()
             stage.frame = CGRect(x: 0, y: 0, width: 8, height: 8)
             stage.backgroundColor = CGColor(gray: 1, alpha: 1)
+            CATransaction.commit()
             let compositor = CARenderer(mtlTexture: texture, options: [kCARendererMetalCommandQueue as String: queue])
             compositor.layer = stage
             compositor.bounds = stage.bounds
@@ -36,7 +41,7 @@ final class OffscreenImage: @unchecked Sendable {
             compositor.render()
             compositor.endFrame()
         }
-    }
+    }()
 
     /// Keeps the layers alive until the render is done.
     private let renderer: DesignRenderer

@@ -103,10 +103,16 @@ final class CanvasBitmaps {
             finished()
         }
         if let job {
+            // Only the main thread lets go of the job, and with it the layers, which the main thread built.
+            let hold = JobHold(job)
             DispatchQueue.global(qos: .utility).async {
-                let image = try? job.draw()
-                // The job (and its layers) is released on the main thread, which built them.
-                DispatchQueue.main.async { MainActor.assumeIsolated { withExtendedLifetime(job) { install(image) } } }
+                let image = try? hold.job?.draw()
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        hold.job = nil
+                        install(image)
+                    }
+                }
             }
         } else {
             DispatchQueue.main.async { MainActor.assumeIsolated { install(nil) } }
@@ -139,4 +145,10 @@ final class CanvasBitmaps {
         entries = [:]
         generation += 1
     }
+}
+
+/// Holds an `OffscreenImage` for the background queue that draws it, while the main thread decides when it is released.
+private final class JobHold: @unchecked Sendable {
+    var job: OffscreenImage?
+    init(_ job: OffscreenImage) { self.job = job }
 }

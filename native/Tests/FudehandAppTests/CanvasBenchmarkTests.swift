@@ -169,7 +169,6 @@ enum CanvasBenchmark {
     } }
 }
 
-
 /// The main thread while the canvas draws its bitmaps (#243): the whole 5100-layer document zoomed out into view, so every
 /// frame with effects wants a bitmap. A heartbeat on the main thread records how long it was kept from running.
 @Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasBitmapMainThreadBenchmark() async throws {

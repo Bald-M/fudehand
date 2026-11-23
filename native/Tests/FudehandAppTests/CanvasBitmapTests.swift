@@ -386,3 +386,62 @@ enum CanvasBitmapFixture {
     try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g")?.contents != nil }
     #expect(h.canvas.bitmaps.layer(for: "g")?.contents != nil)
 }
+
+@Test @MainActor func missingBitmapsAreDrawnWhileThePersonPans() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    // A pan that keeps going: input every turn, the view moving. A layer with no bitmap at all still gets one, since it is
+    // composited live until then.
+    h.canvas.inputPause = 3600
+    h.canvas.noteInput()
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 1), zooming: false)
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    #expect(standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func bitmapsFarthestFromTheViewAreDroppedForNearerOnes() async throws {
+    var document = CanvasBitmapFixture.document()
+    var second = document.nodes[0]
+    second.id = "g2"
+    second.x = 400
+    second.children = second.children.map { var child = $0; child.id += "2"; return child }
+    document.nodes = [document.nodes[0], second]
+    let bitmaps = CanvasBitmaps()
+    bitmaps.pixelBudget = 300_000
+    // First around the first frame, then the view moves to the second (both still near): the second replaces the first.
+    #expect(bitmaps.drawNext(document.nodes, near: CGRect(x: -300, y: -250, width: 900, height: 700), scale: 2, finished: {}) != nil)
+    try await CanvasBitmapFixture.wait { !bitmaps.drawing }
+    #expect(bitmaps.current(document.nodes).keys.sorted() == ["g"])
+    bitmaps.pixelBudget = 300_000
+    let later = CGRect(x: 150, y: -250, width: 1000, height: 700)
+    // g is still near but farther than g2 now; g2 does not fit beside it, and nearer bitmaps come first.
+    if bitmaps.drawNext(document.nodes, near: later, scale: 2, finished: {}) != nil {
+        try await CanvasBitmapFixture.wait { !bitmaps.drawing }
+    }
+    #expect(bitmaps.current(document.nodes).keys.sorted() == ["g2"])
+    #expect(bitmaps.pixelCount <= 300_000)
+}
+
+@Test @MainActor func nodeEditedWhileItsBitmapIsDrawnIsNotShownAsItWas() async throws {
+    let document = CanvasBitmapFixture.document()
+    let bitmaps = CanvasBitmaps()
+    let near = CGRect(x: -100, y: -100, width: 1200, height: 900)
+    #expect(bitmaps.drawNext(document.nodes, near: near, scale: 2, finished: {}) != nil)
+    var edited = document
+    edited.nodes[0].children[0].x += 30
+    try await CanvasBitmapFixture.wait { !bitmaps.drawing }
+    #expect(bitmaps.current(document.nodes)["g"] != nil)
+    #expect(bitmaps.current(edited.nodes)["g"] == nil)
+}
+
+@Test @MainActor func bitmapDrawnAcrossAFontChangeIsDropped() async throws {
+    let document = CanvasBitmapFixture.document()
+    let bitmaps = CanvasBitmaps()
+    let near = CGRect(x: -100, y: -100, width: 1200, height: 900)
+    var finished = false
+    #expect(bitmaps.drawNext(document.nodes, near: near, scale: 2) { finished = true } != nil)
+    bitmaps.removeAll()
+    try await CanvasBitmapFixture.wait { finished }
+    #expect(!bitmaps.drawing)
+    #expect(bitmaps.current(document.nodes).isEmpty)
+}
