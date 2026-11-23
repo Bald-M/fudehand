@@ -29,7 +29,7 @@ private func infoPlist() throws -> [String: Any] {
     #expect(document["LSHandlerRank"] as? String == "Owner")
 }
 
-@Test @MainActor func filesOpenedFromFinderBeforeLaunchFinishesOpenOnceTheStoreIsReady() throws {
+@Test @MainActor func filesOpenedFromFinderBeforeLaunchFinishesOpenOnceTheStoreIsReady() async throws {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-\(UUID().uuidString).fudehand")
     defer { try? FileManager.default.removeItem(at: url) }
     try DesignDocument(nodes: [DesignNode(id: "r", type: .rectangle)]).encoded().write(to: url)
@@ -37,16 +37,18 @@ private func infoPlist() throws -> [String: Any] {
     delegate.application(NSApplication.shared, open: [url])
     let store = FudehandStore(defaults: UserDefaults(suiteName: "fudehand-tests-\(UUID().uuidString)")!)
     delegate.attach(store)
+    await store.opening?.value
     #expect(store.fileURL == url && store.editor.document.node("r") != nil)
     // Later open requests go straight to the store; a bad file shows an error and the current document is unchanged.
     let bad = url.deletingLastPathComponent().appendingPathComponent("fudehand-\(UUID().uuidString).fudehand")
     try Data("not json".utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
     delegate.application(NSApplication.shared, open: [bad])
+    await store.opening?.value
     #expect(store.alert == "Not a Fudehand project file" && store.fileURL == url)
 }
 
-@Test @MainActor func uppercaseExtensionsOpenToo() throws {
+@Test @MainActor func uppercaseExtensionsOpenToo() async throws {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("fudehand-\(UUID().uuidString).FUDEHAND")
     defer { try? FileManager.default.removeItem(at: url) }
     try DesignDocument(nodes: [DesignNode(id: "u", type: .ellipse)]).encoded().write(to: url)
@@ -54,5 +56,6 @@ private func infoPlist() throws -> [String: Any] {
     let store = FudehandStore(defaults: UserDefaults(suiteName: "fudehand-tests-\(UUID().uuidString)")!)
     delegate.attach(store)
     delegate.application(NSApplication.shared, open: [url, URL(fileURLWithPath: "/tmp/readme.txt")])
+    await store.opening?.value
     #expect(store.fileURL == url && store.editor.document.node("u") != nil)
 }

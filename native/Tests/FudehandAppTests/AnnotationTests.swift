@@ -119,7 +119,7 @@ import Testing
     #expect(await failure(store, .listAnnotations(node: "zz")) == "Layer not found: zz")
 }
 
-@Test @MainActor func annotationsSurviveSaveAndOpen() throws {
+@Test @MainActor func annotationsSurviveSaveAndOpen() async throws {
     let h = CanvasHarness()
     defer { h.dispose() }
     let note = try h.store.addAnnotation(on: "card", x: 1, y: 2, text: "Keep", by: .person)
@@ -128,7 +128,7 @@ import Testing
     try h.store.write(to: url)
     h.store.replace(DesignDocument(), url: nil)
     #expect(h.store.editor.document.annotations.isEmpty)
-    try h.store.open(url)
+    try await h.store.open(url)
     #expect(h.store.editor.document.annotations == [note] && h.canvas.overlay.markerCounts == [note.id: "1"])
 }
 

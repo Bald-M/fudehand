@@ -511,14 +511,21 @@ final class FudehandStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Ask only after the file is chosen: the Agent may have modified the document while choosing.
         guard confirmDiscard() else { return }
-        do { try open(url) } catch { alert = error.localizedDescription }
+        opening = Task { do { try await open(url) } catch { alert = error.localizedDescription } }
     }
 
-    /// Reads and validates a project file; on failure the current document is unchanged.
-    func open(_ url: URL) throws {
-        let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read file: %@", url.lastPathComponent)) }
-        replace(try DesignDocument.decode(data), url: url)
+    /// The open started from the UI (the Open panel, Finder, recent files), which finishes once the file is read.
+    private(set) var opening: Task<Void, Never>?
+
+    /// Reads and validates a project file away from the main thread, which a large file would hold for hundreds of
+    /// milliseconds (#248); on failure the current document is unchanged.
+    func open(_ url: URL) async throws {
+        let document = try await Task.detached(priority: .userInitiated) {
+            let data: Data
+            do { data = try Data(contentsOf: url) } catch { throw DesignError(L("Could not read file: %@", url.lastPathComponent)) }
+            return try DesignDocument.decode(data)
+        }.value
+        replace(document, url: url)
     }
 
     /// The conversations of the project file at `url`, or of the document without a file. The file is identified by its canonical
@@ -550,6 +557,7 @@ final class FudehandStore: ObservableObject {
     private func load(_ next: DesignDocument, url: URL?) {
         canvas?.releaseHeldInput()
         expandAnnotation(nil)
+        TextMetrics.prewarm(next.nodes)
         editor.replace(next)
         inGesture = false
         collapsedLayers = []
@@ -724,16 +732,16 @@ final class FudehandStore: ObservableObject {
 
     /// A project file passed by a Finder double-click or "Open With": asks first when there are unsaved changes, and shows the reason when it cannot be opened.
     func openFromSystem(_ url: URL) {
-        do { try openFile(url, discarding: confirmDiscard) } catch { alert = error.localizedDescription }
+        opening = Task { do { try await openFile(url, discarding: confirmDiscard) } catch { alert = error.localizedDescription } }
     }
 
     /// Opens a project file from Finder or the recent files. The current file with no unsaved changes is only shown again; otherwise
     /// `discarding` decides whether unsaved changes may be dropped (the UI asks in an alert, the Agent passes `discard`).
-    func openFile(_ url: URL, discarding: () throws -> Bool) throws {
+    func openFile(_ url: URL, discarding: () throws -> Bool) async throws {
         let current = url.resolvingSymlinksInPath() == fileURL?.resolvingSymlinksInPath()
         guard !current || isDirty else { recordRecent(url); presentEditor(); return }
         guard try discarding() else { return }
-        try open(url)
+        try await open(url)
     }
 
     func shutdown() async { await chat.shutdown() }

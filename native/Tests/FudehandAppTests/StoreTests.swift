@@ -226,7 +226,7 @@ private func temporaryFile() -> URL {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     let missing = temporaryFile()
-    #expect(throws: DesignError.self) { try store.open(missing) }
+    await #expect(throws: DesignError.self) { try await store.open(missing) }
     #expect(store.editor.document.node("r") != nil && store.recents.items.isEmpty)
 }
 
@@ -350,23 +350,23 @@ private func temporaryFile() -> URL {
     #expect(store.chat.transcript.entries.isEmpty)
     #expect(store.chat.conversations.isEmpty)
     store.chat.send("Never saved", root: nil, runtime: nil)
-    try store.open(a)
+    try await store.open(a)
     #expect(store.chat.tabs.map(\.id) == [inA])
     #expect(store.chat.conversations.map(\.title) == ["About A"])
     store.replace(DesignDocument(), url: nil)
     #expect(store.chat.conversations.isEmpty)
 
     // Save As copies the conversations; the original file keeps its own.
-    try store.open(a)
+    try await store.open(a)
     try store.write(to: b)
     #expect(store.chat.conversations.map(\.title) == ["About A"])
-    try store.open(a)
+    try await store.open(a)
     #expect(store.chat.tabs.map(\.id) == [inA])
 
     // On a case-insensitive volume the same file under another spelling of its name has the same conversations.
     let respelled = a.deletingLastPathComponent().appendingPathComponent(a.lastPathComponent.uppercased())
     if FileManager.default.fileExists(atPath: respelled.path) {
-        try store.open(respelled)
+        try await store.open(respelled)
         #expect(store.chat.tabs.map(\.id) == [inA])
     }
 
@@ -376,7 +376,7 @@ private func temporaryFile() -> URL {
     let relaunched = FudehandStore(defaults: defaults, chatRoot: root)
     #expect(relaunched.chat.transcript.entries.isEmpty)
     #expect(relaunched.chat.conversations.isEmpty)
-    try relaunched.open(a)
+    try await relaunched.open(a)
     #expect(relaunched.chat.tabs.map(\.id) == [inA])
     #expect(relaunched.chat.transcript.entries.first?.text == "About A")
 }
@@ -605,7 +605,7 @@ private func temporaryFile() -> URL {
     var node = DesignNode(id: "i", type: .icon, width: 24, height: 24)
     node.icon = DesignIcon(name: "sf/not.a.real.symbol")
     try DesignDocument(nodes: [node]).encoded().write(to: url)
-    try store.open(url)
+    try await store.open(url)
     _ = try await control(store, .updateNode("i", changes: JSONObject(["x": 12, "icon": ["color": "#336699"]])))
     #expect(store.editor.document.node("i")?.x == 12)
     #expect(store.editor.document.node("i")?.icon?.name == "sf/not.a.real.symbol")

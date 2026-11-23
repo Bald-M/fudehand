@@ -35,6 +35,37 @@ public enum DesignLayout {
         for index in node.children.indices { clamp(&node.children[index]) }
     }
 
+    /// Whether a text node's width and height follow its content.
+    private static func hugs(_ text: DesignText, _ node: DesignNode, parentLayout: AutoLayout?) -> (width: Bool, height: Bool) {
+        // When the width is decided by the auto layout parent (fill, or cross-axis stretch in a vertical layout), do not shrink the width to the content.
+        let fillsWidth = parentLayout.map { $0.direction == .vertical && $0.crossAlign == .stretch || node.sizing.horizontal == .fill } ?? false
+        return (!fillsWidth && (text.autoResize == .widthAndHeight || node.sizing.horizontal == .hug),
+                text.autoResize != .none || node.sizing.vertical == .hug)
+    }
+
+    /// A text a layout of the nodes as they are measures first: its natural width when it hugs it (`width` nil), then its
+    /// height at that width, or at `width`, when it hugs its height.
+    public struct TextRequest: Hashable, Sendable {
+        public let text: DesignText
+        public let width: Double?
+        public let height: Bool
+    }
+
+    /// The text measurements laying out `nodes` starts with, each once, so they can be made ahead of the layout (#248). Widths
+    /// the layout settles later (fill, stretch, a hug parent) are measured during the layout.
+    public static func textRequests(_ nodes: [DesignNode]) -> [TextRequest] {
+        var requests = Set<TextRequest>()
+        func visit(_ node: DesignNode, parentLayout: AutoLayout?) {
+            for child in node.children { visit(child, parentLayout: node.layout) }
+            guard node.type == .text, let text = node.text else { return }
+            let (hugWidth, hugHeight) = hugs(text, node, parentLayout: parentLayout)
+            guard hugWidth || hugHeight else { return }
+            requests.insert(TextRequest(text: text, width: hugWidth ? nil : node.width, height: hugHeight))
+        }
+        for node in nodes { visit(node, parentLayout: nil) }
+        return Array(requests)
+    }
+
     /// Bottom-up: text sizes, group unions, hug frame sizes.
     static func measureUp(_ node: inout DesignNode, parentLayout: AutoLayout?, measure: TextMeasure) {
         for index in node.children.indices {
@@ -43,10 +74,7 @@ public enum DesignLayout {
         switch node.type {
         case .text:
             guard let text = node.text else { return }
-            // When the width is decided by the auto layout parent (fill, or cross-axis stretch in a vertical layout), do not shrink the width to the content.
-            let fillsWidth = parentLayout.map { $0.direction == .vertical && $0.crossAlign == .stretch || node.sizing.horizontal == .fill } ?? false
-            let hugWidth = !fillsWidth && (text.autoResize == .widthAndHeight || node.sizing.horizontal == .hug)
-            let hugHeight = text.autoResize != .none || node.sizing.vertical == .hug
+            let (hugWidth, hugHeight) = hugs(text, node, parentLayout: parentLayout)
             if hugWidth { node.width = measure(text, nil).width }
             if hugHeight { node.height = measure(text, node.width).height }
         case .group:
