@@ -92,6 +92,10 @@ final class FudehandCanvasView: NSView {
     var viewMoving = false
     /// The next bitmap to draw, queued on the main thread.
     var bitmapWork: DispatchWorkItem?
+    /// When the last scroll, click, drag, or key press reached the canvas; bitmaps wait for input to pause (#243).
+    var lastInput: CFTimeInterval = 0
+    /// Bitmaps wait until this long has passed since the last input.
+    var inputPause: TimeInterval = 0.25
     private var eventMonitor: Any?
     private var focusObservers: [NSObjectProtocol] = []
     /// Holding Space shows the hand right away, before any drag starts.
@@ -120,6 +124,7 @@ final class FudehandCanvasView: NSView {
         world.layerUsesCoreImageFilters = true
         zoomHost.addSubview(world)
         world.layer?.addSublayer(renderer.root)
+        OffscreenImage.warmUp()
         addSubview(zoomHost)
         addSubview(overlay)
         updateColors()
@@ -469,6 +474,7 @@ final class FudehandCanvasView: NSView {
 
     private func pointerDown(_ event: NSEvent, button: PointerButton) {
         guard !isOverFloatingView(event) else { return }
+        noteInput()
         commitPendingZoom()
         window?.makeFirstResponder(self)
         let (screen, point) = screenPoint(event)
@@ -486,6 +492,7 @@ final class FudehandCanvasView: NSView {
     }
 
     private func pointerDragged(_ event: NSEvent) {
+        noteInput()
         apply(interaction.pointerDragged(to: screenPoint(event).1, modifiers: modifiers(event), context: interactionContext()))
     }
 
@@ -590,6 +597,7 @@ final class FudehandCanvasView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         guard !isOverFloatingView(event) else { return }
+        noteInput()
         stopAnimation()
         // A line-based mouse wheel reports about one unit per notch; trackpads report points.
         let delta = CanvasGeometry.wheelDelta(Point(x: event.scrollingDeltaX, y: event.scrollingDeltaY),
@@ -611,6 +619,7 @@ final class FudehandCanvasView: NSView {
 
     /// A pinch zooms as a transform until it ends, or until 150ms pass without another magnify event.
     func magnify(by magnification: Double, at point: NSPoint, phase: NSEvent.Phase) {
+        noteInput()
         stopAnimation()
         let viewport = liveViewport
         setLiveViewport(CanvasGeometry.zoomAt(viewport, point: Point(x: point.x, y: point.y), scale: viewport.scale * (1 + magnification)),
@@ -630,6 +639,7 @@ final class FudehandCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         guard window?.firstResponder === self else { super.keyDown(with: event); return }
+        noteInput()
         let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
         let plain = flags.subtracting(.shift).isEmpty
         let action: () -> Void

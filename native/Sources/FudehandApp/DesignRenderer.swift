@@ -346,77 +346,10 @@ final class DesignRenderer {
         return data as Data
     }
 
-    /// One Metal device and queue for every snapshot and canvas bitmap.
-    private static let gpu: (device: MTLDevice, queue: MTLCommandQueue)? = {
-        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { return nil }
-        return (device, queue)
-    }()
-
     /// Draws `rect` of the node (in its own coordinates, its top-left corner at 0, 0) at `scale` pixels per point, shown
     /// wherever it is placed, as the canvas draws it.
     static func image(of node: DesignNode, in rect: CGRect, scale: Double) throws -> CGImage {
-        let renderer = DesignRenderer()
-        renderer.contentsScale = scale
-        var placed = node
-        placed.x = -rect.minX
-        placed.y = -rect.minY
-        placed.visible = true
-        renderer.sync([placed])
-        let pixels = (width: (rect.width * scale).rounded(.up), height: (rect.height * scale).rounded(.up))
-        guard pixels.width <= 16_384, pixels.height <= 16_384 else {
-            throw ControlCommandError("Snapshot is too large (\(Int(pixels.width))×\(Int(pixels.height)) pixels); reduce scale")
-        }
-        let width = max(1, Int(pixels.width)), height = max(1, Int(pixels.height))
-        // Rendered by Core Animation itself, like the canvas, so blurs, masks, and shadows come out the same; `render(in:)` skips
-        // filters and masks. The stage has the canvas's top-left origin and scales the layers to pixels.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let stage = CALayer()
-        stage.isGeometryFlipped = true
-        stage.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        renderer.root.anchorPoint = .zero
-        renderer.root.frame = CGRect(origin: .zero, size: rect.size)
-        renderer.root.transform = CATransform3DMakeScale(CGFloat(scale), CGFloat(scale), 1)
-        stage.addSublayer(renderer.root)
-        CATransaction.commit()
-        guard let (device, queue) = gpu else { throw ControlCommandError("Could not create the snapshot canvas") }
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
-        descriptor.usage = [.renderTarget, .shaderRead]
-        descriptor.storageMode = .managed
-        guard let texture = device.makeTexture(descriptor: descriptor) else { throw ControlCommandError("Could not create the snapshot canvas") }
-        let compositor = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                                                 kCARendererMetalCommandQueue as String: queue])
-        compositor.layer = stage
-        compositor.bounds = stage.bounds
-        // The renderer draws only what has been committed.
-        CATransaction.flush()
-        compositor.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
-        compositor.addUpdate(compositor.bounds)
-        compositor.render()
-        compositor.endFrame()
-        guard let commands = queue.makeCommandBuffer(), let blit = commands.makeBlitCommandEncoder() else { throw ControlCommandError("Snapshot failed") }
-        blit.synchronize(resource: texture)
-        blit.endEncoding()
-        commands.commit()
-        commands.waitUntilCompleted()
-        // The texture's first row is the bottom of the stage.
-        let rowBytes = width * 4
-        var pixelData = Data(count: rowBytes * height)
-        pixelData.withUnsafeMutableBytes { buffer in
-            let base = buffer.baseAddress!
-            for row in 0..<height {
-                texture.getBytes(base + (height - 1 - row) * rowBytes, bytesPerRow: rowBytes,
-                                 from: MTLRegionMake2D(0, row, width, 1), mipmapLevel: 0)
-            }
-        }
-        guard let provider = CGDataProvider(data: pixelData as CFData),
-              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
-                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
-            throw ControlCommandError("Snapshot failed")
-        }
-        return image
+        try OffscreenImage(of: node, in: rect, scale: scale).draw()
     }
 }
 
