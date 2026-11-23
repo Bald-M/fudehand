@@ -365,8 +365,11 @@ enum CanvasBenchmark {
 
 /// Opening a large phone design (#248): 226 screens of about 70 layers each (16k layers), with text whose labels repeat
 /// across screens and SVG icons placed many times over, like a light and dark copy of every screen. Measures, on a cold
-/// process, reading the file and the main thread's share of opening it with the editor canvas attached, fitted to all.
-@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func documentOpenBenchmark() throws {
+/// process, reading the file, the main thread's share of opening it with the editor canvas attached, fitted to all, and then,
+/// while the canvas builds the rest a part per run loop turn, the longest the main thread was held and when all was built.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func documentOpenBenchmark() async throws {
+    let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
+    defer { ProcessInfo.processInfo.endActivity(activity) }
     let icons = (0..<40).map { index in
         Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M\##(index % 12) 2h\##(8 + index % 9)v\##(6 + index % 7)H4z" fill="#\##(String(format: "%06X", index * 40_503))"/></svg>"##.utf8)
     }
@@ -407,11 +410,18 @@ enum CanvasBenchmark {
     h.store.replace(decoded, url: nil)
     let open = (CACurrentMediaTime() - start) * 1000
     start = CACurrentMediaTime()
-    CATransaction.flush()
-    let commit = (CACurrentMediaTime() - start) * 1000
-    print(String(format: "[bench] layers=%d documentOpen read=%.0fms mainThread=%.0fms commit=%.0fms",
-                 decoded.nodeCount, read, open, commit))
+    var last = start, longest = 0.0
+    while h.canvas.renderer.layerCount < decoded.nodeCount, CACurrentMediaTime() - start < 30 {
+        try await Task.sleep(for: .milliseconds(1))
+        let now = CACurrentMediaTime()
+        longest = max(longest, (now - last) * 1000)
+        last = now
+    }
+    print(String(format: "[bench] layers=%d documentOpen read=%.0fms mainThread=%.0fms allBuilt=%.0fms longestMainThreadBlock=%.1fms",
+                 decoded.nodeCount, read, open, (CACurrentMediaTime() - start) * 1000, longest))
     #expect(h.canvas.renderer.layerCount == decoded.nodeCount)
-    // About 400–600 ms before the text measurements were made in parallel and SVG icons parsed and rasterized once each.
-    #expect(open < 300)
+    // About 400–600 ms before the text measurements were made in parallel, SVG icons parsed and rasterized once each, and
+    // large documents built a part at a time.
+    #expect(open < 150)
+    #expect(longest < 100)
 }

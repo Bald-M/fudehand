@@ -76,7 +76,7 @@ extension FudehandCanvasView {
         let bare = renderer.withoutEffects.filter(bitmaps.awaits)
         if bare != renderer.withoutEffects {
             renderer.withoutEffects = bare
-            renderer.sync(document.nodes)
+            syncRenderer()
         }
     }
 
