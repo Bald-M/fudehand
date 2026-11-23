@@ -31,8 +31,10 @@ final class DesignRenderer {
         /// unchanged: arrays compare by identity first, so an edit elsewhere in the document costs nothing here (#228).
         var syncedChildren: [DesignNode]?
         var subtreeCount = 0
-        /// For a top-level node, where it and its descendants paint, in world coordinates; nil when that is unbounded.
+        /// For a top-level node, where it and its descendants paint, in world coordinates (nil when that is unbounded), and the
+        /// node it was worked out for.
         var paint: CGRect?
+        var paintedNode: DesignNode?
         init(_ layer: CALayer) { self.layer = layer; content = layer }
     }
     private var records: [String: Record] = [:]
@@ -168,9 +170,11 @@ final class DesignRenderer {
                 current.subtreeCount = syncChildren(of: current.content, node.children, below: current.innerShadows, skipping: skipping)
                 current.syncedChildren = node.children
                 seen += current.subtreeCount
-                if parent === root {
-                    current.paint = node.paintBounds.map { CGRect(x: node.x + $0.x, y: node.y + $0.y, width: $0.width, height: $0.height) }
-                }
+            }
+            // Arrays compare by identity first, so an unchanged node costs little here.
+            if parent === root, current.paintedNode != node {
+                current.paint = node.paintBounds.map { CGRect(x: node.x + $0.x, y: node.y + $0.y, width: $0.width, height: $0.height) }
+                current.paintedNode = node
             }
             ordered += current.backdrops
             ordered.append(current.layer)

@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import Metal
+import QuartzCore
 import Testing
 @testable import FudehandApp
 @testable import FudehandCore
@@ -19,6 +21,61 @@ enum CanvasBitmapFixture {
         var plain = DesignNode(id: "plain", type: .frame, name: "Plain", x: 400, width: 300, height: 200)
         plain.fill = .white
         return DesignDocument(nodes: [glassFrame, plain])
+    }
+
+    /// Composites `content` (a renderer's root, in world coordinates) offscreen at `viewport` over a canvas of `size` points,
+    /// at 2 pixels per point, and returns the pixels (BGRA). The root is moved onto a stage of its own and put back after:
+    /// a layer can be drawn by one renderer only.
+    @MainActor static func composite(_ content: CALayer, _ viewport: Viewport, size: CGSize) throws -> [UInt8] {
+        let home = content.superlayer
+        content.removeFromSuperlayer()
+        defer { home?.addSublayer(content) }
+        let stage = CALayer()
+        stage.isGeometryFlipped = true
+        stage.backgroundColor = CGColor(gray: 0.5, alpha: 1)
+        stage.frame = CGRect(x: 0, y: 0, width: size.width * 2, height: size.height * 2)
+        // As snapshots do: a transform on the layer holding the world, not a sublayer transform, which the offscreen renderer
+        // draws background filters, glass tints, and shadows under incorrectly.
+        let world = CALayer()
+        world.anchorPoint = .zero
+        world.bounds = CGRect(origin: .zero, size: size)
+        world.position = CGPoint(x: viewport.x * 2, y: viewport.y * 2)
+        world.transform = CATransform3DMakeScale(2 * viewport.scale, 2 * viewport.scale, 1)
+        stage.addSublayer(world)
+        world.addSublayer(content)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let queue = try #require(device.makeCommandQueue())
+        let width = Int(stage.bounds.width), height = Int(stage.bounds.height)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .managed
+        let texture = try #require(device.makeTexture(descriptor: descriptor))
+        let compositor = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                                 kCARendererMetalCommandQueue: queue])
+        compositor.layer = stage
+        compositor.bounds = stage.bounds
+        CATransaction.flush()
+        compositor.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
+        compositor.addUpdate(compositor.bounds)
+        compositor.render()
+        compositor.endFrame()
+        let commands = try #require(queue.makeCommandBuffer())
+        let blit = try #require(commands.makeBlitCommandEncoder())
+        blit.synchronize(resource: texture)
+        blit.endEncoding()
+        commands.commit()
+        commands.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&pixels, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        return pixels
+    }
+
+    /// The share of pixels whose channels differ by more than 8 / 255.
+    static func difference(_ a: [UInt8], _ b: [UInt8]) -> Double {
+        var differing = 0
+        for pixel in stride(from: 0, to: min(a.count, b.count), by: 4)
+        where (0..<3).contains(where: { abs(Int(a[pixel + $0]) - Int(b[pixel + $0])) > 8 }) { differing += 1 }
+        return Double(differing) / Double(a.count / 4)
     }
 
     /// Lets the canvas's queued main-thread work (drawing bitmaps) run until `done` holds, for up to 5 s.
@@ -146,4 +203,109 @@ enum CanvasBitmapFixture {
         #expect(abs(expected.redComponent - actual.redComponent) < 0.02 && abs(expected.greenComponent - actual.greenComponent) < 0.02
                 && abs(expected.blueComponent - actual.blueComponent) < 0.02, "at \(point)")
     }
+}
+
+
+@Test @MainActor func bitmapLinesUpWithTheLiveLayers() async throws {
+    // A glass card with a drop shadow over a stripe, under a blurred glow. The frame and the view sit on whole pixels: elsewhere
+    // the bitmap is resampled, which softens its edges a little.
+    var frame = DesignNode(id: "frame", type: .frame, name: "Frame", x: 10.5, y: 20.25, width: 300, height: 200)
+    frame.fill = DesignColor(r: 1, g: 0.5, b: 0, a: 1)
+    frame.clipsContent = false
+    var stripe = DesignNode(id: "stripe", type: .rectangle, x: 0, y: 90, width: 300, height: 20)
+    stripe.fill = DesignColor(r: 0, g: 0, b: 1, a: 1)
+    var card = DesignNode(id: "card", type: .rectangle, x: 40, y: 60, width: 200, height: 80)
+    card.cornerRadius = 16
+    card.effects = [DesignEffect(type: .dropShadow, radius: 12), DesignEffect(type: .glass)]
+    var glow = DesignNode(id: "glow", type: .ellipse, x: 250, y: -20, width: 80, height: 80)
+    glow.fill = DesignColor(r: 0.2, g: 0.8, b: 0.3, a: 1)
+    glow.effects = [DesignEffect(type: .layerBlur, radius: 20)]
+    frame.children = [stripe, card, glow]
+    let h = CanvasHarness(document: DesignDocument(nodes: [frame]))
+    defer { h.dispose() }
+    let viewport = Viewport(x: 37, y: 61.5, scale: 1)
+    h.request(viewport)
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "frame")?.contents != nil }
+    let standIn = try #require(h.canvas.bitmaps.layer(for: "frame"))
+    // The bitmap where the canvas puts it, against the frame's live layers from a renderer of its own. (One frame at a time:
+    // Core Animation's offscreen renderer drops glass tints and shadows when several top-level layers share a root, although
+    // the window server draws them; the App was checked by eye in light and dark.)
+    let holder = CALayer()
+    holder.addSublayer(standIn)
+    let moving = try CanvasBitmapFixture.composite(holder, viewport, size: h.canvas.bounds.size)
+    let live = DesignRenderer()
+    live.contentsScale = h.canvas.renderer.contentsScale
+    live.sync([frame])
+    let settled = try CanvasBitmapFixture.composite(live.root, viewport, size: h.canvas.bounds.size)
+    // Measured: about 480 of the 2.8 million pixels differ (soft blur edges); a bitmap half a point out of place makes about 1800.
+    #expect(CanvasBitmapFixture.difference(settled, moving) * Double(settled.count / 4) < 1000)
+}
+
+@Test @MainActor func importedFontsDropTheBitmaps() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g") != nil }
+    h.canvas.fontsChanged()
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 1), zooming: false)
+    #expect(onCanvas(h, "g"))
+    #expect(!standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func layerWhoseShadowAloneReachesIntoTheViewIsKept() {
+    var document = CanvasBitmapFixture.document()
+    // The frame ends 20 points left of the view; its shadow reaches 2 × 30 points past it.
+    document.nodes[1].x = -320
+    document.nodes[1].effects = [DesignEffect(type: .dropShadow, x: 0, y: 0, radius: 30)]
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    #expect(onCanvas(h, "plain"))
+    document.nodes[1].effects = []
+    h.store.replace(document, url: nil)
+    #expect(!onCanvas(h, "plain"))
+}
+
+@Test @MainActor func deletingALayerWhileTheViewMovesRemovesIt() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g") != nil }
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 1), zooming: false)
+    #expect(standInOnCanvas(h, "g"))
+    var document = CanvasBitmapFixture.document()
+    document.nodes.removeFirst()
+    h.store.replace(document, url: nil)
+    #expect(!standInOnCanvas(h, "g"))
+    #expect(h.canvas.renderer.layer(for: "g") == nil)
+    #expect(h.canvas.renderer.root.sublayers?.count == 1)
+}
+
+@Test @MainActor func bitmapFromTheLastZoomIsShownUntilTheViewSettles() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g")?.contents != nil }
+    let before = try #require(h.canvas.bitmaps.layer(for: "g")?.contents.map { ($0 as! CGImage).width })
+    // Zoom in and pan straight away: the old bitmap stands in, stretched, and is not drawn again while the view moves.
+    h.canvas.setLiveViewport(Viewport(x: 0, y: 100, scale: 3), zooming: true)
+    h.canvas.settleViewport()
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 90, scale: 3), zooming: false)
+    #expect(standInOnCanvas(h, "g"))
+    try await Task.sleep(for: .milliseconds(500))
+    #expect(h.canvas.bitmaps.layer(for: "g")?.contents.map { ($0 as! CGImage).width } == before)
+    h.canvas.settleViewport()
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g")?.contents.map { ($0 as! CGImage).width } != before }
+    #expect((h.canvas.bitmaps.layer(for: "g")?.contents.map { ($0 as! CGImage).width } ?? 0) > before)
+}
+
+@Test @MainActor func paintBoundsFollowANodeBackToTheTopLevel() {
+    let renderer = DesignRenderer()
+    renderer.visibleRect = CGRect(x: 110, y: 0, width: 100, height: 100)
+    var card = DesignNode(id: "card", type: .rectangle, width: 100, height: 100)
+    var holder = DesignNode(id: "holder", type: .frame, x: 500, width: 200, height: 200)
+    renderer.sync([card])
+    #expect((renderer.root.sublayers ?? []).isEmpty)
+    // Nested, it gains a shadow reaching 2 × 20 points; back at the top level, unchanged since, the shadow reaches the view.
+    card.effects = [DesignEffect(type: .dropShadow, x: 0, y: 0, radius: 20)]
+    holder.children = [card]
+    renderer.sync([holder])
+    renderer.sync([card])
+    #expect(renderer.root.sublayers?.contains { $0 === renderer.layer(for: "card") } == true)
 }

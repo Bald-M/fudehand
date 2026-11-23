@@ -92,9 +92,17 @@ enum CanvasBenchmark {
         let size = h.canvas.bounds.size
         // Bitmaps are drawn while the canvas is idle; wait for those around the view.
         let near = h.canvas.visibleWorldRect.insetBy(dx: -size.width, dy: -size.height)
-        let wanted = document.nodes.filter { CanvasBitmaps.wanted($0) && CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height).intersects(near) }
-        for _ in 0..<500 where h.canvas.bitmaps.current(wanted, scale: h.canvas.renderer.contentsScale).count < wanted.count {
+        let wanted = document.nodes.filter { node in
+            guard CanvasBitmaps.wanted(node), let paint = node.paintBounds else { return false }
+            return CGRect(x: node.x + paint.x, y: node.y + paint.y, width: paint.width, height: paint.height).intersects(near)
+        }
+        for _ in 0..<500 where h.canvas.bitmaps.current(wanted).count < wanted.count {
             try await Task.sleep(for: .milliseconds(20))
+        }
+        // What drawing one bitmap costs the main thread (a frame of 50 layers, rendered offscreen and read back).
+        let draws = CanvasBitmaps()
+        let draw = CanvasBenchmark.time(wanted.count) { _ in
+            _ = draws.drawNext(wanted, near: near, scale: h.canvas.renderer.contentsScale)
         }
 
         // The renderer's tree on a stage of its own: a layer can be drawn by one renderer only.
@@ -147,7 +155,9 @@ enum CanvasBenchmark {
         }
         let live = pan(live: true)
         let moving = pan(live: false)
-        print(String(format: "[bench] layers=%d effects=%@ panComposite p95 live=%.1fms moving=%.1fms bitmaps=%d",
-                     document.nodeCount, effects ? "10%" : "none", live, moving, wanted.count))
+        print(String(format: "[bench] layers=%d effects=%@ panComposite p95 live=%.1fms moving=%.1fms bitmaps=%d bitmapDraw=%.1fms",
+                     document.nodeCount, effects ? "10%" : "none", live, moving, wanted.count, wanted.isEmpty ? 0 : draw))
+        // The gate in ADR 0012: one 60 Hz frame while the view moves.
+        #expect(moving < 1000.0 / 60)
     } }
 }

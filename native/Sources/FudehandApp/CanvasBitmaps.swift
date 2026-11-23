@@ -7,7 +7,8 @@ import FudehandCore
 /// moves, which costs hundreds of milliseconds per frame on a design with a few hundred of them. Moving the view does not
 /// change what a top-level layer looks like, so a bitmap of it, drawn once by Core Animation itself (as snapshots are),
 /// shows the same pixels and only needs moving. Bitmaps are drawn one at a time while the canvas is idle, kept while their
-/// node is unchanged, and drawn again at a new zoom; a stale one is never shown.
+/// node is unchanged, and drawn again at a new zoom (until then the old one is shown stretched); one of a node that has
+/// changed since is never shown.
 @MainActor
 final class CanvasBitmaps {
     private struct Entry {
@@ -34,20 +35,20 @@ final class CanvasBitmaps {
         node.effects.contains(where: \.visible) || node.children.contains { $0.visible && hasEffects($0) }
     }
 
-    /// The bitmaps that show the top-level `nodes` as they are now, at `scale`, by node id.
-    func current(_ nodes: [DesignNode], scale: CGFloat) -> [String: CALayer] {
+    /// The bitmaps that show the top-level `nodes` as they are now, by node id; drawn at any zoom.
+    func current(_ nodes: [DesignNode]) -> [String: CALayer] {
         var current: [String: CALayer] = [:]
         for node in nodes {
-            if let entry = entries[node.id], entry.scale == scale, entry.node == node, entry.layer.contents != nil {
-                current[node.id] = entry.layer
-            }
+            if let entry = entries[node.id], entry.node == node, entry.layer.contents != nil { current[node.id] = entry.layer }
         }
         return current
     }
 
-    /// Draws the bitmap of the wanted node nearest the middle of `near` (world coordinates) that has no current one, and
-    /// forgets bitmaps of nodes that are gone or whose paint misses `near`. Returns false when there was nothing to draw.
-    func drawNext(_ nodes: [DesignNode], near: CGRect, scale: CGFloat) -> Bool {
+    /// Draws the bitmap of the wanted node nearest the middle of `near` (world coordinates) that has none showing it as it is
+    /// now at `scale`, and forgets bitmaps of nodes that are gone or whose paint misses `near`. With `onlyMissing` (while the
+    /// view moves), a node whose bitmap is only at another zoom is left for later: drawing costs the main thread a render.
+    /// Returns false when there was nothing to draw.
+    func drawNext(_ nodes: [DesignNode], near: CGRect, scale: CGFloat, onlyMissing: Bool = false) -> Bool {
         var kept: Set<String> = []
         var candidates: [(distance: CGFloat, node: DesignNode, paint: CGRect)] = []
         for node in nodes where Self.wanted(node) {
@@ -55,7 +56,7 @@ final class CanvasBitmaps {
             let paint = CGRect(x: node.x + bounds.x, y: node.y + bounds.y, width: bounds.width, height: bounds.height)
             guard paint.intersects(near) else { continue }
             kept.insert(node.id)
-            if let entry = entries[node.id], entry.scale == scale, entry.node == node { continue }
+            if let entry = entries[node.id], entry.node == node, entry.scale == scale || onlyMissing { continue }
             candidates.append((hypot(paint.midX - near.midX, paint.midY - near.midY), node, paint))
         }
         entries = entries.filter { kept.contains($0.key) }
@@ -72,7 +73,9 @@ final class CanvasBitmaps {
         let image = try? DesignRenderer.image(of: next.node, in: local, scale: pixels)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.frame = next.paint
+        // The bitmap's whole pixels cover a little more than the paint bounds; the layer matches them, so nothing is stretched.
+        layer.frame = CGRect(origin: next.paint.origin,
+                             size: image.map { CGSize(width: CGFloat($0.width) / pixels, height: CGFloat($0.height) / pixels) } ?? next.paint.size)
         layer.contents = image
         CATransaction.commit()
         entries[next.node.id] = Entry(node: next.node, scale: scale, layer: layer)

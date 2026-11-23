@@ -53,7 +53,8 @@ extension FudehandCanvasView {
         if world.bounds != committedBounds { world.bounds = committedBounds }
         zoomHost.layer?.sublayerTransform = zoomTransform()
         gridLayer.update(viewport: liveViewport, bounds: bounds)
-        renderer.visibleRect = visibleWorldRect
+        // A few points of margin for soft edges that reach past the paint bounds' estimate.
+        renderer.visibleRect = visibleWorldRect.insetBy(dx: -4 / liveViewport.scale, dy: -4 / liveViewport.scale)
         updateStandIns()
         CATransaction.commit()
         refreshOverlay()
@@ -66,9 +67,10 @@ extension FudehandCanvasView {
         return CGRect(x: -v.x / v.scale, y: -v.y / v.scale, width: bounds.width / v.scale, height: bounds.height / v.scale)
     }
 
-    /// While the view moves, top-level layers with a current bitmap are drawn as it.
+    /// While the view moves, top-level layers with a bitmap of them as they are now are drawn as it, even one drawn at another
+    /// zoom (stretched until it is drawn again): any bitmap is far cheaper to show than the live layers.
     func updateStandIns() {
-        renderer.standIns = viewMoving ? bitmaps.current(document.nodes, scale: renderer.contentsScale) : [:]
+        renderer.standIns = viewMoving ? bitmaps.current(document.nodes) : [:]
     }
 
     /// Queues drawing the missing bitmaps, one per main-thread turn. `restart` (after an edit or a settled view) waits for a
@@ -91,7 +93,7 @@ extension FudehandCanvasView {
         // Bitmaps cover the view and half a view around it, where a pan goes next.
         let visible = visibleWorldRect
         let near = visible.insetBy(dx: -visible.width / 2, dy: -visible.height / 2)
-        guard bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale) else { return }
+        guard bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving) else { return }
         if viewMoving { updateStandIns() }
         scheduleBitmaps(restart: false)
     }
