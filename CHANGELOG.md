@@ -10,6 +10,10 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Large project files open faster and hold the main thread for less of the time: the file is read and checked off the main thread, the text a layout needs is measured in parallel and kept for documents with tens of thousands of texts, and an SVG image placed many times is parsed once and drawn once per size, also after a zoom. On a 16,000-layer phone design the main thread's share of opening drops from about 400–600 ms to about 120–180 ms, and the App's open time from the launch window drops from about 1.4 s to about 0.95 s; `pnpm bench:native` now measures opening (#248).
+
 ### Fixed
 
 - Opening a large design with many glass layers and layer blurs no longer keeps the system busy for half a minute or freezes the App for seconds at a time: until a top-level layer's canvas bitmap is drawn, the layer shows without its effects (#247).

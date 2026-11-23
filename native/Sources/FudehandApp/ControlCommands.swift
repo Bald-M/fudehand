@@ -69,7 +69,7 @@ extension FudehandStore {
             return controlState()
         case .openDocument(let path, let discard):
             try requireDiscardable(discard)
-            try open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+            try await open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath)) { try requireDiscardable(discard); return true }
             return controlState()
         case .saveDocument(let path):
             guard let url = path.map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }) ?? fileURL else {
@@ -149,7 +149,7 @@ extension FudehandStore {
             guard entry.available else {
                 throw ControlCommandError("File not found: \(path) (deleted or moved); remove it from the list with app_remove_recent")
             }
-            try openFile(URL(fileURLWithPath: entry.path)) { try requireDiscardable(discard); return true }
+            try await openFile(URL(fileURLWithPath: entry.path)) { try requireDiscardable(discard); return true }
             return controlState()
         case .removeRecent(let path):
             let entry = try requireRecent(path)

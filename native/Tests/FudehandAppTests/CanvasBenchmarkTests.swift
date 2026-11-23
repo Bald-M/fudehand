@@ -362,3 +362,56 @@ enum CanvasBenchmark {
     #expect(composite < 50)
     #expect(longest < 250)
 }
+
+/// Opening a large phone design (#248): 226 screens of about 70 layers each (16k layers), with text whose labels repeat
+/// across screens and SVG icons placed many times over, like a light and dark copy of every screen. Measures, on a cold
+/// process, reading the file and the main thread's share of opening it with the editor canvas attached, fitted to all.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func documentOpenBenchmark() throws {
+    let icons = (0..<40).map { index in
+        Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M\##(index % 12) 2h\##(8 + index % 9)v\##(6 + index % 7)H4z" fill="#\##(String(format: "%06X", index * 40_503))"/></svg>"##.utf8)
+    }
+    let labels = (0..<60).map { "Shared label \($0)" }
+    let document = DesignDocument(nodes: (0..<226).map { screen in
+        var frame = DesignNode(id: "s\(screen)", type: .frame, name: "Screen \(screen)",
+                               x: Double(screen % 12) * 470, y: Double(screen / 12) * 964, width: 390, height: 844)
+        frame.fill = .white
+        frame.children = (0..<70).map { child in
+            let id = "s\(screen)c\(child)", y = 20 + Double(child) * 11
+            switch child % 7 {
+            case 0, 1, 2:
+                var node = DesignNode(id: id, type: .text, x: 16, y: y, width: 300, height: 20)
+                // Most labels repeat on other screens; one in nine is the screen's own.
+                let content = child % 9 == 0 ? "Screen \(screen) item \(child)" : labels[(screen + child) % labels.count]
+                node.text = DesignText(content: content, fontSize: child % 2 == 0 ? 14 : 12, autoResize: child % 2 == 0 ? .widthAndHeight : .height)
+                return node
+            case 3:
+                let side = [14.0, 18, 24][child % 3]
+                var node = DesignNode(id: id, type: .image, x: 340, y: y, width: side, height: side)
+                node.image = DesignImage(data: icons[(screen * 7 + child) % icons.count])
+                return node
+            default:
+                var node = DesignNode(id: id, type: child % 13 == 0 ? .ellipse : .rectangle, x: 16, y: y, width: 358, height: 8)
+                node.fill = .black
+                return node
+            }
+        }
+        return frame
+    })
+    let data = try document.encoded()
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    var start = CACurrentMediaTime()
+    let decoded = try DesignDocument.decode(data)
+    let read = (CACurrentMediaTime() - start) * 1000
+    start = CACurrentMediaTime()
+    h.store.replace(decoded, url: nil)
+    let open = (CACurrentMediaTime() - start) * 1000
+    start = CACurrentMediaTime()
+    CATransaction.flush()
+    let commit = (CACurrentMediaTime() - start) * 1000
+    print(String(format: "[bench] layers=%d documentOpen read=%.0fms mainThread=%.0fms commit=%.0fms",
+                 decoded.nodeCount, read, open, commit))
+    #expect(h.canvas.renderer.layerCount == decoded.nodeCount)
+    // About 400–600 ms before the text measurements were made in parallel and SVG icons parsed and rasterized once each.
+    #expect(open < 300)
+}

@@ -103,6 +103,29 @@ import Testing
     #expect(TextMetrics.measure(DesignText(content: ""), nil).height > 0)
 }
 
+/// Opening a document measures its text in parallel first (#248): laying it out then finds every measurement it needs, even
+/// with more distinct texts than the cache used to hold, and gives the same layout as measuring one text at a time.
+@Test @MainActor func prewarmedTextMeasurementsServeTheLayout() {
+    var frame = DesignNode(id: "f", type: .frame, width: 4000, height: 4000)
+    frame.children = (0..<6000).map { index in
+        var node = DesignNode(id: "t\(index)", type: .text, x: 0, y: Double(index), width: 80, height: 10)
+        node.text = DesignText(content: "Label \(index)", fontSize: 12, autoResize: index % 2 == 0 ? .widthAndHeight : .height)
+        return node
+    }
+    let document = DesignDocument(nodes: [frame])
+    TextMetrics.resetCache()
+    var serial = DesignEditor(measure: TextMetrics.measure)
+    serial.replace(document)
+
+    TextMetrics.resetCache()
+    TextMetrics.prewarm(document.nodes)
+    let misses = TextMetrics.misses
+    var prewarmed = DesignEditor(measure: TextMetrics.measure)
+    prewarmed.replace(document)
+    #expect(TextMetrics.misses == misses)
+    #expect(prewarmed.document == serial.document)
+}
+
 /// The strokes of "▀" are in the upper half of the line and those of "▄" in the lower half; when text is upside down their vertical relationship is reversed.
 @Test @MainActor func snapshotTextIsNotUpsideDown() throws {
     func inkCenterY(_ content: String) throws -> Double {
@@ -168,6 +191,21 @@ private let redSVG = Data(##"<svg xmlns="http://www.w3.org/2000/svg" width="48" 
     node.height = 24
     renderer.sync([node])
     #expect(layer.contents as! CGImage === grown)
+}
+
+/// The same icon placed many times is parsed once and rasterized once per pixel size, at load and after a zoom (#248).
+@Test @MainActor func identicalSVGImagesShareOneRaster() throws {
+    let renderer = DesignRenderer()
+    renderer.contentsScale = 1
+    var a = svgImage(), b = svgImage(), c = svgImage(width: 96, height: 48)
+    a.id = "a"; b.id = "b"; c.id = "c"; b.x = 100
+    renderer.sync([a, b, c])
+    func raster(_ id: String) throws -> CGImage { try #require(renderer.layer(for: id)?.contents as! CGImage?) }
+    #expect(try raster("a") === raster("b"))
+    #expect(try raster("c").width == 96)
+    renderer.contentsScale = 4
+    #expect(try raster("a").width == 192)
+    #expect(try raster("a") === raster("b"))
 }
 
 @Test @MainActor func svgFollowsImageFitAndCornerRadius() throws {

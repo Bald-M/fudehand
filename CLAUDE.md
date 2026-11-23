@@ -31,7 +31,7 @@ pnpm dev               # build the app in debug and open it
 pnpm build:native      # release build + ad-hoc signing → dist/Fudehand.app
 pnpm package:native    # distributable App (no workspace.json, carries the Node tools) → dist/Fudehand-<version>.dmg
 pnpm test:native       # run swift test on native/ (FudehandCoreTests + FudehandAppTests)
-pnpm bench:native      # release-build canvas drag/hover, pan compositing (GPU time per pan frame), canvas-bitmap main-thread blocking, opening a large design with glass, layer selection, and edit (nudge, undo, redo, drag release) benchmarks on 510–14,200 layers (prints [bench] lines)
+pnpm bench:native      # release-build document open (16k layers), canvas drag/hover, pan compositing (GPU time per pan frame), canvas-bitmap main-thread blocking, opening a large design with glass, layer selection, and edit (nudge, undo, redo, drag release) benchmarks on 510–16,000 layers (prints [bench] lines)
 pnpm check             # Vitest (tests/): MCP tools, MCP server, chat harness
 pnpm mcp               # start the Fudehand MCP server over stdio (usually launched by the Agent)
 ```

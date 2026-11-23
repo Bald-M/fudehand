@@ -119,6 +119,43 @@ private func temporaryFile() -> URL {
     #expect(reopened.editor.document == expected && !reopened.isDirty && reopened.title == url.deletingPathExtension().lastPathComponent)
 }
 
+/// The file is read in the background (#248): an edit made meanwhile is not dropped unless discarding is allowed again.
+@Test @MainActor func anEditWhileAFileIsReadIsKeptUnlessDiscarded() async throws {
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try DesignDocument(nodes: [DesignNode(id: "opened", type: .rectangle)]).encoded().write(to: url)
+    for allowed in [false, true] {
+        let store = makeStore()
+        var asked = 0
+        let open = Task { try await store.open(url) { asked += 1; return allowed } }
+        // The open starts and waits for the read; the edit lands before it resumes.
+        await Task.yield()
+        _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "edit", "type": "ellipse"])))
+        try await open.value
+        #expect(asked == 1)
+        #expect((store.editor.document.node("edit") != nil) == !allowed && (store.editor.document.node("opened") != nil) == allowed)
+    }
+}
+
+/// When a second file is opened while the first is still being read, the second is the one that stays open.
+@Test @MainActor func theLastFileOpenedWins() async throws {
+    let first = temporaryFile(), second = temporaryFile()
+    defer { [first, second].forEach { try? FileManager.default.removeItem(at: $0) } }
+    // The first file is large, so it is still being read when the small second one has been read.
+    var large = DesignNode(id: "first", type: .frame, width: 100, height: 100)
+    large.children = (0..<20_000).map { DesignNode(id: "r\($0)", type: .rectangle, width: 1, height: 1) }
+    try DesignDocument(nodes: [large]).encoded().write(to: first)
+    try DesignDocument(nodes: [DesignNode(id: "second", type: .rectangle)]).encoded().write(to: second)
+    let store = makeStore()
+    let a = Task { try await store.open(first) { true } }
+    await Task.yield()
+    let b = Task { try await store.open(second) { true } }
+    await Task.yield()
+    try await a.value
+    try await b.value
+    #expect(store.editor.document.node("second") != nil && store.fileURL == second)
+}
+
 @Test @MainActor func openingABadFileKeepsTheCurrentDocument() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
@@ -226,7 +263,7 @@ private func temporaryFile() -> URL {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     let missing = temporaryFile()
-    #expect(throws: DesignError.self) { try store.open(missing) }
+    await #expect(throws: DesignError.self) { try await store.open(missing) { true } }
     #expect(store.editor.document.node("r") != nil && store.recents.items.isEmpty)
 }
 
@@ -350,23 +387,23 @@ private func temporaryFile() -> URL {
     #expect(store.chat.transcript.entries.isEmpty)
     #expect(store.chat.conversations.isEmpty)
     store.chat.send("Never saved", root: nil, runtime: nil)
-    try store.open(a)
+    try await store.open(a) { true }
     #expect(store.chat.tabs.map(\.id) == [inA])
     #expect(store.chat.conversations.map(\.title) == ["About A"])
     store.replace(DesignDocument(), url: nil)
     #expect(store.chat.conversations.isEmpty)
 
     // Save As copies the conversations; the original file keeps its own.
-    try store.open(a)
+    try await store.open(a) { true }
     try store.write(to: b)
     #expect(store.chat.conversations.map(\.title) == ["About A"])
-    try store.open(a)
+    try await store.open(a) { true }
     #expect(store.chat.tabs.map(\.id) == [inA])
 
     // On a case-insensitive volume the same file under another spelling of its name has the same conversations.
     let respelled = a.deletingLastPathComponent().appendingPathComponent(a.lastPathComponent.uppercased())
     if FileManager.default.fileExists(atPath: respelled.path) {
-        try store.open(respelled)
+        try await store.open(respelled) { true }
         #expect(store.chat.tabs.map(\.id) == [inA])
     }
 
@@ -376,7 +413,7 @@ private func temporaryFile() -> URL {
     let relaunched = FudehandStore(defaults: defaults, chatRoot: root)
     #expect(relaunched.chat.transcript.entries.isEmpty)
     #expect(relaunched.chat.conversations.isEmpty)
-    try relaunched.open(a)
+    try await relaunched.open(a) { true }
     #expect(relaunched.chat.tabs.map(\.id) == [inA])
     #expect(relaunched.chat.transcript.entries.first?.text == "About A")
 }
@@ -605,7 +642,7 @@ private func temporaryFile() -> URL {
     var node = DesignNode(id: "i", type: .icon, width: 24, height: 24)
     node.icon = DesignIcon(name: "sf/not.a.real.symbol")
     try DesignDocument(nodes: [node]).encoded().write(to: url)
-    try store.open(url)
+    try await store.open(url) { true }
     _ = try await control(store, .updateNode("i", changes: JSONObject(["x": 12, "icon": ["color": "#336699"]])))
     #expect(store.editor.document.node("i")?.x == 12)
     #expect(store.editor.document.node("i")?.icon?.name == "sf/not.a.real.symbol")

@@ -47,6 +47,10 @@ enum TextMetrics {
     private struct MeasureKey: Hashable { let text: DesignText; let maxWidth: Double? }
     /// Layout measures all text again after every edit; the same text and width reuse the result directly. Used on the main thread only.
     nonisolated(unsafe) private static var cache: [MeasureKey: Size] = [:]
+    /// Large enough for every text of a document of tens of thousands of layers, so laying it out again finds them all (#248).
+    static let maximumCached = 50_000
+    /// Measurements not found in the cache, for tests.
+    nonisolated(unsafe) private(set) static var misses = 0
 
     /// Forgets the measurements, which no longer hold once the available fonts change.
     static func resetCache() { cache.removeAll(keepingCapacity: true) }
@@ -54,14 +58,44 @@ enum TextMetrics {
     static let measure: TextMeasure = { text, maxWidth in
         let key = MeasureKey(text: text, maxWidth: maxWidth)
         if let hit = cache[key] { return hit }
-        let size = uncachedMeasure(text, maxWidth)
-        if cache.count >= 5000 { cache.removeAll(keepingCapacity: true) }
-        cache[key] = size
+        misses += 1
+        let size = uncachedMeasure(attributed(text), maxWidth)
+        store(key, size)
         return size
     }
 
-    private static func uncachedMeasure(_ text: DesignText, _ maxWidth: Double?) -> Size {
-        let framesetter = CTFramesetterCreateWithAttributedString(attributed(text))
+    private static func store(_ key: MeasureKey, _ size: Size) {
+        if cache.count >= maximumCached { cache.removeAll(keepingCapacity: true) }
+        cache[key] = size
+    }
+
+    /// Measures what laying out `nodes` asks for first (see `DesignLayout.textRequests`), spread over the CPU cores, so
+    /// opening a document with thousands of distinct texts does not measure them one at a time on the main thread (#248).
+    /// The attributed strings are made here, on the main thread; CoreText sizes them in parallel.
+    @MainActor static func prewarm(_ nodes: [DesignNode]) {
+        let requests = DesignLayout.textRequests(nodes).filter { cache[MeasureKey(text: $0.text, maxWidth: $0.width)] == nil }
+        guard !requests.isEmpty else { return }
+        let strings = requests.map { attributed($0.text) }
+        var sizes = [(natural: Size?, height: Size?)](repeating: (nil, nil), count: requests.count)
+        sizes.withUnsafeMutableBufferPointer { sizes in
+            nonisolated(unsafe) let sizes = sizes
+            DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+                let request = requests[index], string = strings[index]
+                let natural = request.width == nil ? uncachedMeasure(string, nil) : nil
+                let height = request.height ? uncachedMeasure(string, natural?.width ?? request.width) : nil
+                sizes[index] = (natural, height)
+            }
+        }
+        for (request, size) in zip(requests, sizes) {
+            if let natural = size.natural { store(MeasureKey(text: request.text, maxWidth: nil), natural) }
+            if let height = size.height {
+                store(MeasureKey(text: request.text, maxWidth: size.natural?.width ?? request.width), height)
+            }
+        }
+    }
+
+    private static func uncachedMeasure(_ string: NSAttributedString, _ maxWidth: Double?) -> Size {
+        let framesetter = CTFramesetterCreateWithAttributedString(string)
         let constraint = CGSize(width: maxWidth.map { CGFloat(max($0, 1)) } ?? .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRange(), nil, constraint, nil)
         return Size(width: Double(size.width.rounded(.up)), height: Double(size.height.rounded(.up)))

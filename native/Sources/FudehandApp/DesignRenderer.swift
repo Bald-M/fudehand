@@ -368,16 +368,20 @@ final class DesignRenderer {
 /// is shown at, so it stays sharp when zoomed in: again when the zoom settles (a new `contentsScale`) or the layer grows.
 final class ImageLayer: CALayer {
     private var svg: NSImage?
+    private var svgKey: SVGCache.Key?
     /// The pixel size of the current SVG raster.
     private var raster: CGSize = .zero
 
     @MainActor func load(_ data: Data) {
         if let bitmap = DesignRenderer.cgImage(data) {
             svg = nil
+            svgKey = nil
             contents = bitmap
             return
         }
-        svg = DesignRenderer.svgImage(data)
+        let key = SVGCache.Key(data)
+        svg = SVGCache.image(key)
+        svgKey = svg == nil ? nil : key
         contents = nil
         rasterize(force: true)
     }
@@ -386,7 +390,7 @@ final class ImageLayer: CALayer {
     /// larger than the current raster, and then with 1.5× headroom: shrinking keeps the sharper raster, and a resize drag that
     /// enlarges the layer redraws in a few steps rather than on every frame.
     @MainActor func rasterize(force: Bool) {
-        guard let svg else { return }
+        guard let svg, let svgKey else { return }
         let size = svg.size
         let cover = max(bounds.width / size.width, bounds.height / size.height) * contentsScale
         let limit = DesignRenderer.maximumRasterSide / max(size.width, size.height)
@@ -394,14 +398,73 @@ final class ImageLayer: CALayer {
         guard force || needed.width > raster.width || needed.height > raster.height else { return }
         let factor = min(force ? cover : cover * 1.5, limit)
         let pixels = CGSize(width: max(1, (size.width * factor).rounded(.up)), height: max(1, (size.height * factor).rounded(.up)))
-        guard let context = CGContext(data: nil, width: Int(pixels.width), height: Int(pixels.height), bitsPerComponent: 8, bytesPerRow: 0,
+        guard let image = SVGCache.raster(svgKey, svg, pixels: pixels) else { return }
+        contents = image
+        raster = pixels
+    }
+}
+
+/// Parsed SVG images and their rasters by data, shared by every image layer that shows the same data: a document that places
+/// the same icon hundreds of times parses it once and rasterizes it once per pixel size, when it opens and after a zoom (#248).
+@MainActor enum SVGCache {
+    /// Hashes all of the data: `Data`'s own hash reads only its first bytes, which SVG icons tend to share.
+    struct Key: Hashable {
+        let data: Data
+        private let digest: Int
+
+        init(_ data: Data) {
+            var hasher = Hasher()
+            data.withUnsafeBytes { hasher.combine(bytes: $0) }
+            self.data = data
+            digest = hasher.finalize()
+        }
+
+        func hash(into hasher: inout Hasher) { hasher.combine(digest) }
+        static func == (a: Key, b: Key) -> Bool { a.digest == b.digest && a.data == b.data }
+    }
+
+    private struct RasterKey: Hashable { let svg: Key, width: Int, height: Int }
+    /// Kept entries are dropped all at once past these limits; layers keep showing the images they hold.
+    static let maximumImages = 1024
+    static let maximumRasterBytes = 64 * 1024 * 1024
+    private static var images: [Key: NSImage?] = [:]
+    private static var rasters: [RasterKey: CGImage] = [:]
+    private static var rasterBytes = 0
+
+    /// Forgets every image and raster; layers keep showing the ones they hold.
+    static func removeAll() {
+        images = [:]
+        rasters = [:]
+        rasterBytes = 0
+    }
+
+    /// The SVG the data holds, or nil when it is not one.
+    static func image(_ key: Key) -> NSImage? {
+        if let cached = images[key] { return cached }
+        if images.count >= maximumImages { images = [:] }
+        let image = DesignRenderer.svgImage(key.data)
+        images[key] = image
+        return image
+    }
+
+    /// `image` (the SVG of `key`) drawn to fill `pixels`.
+    static func raster(_ key: Key, _ image: NSImage, pixels: CGSize) -> CGImage? {
+        let rasterKey = RasterKey(svg: key, width: Int(pixels.width), height: Int(pixels.height))
+        if let cached = rasters[rasterKey] { return cached }
+        guard let context = CGContext(data: nil, width: rasterKey.width, height: rasterKey.height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        svg.draw(in: CGRect(origin: .zero, size: pixels))
+        image.draw(in: CGRect(origin: .zero, size: pixels))
         NSGraphicsContext.restoreGraphicsState()
-        contents = context.makeImage()
-        raster = pixels
+        guard let raster = context.makeImage() else { return nil }
+        let bytes = raster.bytesPerRow * raster.height
+        // A raster larger than the whole budget is not kept.
+        guard bytes <= maximumRasterBytes else { return raster }
+        if rasterBytes + bytes > maximumRasterBytes { rasters = [:]; rasterBytes = 0 }
+        rasters[rasterKey] = raster
+        rasterBytes += bytes
+        return raster
     }
 }
