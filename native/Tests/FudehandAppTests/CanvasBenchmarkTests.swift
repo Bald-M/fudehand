@@ -176,6 +176,9 @@ enum CanvasBenchmark {
     let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
     defer { ProcessInfo.processInfo.endActivity(activity) }
     let document = CanvasBenchmark.document(frames: 100, effects: true)
+    // One bitmap first: the first in a process also sets up Core Image's filters and text (16–36 ms, varying with the
+    // machine's load), once per launch. What is measured is the steady cost of each bitmap.
+    _ = try OffscreenImage(of: document.nodes[0], in: CGRect(x: 0, y: 0, width: 400, height: 300), scale: 0.5).draw()
     let h = CanvasHarness(document: document)
     defer { h.dispose() }
     h.request(Viewport(x: 0, y: 0, scale: 0.14))
@@ -194,8 +197,73 @@ enum CanvasBenchmark {
     #expect(h.canvas.bitmaps.current(wanted).count == wanted.count)
     print(String(format: "[bench] layers=%d bitmaps=%d allDrawn=%.2fs longestMainThreadBlock=%.1fms blocksOver16.7ms=%d",
                  document.nodeCount, wanted.count, CACurrentMediaTime() - start, longest, dropped))
-    // Each bitmap holds the main thread for its layers only (about 3.5 ms here). The first after launch also sets up Core Image's
-    // filters and text (16–30 ms): at most that one frame is dropped, and never two in a row.
+    // Each bitmap holds the main thread for its layers only (about 3.5 ms here): at most one frame is dropped to the system,
+    // and never two in a row.
     #expect(dropped <= 1)
     #expect(longest < 2000.0 / 60)
+}
+
+/// The canvas at rest (#245): with every frame of the 5100-layer document in view, how long Core Animation takes to composite
+/// the whole canvas again, which the window server does whenever anything on it changes (a selection box, a hover outline).
+/// *live* draws the top-level layers as they are; *rest* is what the canvas shows once their bitmaps are drawn.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasRestCompositeBenchmark() async throws {
+    let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
+    defer { ProcessInfo.processInfo.endActivity(activity) }
+    let device = try #require(MTLCreateSystemDefaultDevice())
+    let queue = try #require(device.makeCommandQueue())
+    let h = CanvasHarness(document: CanvasBenchmark.document(frames: 100, effects: true))
+    defer { h.dispose() }
+    let viewport = Viewport(x: 0, y: 0, scale: 0.14)
+    h.request(viewport)
+    let wanted = h.canvas.document.nodes.filter(CanvasBitmaps.wanted)
+    for _ in 0..<1500 where h.canvas.bitmaps.current(wanted, minimumScale: h.canvas.renderer.contentsScale).count < wanted.count {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    let size = h.canvas.bounds.size
+    let content = h.canvas.renderer.root
+    content.removeFromSuperlayer()
+    let stage = CALayer()
+    stage.isGeometryFlipped = true
+    stage.frame = CGRect(x: 0, y: 0, width: size.width * 2, height: size.height * 2)
+    let world = CALayer()
+    world.anchorPoint = .zero
+    world.bounds = CGRect(origin: .zero, size: size)
+    world.position = CGPoint(x: viewport.x * 2, y: viewport.y * 2)
+    world.transform = CATransform3DMakeScale(2 * viewport.scale, 2 * viewport.scale, 1)
+    stage.addSublayer(world)
+    world.addSublayer(content)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: Int(stage.bounds.width),
+                                                              height: Int(stage.bounds.height), mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    let compositor = CARenderer(mtlTexture: try #require(device.makeTexture(descriptor: descriptor)),
+                                options: [kCARendererMetalCommandQueue: queue])
+    compositor.layer = stage
+    compositor.bounds = stage.bounds
+
+    /// Composites the whole canvas 25 times and returns the 95th-percentile milliseconds.
+    func composite() -> Double {
+        CATransaction.flush()
+        var times: [Double] = []
+        for step in 0..<25 {
+            let begin = CACurrentMediaTime()
+            compositor.beginFrame(atTime: begin, timeStamp: nil)
+            compositor.addUpdate(compositor.bounds)
+            compositor.render()
+            compositor.endFrame()
+            let fence = queue.makeCommandBuffer()!
+            fence.commit()
+            fence.waitUntilCompleted()
+            if step >= 3 { times.append((CACurrentMediaTime() - begin) * 1000) }
+        }
+        return times.sorted()[times.count * 95 / 100]
+    }
+    let rest = composite()
+    let standIns = h.canvas.renderer.standIns
+    h.canvas.renderer.standIns = [:]
+    let live = composite()
+    print(String(format: "[bench] layers=5100 framesInView=100 restComposite p95 live=%.1fms rest=%.1fms bitmaps=%d",
+                 live, rest, standIns.count))
+    #expect(standIns.count == wanted.count)
+    // The gate in ADR 0012: one 60 Hz frame at rest.
+    #expect(rest < 1000.0 / 60)
 }

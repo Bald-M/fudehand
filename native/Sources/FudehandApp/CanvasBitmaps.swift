@@ -1,19 +1,25 @@
 import AppKit
 import FudehandCore
 
-/// Bitmaps of top-level layers with effects, drawn in place of their live layers while the canvas pans or zooms (#241).
+/// Bitmaps of top-level layers with effects, drawn in place of their live layers (#241, #245).
 ///
 /// Core Animation computes every background filter (glass, background blur) and layer blur again on each frame the view
-/// moves, which costs hundreds of milliseconds per frame on a design with a few hundred of them. Moving the view does not
-/// change what a top-level layer looks like, so a bitmap of it, drawn once by Core Animation itself (as snapshots are),
-/// shows the same pixels and only needs moving. Bitmaps are drawn one at a time while the canvas is idle, mostly off the main
-/// thread (#243), kept while their node is unchanged and they fit the pixel budget, and drawn again at a new zoom (until
-/// then the old one is shown stretched); one of a node that has changed since is never shown.
+/// moves, which costs hundreds of milliseconds per frame on a design with a few hundred of them, and the window server
+/// does the same at rest whenever anything on the canvas changes (a selection box, a hover outline). Neither changes
+/// what a top-level layer looks like, so a bitmap of it, drawn once by Core Animation itself (as snapshots are), can
+/// stand in for it and only needs moving. It matches a snapshot; the window server blurs a little differently from the
+/// offscreen renderer, so glows and glass spread slightly wider in a bitmap than live, the more so the smaller the zoom
+/// (ADR 0012). Bitmaps are drawn one at a time while the canvas is idle, mostly off the main thread (#243), kept while
+/// their node is unchanged and they fit the pixel budget, and drawn again at a new zoom (until then the old one is
+/// shown stretched while the view moves); one of a node that has changed since is never shown.
 @MainActor
 final class CanvasBitmaps {
     private struct Entry {
         let node: DesignNode
+        /// The scale asked for (the canvas's raster scale), which decides whether the bitmap is drawn again.
         let scale: CGFloat
+        /// The pixels per point actually drawn: lower than `scale` for a layer too large for `maximumPixels`.
+        let drawnScale: CGFloat
         let layer: CALayer
         let pixels: Int
     }
@@ -25,8 +31,8 @@ final class CanvasBitmaps {
     /// The bitmap layer last drawn for a node, current or not.
     func layer(for id: String) -> CALayer? { entries[id]?.layer }
 
-    /// Whether a top-level node is drawn as a bitmap while the view moves: it is visible, it or a descendant has a visible
-    /// effect, its paint is bounded, and it has no background blur or glass of its own, which shows the layers behind it.
+    /// Whether a top-level node is drawn as a bitmap: it is visible, it or a descendant has a visible effect, its paint
+    /// is bounded, and it has no background blur or glass of its own, which shows the layers behind it.
     static func wanted(_ node: DesignNode) -> Bool {
         guard node.visible, hasEffects(node), node.paintBounds != nil else { return false }
         return !node.effects.contains { $0.visible && ($0.type == .glass || $0.type == .backgroundBlur) }
@@ -36,11 +42,14 @@ final class CanvasBitmaps {
         node.effects.contains(where: \.visible) || node.children.contains { $0.visible && hasEffects($0) }
     }
 
-    /// The bitmaps that show the top-level `nodes` as they are now, by node id; drawn at any zoom.
-    func current(_ nodes: [DesignNode]) -> [String: CALayer] {
+    /// The bitmaps that show the top-level `nodes` as they are now, by node id, drawn at `minimumScale` pixels per point or
+    /// more (a layer too large for `maximumPixels` at the canvas's scale stays live at rest).
+    func current(_ nodes: [DesignNode], minimumScale: CGFloat = 0) -> [String: CALayer] {
         var current: [String: CALayer] = [:]
         for node in nodes {
-            if let entry = entries[node.id], entry.node == node, entry.layer.contents != nil { current[node.id] = entry.layer }
+            if let entry = entries[node.id], entry.node == node, entry.drawnScale >= minimumScale, entry.layer.contents != nil {
+                current[node.id] = entry.layer
+            }
         }
         return current
     }
@@ -97,7 +106,8 @@ final class CanvasBitmaps {
                 // A node that cannot be drawn keeps an empty entry, so it is not tried again until it changes, and stays live.
                 layer.contents = image
                 CATransaction.commit()
-                self.entries[next.node.id] = Entry(node: next.node, scale: scale, layer: layer, pixels: image.map { $0.width * $0.height } ?? 0)
+                self.entries[next.node.id] = Entry(node: next.node, scale: scale, drawnScale: pixels, layer: layer,
+                                                   pixels: image.map { $0.width * $0.height } ?? 0)
                 self.keepToBudget()
             }
             finished()

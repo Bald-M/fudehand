@@ -67,10 +67,11 @@ extension FudehandCanvasView {
         return CGRect(x: -v.x / v.scale, y: -v.y / v.scale, width: bounds.width / v.scale, height: bounds.height / v.scale)
     }
 
-    /// While the view moves, top-level layers with a bitmap of them as they are now are drawn as it, even one drawn at another
-    /// zoom (stretched until it is drawn again): any bitmap is far cheaper to show than the live layers.
+    /// Top-level layers with a bitmap of them as they are now are drawn as it, while the view moves and at rest (#245); a layer
+    /// being edited has changed since, so it shows live until its bitmap is drawn again. While the view moves a bitmap from
+    /// any zoom serves (stretched until it is drawn again); at rest only one at least as sharp as the live layers.
     func updateStandIns() {
-        renderer.standIns = viewMoving ? bitmaps.current(document.nodes) : [:]
+        renderer.standIns = bitmaps.current(document.nodes, minimumScale: viewMoving ? 0 : renderer.contentsScale)
     }
 
     /// Queues drawing the missing bitmaps. `restart` (after an edit or a settled view) waits for a pause first, so a drag
@@ -111,7 +112,7 @@ extension FudehandCanvasView {
         var spent: CFTimeInterval = 0
         guard let started = bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving, finished: { [weak self] in
             guard let self else { return }
-            if self.viewMoving { self.updateStandIns() }
+            self.updateStandIns()
             self.scheduleBitmaps(after: spent * Self.bitmapSpacing, replacing: false)
         }) else { return }
         spent = started
