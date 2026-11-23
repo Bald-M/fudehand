@@ -558,6 +558,7 @@ final class FudehandStore: ObservableObject {
         savedRevision = editor.revision
         savedDocument = editor.document
         setSelection([])
+        canvas?.documentLoaded()
         changed()
         fitAll(animated: false)
         if canvas == nil { fitWhenCanvasSized = true }

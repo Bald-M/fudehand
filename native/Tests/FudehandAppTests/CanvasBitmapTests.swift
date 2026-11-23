@@ -508,3 +508,101 @@ enum CanvasBitmapFixture {
     try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
     #expect(standInOnCanvas(h, "g"))
 }
+
+// #247: until its first bitmap is drawn, a top-level layer with effects is shown without them. Composited live, a large design's
+// glass and blurs kept the window server busy for half a minute after opening it.
+
+@MainActor private func liveWithEffects(_ h: CanvasHarness, _ id: String) -> Bool { !h.canvas.renderer.backdrops(for: id).isEmpty }
+
+@Test @MainActor func frameIsShownWithoutEffectsUntilItsFirstBitmap() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    #expect(onCanvas(h, "g"))
+    #expect(!liveWithEffects(h, "card"))
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    // The bitmap shows the glass; the live layers get their effects back, for when the frame is edited.
+    #expect(liveWithEffects(h, "card"))
+    let image = try #require(h.canvas.bitmaps.layer(for: "g")?.contents.map { $0 as! CGImage })
+    let paint = try #require(h.canvas.document.nodes[0].paintBounds)
+    let direct = try DesignRenderer.image(of: h.canvas.document.nodes[0], in: CGRect(x: paint.x, y: paint.y, width: paint.width, height: paint.height),
+                                          scale: h.canvas.renderer.contentsScale)
+    #expect(image.dataProvider?.data as Data? == direct.dataProvider?.data as Data?)
+}
+
+@Test @MainActor func frameEditedAfterItsBitmapShowsItsEffectsLive() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    h.store.canvasBeginGesture("Move Layers")
+    h.store.canvasMove(["spot": Point(x: 60, y: 40)])
+    #expect(onCanvas(h, "g"))
+    #expect(liveWithEffects(h, "card"))
+    h.store.canvasEndGesture()
+}
+
+@Test @MainActor func frameWhoseBitmapDoesNotFitTheBudgetShowsItsEffectsLive() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    h.canvas.bitmaps.pixelBudget = 1
+    try await CanvasBitmapFixture.wait { liveWithEffects(h, "card") }
+    #expect(liveWithEffects(h, "card"))
+    #expect(onCanvas(h, "g"))
+    #expect(h.canvas.bitmaps.layer(for: "g") == nil)
+}
+
+@Test @MainActor func effectsStayLiveWhenTheFontsChange() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") && liveWithEffects(h, "card") }
+    h.canvas.fontsChanged()
+    h.canvas.show(h.canvas.index)
+    #expect(liveWithEffects(h, "card"))
+}
+
+@Test @MainActor func effectAddedToAShownFrameShowsAtOnce() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    var pane = DesignNode(id: "pane", type: .rectangle, x: 20, y: 20, width: 100, height: 60)
+    pane.effects = [DesignEffect(type: .glass)]
+    h.store.updateNode("plain", "Add Glass") { $0.children.append(pane) }
+    #expect(liveWithEffects(h, "pane"))
+}
+
+@Test @MainActor func frameEditedBeforeItsFirstBitmapShowsItsEffects() {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    h.canvas.inputPause = 3600
+    h.canvas.noteInput()
+    #expect(!liveWithEffects(h, "card"))
+    h.store.canvasBeginGesture("Move Layers")
+    h.store.canvasMove(["spot": Point(x: 60, y: 40)])
+    h.store.canvasEndGesture()
+    #expect(liveWithEffects(h, "card"))
+}
+
+@Test @MainActor func openingAnotherDocumentShowsItsFramesWithoutEffects() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") && liveWithEffects(h, "card") }
+    // Another design whose ids happen to match: the old bitmap does not show it, and its glass waits for a bitmap of its own.
+    var other = CanvasBitmapFixture.document()
+    other.nodes[0].children[0].x += 50
+    h.store.replace(other, url: nil)
+    #expect(!liveWithEffects(h, "card"))
+    #expect(!standInOnCanvas(h, "g"))
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") && liveWithEffects(h, "card") }
+    #expect(standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func deletingALayersLastEffectRemovesItsEffectLayers() {
+    let renderer = DesignRenderer()
+    var card = DesignNode(id: "card", type: .rectangle, width: 100, height: 100)
+    card.effects = [DesignEffect(type: .glass)]
+    renderer.sync([card])
+    #expect(renderer.backdrops(for: "card").count == 1)
+    card.effects = []
+    renderer.sync([card])
+    #expect(renderer.backdrops(for: "card").isEmpty)
+    #expect(renderer.root.sublayers?.count == 1)
+}

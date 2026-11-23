@@ -54,6 +54,14 @@ final class CanvasBitmaps {
         return current
     }
 
+    /// The wanted top-level `nodes` that have no bitmap yet (see `awaits`).
+    func awaiting(_ nodes: [DesignNode]) -> Set<String> {
+        Set(nodes.lazy.filter { self.awaits($0.id) && Self.wanted($0) }.map(\.id))
+    }
+
+    /// Whether the node has no bitmap yet and is still to get one: the last `drawNext` did not leave it out for the pixel budget.
+    func awaits(_ id: String) -> Bool { entries[id] == nil && !declined.contains(id) }
+
     /// Starts drawing the bitmap of the wanted node nearest the middle of `near` (world coordinates) that has none showing it
     /// as it is now at `scale`, and forgets bitmaps of nodes that are gone or whose paint misses `near`. With `onlyMissing`
     /// (while the view moves), a node whose bitmap is only at another zoom is left for later.
@@ -66,6 +74,7 @@ final class CanvasBitmaps {
                   finished: @escaping @MainActor () -> Void) -> CFTimeInterval? {
         guard !drawing else { return nil }
         let start = CACurrentMediaTime()
+        declined = []
         var distances: [String: CGFloat] = [:]
         var candidates: [(distance: CGFloat, node: DesignNode, paint: CGRect)] = []
         for node in nodes where Self.wanted(node) {
@@ -83,7 +92,10 @@ final class CanvasBitmaps {
         let pixels = min(scale, Self.maximumPixels / max(next.paint.width, next.paint.height, 1))
         let cost = Int((next.paint.width * pixels).rounded(.up) * (next.paint.height * pixels).rounded(.up))
         let nearer = entries.filter { $0.key != next.node.id && (distances[$0.key] ?? .infinity) < next.distance }.values.reduce(0) { $0 + $1.pixels }
-        guard nearer + cost <= pixelBudget else { return nil }
+        guard nearer + cost <= pixelBudget else {
+            declined = Set(candidates.map(\.node.id))
+            return nil
+        }
         let local = next.paint.offsetBy(dx: -next.node.x, dy: -next.node.y)
         let layer = entries[next.node.id]?.layer ?? {
             let layer = CALayer()
@@ -138,6 +150,8 @@ final class CanvasBitmaps {
     var pixelCount: Int { entries.values.reduce(0) { $0 + $1.pixels } }
     /// Each kept node's distance from the middle of the last `near`, for choosing which bitmaps to drop.
     private var lastDistances: [String: CGFloat] = [:]
+    /// The nodes still to draw when the last `drawNext` stopped at the pixel budget, the nearest of them not fitting.
+    private var declined: Set<String> = []
     /// Bumped by `removeAll`, so a bitmap still being drawn is not kept.
     private var generation = 0
 

@@ -69,9 +69,15 @@ extension FudehandCanvasView {
 
     /// Top-level layers with a bitmap of them as they are now are drawn as it, while the view moves and at rest (#245); a layer
     /// being edited has changed since, so it shows live until its bitmap is drawn again. While the view moves a bitmap from
-    /// any zoom serves (stretched until it is drawn again); at rest only one at least as sharp as the live layers.
+    /// any zoom serves (stretched until it is drawn again); at rest only one at least as sharp as the live layers. A layer of a
+    /// newly shown document shows without its effects until its bitmap is in place, or the pixel budget leaves it out (#247).
     func updateStandIns() {
         renderer.standIns = bitmaps.current(document.nodes, minimumScale: viewMoving ? 0 : renderer.contentsScale)
+        let bare = renderer.withoutEffects.filter(bitmaps.awaits)
+        if bare != renderer.withoutEffects {
+            renderer.withoutEffects = bare
+            renderer.sync(document.nodes)
+        }
     }
 
     /// Queues drawing the missing bitmaps. `restart` (after an edit or a settled view) waits for a pause first, so a drag
@@ -112,9 +118,16 @@ extension FudehandCanvasView {
         var spent: CFTimeInterval = 0
         guard let started = bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving, finished: { [weak self] in
             guard let self else { return }
+            // Building the layer's effects back behind its bitmap counts toward the spacing too.
+            let start = CACurrentMediaTime()
             self.updateStandIns()
+            spent += CACurrentMediaTime() - start
             self.scheduleBitmaps(after: spent * Self.bitmapSpacing, replacing: false)
-        }) else { return }
+        }) else {
+            // Layers left out for the pixel budget get their effects back.
+            updateStandIns()
+            return
+        }
         spent = started
     }
 

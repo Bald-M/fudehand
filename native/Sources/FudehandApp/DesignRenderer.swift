@@ -31,6 +31,8 @@ final class DesignRenderer {
         /// unchanged: arrays compare by identity first, so an edit elsewhere in the document costs nothing here (#228).
         var syncedChildren: [DesignNode]?
         var subtreeCount = 0
+        /// Whether the subtree was last synced without its effects (see `withoutEffects`).
+        var syncedBare = false
         /// For a top-level node, where it and its descendants paint, in world coordinates (nil when that is unbounded), and the
         /// node it was worked out for.
         var paint: CGRect?
@@ -50,6 +52,9 @@ final class DesignRenderer {
     var standIns: [String: CALayer] = [:] {
         didSet { if standIns != oldValue { arrangeRoot() } }
     }
+    /// Top-level nodes whose layers, descendants included, are built without their effects; a sync applies a change to it. The
+    /// canvas shows the frames of a document it has just opened this way until their bitmaps are drawn (#247).
+    var withoutEffects: Set<String> = []
     /// Text and images are rasterized at this scale: screen scale × canvas zoom.
     var contentsScale: CGFloat = 2 {
         didSet {
@@ -98,11 +103,11 @@ final class DesignRenderer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         pass += 1
-        var seen = syncChildren(of: root, nodes, skipping: true)
+        var seen = syncChildren(of: root, nodes, skipping: true, bare: false)
         // Ids are unique, so when as many nodes were synced as there are records, none was left behind by a deleted node.
         // Otherwise sync every node again, so that only the records of deleted nodes are left with an older pass.
         if seen != records.count {
-            seen = syncChildren(of: root, nodes, skipping: false)
+            seen = syncChildren(of: root, nodes, skipping: false, bare: false)
         }
         if seen != records.count {
             for (id, record) in records where record.pass != pass {
@@ -138,8 +143,9 @@ final class DesignRenderer {
     }
 
     /// Returns the number of nodes synced, descendants included. `below` are the parent's own layers kept under its children.
-    /// `skipping` skips the subtrees of unchanged nodes whose children are unchanged, counting their nodes as synced.
-    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], below: [CALayer] = [], skipping: Bool) -> Int {
+    /// `skipping` skips the subtrees of unchanged nodes whose children are unchanged, counting their nodes as synced. `bare` builds
+    /// the nodes without their effects; at the top level, `withoutEffects` decides it for each node.
+    private func syncChildren(of parent: CALayer, _ nodes: [DesignNode], below: [CALayer] = [], skipping: Bool, bare: Bool) -> Int {
         var ordered = below
         var seen = nodes.count
         for node in nodes {
@@ -155,20 +161,23 @@ final class DesignRenderer {
                 return created
             }()
             current.pass = pass
+            let bare = parent === root ? withoutEffects.contains(node.id) : bare
             var shallow = node
             shallow.children = []
+            if bare { shallow.effects = [] }
             var unchanged = true
             if current.applied != shallow {
                 Self.apply(node, to: current.content, previous: current.applied, scale: contentsScale)
-                applyEffects(node, to: current)
+                applyEffects(shallow, to: current)
                 current.applied = shallow
                 unchanged = false
             }
-            if skipping, unchanged, let synced = current.syncedChildren, synced == node.children {
+            if skipping, unchanged, current.syncedBare == bare, let synced = current.syncedChildren, synced == node.children {
                 seen += current.subtreeCount
             } else {
-                current.subtreeCount = syncChildren(of: current.content, node.children, below: current.innerShadows, skipping: skipping)
+                current.subtreeCount = syncChildren(of: current.content, node.children, below: current.innerShadows, skipping: skipping, bare: bare)
                 current.syncedChildren = node.children
+                current.syncedBare = bare
                 seen += current.subtreeCount
             }
             // Arrays compare by identity first, so an unchanged node costs little here.
@@ -197,6 +206,8 @@ final class DesignRenderer {
         let wanted = node.effects.contains(where: \.visible)
         // Without a wrapper the node has no effect layers, so a node without effects has nothing to update.
         guard wanted || record.layer !== record.content else { return }
+        // Wrapping or unwrapping builds the effect layers again: a node whose last effect was deleted would keep its old ones.
+        var rebuild = false
         if wanted != (record.layer !== record.content) {
             if wanted {
                 let wrapper = CALayer()
@@ -207,14 +218,14 @@ final class DesignRenderer {
                 record.content.removeFromSuperlayer()
                 record.layer = record.content
             }
-            record.applied?.effects = []
+            rebuild = true
         }
         func inputs(_ node: DesignNode) -> DesignNode {
             var node = node
             node.x = 0; node.y = 0; node.opacity = 1; node.visible = true; node.name = ""; node.children = []
             return node
         }
-        if record.applied.map(inputs) != inputs(node) {
+        if rebuild || record.applied.map(inputs) != inputs(node) {
             let built = wanted ? EffectLayers.build(node, scale: contentsScale) : EffectLayers.Built()
             // A shader that only changed size keeps showing its bitmap until the size settles (see `ShaderLayer.carryOver`).
             for (old, new) in zip(record.innerShadows.compactMap { $0 as? ShaderLayer }, built.inner.compactMap { $0 as? ShaderLayer }) {
