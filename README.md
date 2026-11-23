@@ -206,7 +206,7 @@ pnpm dev               # debug build, then open the App
 pnpm build:native      # release build with ad-hoc signing → dist/Fudehand.app
 pnpm package:native    # an App that does not need this checkout, as dist/Fudehand-<version>.dmg
 pnpm test:native       # Swift tests: FudehandCoreTests and FudehandAppTests
-pnpm bench:native      # canvas drag, hover, pan compositing, layer selection, and edit benchmarks on large documents (release build)
+pnpm bench:native      # canvas drag, hover, pan compositing, bitmap main-thread, layer selection, and edit benchmarks on large documents (release build)
 pnpm check             # Vitest: MCP tools, MCP server, and chat harness
 pnpm mcp               # start the MCP server over stdio (an agent usually launches it)
 ```

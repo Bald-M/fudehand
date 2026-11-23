@@ -92,17 +92,24 @@ enum CanvasBenchmark {
         let size = h.canvas.bounds.size
         // Bitmaps are drawn while the canvas is idle; wait for those around the view.
         let near = h.canvas.visibleWorldRect.insetBy(dx: -size.width, dy: -size.height)
-        let wanted = document.nodes.filter { node in
+        let wanted = h.canvas.document.nodes.filter { node in
             guard CanvasBitmaps.wanted(node), let paint = node.paintBounds else { return false }
             return CGRect(x: node.x + paint.x, y: node.y + paint.y, width: paint.width, height: paint.height).intersects(near)
         }
         for _ in 0..<500 where h.canvas.bitmaps.current(wanted).count < wanted.count {
             try await Task.sleep(for: .milliseconds(20))
         }
-        // What drawing one bitmap costs the main thread (a frame of 50 layers, rendered offscreen and read back).
+        // What drawing one bitmap (a frame of 50 layers) costs: the main thread's share (building its layers), and the time until
+        // it is in place (rendered and read back on a background queue).
         let draws = CanvasBitmaps()
-        let draw = CanvasBenchmark.time(wanted.count) { _ in
-            _ = draws.drawNext(wanted, near: near, scale: h.canvas.renderer.contentsScale)
+        var drawMain = 0.0, drawTotal = 0.0
+        for _ in wanted {
+            var done = false
+            let begin = CACurrentMediaTime()
+            guard let started = draws.drawNext(wanted, near: near, scale: h.canvas.renderer.contentsScale, finished: { done = true }) else { break }
+            for _ in 0..<2000 where !done { try await Task.sleep(for: .milliseconds(1)) }
+            drawMain += started * 1000 / Double(wanted.count)
+            drawTotal += (CACurrentMediaTime() - begin) * 1000 / Double(wanted.count)
         }
 
         // The renderer's tree on a stage of its own: a layer can be drawn by one renderer only.
@@ -155,9 +162,41 @@ enum CanvasBenchmark {
         }
         let live = pan(live: true)
         let moving = pan(live: false)
-        print(String(format: "[bench] layers=%d effects=%@ panComposite p95 live=%.1fms moving=%.1fms bitmaps=%d bitmapDraw=%.1fms",
-                     document.nodeCount, effects ? "10%" : "none", live, moving, wanted.count, wanted.isEmpty ? 0 : draw))
+        print(String(format: "[bench] layers=%d effects=%@ panComposite p95 live=%.1fms moving=%.1fms bitmaps=%d bitmapMainThread=%.1fms bitmapTotal=%.1fms",
+                     document.nodeCount, effects ? "10%" : "none", live, moving, wanted.count, drawMain, drawTotal))
         // The gate in ADR 0012: one 60 Hz frame while the view moves.
         #expect(moving < 1000.0 / 60)
     } }
+}
+
+
+/// The main thread while the canvas draws its bitmaps (#243): the whole 5100-layer document zoomed out into view, so every
+/// frame with effects wants a bitmap. A heartbeat on the main thread records how long it was kept from running.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasBitmapMainThreadBenchmark() async throws {
+    // A test process has no window on screen: without this, App Nap delays its timers by seconds.
+    let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
+    defer { ProcessInfo.processInfo.endActivity(activity) }
+    let document = CanvasBenchmark.document(frames: 100, effects: true)
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 0.14))
+    // The nodes as the canvas holds them (laid out by the store).
+    let wanted = h.canvas.document.nodes.filter(CanvasBitmaps.wanted)
+    let start = CACurrentMediaTime()
+    var last = start, longest = 0.0, dropped = 0
+    while h.canvas.bitmaps.current(wanted).count < wanted.count, CACurrentMediaTime() - start < 60 {
+        try await Task.sleep(for: .milliseconds(2))
+        let now = CACurrentMediaTime()
+        let gap = (now - last) * 1000
+        longest = max(longest, gap)
+        if gap > 1000.0 / 60 { dropped += 1 }
+        last = now
+    }
+    #expect(h.canvas.bitmaps.current(wanted).count == wanted.count)
+    print(String(format: "[bench] layers=%d bitmaps=%d allDrawn=%.2fs longestMainThreadBlock=%.1fms blocksOver16.7ms=%d",
+                 document.nodeCount, wanted.count, CACurrentMediaTime() - start, longest, dropped))
+    // Each bitmap holds the main thread for its layers only (about 3.5 ms here). The first after launch also sets up Core Image's
+    // filters and text (16–30 ms): at most that one frame is dropped, and never two in a row.
+    #expect(dropped <= 1)
+    #expect(longest < 2000.0 / 60)
 }

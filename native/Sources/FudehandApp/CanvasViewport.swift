@@ -73,29 +73,46 @@ extension FudehandCanvasView {
         renderer.standIns = viewMoving ? bitmaps.current(document.nodes) : [:]
     }
 
-    /// Queues drawing the missing bitmaps, one per main-thread turn. `restart` (after an edit or a settled view) waits for a
-    /// pause first, so a drag does not redraw the bitmap of the frame it edits on every event.
+    /// Queues drawing the missing bitmaps. `restart` (after an edit or a settled view) waits for a pause first, so a drag
+    /// does not redraw the bitmap of the frame it edits on every event.
     func scheduleBitmaps(restart: Bool) {
+        scheduleBitmaps(after: restart ? Self.bitmapPause : 0, replacing: restart)
+    }
+
+    private func scheduleBitmaps(after delay: TimeInterval, replacing: Bool) {
         if let pending = bitmapWork {
-            guard restart else { return }
+            guard replacing else { return }
             pending.cancel()
         }
         let work = DispatchWorkItem { [weak self] in self?.drawNextBitmap() }
         bitmapWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (restart ? Self.bitmapPause : 0), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     static let bitmapPause = 0.25
+    /// Starting a bitmap still costs the main thread its layers (about 10 ms for a phone screen of a few hundred layers):
+    /// after one took t, the next waits 3 t, so bitmaps take at most a quarter of the main thread.
+    static let bitmapSpacing = 3.0
+
+    /// Records a scroll, click, drag, or key press: bitmaps are not started until input pauses.
+    func noteInput() { lastInput = CACurrentMediaTime() }
 
     private func drawNextBitmap() {
         bitmapWork = nil
-        guard window != nil else { return }
+        // The bitmap being drawn queues the next when it is done.
+        guard window != nil, !bitmaps.drawing else { return }
+        let quiet = CACurrentMediaTime() - lastInput
+        guard quiet >= inputPause else { return scheduleBitmaps(after: inputPause - quiet, replacing: false) }
         // Bitmaps cover the view and half a view around it, where a pan goes next.
         let visible = visibleWorldRect
         let near = visible.insetBy(dx: -visible.width / 2, dy: -visible.height / 2)
-        guard bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving) else { return }
-        if viewMoving { updateStandIns() }
-        scheduleBitmaps(restart: false)
+        var spent: CFTimeInterval = 0
+        guard let started = bitmaps.drawNext(document.nodes, near: near, scale: renderer.contentsScale, onlyMissing: viewMoving, finished: { [weak self] in
+            guard let self else { return }
+            if self.viewMoving { self.updateStandIns() }
+            self.scheduleBitmaps(after: spent * Self.bitmapSpacing, replacing: false)
+        }) else { return }
+        spent = started
     }
 
     /// Maps the committed world rendering onto the live viewport: screen' = k·screen + (live − k·committed).
