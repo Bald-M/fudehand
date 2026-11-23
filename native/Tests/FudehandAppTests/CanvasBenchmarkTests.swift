@@ -267,3 +267,98 @@ enum CanvasBenchmark {
     // The gate in ADR 0012: one 60 Hz frame at rest.
     #expect(rest < 1000.0 / 60)
 }
+
+/// Opening a large design with glass and zooming out to all of it (#247): 200 phone-sized frames of 70 layers, each holding 5
+/// glass layers, 2 layer blurs, and 8 drop shadows, all in view at 5%. *open* is how long the main thread took to show it;
+/// *composite* is how long Core Animation takes to composite the canvas as it then stands, which the window server does whenever
+/// anything on it changes, until the bitmaps are drawn; then the main thread is timed with a heartbeat until they are.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func canvasOpenLargeDesignBenchmark() async throws {
+    let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
+    defer { ProcessInfo.processInfo.endActivity(activity) }
+    let document = DesignDocument(nodes: (0..<200).map { index in
+        var frame = DesignNode(id: "f\(index)", type: .frame, name: "Screen \(index)",
+                               x: Double(index % 15) * 450, y: Double(index / 15) * 900, width: 390, height: 844)
+        frame.fill = .white
+        frame.children = (0..<70).map { child in
+            let x = 10 + Double(child % 7) * 54, y = 20 + Double(child / 7) * 80
+            var node = DesignNode(id: "f\(index)c\(child)", type: child % 5 == 0 ? .text : .rectangle, x: x, y: y, width: 48, height: 64)
+            if node.type == .text { node.text = DesignText(content: "Label \(child)", fontSize: 12) } else { node.fill = .black }
+            switch child % 14 {
+            case 1, 3, 5, 7, 9: node.effects = [DesignEffect(type: .glass)]
+            case 11, 13: node.effects = [DesignEffect(type: .layerBlur, radius: 12)]
+            default: if child % 5 != 0 { node.effects = [DesignEffect(type: .dropShadow, radius: 8)] }
+            }
+            return node
+        }
+        return frame
+    })
+    // The first offscreen render in a process sets up Core Image's filters and text, once per launch.
+    _ = try OffscreenImage(of: document.nodes[0], in: CGRect(x: 0, y: 0, width: 390, height: 844), scale: 0.5).draw()
+    let begin = CACurrentMediaTime()
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    let viewport = Viewport(x: 20, y: 20, scale: 0.05)
+    h.request(viewport)
+    let open = (CACurrentMediaTime() - begin) * 1000
+
+    // The canvas as it stands right after opening, composited offscreen at 2 pixels per point.
+    let device = try #require(MTLCreateSystemDefaultDevice())
+    let queue = try #require(device.makeCommandQueue())
+    let size = h.canvas.bounds.size
+    let content = h.canvas.renderer.root
+    let home = try #require(content.superlayer)
+    content.removeFromSuperlayer()
+    let stage = CALayer()
+    stage.isGeometryFlipped = true
+    stage.frame = CGRect(x: 0, y: 0, width: size.width * 2, height: size.height * 2)
+    let world = CALayer()
+    world.anchorPoint = .zero
+    world.bounds = CGRect(origin: .zero, size: size)
+    world.position = CGPoint(x: viewport.x * 2, y: viewport.y * 2)
+    world.transform = CATransform3DMakeScale(2 * viewport.scale, 2 * viewport.scale, 1)
+    stage.addSublayer(world)
+    world.addSublayer(content)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: Int(stage.bounds.width),
+                                                              height: Int(stage.bounds.height), mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    let compositor = CARenderer(mtlTexture: try #require(device.makeTexture(descriptor: descriptor)),
+                                options: [kCARendererMetalCommandQueue: queue])
+    compositor.layer = stage
+    compositor.bounds = stage.bounds
+    CATransaction.flush()
+    var times: [Double] = []
+    for _ in 0..<4 {
+        let start = CACurrentMediaTime()
+        compositor.beginFrame(atTime: start, timeStamp: nil)
+        compositor.addUpdate(compositor.bounds)
+        compositor.render()
+        compositor.endFrame()
+        let fence = queue.makeCommandBuffer()!
+        fence.commit()
+        fence.waitUntilCompleted()
+        times.append((CACurrentMediaTime() - start) * 1000)
+    }
+    // The first composite sets the layers up; the median of the rest.
+    let composite = times.dropFirst().sorted()[1]
+    compositor.layer = nil
+    content.removeFromSuperlayer()
+    home.addSublayer(content)
+
+    let wanted = h.canvas.document.nodes.filter(CanvasBitmaps.wanted)
+    let start = CACurrentMediaTime()
+    var last = start, longest = 0.0, dropped = 0
+    while h.canvas.bitmaps.current(wanted).count < wanted.count, CACurrentMediaTime() - start < 120 {
+        try await Task.sleep(for: .milliseconds(2))
+        let now = CACurrentMediaTime()
+        let gap = (now - last) * 1000
+        longest = max(longest, gap)
+        if gap > 1000.0 / 60 { dropped += 1 }
+        last = now
+    }
+    #expect(h.canvas.bitmaps.current(wanted).count == wanted.count)
+    print(String(format: "[bench] layers=%d framesInView=%d open=%.0fms openComposite=%.1fms allDrawn=%.2fs longestMainThreadBlock=%.1fms blocksOver16.7ms=%d",
+                 document.nodeCount, wanted.count, open, composite, CACurrentMediaTime() - start, longest, dropped))
+    // Until the bitmaps are drawn, a change on the canvas is composited in tens of milliseconds, not seconds.
+    #expect(composite < 50)
+    #expect(longest < 250)
+}

@@ -72,7 +72,7 @@ _Avoid_: comment (评论) (suggests a multi-user review workflow, which annotati
 
 **Canvas (画布 / 畫布)**: The pannable, zoomable workspace that displays the design document.
 
-**Canvas bitmap (画布位图 / 畫布點陣圖)**: A picture of a top-level layer with effects, rendered by Core Animation like a snapshot, that the canvas draws instead of the live layer, except while the layer is being edited, so glass and blurs are not computed again whenever the canvas changes. It matches a snapshot; blurs spread slightly wider in it than live. Not saved and not shown anywhere else ([ADR 0012](docs/adr/0012-advanced-effects.md#performance)).
+**Canvas bitmap (画布位图 / 畫布點陣圖)**: A picture of a top-level layer with effects, rendered by Core Animation like a snapshot, that the canvas draws instead of the live layer, except while the layer is being edited, so glass and blurs are not computed again whenever the canvas changes. It matches a snapshot; blurs spread slightly wider in it than live. In a design just opened, the layer shows without its effects until its canvas bitmap is drawn. Not saved and not shown anywhere else ([ADR 0012](docs/adr/0012-advanced-effects.md#performance)).
 _Avoid_: cache (too vague), rasterization (Core Animation's `shouldRasterize`, which cannot cache background filters)
 
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.

@@ -262,7 +262,17 @@ final class FudehandCanvasView: NSView {
 
     /// Shows the document; called on every document change, including during drags.
     func show(_ next: DesignIndex) {
+        let previous = index
         index = next
+        if showsNewDocument {
+            showsNewDocument = false
+            renderer.withoutEffects = bitmaps.awaiting(next.document.nodes)
+        } else if !renderer.withoutEffects.isEmpty {
+            // A layer edited before its bitmap is drawn shows its effects, live.
+            func byID(_ nodes: [DesignNode]) -> [String: DesignNode] { Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+            let before = byID(previous.document.nodes), after = byID(next.document.nodes)
+            renderer.withoutEffects = renderer.withoutEffects.filter { after[$0] != nil && after[$0] == before[$0] }
+        }
         renderer.sync(next.document.nodes)
         // An edited layer is shown live until its bitmap is drawn again, once the edits pause.
         updateStandIns()
@@ -273,6 +283,17 @@ final class FudehandCanvasView: NSView {
         }
         if let hover, !next.contains(hover) { self.hover = nil; host?.canvasHover(nil) }
         refreshOverlay()
+    }
+
+    /// Set until the canvas first shows a document, and when the store loads another: its top-level layers with effects are
+    /// then built without them until their bitmaps are drawn (#247). Composited live, the glass and blurs of a large design
+    /// kept the window server busy for half a minute after opening it. Later edits never take effects away.
+    private var showsNewDocument = true
+
+    /// The store is about to show another document: the bitmaps of the last one are dropped, and its layers start bare.
+    func documentLoaded() {
+        bitmaps.removeAll()
+        showsNewDocument = true
     }
 
     /// The available fonts changed; the store follows with `show`.
