@@ -366,7 +366,8 @@ enum CanvasBenchmark {
 /// Opening a large phone design (#248): 226 screens of about 70 layers each (16k layers), with text whose labels repeat
 /// across screens and SVG icons placed many times over, like a light and dark copy of every screen. Measures, on a cold
 /// process, reading the file, the main thread's share of opening it with the editor canvas attached, fitted to all, and then,
-/// while the canvas builds the rest a part per run loop turn, the longest the main thread was held and when all was built.
+/// while the canvas builds the rest a part per run loop turn, the longest the main thread was held and when all was built. The
+/// test window is not on screen, so the commits that draw the text are left out; in the App each turn costs about twice this.
 @Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func documentOpenBenchmark() async throws {
     let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Benchmark")
     defer { ProcessInfo.processInfo.endActivity(activity) }

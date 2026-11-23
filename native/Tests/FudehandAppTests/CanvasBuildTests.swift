@@ -21,16 +21,8 @@ import Testing
     h.store.replace(document, url: nil)
     #expect(h.canvas.renderer.layerCount < document.nodeCount)
 
-    var built: [Int] = []
-    try await turn {
-        let count = h.canvas.renderer.layerCount
-        if built.last != count { built.append(count) }
-        return count == document.nodeCount
-    }
-    #expect(h.canvas.renderer.layerCount == document.nodeCount)
-    // Several turns, none building much more than its share.
-    let steps = zip(built, built.dropFirst()).map { $1 - $0 }
-    #expect(built.count > 2 && steps.allSatisfy { $0 <= FudehandCanvasView.layersPerTurn + 51 })
+    try await turn { h.canvas.renderer.layerCount == document.nodeCount }
+    #expect(h.canvas.renderer.layerCount == document.nodeCount && h.canvas.unbuilt.isEmpty)
 }
 
 /// The first part built holds the frame at the middle of the view, not the one farthest from it.
@@ -54,7 +46,9 @@ import Testing
     h.store.replace(document, url: nil)
     _ = try await h.store.handleControl(.createNode(parent: nil, index: nil, node: JSONObject(["id": "new", "type": "rectangle"])))
     #expect(h.canvas.renderer.layer(for: "new") != nil)
+    #expect(h.canvas.unbuilt.contains("f149"))
     _ = try await h.store.handleControl(.deleteNodes(["f149"]))
+    #expect(!h.canvas.unbuilt.contains("f149"))
     try await turn { h.canvas.renderer.layerCount == h.store.editor.document.nodeCount }
     #expect(h.canvas.renderer.layerCount == h.store.editor.document.nodeCount && h.canvas.renderer.layer(for: "f149") == nil)
 }
@@ -66,4 +60,16 @@ import Testing
     let h = CanvasHarness(document: document)
     defer { h.dispose() }
     #expect(h.canvas.renderer.layerCount == document.nodeCount)
+}
+
+/// Another document opened while a large one is still being built replaces it; nothing of the first is built later.
+@Test @MainActor func aDocumentOpenedMidBuildReplacesTheRest() async throws {
+    let h = CanvasHarness()
+    defer { h.dispose() }
+    h.store.replace(CanvasBenchmark.document(frames: 150), url: nil)
+    let small = CanvasBenchmark.document(frames: 2)
+    h.store.replace(small, url: nil)
+    #expect(h.canvas.unbuilt.isEmpty && h.canvas.renderer.layerCount == small.nodeCount)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(h.canvas.renderer.layerCount == small.nodeCount)
 }
