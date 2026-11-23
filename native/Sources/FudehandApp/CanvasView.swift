@@ -87,8 +87,8 @@ final class FudehandCanvasView: NSView {
     /// Set when the current gesture panned, so its end reports the settled viewport.
     private var gesturePanned = false
     var settleWork: DispatchWorkItem?
-    /// Set from the first viewport change of a pan or zoom until it settles; top-level layers with effects are then drawn as
-    /// their bitmaps (see `CanvasBitmaps`).
+    /// Set from the first viewport change of a pan or zoom until it settles; any bitmap of a top-level layer then stands in for
+    /// it, even one from another zoom (see `updateStandIns`).
     var viewMoving = false
     /// The next bitmap to draw, queued on the main thread.
     var bitmapWork: DispatchWorkItem?
@@ -199,6 +199,8 @@ final class FudehandCanvasView: NSView {
         updateDisplayLink()
         updateContentsScale()
         guard let window else { return }
+        // Bitmaps are drawn only in a window, at its display's scale.
+        scheduleBitmaps(restart: true)
         // The Space key-up goes to whichever app or window is focused when it is released.
         let center = NotificationCenter.default
         focusObservers = [
@@ -222,6 +224,8 @@ final class FudehandCanvasView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         updateContentsScale()
+        // On a display of another scale the bitmaps are drawn again.
+        scheduleBitmaps(restart: true)
     }
 
     func dispose() {

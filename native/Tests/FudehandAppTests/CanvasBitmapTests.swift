@@ -479,3 +479,32 @@ enum CanvasBitmapFixture {
     #expect(!bitmaps.drawing)
     #expect(bitmaps.current(document.nodes).isEmpty)
 }
+
+@Test @MainActor func atRestAFrameTooLargeForASharpBitmapShowsLive() async throws {
+    // 3000 points tall: at 2 pixels per point its bitmap is capped at 4096 pixels, softer than the live text.
+    var document = CanvasBitmapFixture.document()
+    document.nodes[0].height = 3000
+    let h = CanvasHarness(document: document)
+    defer { h.dispose() }
+    h.request(Viewport(x: 0, y: 0, scale: 1))
+    try await CanvasBitmapFixture.wait { h.canvas.bitmaps.layer(for: "g")?.contents != nil }
+    #expect(onCanvas(h, "g"))
+    // While the view moves any bitmap serves.
+    h.canvas.setLiveViewport(Viewport(x: -10, y: 0, scale: 1), zooming: false)
+    #expect(standInOnCanvas(h, "g"))
+}
+
+@Test @MainActor func aNewDisplayScaleDrawsTheBitmapsAgain() async throws {
+    let h = CanvasHarness(document: CanvasBitmapFixture.document())
+    defer { h.dispose() }
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    // Let the queued follow-up find nothing left to draw.
+    try await CanvasBitmapFixture.wait { h.canvas.bitmapWork == nil && !h.canvas.bitmaps.drawing }
+    try await Task.sleep(for: .milliseconds(300))
+    // The window moved to another display: its bitmaps no longer fit and are drawn again without waiting for an edit.
+    h.canvas.bitmaps.removeAll()
+    h.canvas.viewDidChangeBackingProperties()
+    #expect(onCanvas(h, "g"))
+    try await CanvasBitmapFixture.wait { standInOnCanvas(h, "g") }
+    #expect(standInOnCanvas(h, "g"))
+}
