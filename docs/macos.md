@@ -105,6 +105,10 @@ Interaction follows Figma.
 - The window toolbar provides zoom out, the zoom percentage (click to return to 100%), zoom in, Fit All, and Play Prototype (see "Prototype" below). Menu shortcuts: ⌘+ zoom in, ⌘− zoom out, ⌘1 100%, ⌘0 Fit All.
 - When the canvas has focus: Shift+1 fits all, Shift+2 zooms to the selection, Shift+0 returns to 100%. Double-clicking a top-level frame's name label zooms to focus on that frame. These transitions use a 200ms animation, and new input interrupts them immediately; with *Reduce motion* on in System Settings › Accessibility › Display they jump straight to the end (see [Accessibility](accessibility.md)).
 
+**Find**
+
+- Edit › Find (编辑 › 查找, ⌘F) opens the find bar over the top-right corner of the canvas with its search field focused; choosing it again while the bar is open focuses the field again. The bar finds every layer — hidden and locked ones included — whose text content or name contains the query, ignoring case and accents and leading or trailing spaces, in layer-tree order, each layer once. It shows *n / m* once a match has been stepped to, *m Results* (*1 Result*) before that, and *No Results* when nothing matches. Return or ⌘G (Edit › Find Next) steps to the next match and Shift-Return or ⇧⌘G (Edit › Find Previous) to the previous one, wrapping at either end; each step selects the layer and zooms the canvas to it as Shift+2 does. When the document changes while the bar is open, the matches are found again. Esc in the search field, or the close button, closes the bar and clears the query; the selection stays on the last match. Finding never changes the document or the undo history. An Agent finds the same layers with `design_find_nodes`.
+
 **Undo**
 
 - ⌘Z / ⇧⌘Z undo and redo changes to the design document; human and Agent changes share one history. When a text field has focus, these go to the text field. Creating or opening a file clears the history.

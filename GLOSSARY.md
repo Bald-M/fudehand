@@ -75,6 +75,8 @@ _Avoid_: comment (评论) (suggests a multi-user review workflow, which annotati
 **Canvas bitmap (画布位图 / 畫布點陣圖)**: A picture of a top-level layer with effects, rendered by Core Animation like a snapshot, that the canvas draws instead of the live layer, except while the layer is being edited, so glass and blurs are not computed again whenever the canvas changes. It matches a snapshot; blurs spread slightly wider in it than live. In a design just opened, the layer shows without its effects until its canvas bitmap is drawn. Not saved and not shown anywhere else ([ADR 0012](docs/adr/0012-advanced-effects.md#performance)).
 _Avoid_: cache (too vague), rasterization (Core Animation's `shouldRasterize`, which cannot cache background filters)
 
+**Find bar (查找栏 / 尋找列)**: The bar opened over the top-right corner of the canvas by Edit › Find (⌘F), which steps through the layers whose text content or name contains a query, selecting and zooming to each.
+
 **Layers panel (图层面板 / 圖層面板)**: The layer tree in the left sidebar, used to select, rename, show/hide, and lock layers.
 
 **Properties panel (属性面板 / 屬性面板)**: The Design (设计) and Prototype (原型) tabs of the right inspector: the Design tab edits the selected layer's position, size, auto layout, appearance, fill, stroke, and text; the Prototype tab its interaction, states, scrolling, and animation.

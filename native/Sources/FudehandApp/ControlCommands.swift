@@ -115,6 +115,11 @@ extension FudehandStore {
             return ["fonts": fontFamilies.map { ["family": $0.name, "source": $0.imported ? "imported" : "system"] }]
         case .searchIcons(let query, let library, let limit):
             return ["icons": IconCatalog.shared.search(query, library: library, limit: limit)]
+        case .findNodes(let query, let limit):
+            let matches = findLayers(query)
+            return ["total": matches.count, "matches": matches.prefix(limit).map {
+                ["id": $0.id, "name": $0.name, "type": $0.type.rawValue, "field": $0.field.rawValue, "excerpt": $0.excerpt]
+            }]
         case .listColors(let ids):
             return selectionColorsResult(try colorLayers(ids))
         case .replaceColor(let from, let to, let ids):

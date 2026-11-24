@@ -674,6 +674,116 @@ private func temporaryFile() -> URL {
     #expect((symbols["icons"] as? [String])?.first == "sf/house.fill")
 }
 
+@Test @MainActor func findNodesReturnsMatchesAndTotal() async throws {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var first = DesignNode(id: "a", type: .text, name: "Primary")
+    first.text = DesignText(content: "Buy now")
+    var second = DesignNode(id: "b", type: .text, name: "Secondary")
+    second.text = DesignText(content: "Buy later")
+    try DesignDocument(nodes: [first, second]).encoded().write(to: url)
+    try await store.open(url) { true }
+    let result = try await control(store, .findNodes(query: "buy", limit: 1))
+    #expect(result["total"] as? Int == 2)
+    let matches = try #require(result["matches"] as? [[String: Any]])
+    #expect(matches.count == 1)
+    #expect(matches[0]["id"] as? String == "a" && matches[0]["name"] as? String == "Primary")
+    #expect(matches[0]["type"] as? String == "text" && matches[0]["field"] as? String == "text" && matches[0]["excerpt"] as? String == "Buy now")
+    #expect(!store.isDirty && !store.canUndo)
+}
+
+/// A clean store holding three text layers that contain "Buy".
+@MainActor private func storeWithThreeBuys() async throws -> FudehandStore {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let nodes = ["a", "b", "c"].map { id -> DesignNode in
+        var node = DesignNode(id: id, type: .text, name: "Label \(id)")
+        node.text = DesignText(content: "Buy \(id)")
+        return node
+    }
+    try DesignDocument(nodes: nodes).encoded().write(to: url)
+    try await store.open(url) { true }
+    return store
+}
+
+@Test @MainActor func findStepsThroughMatchesAndWraps() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    #expect(store.find.isOpen)
+    store.setFindQuery("buy")
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c"] && store.find.current == nil && store.selection.isEmpty)
+    var visited: [Set<String>] = []
+    for _ in 0..<4 { store.findNext(); visited.append(store.selection) }
+    #expect(visited == [["a"], ["b"], ["c"], ["a"]])
+    store.findPrevious()
+    #expect(store.selection == ["c"] && store.find.current == 2)
+    #expect(!store.isDirty && !store.canUndo)
+}
+
+@Test @MainActor func findPreviousFromNoMatchStartsAtTheLast() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    store.findPrevious()
+    #expect(store.selection == ["c"])
+    store.setFindQuery("nothing like this")
+    store.findNext()
+    #expect(store.find.matches.isEmpty && store.find.current == nil && store.selection == ["c"])
+}
+
+@Test @MainActor func findRefreshesWhenTheDocumentChanges() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    for _ in 0..<3 { store.findNext() }
+    _ = try await control(store, .deleteNodes(["c"]))
+    #expect(store.find.matches.map(\.id) == ["a", "b"])
+    #expect(store.find.current == nil)
+    store.undo()
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c"])
+    store.findNext()
+    #expect(store.selection == ["a"])
+}
+
+@Test @MainActor func findKeepsTheCurrentMatchWhenAnotherMatchIsAddedBeforeIt() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    for _ in 0..<3 { store.findNext() }
+    _ = try await control(store, .createNode(parent: nil, index: 0, node: JSONObject([
+        "id": "z", "type": "text", "text": ["content": "Buy z"],
+    ])))
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c", "z"] || store.find.matches.map(\.id) == ["z", "a", "b", "c"])
+    #expect(store.find.current.map { store.find.matches[$0].id } == "c")
+}
+
+@Test @MainActor func findStatusCountsMatches() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    #expect(store.find.status == "")
+    store.setFindQuery("buy a")
+    #expect(store.find.status == "1 Result")
+    store.setFindQuery("buy")
+    #expect(store.find.status == "3 Results")
+    store.findNext()
+    #expect(store.find.status == "1 / 3")
+    store.setFindQuery("nothing like this")
+    #expect(store.find.status == "No Results")
+}
+
+@Test @MainActor func closeFindKeepsSelection() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    store.findNext(); store.findNext()
+    store.closeFind()
+    #expect(!store.find.isOpen && store.find.query.isEmpty && store.find.matches.isEmpty && store.selection == ["b"])
+    store.findNext()
+    #expect(store.selection == ["b"])
+}
+
 @Test @MainActor func iconSnapshotViaControl() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([

@@ -137,6 +137,9 @@ struct FudehandApp: App {
             }
             CommandGroup(after: .pasteboard) {
                 DuplicateMenuItem(store: store, selection: store.layerSelection)
+                Divider()
+                Button(L("Find…")) { store.openFind() }.keyboardShortcut("f")
+                FindStepMenuItems(store: store, find: store.find)
             }
             CommandMenu(L("Canvas")) {
                 Button(L("Zoom In")) { store.zoomIn() }.keyboardShortcut("+")
