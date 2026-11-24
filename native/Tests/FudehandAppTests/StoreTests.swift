@@ -1726,3 +1726,117 @@ private func temporaryDirectory() -> URL {
     #expect(sets.count == 1 && sets[0]["id"] as? String == set && sets[0]["properties"] as? [String] == [name])
     #expect(sets[0]["variants"] as? [String] == ["a", "b"])
 }
+
+// MARK: Variants in the UI
+
+@Test @MainActor func combineMenuEnablement() throws {
+    let (store, set) = try makeVariantStore()
+    // Variants already in a set cannot be combined again; the set itself is not a main component.
+    #expect(!store.canCombineAsVariants(["a"]) && !store.canCombineAsVariants([set]) && !store.canCombineAsVariants([]))
+    store.undo()
+    #expect(store.canCombineAsVariants(["a"]) && store.canCombineAsVariants(["a", "b"]))
+    #expect(!store.canCombineAsVariants(["a", "page"]))
+    // Main components with different parents.
+    let other = DesignNode(id: "c", type: .frame, x: 2000, y: 0, width: 50, height: 50)
+    try store.perform("Add c") { try $0.insert(other, parent: nil, index: nil) }
+    _ = try store.createComponent("c")
+    #expect(store.canCombineAsVariants(["c"]) && !store.canCombineAsVariants(["a", "c"]))
+    store.combineAsVariants(from: ["a", "b"])
+    let combined = try #require(store.selection.first)
+    #expect(store.editor.document.node(combined)?.componentSet == [L("Property 1")] && store.editor.undoName == "Combine as Variants")
+    // Refused: nothing changes.
+    store.combineAsVariants(from: ["a", "c"])
+    #expect(store.editor.undoName == "Combine as Variants" && store.alert == nil)
+}
+
+@Test @MainActor func variantPropertiesFromThePanel() throws {
+    let (store, set) = try makeVariantStore()
+    let first = L("Property 1")
+    #expect(store.variantProperties(of: "a") == [first] && store.variantProperties(of: set) == nil && store.variantProperties(of: "at") == nil)
+    store.addVariantProperty(to: set)
+    let second = L("Property %d", 2)
+    #expect(store.editor.document.node(set)?.componentSet == [first, second] && store.editor.undoName == "Edit Variant Properties")
+    #expect(store.editor.document.node("a")?.variant?[second] == L("Default"))
+    store.renameVariantProperty(second, to: " Size ", in: set)
+    #expect(store.editor.document.node(set)?.componentSet == [first, "Size"] && store.editor.document.node("b")?.variant?["Size"] == L("Default"))
+    // An empty or unchanged name changes nothing.
+    store.renameVariantProperty("Size", to: "  ", in: set)
+    store.renameVariantProperty("Size", to: "Size", in: set)
+    #expect(store.editor.document.node(set)?.componentSet == [first, "Size"])
+    store.removeVariantProperty("Size", from: set)
+    #expect(store.editor.document.node(set)?.componentSet == [first])
+    // Removing the last property would leave two variants with equal values: an alert.
+    store.removeVariantProperty(first, from: set)
+    #expect(store.alert != nil && store.editor.document.node(set)?.componentSet == [first])
+    store.alert = nil
+    store.setVariantValue("b", property: first, value: "Pressed")
+    #expect(store.editor.document.node("b")?.variant == [first: "Pressed"] && store.editor.undoName == "Edit Variant")
+    store.setVariantValue("b", property: first, value: "Default")
+    #expect(store.alert != nil && store.editor.document.node("b")?.variant == [first: "Pressed"])
+    store.alert = nil
+    store.addVariant(from: set)
+    let added = try #require(store.selection.first)
+    #expect(store.editor.document.parentID(of: added) == .some(set) && store.editor.undoName == "Add Variant")
+}
+
+@Test @MainActor func instanceVariantChoicesAndSwitching() throws {
+    let (store, set) = try makeVariantStore()
+    let name = L("Property 1")
+    let instance = try store.createInstance(of: set, parent: "page", index: nil, at: Point(x: 500, y: 0))
+    let choices = store.variantChoices(of: instance.id)
+    #expect(choices.count == 1 && choices.first?.property == name)
+    #expect(choices.first?.values == ["Default", "Hover"] && choices.first?.current == "Default")
+    #expect(store.variantChoices(of: "a").isEmpty && store.variantChoices(of: "page").isEmpty)
+    store.switchVariant(of: [instance.id], property: name, value: "Hover")
+    #expect(store.editor.document.node(instance.id)?.instance == "b" && store.editor.undoName == "Switch Variant")
+    #expect(store.variantChoices(of: instance.id).first?.current == "Hover")
+}
+
+@Test @MainActor func insertComponentListsSetsOnce() throws {
+    let (store, set) = try makeVariantStore()
+    let lone = DesignNode(id: "c", type: .frame, name: "Lone", x: 2000, y: 0, width: 50, height: 50)
+    try store.perform("Add c") { try $0.insert(lone, parent: nil, index: nil) }
+    _ = try store.createComponent("c")
+    let entries = store.insertableComponents()
+    #expect(entries.map(\.id) == [set, "c"])
+    #expect(entries.map(\.name) == [store.editor.document.node(set)?.name, "Lone"])
+    #expect(entries.map(\.preview.id) == ["a", "c"])
+}
+
+@Test @MainActor func resetOverridesShownOnlyForOwnOverrides() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    // Main component "box" holds frame "wrap", which holds an instance of "home".
+    let box = DesignNode(id: "box", type: .frame, x: 0, y: 400, width: 300, height: 300)
+    let wrap = DesignNode(id: "wrap", type: .frame, x: 0, y: 0, width: 300, height: 300)
+    try store.perform("Add box") {
+        try $0.insert(box, parent: nil, index: nil)
+        try $0.insert(wrap, parent: "box", index: nil)
+    }
+    _ = try store.createInstance(of: "home", parent: "wrap", index: nil, at: Point(x: 0, y: 0))
+    _ = try store.createComponent("box")
+    let outer = try store.createInstance(of: "box", parent: "page", index: nil, at: Point(x: 0, y: 0))
+    let wrapCopy = try #require(store.editor.document.node(outer.id)?.children.first)
+    let nested = try #require(wrapCopy.children.first)
+    let card = try #require(nested.children.first)
+    #expect(!store.showsResetOverrides(card.id) && !store.showsResetOverrides(nested.id) && !store.showsResetOverrides(wrapCopy.id))
+    store.updateNode(card.id, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    // The layer with its own overrides, and the nested instance root above it; not a plain layer between, nor the root.
+    #expect(store.showsResetOverrides(card.id) && store.showsResetOverrides(nested.id))
+    #expect(!store.showsResetOverrides(wrapCopy.id) && !store.showsResetOverrides(outer.id))
+    #expect(!store.showsResetOverrides("card") && !store.showsResetOverrides("missing"))
+}
+
+@Test @MainActor func resetDisabledWithoutMainComponent() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    store.updateNode(child, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    #expect(store.canResetOverrides(instance.id) && store.canResetOverrides(child))
+    #expect(!store.canResetOverrides("card") && !store.canResetOverrides("page"))
+    // Cut leaves the instance pointing at the missing main component.
+    try store.copyLayers(["home"], cut: true)
+    #expect(store.editor.document.node(instance.id)?.instance == "home")
+    #expect(!store.canResetOverrides(instance.id) && !store.canResetOverrides(child))
+}

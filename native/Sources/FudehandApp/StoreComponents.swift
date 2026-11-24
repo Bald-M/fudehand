@@ -1,3 +1,4 @@
+import Foundation
 import FudehandCore
 
 /// Main components and instances (see "Components" in `docs/macos.md`). The UI and the control channel both call these.
@@ -191,6 +192,124 @@ extension FudehandStore {
     /// Resets the given properties of a layer inside an instance; nil resets all of them (for an instance root, on every layer of it).
     func resetOverrides(of id: String, _ properties: Set<String>?) {
         do { try resetOverrides(id, properties: properties) } catch { alert = error.localizedDescription }
+    }
+
+    /// Whether *Reset Overrides* shows for a layer below an instance's root: it overrides properties itself, or it is a nested
+    /// instance's root with overrides in its subtree.
+    func showsResetOverrides(_ id: String) -> Bool {
+        guard let node = index.node(id), node.source != nil, !(node.instance != nil && node.source == node.instance) else { return false }
+        return !node.overrides.isEmpty || (node.instance != nil && Self.hasOverrides(node))
+    }
+
+    /// Whether the overrides of layer `id` can be reset: it is in an instance whose main component (the outermost instance's,
+    /// which a reset goes back to) still exists.
+    func canResetOverrides(_ id: String) -> Bool {
+        let index = self.index
+        guard index.node(id)?.source != nil,
+              let root = index.ancestry(of: id).lazy.compactMap(index.node).first(where: { $0.instance != nil }),
+              let component = root.instance else { return false }
+        return index.node(component)?.component == true
+    }
+
+    /// Whether layer `node` or a layer below it overrides properties.
+    nonisolated static func hasOverrides(_ node: DesignNode) -> Bool {
+        !node.overrides.isEmpty || node.children.contains(where: hasOverrides)
+    }
+
+    /// Whether Combine as Variants applies to these layers: one or more main components that share a parent, none of them a
+    /// variant already.
+    func canCombineAsVariants(_ ids: Set<String>) -> Bool {
+        let index = self.index
+        guard let first = ids.first, let parent = index.parentID(of: first) else { return false }
+        return ids.allSatisfy { id in
+            guard index.node(id)?.component == true, index.parentID(of: id) == parent else { return false }
+            return parent.flatMap(index.node)?.componentSet == nil
+        }
+    }
+
+    func combineAsVariants(from ids: Set<String>) {
+        guard canCombineAsVariants(ids) else { return }
+        do { try combineAsVariants(ids.sorted()) } catch { alert = error.localizedDescription }
+    }
+
+    /// The variant properties of the component set that layer `id` is a variant of; nil when it is not a variant.
+    func variantProperties(of id: String) -> [String]? {
+        let index = self.index
+        guard index.node(id)?.variant != nil, let parent = index.parentID(of: id) ?? nil else { return nil }
+        return index.node(parent)?.componentSet
+    }
+
+    /// Adds a property named "Property n" (the lowest unused n) to component set `set`; every variant gets the value *Default*.
+    func addVariantProperty(to set: String) {
+        guard let properties = index.node(set)?.componentSet else { return }
+        let name = (1...).lazy.map { L("Property %d", $0) }.first { !properties.contains($0) }!
+        editVariantProperties(set, properties + [name], rename: [:])
+    }
+
+    /// Renames a property of component set `set`; an empty or unchanged name changes nothing.
+    func renameVariantProperty(_ old: String, to new: String, in set: String) {
+        let new = new.trimmingCharacters(in: .whitespaces)
+        guard !new.isEmpty, new != old, let properties = index.node(set)?.componentSet else { return }
+        editVariantProperties(set, properties.map { $0 == old ? new : $0 }, rename: [old: new])
+    }
+
+    func removeVariantProperty(_ name: String, from set: String) {
+        guard let properties = index.node(set)?.componentSet else { return }
+        editVariantProperties(set, properties.filter { $0 != name }, rename: [:])
+    }
+
+    private func editVariantProperties(_ set: String, _ properties: [String], rename: [String: String]) {
+        do { try setVariantProperties(set, properties, rename: rename) } catch { alert = error.localizedDescription }
+    }
+
+    /// Sets one value of variant `id`; an unchanged value changes nothing.
+    func setVariantValue(_ id: String, property: String, value: String) {
+        let value = value.trimmingCharacters(in: .whitespaces)
+        guard index.node(id)?.variant?[property] != value else { return }
+        do { try setVariant(id, values: [property: value]) } catch { alert = error.localizedDescription }
+    }
+
+    /// Adds a variant copied from variant `id`, or from component set `id`'s last variant, and selects it.
+    func addVariant(from id: String) {
+        do { try addVariant(id) } catch { alert = error.localizedDescription }
+    }
+
+    /// For an instance root of a variant: each property of its set with the values the set's variants use (in set order) and
+    /// the instance's current value. Empty for any other layer.
+    func variantChoices(of id: String) -> [(property: String, values: [String], current: String)] {
+        let index = self.index
+        guard let node = index.node(id), let variantID = node.instance, node.source == variantID,
+              let current = index.node(variantID)?.variant, let setID = index.parentID(of: variantID) ?? nil,
+              let set = index.node(setID), let properties = set.componentSet else { return [] }
+        return properties.map { property in
+            var values: [String] = []
+            for variant in set.children { if let value = variant.variant?[property], !values.contains(value) { values.append(value) } }
+            return (property, values, current[property] ?? "")
+        }
+    }
+
+    /// Switches instances to the variant with `property` set to `value`, each keeping its other values where it can.
+    func switchVariant(of ids: Set<String>, property: String, value: String) {
+        do { try switchVariant(ids.sorted(), values: [property: value]) } catch { alert = error.localizedDescription }
+    }
+
+    /// What Insert Component lists, in document order: each component set that has a variant (previewed by its first variant)
+    /// and each main component outside a set.
+    func insertableComponents() -> [(id: String, name: String, preview: DesignNode)] {
+        var entries: [(id: String, name: String, preview: DesignNode)] = []
+        func visit(_ nodes: [DesignNode]) {
+            for node in nodes {
+                if node.componentSet != nil {
+                    if let first = node.children.first, first.component { entries.append((node.id, node.name, first)) }
+                } else if node.component {
+                    entries.append((node.id, node.name, node))
+                } else {
+                    visit(node.children)
+                }
+            }
+        }
+        visit(editor.document.nodes)
+        return entries
     }
 
     /// Selects every instance of main component `id`.

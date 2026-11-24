@@ -31,16 +31,18 @@ final class LayerOutline: ObservableObject {
         let collapsed: Bool
         let depth: Int
         let component: Bool
+        let componentSet: Bool
         let instance: Bool
         let overridden: Bool
 
         var symbol: String {
+            if componentSet { return "square.grid.2x2" }
             if component { return "square.on.square.dashed" }
             if instance { return "diamond" }
             return hasLayout ? "square.split.1x2" : type.symbol
         }
 
-        var kind: String { component ? L("Main Component") : instance ? L("Instance") : type.title }
+        var kind: String { componentSet ? L("Component Set") : component ? L("Main Component") : instance ? L("Instance") : type.title }
     }
 
     @Published private(set) var rows: [Row] = []
@@ -56,7 +58,7 @@ final class LayerOutline: ObservableObject {
                 let isCollapsed = collapsed.contains(node.id)
                 next.append(Row(id: node.id, name: node.name, type: node.type, hasLayout: node.layout != nil, visible: node.visible,
                                 locked: node.locked, hasChildren: !node.children.isEmpty, collapsed: isCollapsed, depth: depth,
-                                component: node.component, instance: node.instance != nil,
+                                component: node.component, componentSet: node.componentSet != nil, instance: node.instance != nil,
                                 overridden: !node.overrides.isEmpty))
                 if !isCollapsed { visit(node.children, depth: depth + 1) }
             }
@@ -184,6 +186,8 @@ struct LayersPanel: View {
             Divider()
             Button(L("Create Component")) { store.createComponent(from: [node.id]) }
                 .disabled(!store.canCreateComponent([node.id]))
+            Button(L("Combine as Variants")) { store.combineAsVariants(from: targets(node)) }
+                .disabled(!store.canCombineAsVariants(targets(node)))
             Button(L("Detach Instance")) { store.detachInstances(from: targets(node)) }
                 .disabled(!store.canDetachInstances(targets(node)))
             Divider()

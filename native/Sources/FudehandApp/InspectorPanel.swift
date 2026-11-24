@@ -357,27 +357,56 @@ private struct NodeInspector: View {
         if node.type == .frame { frameSnapshotsSection }
     }
 
-    /// For a main component, its instances; for an instance, its main component and the commands that act on the whole instance.
+    /// For a component set, its variant properties; for a main component, its instances (and for a variant, its values); for an
+    /// instance, its main component, its variant values, and the commands that act on the whole instance.
     @ViewBuilder private var componentSection: some View {
-        if node.component {
+        if let properties = node.componentSet {
+            InspectorSection(L("Variant Properties"), accessory: { AddButton(label: L("Add Property")) { store.addVariantProperty(to: node.id) } }) {
+                ForEach(properties, id: \.self) { property in
+                    HStack(spacing: InspectorMetrics.gap) {
+                        FieldBox { CommitText(label: L("Property Name"), value: property) { store.renameVariantProperty(property, to: $0, in: node.id) } }
+                        RemoveButton(label: L("Remove Property")) { store.removeVariantProperty(property, from: node.id) }
+                    }
+                }
+                Button(L("Add Variant")) { store.addVariant(from: node.id) }
+            }
+        } else if node.component {
             let count = Self.instanceCount(of: node.id, in: displayed.document)
             InspectorSection(L("Main Component")) {
                 Text(L("%d Instances", count)).foregroundStyle(.secondary)
                 Button(L("Select Instances")) { store.selectInstances(of: node.id) }.disabled(count == 0)
             }
+            if let properties = store.variantProperties(of: node.id) {
+                InspectorSection(L("Variant")) {
+                    ForEach(properties, id: \.self) { property in
+                        LabeledContent(property) {
+                            FieldBox {
+                                CommitText(label: property, value: node.variant?[property] ?? "") { store.setVariantValue(node.id, property: property, value: $0) }
+                            }
+                        }
+                    }
+                    Button(L("Add Variant")) { store.addVariant(from: node.id) }
+                }
+            }
         } else if let component = node.instance, node.source == component {
             let main = displayed.index.node(component).flatMap { $0.component ? $0 : nil }
-            let overridden = Self.hasOverrides(node)
+            let resettable = store.canResetOverrides(node.id)
             InspectorSection(L("Instance")) {
                 LabeledContent(L("Main Component")) { Text(main?.name ?? L("Deleted")).lineLimit(1) }
+                ForEach(store.variantChoices(of: node.id), id: \.property) { choice in
+                    Picker(choice.property, selection: Binding(get: { choice.current },
+                                                               set: { store.switchVariant(of: [node.id], property: choice.property, value: $0) })) {
+                        ForEach(choice.values, id: \.self) { Text($0).tag($0) }
+                    }
+                }
                 Button(L("Go to Main Component")) { store.goToMainComponent(of: node.id) }.disabled(main == nil)
-                Button(L("Reset All Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(main == nil || !overridden)
+                Button(L("Reset All Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(!resettable || !FudehandStore.hasOverrides(node))
                 Button(L("Detach Instance")) { store.detachInstances(from: [node.id]) }
             }
-        } else if node.source != nil, Self.hasOverrides(node) {
-            // A layer below an instance's root (a nested instance's root included) that overrides properties.
+        } else if store.showsResetOverrides(node.id) {
+            // A layer below an instance's root that overrides properties, or a nested instance's root with overrides below it.
             InspectorSection(L("Instance")) {
-                Button(L("Reset Overrides")) { store.resetOverrides(of: node.id, nil) }
+                Button(L("Reset Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(!store.canResetOverrides(node.id))
             }
         }
     }
@@ -387,10 +416,6 @@ private struct NodeInspector: View {
         var count = 0
         document.forEach { if $0.instance == id { count += 1 } }
         return count
-    }
-
-    private nonisolated static func hasOverrides(_ node: DesignNode) -> Bool {
-        !node.overrides.isEmpty || node.children.contains(where: hasOverrides)
     }
 
     /// A reset control for the properties among `paths` that the selected layer overrides; nothing when it overrides none.

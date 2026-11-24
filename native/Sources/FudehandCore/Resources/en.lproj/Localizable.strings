@@ -616,3 +616,14 @@
 "1 Result" = "1 Result";
 "%d Results" = "%d Results";
 "Property 1" = "Property 1";
+
+/* Variants (#256) */
+"Combine as Variants" = "Combine as Variants";
+"Component Set" = "Component Set";
+"Variant" = "Variant";
+"Variant Properties" = "Variant Properties";
+"Add Property" = "Add Property";
+"Remove Property" = "Remove Property";
+"Add Variant" = "Add Variant";
+"Property Name" = "Property Name";
+"Property %d" = "Property %d";
