@@ -16,10 +16,29 @@ private func infoPlist() throws -> [String: Any] {
     let plist = try infoPlist()
     let exported = try #require(plist["UTExportedTypeDeclarations"] as? [[String: Any]])
     let declaration = try #require(exported.first { $0["UTTypeIdentifier"] as? String == FudehandStore.contentTypeIdentifier })
-    #expect((declaration["UTTypeConformsTo"] as? [String])?.contains("public.json") == true)
+    #expect(declaration["UTTypeConformsTo"] as? [String] == ["public.data", "public.content"])
     let tags = try #require(declaration["UTTypeTagSpecification"] as? [String: Any])
     #expect(tags["public.filename-extension"] as? [String] == [DesignDocument.fileExtension])
     #expect(FudehandStore.contentType.identifier == FudehandStore.contentTypeIdentifier)
+}
+
+/// Finder draws project files with the system-generated document icon (the App icon on a page, labelled FUDEHAND), not the
+/// JSON text of the file: the type names the App icon as its badge and does not conform to public.json (#254).
+@Test @MainActor func projectFilesShowTheFudehandDocumentIcon() throws {
+    let plist = try infoPlist()
+    let exported = try #require(plist["UTExportedTypeDeclarations"] as? [[String: Any]])
+    let declaration = try #require(exported.first { $0["UTTypeIdentifier"] as? String == FudehandStore.contentTypeIdentifier })
+    let icons = try #require(declaration["UTTypeIcons"] as? [String: Any])
+    let badge = try #require(icons["UTTypeIconBadgeName"] as? String)
+    #expect(badge == plist["CFBundleIconFile"] as? String)
+    #expect(icons["UTTypeIconText"] as? String == DesignDocument.fileExtension)
+    let resources = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Resources")
+    #expect(FileManager.default.fileExists(atPath: resources.appendingPathComponent("\(badge).icns").path))
+    let documents = try #require(plist["CFBundleDocumentTypes"] as? [[String: Any]])
+    let document = try #require(documents.first { ($0["LSItemContentTypes"] as? [String])?.contains(FudehandStore.contentTypeIdentifier) == true })
+    #expect(document["CFBundleTypeIconSystemGenerated"] as? Bool == true)
 }
 
 @Test @MainActor func infoPlistDeclaresTheAppAsEditorOfProjectFiles() throws {
