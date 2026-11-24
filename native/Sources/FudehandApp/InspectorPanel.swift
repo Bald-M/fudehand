@@ -271,7 +271,7 @@ private struct NodeInspector: View {
                             accessory: sizing ? AnyView(SizingChip(label: L("Height"), mode: node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }) : nil) { v in
                     update("Change Size") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
                 }
-                overrideReset(["width", "height"])
+                overrideReset(["width", "height", "sizing", "sizing.horizontal", "sizing.vertical"])
             }
         }
         if node.type == .frame {
@@ -339,7 +339,10 @@ private struct NodeInspector: View {
         }
         if let icon = node.icon {
             InspectorSection(L("Icon")) {
-                LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
+                HStack(spacing: InspectorMetrics.gap) {
+                    LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
+                    overrideReset(["icon.name"])
+                }
                 HStack(spacing: InspectorMetrics.gap) {
                     ColorField(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
                     overrideReset(["icon.color"])
@@ -370,6 +373,11 @@ private struct NodeInspector: View {
                 Button(L("Go to Main Component")) { store.goToMainComponent(of: node.id) }.disabled(main == nil)
                 Button(L("Reset All Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(main == nil || !overridden)
                 Button(L("Detach Instance")) { store.detachInstances(from: [node.id]) }
+            }
+        } else if node.source != nil, Self.hasOverrides(node) {
+            // A layer below an instance's root (a nested instance's root included) that overrides properties.
+            InspectorSection(L("Instance")) {
+                Button(L("Reset Overrides")) { store.resetOverrides(of: node.id, nil) }
             }
         }
     }
@@ -448,34 +456,45 @@ private struct NodeInspector: View {
                     if next != node.text?.content { update("Change Text", "text.content") { $0.text?.content = next } }
                 }
                 .accessibilityLabel(L("Text content"))
-            Picker(L("Font"), selection: Binding(get: { text.fontFamily ?? "" }, set: { v in update("Change Font") { $0.text?.fontFamily = v.isEmpty ? nil : v } })) {
-                Text(L("System Default")).tag("")
-                // A family this Mac does not have stays selectable, so the layer's setting is shown as it is.
-                if let family = text.fontFamily, !store.fontFamilies.contains(where: { $0.name == family }) {
-                    Text(L("%@ (missing)", family)).tag(family)
+            HStack(spacing: InspectorMetrics.gap) {
+                Picker(L("Font"), selection: Binding(get: { text.fontFamily ?? "" }, set: { v in update("Change Font") { $0.text?.fontFamily = v.isEmpty ? nil : v } })) {
+                    Text(L("System Default")).tag("")
+                    // A family this Mac does not have stays selectable, so the layer's setting is shown as it is.
+                    if let family = text.fontFamily, !store.fontFamilies.contains(where: { $0.name == family }) {
+                        Text(L("%@ (missing)", family)).tag(family)
+                    }
+                    Divider()
+                    ForEach(store.fontFamilies, id: \.name) { Text($0.name).tag($0.name) }
                 }
-                Divider()
-                ForEach(store.fontFamilies, id: \.name) { Text($0.name).tag($0.name) }
+                overrideReset(["text.fontFamily"])
             }
             HStack(spacing: InspectorMetrics.gap) {
                 NumberField(label: L("Font size"), symbol: "textformat.size", value: text.fontSize, minimum: 1) { v in update("Change Font Size") { $0.text?.fontSize = v } }
                 Picker(L("Weight|font"), selection: Binding(get: { text.fontWeight }, set: { v in update("Change Font Weight") { $0.text?.fontWeight = v } })) {
                     ForEach([100, 200, 300, 400, 500, 600, 700, 800, 900], id: \.self) { Text(Self.weightName($0)).tag($0) }
                 }.labelsHidden()
+                // Line height has no field of its own; it is reset with the other type metrics.
+                overrideReset(["text.fontSize", "text.fontWeight", "text.lineHeight"])
             }
             HStack(spacing: InspectorMetrics.gap) {
                 ColorField(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
                 overrideReset(["text.color"])
             }
-            Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
-                Image(systemName: "text.alignleft").accessibilityLabel(L("Left")).tag(TextAlign.left)
-                Image(systemName: "text.aligncenter").accessibilityLabel(L("Center")).tag(TextAlign.center)
-                Image(systemName: "text.alignright").accessibilityLabel(L("Right")).tag(TextAlign.right)
-            }.pickerStyle(.segmented)
-            Picker(L("Sizing"), selection: Binding(get: { text.autoResize }, set: { v in update("Change Text Sizing") { $0.text?.autoResize = v } })) {
-                Text(L("Auto width and height")).tag(TextAutoResize.widthAndHeight)
-                Text(L("Auto height")).tag(TextAutoResize.height)
-                Text(L("Fixed")).tag(TextAutoResize.none)
+            HStack(spacing: InspectorMetrics.gap) {
+                Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
+                    Image(systemName: "text.alignleft").accessibilityLabel(L("Left")).tag(TextAlign.left)
+                    Image(systemName: "text.aligncenter").accessibilityLabel(L("Center")).tag(TextAlign.center)
+                    Image(systemName: "text.alignright").accessibilityLabel(L("Right")).tag(TextAlign.right)
+                }.pickerStyle(.segmented)
+                overrideReset(["text.align"])
+            }
+            HStack(spacing: InspectorMetrics.gap) {
+                Picker(L("Sizing"), selection: Binding(get: { text.autoResize }, set: { v in update("Change Text Sizing") { $0.text?.autoResize = v } })) {
+                    Text(L("Auto width and height")).tag(TextAutoResize.widthAndHeight)
+                    Text(L("Auto height")).tag(TextAutoResize.height)
+                    Text(L("Fixed")).tag(TextAutoResize.none)
+                }
+                overrideReset(["text.autoResize"])
             }
             Button(L("Import Font…")) { store.importFontFiles() }
             sequenceEditor(text)
@@ -612,6 +631,7 @@ private struct NodeInspector: View {
 
     private func layoutSection(_ layout: AutoLayout?) -> some View {
         InspectorSection(L("Auto Layout")) {
+            overrideReset(["layout"])
             if layout != nil {
                 Button(L("Remove")) { update("Remove Auto Layout") { $0.layout = nil } }
                     .buttonStyle(.borderless).font(.system(size: 11)).help(L("Remove Auto Layout")).accessibilityLabel(L("Remove Auto Layout"))
@@ -620,11 +640,14 @@ private struct NodeInspector: View {
             }
         } content: {
             if let layout {
-                Picker(L("Direction"), selection: Binding(get: { layout.direction }, set: { v in update("Change Layout Direction") { $0.layout?.direction = v } })) {
-                    Label(L("Vertical"), systemImage: "arrow.down").tag(LayoutDirection.vertical)
-                    Label(L("Horizontal"), systemImage: "arrow.right").tag(LayoutDirection.horizontal)
+                HStack(spacing: InspectorMetrics.gap) {
+                    Picker(L("Direction"), selection: Binding(get: { layout.direction }, set: { v in update("Change Layout Direction") { $0.layout?.direction = v } })) {
+                        Label(L("Vertical"), systemImage: "arrow.down").tag(LayoutDirection.vertical)
+                        Label(L("Horizontal"), systemImage: "arrow.right").tag(LayoutDirection.horizontal)
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                    overrideReset(["layout.direction"])
                 }
-                .pickerStyle(.segmented).labelsHidden()
                 HStack(alignment: .top, spacing: InspectorMetrics.gap) {
                     AlignmentGridView(layout: layout) { setLayout("Change Alignment", $0) }
                     VStack(spacing: 4) {
@@ -639,8 +662,13 @@ private struct NodeInspector: View {
                         }
                     }
                     .toggleStyle(BoxToggleStyle())
+                    overrideReset(["layout.spacing", "layout.align", "layout.crossAlign"])
                 }
-                Text(L("Padding")).font(.system(size: 11)).foregroundStyle(.secondary)
+                HStack(spacing: InspectorMetrics.gap) {
+                    Text(L("Padding")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    overrideReset(["layout.padding"])
+                }
                 HStack(spacing: 4) {
                     NumberField(label: L("Top"), caption: L("T|padding"), value: layout.padding.top, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.top = v } }
                     NumberField(label: L("Right"), caption: L("R|padding"), value: layout.padding.right, minimum: 0) { v in update("Change Padding") { $0.layout?.padding.right = v } }

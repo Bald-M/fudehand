@@ -594,6 +594,7 @@
 "Select Instances" = "選取實例";
 "Reset All Overrides" = "重設所有覆寫";
 "Reset Override" = "重設覆寫";
+"Reset Overrides" = "重設此圖層的覆寫";
 "Detach Instance" = "中斷實例連結";
 "No Components" = "沒有元件";
 "%d Instances" = "%d 個實例";
