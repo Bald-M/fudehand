@@ -485,8 +485,11 @@ import Testing
         var document = edit(nestedFixture()) { $0.update(at: [1, 0, 0]) { $0.text?.color = Self.green } }
         let copied = document.node("ia")!.children[0]
         let clip = try LayerClipboard(copying: [copied.id], from: document)
-        // Beside the original it would go back inside the instance, which is refused; out of view it goes to the top level.
-        #expect(throws: DesignError.self) { try clip.paste(into: &document, frame: nil, visible: nil, step: 1, related: []) }
+        // Beside the original it cannot go back inside the instance, so it goes beside the instance, at the top level.
+        let beside = try clip.paste(into: &document, frame: nil, visible: nil, step: 1, related: [])
+        #expect(document.parentID(of: beside[0]) == .some(nil) && document.nodes.map(\.id) == ["b", "a", "ia", beside[0]])
+        #expect(document.node(beside[0])?.instance == "b")
+        // Out of view it goes to the top level too.
         let away = Rect(x: 5000, y: 5000, width: 100, height: 100)
         let ids = try clip.paste(into: &document, frame: nil, visible: away, step: 1, related: [])
         let copy = try #require(document.node(ids[0]))
