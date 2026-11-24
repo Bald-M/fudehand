@@ -215,9 +215,12 @@ private struct WindowActions: ViewModifier {
     func body(content: Content) -> some View {
         content.onAppear {
             store.presentEditor = { [openWindow, dismissWindow] in
-                openWindow(id: FudehandApp.editorWindowID)
-                // Close the launch window only after the editor window appears, so the App does not quit during a moment with no windows.
-                DispatchQueue.main.async { dismissWindow(id: FudehandApp.launchWindowID) }
+                // Opened in a later main-thread turn than the document load before it, so the two do not block at once (#252).
+                DispatchQueue.main.async {
+                    openWindow(id: FudehandApp.editorWindowID)
+                    // Close the launch window only after the editor window appears, so the App does not quit during a moment with no windows.
+                    DispatchQueue.main.async { dismissWindow(id: FudehandApp.launchWindowID) }
+                }
             }
             store.presentPrototype = { [openWindow] in openWindow(id: FudehandApp.prototypeWindowID) }
             store.dismissPrototype = { [dismissWindow] in dismissWindow(id: FudehandApp.prototypeWindowID) }

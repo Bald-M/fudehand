@@ -62,6 +62,7 @@ struct LayersPanel: View {
     @State private var renaming: String?
     @State private var draftName = ""
     @FocusState private var renameFocused: Bool
+    @State private var showsRows = false
 
     init(store: FudehandStore) {
         self.store = store
@@ -88,10 +89,15 @@ struct LayersPanel: View {
                 }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(outline.rows) { row in rowView(row) }
-                    }.padding(.vertical, 4)
+                    if showsRows {
+                        LazyVStack(spacing: 0) {
+                            ForEach(outline.rows) { row in rowView(row) }
+                        }.padding(.vertical, 4)
+                    }
                 }
+                // The first rows are built in a later main-thread turn than the window, so opening the editor window does
+                // not block for both at once (#252).
+                .task { showsRows = true }
             }
         }
     }

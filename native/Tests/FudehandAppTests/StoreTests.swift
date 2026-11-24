@@ -302,6 +302,23 @@ private func temporaryFile() -> URL {
     #expect(presented == 2)
 }
 
+/// The App opens the editor window in a later main-thread turn (#252); an Agent command that enters the editor answers only
+/// after that, so the Agent's next command finds the window and its canvas.
+@Test @MainActor func agentCommandsThatEnterTheEditorAnswerAfterItOpens() async throws {
+    let store = makeStore()
+    var opened = 0
+    store.presentEditor = { DispatchQueue.main.async { opened += 1 } }
+    _ = try await control(store, .newDocument(discard: false))
+    #expect(opened == 1)
+    let url = temporaryFile()
+    _ = try await control(store, .saveDocument(url.path))
+    _ = try await control(store, .openDocument(url.path, discard: false))
+    #expect(opened == 2)
+    _ = try await control(store, .newDocument(discard: true))
+    _ = try await control(store, .openRecent(url.path, discard: false))
+    #expect(opened == 4)
+}
+
 @Test @MainActor func languageDefaultsToUSEnglishAndPersists() {
     let suite = "fudehand-tests-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
