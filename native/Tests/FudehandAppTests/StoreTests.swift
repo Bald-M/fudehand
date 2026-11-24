@@ -1418,3 +1418,56 @@ private func temporaryDirectory() -> URL {
     store.canvasDelete([instance.id])
     #expect(store.editor.document.node(instance.id) == nil)
 }
+
+@Test @MainActor func agentCreateNodeRefusesComponentFields() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let before = store.editor.document
+    let cases: [(JSONObject, String)] = [
+        (JSONObject(["id": "c", "type": "frame", "component": true]), "Layer c: cannot set component"),
+        (JSONObject(["id": "c", "type": "frame", "instance": "home"]), "Layer c: cannot set instance"),
+        (JSONObject(["id": "c", "type": "frame", "children": [["id": "k", "type": "rectangle", "source": "card"]]]), "Layer k: cannot set source"),
+        (JSONObject(["id": "c", "type": "frame", "children": [["id": "k", "type": "rectangle", "overrides": ["fill"]]]]), "Layer k: cannot set overrides"),
+    ]
+    for (object, message) in cases {
+        #expect(await failure(store, .createNode(parent: nil, index: nil, node: object)) == message)
+    }
+    #expect(store.editor.document == before && store.editor.undoName == "Create Component")
+    // A false or empty value sets nothing and is accepted.
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "ok", "type": "frame", "component": false])))
+    #expect(store.editor.document.node("ok")?.component == false)
+}
+
+@Test @MainActor func drawingOverATopLevelInstanceSkipsIt() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    // An instance at the top level, over empty canvas: the new shape goes to the top level.
+    let loose = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 1000, y: 0))
+    store.create(.rectangle, in: Rect(x: 1010, y: 10, width: 20, height: 20), clicked: false)
+    let first = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: first) == .some(nil))
+    #expect(store.editor.document.node(loose.id)?.children.count == 1)
+    // An instance at the top level over a frame: the frame under it takes the shape.
+    let over = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 400, y: 0))
+    store.create(.ellipse, in: Rect(x: 420, y: 20, width: 20, height: 20), clicked: false)
+    let second = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: second) == .some("page"))
+    #expect(store.editor.document.node(over.id)?.children.count == 1)
+}
+
+@Test @MainActor func resetAllOverridesOfALayerBelowTheRootKeepsSiblings() throws {
+    let store = try makeComponentStore()
+    var extra = DesignNode(id: "dot", type: .ellipse, x: 100, y: 100, width: 10, height: 10)
+    extra.fill = try DesignColor(hex: "#0000FF")
+    try store.perform("Add dot") { try $0.insert(extra, parent: "home", index: nil) }
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let children = try #require(store.editor.document.node(instance.id)?.children.map(\.id))
+    let green = try DesignColor(hex: "#00FF00")
+    store.updateNode(children[0], "Change") { $0.fill = green; $0.opacity = 0.5 }
+    store.updateNode(children[1], "Change") { $0.fill = green }
+    store.resetOverrides(of: children[0], nil)
+    #expect(store.editor.document.node(children[0])?.overrides.isEmpty == true)
+    #expect(store.editor.document.node(children[0])?.opacity == 1)
+    #expect(store.editor.document.node(children[1])?.overrides == ["fill"])
+}

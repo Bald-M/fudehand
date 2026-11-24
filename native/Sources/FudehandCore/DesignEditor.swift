@@ -83,7 +83,11 @@ extension DesignDocument {
         try DesignDocument(nodes: [node]).validateUniqueIDs()
         let position = index ?? list.count
         guard (0...list.count).contains(position) else { throw DesignError("index out of range: 0–\(list.count)") }
-        if let path, let root = enclosingInstance(path, includingLast: true) { throw insideInstance(node.id, root) }
+        if let path, let root = enclosingInstance(path, includingLast: true) {
+            // The caller knows the parent, not necessarily the new layer's id, so the parent is named.
+            let target = self[path].id
+            throw target == root ? DesignError("Layer \(root) is an instance; change its main component instead") : insideInstance(target, root)
+        }
         try checkInstanceCycles(node, under: path)
         var next = list
         next.insert(node, at: position)

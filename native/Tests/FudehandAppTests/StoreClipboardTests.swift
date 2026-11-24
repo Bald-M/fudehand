@@ -137,3 +137,17 @@ import Testing
     #expect(store.editor.document.parentID(of: ids[0]) == .some(nil))
     #expect(store.editor.document.node(ids[0]) != nil)
 }
+
+@Test @MainActor func agentPastesLayerCopiedOutOfAnInstanceBesideIt() async throws {
+    let store = try makeStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 500, y: 0))
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    _ = try await control(store, .copyNodes(ids: [child], cut: false))
+    store.setSelection([])
+    let result = try await control(store, .paste)
+    let ids = try #require(result["ids"] as? [String])
+    #expect(store.editor.document.parentID(of: ids[0]) == .some(nil))
+    #expect(store.editor.document.nodes.map(\.id) == ["home", instance.id, ids[0]])
+    #expect(store.editor.document.node(instance.id)?.children.count == 1)
+}

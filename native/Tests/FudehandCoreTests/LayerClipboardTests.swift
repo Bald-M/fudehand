@@ -237,7 +237,7 @@ private func mainComponents(_ document: DesignDocument) -> [String] {
     let clip = try LayerClipboard(copying: ["box"], from: doc)
     #expect {
         _ = try clip.paste(into: &doc, frame: "i", visible: everywhere, step: 1, related: [])
-    } throws: { ($0 as? DesignError)?.message.hasSuffix("is inside instance i; change its main component instead") == true }
+    } throws: { ($0 as? DesignError)?.message == "Layer i is an instance; change its main component instead" }
 }
 
 @Test func pasteMainComponentIntoMainComponentIsRefused() throws {
@@ -259,4 +259,45 @@ private func mainComponents(_ document: DesignDocument) -> [String] {
         ($0 as? DesignError)?.message.hasSuffix(": a main component cannot be inside another main component") == true
     }
     #expect(target == DesignDocument(nodes: [other]))
+}
+
+@Test func pasteCopiedOutOfInstanceGoesBesideTheInstance() throws {
+    var doc = componentDocument()
+    doc.nodes.append(DesignNode(id: "z", type: .rectangle, x: 900, y: 0, width: 10, height: 10))
+    let label = try #require(doc.node("i")?.children.first?.id)
+    let clip = try LayerClipboard(copying: [label], from: doc)
+    let ids = try clip.paste(into: &doc, frame: nil, visible: everywhere, step: 1, related: [])
+    // In the instance's parent (the top level), just above the instance, one step down and right of the original.
+    #expect(doc.nodes.map(\.id) == ["box", "i", ids[0], "z"])
+    #expect(doc.worldRect(ids[0]) == Rect(x: 426, y: 30, width: 100, height: 20))
+    #expect(doc.node(ids[0])?.source == nil && doc.node("i")?.children.count == 1)
+    // A second paste goes above the first.
+    let again = try clip.paste(into: &doc, frame: nil, visible: everywhere, step: 2, related: Set(ids))
+    #expect(doc.nodes.map(\.id) == ["box", "i", ids[0], again[0], "z"])
+}
+
+@Test func pasteNestedInstanceCopiedOutOfInstanceGoesBesideTheOutermostRoot() throws {
+    // Main component "k" holds an instance "ki" of "m"; instance "ik" of "k" sits in frame "page".
+    var doc = componentDocument()
+    var existing = doc.allIDs().union(["k", "ki", "ik", "page"])
+    var inner = ComponentSync.makeInstance(of: doc.node("m")!, existing: &existing)
+    inner.id = "ki"
+    var main = DesignNode(id: "k", type: .frame, x: 0, y: 400, width: 300, height: 100)
+    main.component = true
+    main.children = [inner]
+    var outer = ComponentSync.makeInstance(of: main, existing: &existing)
+    outer.id = "ik"
+    outer.x = 10
+    var page = DesignNode(id: "page", type: .frame, x: 0, y: 600, width: 400, height: 200)
+    page.children = [outer]
+    doc.nodes += [main, page]
+    let copied = try #require(doc.node("ik")?.children.first)
+    #expect(copied.instance == "m")
+    let clip = try LayerClipboard(copying: [copied.id], from: doc)
+    let ids = try clip.paste(into: &doc, frame: nil, visible: everywhere, step: 1, related: [])
+    #expect(doc.parentID(of: ids[0]) == .some("page"))
+    #expect(doc.node("page")?.children.map(\.id) == ["ik", ids[0]])
+    let pasted = try #require(doc.node(ids[0]))
+    #expect(pasted.instance == "m" && pasted.source == "m")
+    #expect(doc.node("ik")?.children.count == 1)
 }

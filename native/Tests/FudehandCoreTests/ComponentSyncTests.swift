@@ -366,7 +366,8 @@ import Testing
     @Test func insertDeleteMoveInsideInstanceThrow() throws {
         var document = componentFixture()
         let label = instance(document).children[0].id
-        let refusedInsert = DesignError("Layer r is inside instance i; change its main component instead")
+        // Inserting names the parent, not the new layer's id the caller may never have seen.
+        let refusedInsert = DesignError("Layer i is an instance; change its main component instead")
         #expect(throws: refusedInsert) { try document.insert(DesignNode(id: "r", type: .rectangle), parent: "i", index: nil) }
         #expect(throws: DesignError("Layer \(label) is inside instance i; change its main component instead")) {
             try document.delete([label])
@@ -375,7 +376,7 @@ import Testing
             try document.move(label, parent: nil, index: nil)
         }
         document.nodes.append(DesignNode(id: "x", type: .frame))
-        #expect(throws: DesignError("Layer x is inside instance i; change its main component instead")) {
+        #expect(throws: refusedInsert) {
             try document.move("x", parent: "i", index: nil)
         }
         // A nested instance inside an instance counts as below its root.
@@ -383,6 +384,9 @@ import Testing
         let copy = nested.node("ia")!.children[0].id
         #expect(throws: DesignError("Layer \(copy) is inside instance ia; change its main component instead")) {
             try nested.delete([copy])
+        }
+        #expect(throws: DesignError("Layer \(copy) is inside instance ia; change its main component instead")) {
+            try nested.insert(DesignNode(id: "r", type: .rectangle), parent: copy, index: nil)
         }
         // The root itself moves and deletes like any layer; its layers go with it.
         try document.move("i", parent: "x", index: nil)

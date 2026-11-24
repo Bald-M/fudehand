@@ -2,15 +2,6 @@ import Foundation
 
 /// Layers copied with Copy or Cut, and where Paste and Duplicate put them (see "Copy and Paste" in `docs/macos.md`).
 /// The copied layers keep everything but their ids: children, image data, effects, and prototype settings.
-extension DesignDocument {
-    /// Whether `id` is a frame that inserted or pasted layers can go into: a frame that is not an instance and not inside one
-    /// (a main component is fine), since an instance's structure only changes through its main component.
-    public func acceptsInsertedLayers(_ id: String) -> Bool {
-        let chain = ancestry(of: id).compactMap(node)
-        return chain.last?.type == .frame && !chain.contains { $0.instance != nil }
-    }
-}
-
 public struct LayerClipboard: Equatable {
     /// The pasteboard type that holds `data()`; only Fudehand reads it.
     public static let pasteboardType = "app.fudehand.layers"
@@ -83,8 +74,9 @@ public struct LayerClipboard: Equatable {
     /// The copied layers' bounding box on the canvas.
     public var bounds: Rect { Rect.union(nodes.map(\.frame))! }
 
-    /// The frame Paste puts the layers into: the one selected layer when it is a frame that takes new layers (not an instance or inside one), unless it is in `excluding` (the copied
-    /// layers and the copies already pasted from this clipboard, so pasting a copied frame again puts it beside, not inside).
+    /// The frame Paste puts the layers into: the one selected layer when it is a frame that takes new layers (not an instance or
+    /// inside one), unless it is in `excluding` (the copied layers and the copies already pasted from this clipboard, so pasting
+    /// a copied frame again puts it beside, not inside).
     public static func target(selection: Set<String>, in document: DesignDocument, excluding: Set<String>) -> String? {
         guard selection.count == 1, let id = selection.first, !excluding.contains(id), document.acceptsInsertedLayers(id) else { return nil }
         return id
@@ -95,7 +87,9 @@ public struct LayerClipboard: Equatable {
     /// - Into `frame` when given: at the same offset from it that the layers had from their parent, when that fits inside it,
     ///   otherwise centered in it.
     /// - Otherwise into the parent the layers came from when this document still has it (the top level otherwise), moved
-    ///   `step` × `pasteOffset` down and right, just above the topmost of `related` and the copied layers in that parent.
+    ///   `step` × `pasteOffset` down and right, just above the topmost of `related` and the copied layers in that parent. When
+    ///   that parent is an instance or inside one (layers copied out of an instance), they go into the parent of the outermost
+    ///   instance root instead, just above it (or above `related`).
     ///   When that place does not overlap `visible` (nil counts as visible), the copies go to the top level, centered in `visible`.
     ///
     /// Toggle-visibility targets inside the copy are pointed at the copied layers; references to layers this document lacks are dropped.
@@ -124,9 +118,11 @@ public struct LayerClipboard: Equatable {
             if let visible, !box.offsetBy(delta).intersects(visible) {
                 delta = Point(x: visible.midX - box.midX, y: visible.midY - box.midY)
             } else {
-                target = home
-                let siblings = home.flatMap { document.node($0)?.children } ?? document.nodes
-                let near = related.union(sources)
+                // Nothing can be inserted inside an instance, so copies of its layers go beside its outermost root.
+                let instance = home.flatMap { document.ancestry(of: $0).first { document.node($0)?.instance != nil } }
+                target = instance.map { document.parentID(of: $0) ?? nil } ?? home
+                let siblings = target.flatMap { document.node($0)?.children } ?? document.nodes
+                let near = related.union(sources).union(instance.map { [$0] } ?? [])
                 index = siblings.lastIndex { near.contains($0.id) }.map { $0 + 1 }
             }
         }
@@ -237,5 +233,14 @@ public struct LayerClipboard: Equatable {
                 }
             }
         }
+    }
+}
+
+extension DesignDocument {
+    /// Whether `id` is a frame that inserted or pasted layers can go into: a frame that is not an instance and not inside one
+    /// (a main component is fine), since an instance's structure only changes through its main component.
+    public func acceptsInsertedLayers(_ id: String) -> Bool {
+        let chain = ancestry(of: id).compactMap(node)
+        return chain.last?.type == .frame && !chain.contains { $0.instance != nil }
     }
 }

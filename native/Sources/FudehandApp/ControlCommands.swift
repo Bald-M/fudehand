@@ -16,6 +16,7 @@ extension FudehandStore {
         case .createNode(let parent, let index, let object):
             var existing = editor.document.allIDs()
             let node = try DesignJSON.node(from: DesignDocument.assigningIDs(Self.iconDefaults(object.value), existing: &existing))
+            try Self.refuseComponentFields(in: node)
             var icons: [String] = []
             DesignDocument(nodes: [node]).forEach { if let icon = $0.icon { icons.append(icon.name) } }
             try icons.forEach(requireIcon)
@@ -277,6 +278,19 @@ extension FudehandStore {
         }
         if let children = object["children"] as? [Any] { object["children"] = children.map { ($0 as? [String: Any]).map(iconDefaults) ?? $0 } }
         return object
+    }
+
+    /// Files and the clipboard carry component fields, but a created layer may not: main components and instances are made with
+    /// `design_create_component` and `design_create_instance`, which keep them consistent.
+    nonisolated static func refuseComponentFields(in node: DesignNode) throws {
+        var refusal: DesignError?
+        DesignDocument(nodes: [node]).forEach { layer in
+            guard refusal == nil else { return }
+            let key = layer.component ? "component" : layer.instance != nil ? "instance" : layer.source != nil ? "source"
+                : !layer.overrides.isEmpty ? "overrides" : nil
+            if let key { refusal = DesignError("Layer \(layer.id): cannot set \(key)") }
+        }
+        if let refusal { throw refusal }
     }
 
     /// The new layers made by Paste or Duplicate, as `design_create_node` returns a layer.
