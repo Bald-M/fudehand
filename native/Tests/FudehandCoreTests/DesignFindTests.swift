@@ -52,3 +52,13 @@ private func ids(_ document: DesignDocument, _ query: String) -> [String] { Desi
     let short = DesignFind.matches(in: DesignDocument(nodes: [text("s", "Two\nlines")]), query: "lines").first?.excerpt
     #expect(short == "Two lines")
 }
+
+@Test func matchesNonLatinTextAndMixedQueries() {
+    let document = DesignDocument(nodes: [text("zh", "立即购买 Buy"), text("en", "CAFE au lait"), text("fr", "Crème brûlée")])
+    #expect(ids(document, "购买") == ["zh"])
+    #expect(ids(document, "购买 buy") == ["zh"])
+    #expect(ids(document, "café") == ["en"])
+    #expect(ids(document, "BRULEE") == ["fr"])
+    #expect(ids(DesignDocument(nodes: [text("el", "ΑΛΦΑ")]), "αλφα") == ["el"])
+    #expect(DesignFind.matches(in: document, query: "brulee").first?.excerpt == "Crème brûlée")
+}
