@@ -94,6 +94,7 @@ public struct LayerClipboard: Equatable {
     ///
     /// Toggle-visibility targets inside the copy are pointed at the copied layers; references to layers this document lacks are dropped.
     public func paste(into document: inout DesignDocument, frame: String?, visible: Rect?, step: Int, related: Set<String>) throws -> [String] {
+        if let frame, document.node(frame)?.componentSet != nil { return try pasteVariants(into: &document, set: frame) }
         let box = bounds
         var target: String?
         var delta: Point
@@ -118,11 +119,13 @@ public struct LayerClipboard: Equatable {
             if let visible, !box.offsetBy(delta).intersects(visible) {
                 delta = Point(x: visible.midX - box.midX, y: visible.midY - box.midY)
             } else {
-                // Nothing can be inserted inside an instance, so copies of its layers go beside its outermost root.
+                // Nothing can be inserted inside an instance, so copies of its layers go beside its outermost root; copies of
+                // variants go beside their component set.
                 let instance = home.flatMap { document.ancestry(of: $0).first { document.node($0)?.instance != nil } }
-                target = instance.map { document.parentID(of: $0) ?? nil } ?? home
+                let blocked = instance ?? home.flatMap { document.node($0)?.componentSet != nil ? $0 : nil }
+                target = blocked.map { document.parentID(of: $0) ?? nil } ?? home
                 let siblings = target.flatMap { document.node($0)?.children } ?? document.nodes
-                let near = related.union(sources).union(instance.map { [$0] } ?? [])
+                let near = related.union(sources).union(blocked.map { [$0] } ?? [])
                 index = siblings.lastIndex { near.contains($0.id) }.map { $0 + 1 }
             }
         }
@@ -142,21 +145,47 @@ public struct LayerClipboard: Equatable {
         return roots
     }
 
+    /// Pastes the copied layers into component set `set` as new variants (see `ComponentVariants.insertVariant`); refused unless
+    /// every copied layer is a main component.
+    private func pasteVariants(into document: inout DesignDocument, set: String) throws -> [String] {
+        guard nodes.allSatisfy(\.component) else { throw DesignDocument.componentSetRefusal(set) }
+        var existing = document.allIDs()
+        var copies: [DesignNode] = []
+        for node in nodes {
+            let copy = ComponentVariants.freshCopy(node, existing: &existing)
+            _ = try ComponentVariants.insertVariant(copy, values: node.variant ?? [:], fallback: node.name, into: set, after: nil,
+                                                    in: &document)
+            copies.append(copy)
+        }
+        ComponentSync.repair(&document, within: Set(copies.map(\.id)))
+        try dropUnreachableReferences(of: copies, in: &document)
+        return copies.map(\.id)
+    }
+
     /// Duplicate: inserts a copy of each copied layer just above its original, in the original's parent, moved `pasteOffset` down
-    /// and right, and returns the copies' ids. The originals must still be in `document`.
+    /// and right, and returns the copies' ids. A copied variant becomes a new variant of its set instead, as Add Variant makes
+    /// it. The originals must still be in `document`.
     public func duplicate(in document: inout DesignDocument) throws -> [String] {
         let copies = preparedCopies(for: document)
-        for (source, copy) in zip(sources, copies) {
+        var result = copies.map(\.id)
+        var variants: [Int] = []
+        for (offset, (source, copy)) in zip(sources, copies).enumerated() {
             guard let path = document.indexPath(of: source) else { throw DesignError("Layer not found: \(source)") }
+            if ComponentVariants.set(of: source, in: document) != nil {
+                variants.append(offset)
+                continue
+            }
             var next = copy
             let original = document.node(source)!
             next.x = original.x + Self.pasteOffset
             next.y = original.y + Self.pasteOffset
             try document.insert(next, parent: document.parentID(of: source)!, index: path.last! + 1)
         }
-        ComponentSync.repair(&document, within: Set(copies.map(\.id)))
+        // After the other copies, so that the ids Add Variant picks cannot be taken by them.
+        for offset in variants { result[offset] = try ComponentVariants.addVariant(from: sources[offset], in: &document) }
+        ComponentSync.repair(&document, within: Set(result))
         try dropUnreachableReferences(of: copies, in: &document)
-        return copies.map(\.id)
+        return result
     }
 
     /// The copied layers as they go into `document` (see "Creating" in the components spec), with new ids:
@@ -213,9 +242,19 @@ public struct LayerClipboard: Equatable {
                 next.instance = node.instance.map { movedMains.contains($0) ? renamed[$0]! : $0 }
             }
             next.children = node.children.map { copy($0, inInstance: inInstance || isRoot, relink: relink) }
+            if next.componentSet != nil, next.children.contains(where: { !$0.component }) {
+                // Its variants became instances (copied within the same document): it is a plain frame holding them.
+                next.componentSet = nil
+                for index in next.children.indices { next.children[index].variant = nil }
+            }
             return next
         }
-        return nodes.map { copy($0, inInstance: false, relink: false) }
+        // A copied variant lands outside its set (pasting into a set goes through `pasteVariants`).
+        return nodes.map { node in
+            var next = copy(node, inInstance: false, relink: false)
+            next.variant = nil
+            return next
+        }
     }
 
     /// Removes interactions of the copies (and their layers) that point at frames or layers `document` lacks.
@@ -238,9 +277,10 @@ public struct LayerClipboard: Equatable {
 
 extension DesignDocument {
     /// Whether `id` is a frame that inserted or pasted layers can go into: a frame that is not an instance and not inside one
-    /// (a main component is fine), since an instance's structure only changes through its main component.
+    /// (a main component is fine), since an instance's structure only changes through its main component, and not a component
+    /// set, which takes only variants.
     public func acceptsInsertedLayers(_ id: String) -> Bool {
         let chain = ancestry(of: id).compactMap(node)
-        return chain.last?.type == .frame && !chain.contains { $0.instance != nil }
+        return chain.last?.type == .frame && chain.last?.componentSet == nil && !chain.contains { $0.instance != nil }
     }
 }
