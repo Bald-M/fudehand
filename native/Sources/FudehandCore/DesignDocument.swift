@@ -396,11 +396,14 @@ public struct DesignDocument: Equatable, Sendable {
         case let list as [Any]: annotations = list
         default: throw DesignError("annotations must be an array")
         }
-        let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) },
+        var document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) },
                                       annotations: try annotations.map(DesignAnnotation.from))
         try document.validateUniqueIDs()
         try document.validateComponents()
         try document.validateAnnotations()
+        // Broken component references never stop a file from opening: those instances open detached, the rest synced.
+        ComponentSync.repair(&document)
+        document.pruneAnnotations()
         return document
     }
 

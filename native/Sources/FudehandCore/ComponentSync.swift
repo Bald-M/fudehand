@@ -106,6 +106,60 @@ public enum ComponentSync {
         reset(&node, recursive: properties == nil && node.instance != nil)
     }
 
+    /// Opening a file: detaches the instances that cannot follow their main component (it is missing or not a main component,
+    /// the instance would be inside it through a cycle, or the instance's layers do not match its layers one to one), then syncs
+    /// every other instance from its main component.
+    public static func repair(_ document: inout DesignDocument) { repair(&document, within: nil) }
+
+    /// `repair` limited to the instances inside the layers `scope` names (pasted layers), and to syncing those instances and
+    /// the instances of the main components among those layers. Nil repairs the whole document.
+    static func repair(_ document: inout DesignDocument, within scope: Set<String>?) {
+        func inScope(_ path: [Int], _ scopePaths: [[Int]]?) -> Bool {
+            scopePaths?.contains { path.starts(with: $0) } ?? true
+        }
+        var graph = ComponentGraph(document.nodes)
+        if graph.instances.isEmpty { return }
+        // Detaching changes no index paths.
+        let scopePaths = scope.map { $0.compactMap(document.indexPath(of:)) }
+        while true {
+            var broken: [[Int]] = []
+            for (componentID, instances) in graph.instances {
+                let main = graph.mains[componentID].map { document[$0] }
+                let sources = main.map(layers(of:))
+                let reach = graph.reached(from: componentID)
+                for instance in instances where inScope(instance.path, scopePaths) {
+                    let root = document[instance.path]
+                    let cyclic = instance.container.map(reach.contains) ?? false
+                    if sources == nil || cyclic || root.source != componentID || !matches(root, sources!) {
+                        broken.append(instance.path)
+                    }
+                }
+            }
+            if broken.isEmpty { break }
+            let before = document
+            for path in broken { document.update(at: path) { detach(&$0, in: before) } }
+            graph = ComponentGraph(document.nodes)
+        }
+        var ids = FreshIDs(document: document)
+        if scopePaths != nil {
+            let components = Set(graph.mains.filter { inScope($0.value, scopePaths) }.keys)
+            let instances = graph.instances.values.joined().map(\.path).filter { inScope($0, scopePaths) }
+            syncInstances(in: &document, changedComponents: components, changedInstances: instances, ids: &ids)
+        } else {
+            syncInstances(in: &document, changedComponents: Set(graph.mains.keys), changedInstances: [], ids: &ids)
+        }
+    }
+
+    /// Whether every layer of `root` mirrors a different layer of the main component (`sources`).
+    private static func matches(_ root: DesignNode, _ sources: [String: DesignNode]) -> Bool {
+        var seen: Set<String> = []
+        func check(_ layer: DesignNode) -> Bool {
+            guard let source = layer.source, sources[source] != nil, seen.insert(source).inserted else { return false }
+            return layer.children.allSatisfy(check)
+        }
+        return check(root)
+    }
+
     // MARK: Finding changes
 
     /// The root's x and y belong to the instance: never synced, never overrides.
@@ -269,6 +323,16 @@ public enum ComponentSync {
                 }
                 walk(node.children, path: nodePath, container: inner)
             }
+        }
+
+        /// `id` and every main component whose instances its main component holds, directly or through nested instances.
+        func reached(from id: String) -> Set<String> {
+            var result: Set<String> = []
+            var stack = [id]
+            while let next = stack.popLast() {
+                if result.insert(next).inserted { stack += uses[next] ?? [] }
+            }
+            return result
         }
 
         /// The main components in sync order (one holding instances of another after it), without those on a cycle.

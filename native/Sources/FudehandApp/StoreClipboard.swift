@@ -22,7 +22,7 @@ extension FudehandStore {
         let clip = try LayerClipboard(copying: ids, from: editor.document)
         let data = try clip.data()
         if cut {
-            try perform(step) { try $0.delete(Set(clip.sources)) }
+            try perform(step) { try $0.delete(Set(clip.sources), detachingInstances: false) }
             setSelection([])
         }
         pasteboard.clearContents()

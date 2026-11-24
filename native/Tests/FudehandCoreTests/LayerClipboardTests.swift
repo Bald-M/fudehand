@@ -151,3 +151,91 @@ private let everywhere = Rect(x: -10_000, y: -10_000, width: 20_000, height: 20_
     #expect(doc.node(ids[0])?.x == 20 && doc.node(ids[0])?.y == 30)
     #expect(doc.node(ids[1])?.interaction == .navigate(destination: "g", transition: PrototypeTransition()))
 }
+
+// MARK: Components
+
+/// Frame "box" at (0, 0) holding main component "m" (frame with text "t") at (20, 20); instance "i" of it at (400, 0).
+private func componentDocument() -> DesignDocument {
+    var main = DesignNode(id: "m", type: .frame, name: "Button", x: 20, y: 20, width: 200, height: 60)
+    main.component = true
+    var label = DesignNode(id: "t", type: .text, name: "Label", x: 16, y: 20, width: 100, height: 20)
+    label.text = DesignText(content: "OK")
+    main.children = [label]
+    var box = DesignNode(id: "box", type: .frame, x: 0, y: 0, width: 300, height: 300)
+    box.children = [main]
+    var existing: Set<String> = ["box", "m", "t", "i"]
+    var instance = ComponentSync.makeInstance(of: main, existing: &existing)
+    instance.id = "i"
+    instance.x = 400
+    instance.y = 0
+    return DesignDocument(nodes: [box, instance])
+}
+
+private func mainComponents(_ document: DesignDocument) -> [String] {
+    var ids: [String] = []
+    document.forEach { if $0.component { ids.append($0.id) } }
+    return ids
+}
+
+@Test func pasteMainComponentMakesInstance() throws {
+    var doc = componentDocument()
+    let clip = try LayerClipboard(copying: ["m"], from: doc)
+    let ids = try clip.paste(into: &doc, frame: nil, visible: everywhere, step: 1, related: [])
+    let copy = try #require(doc.node(ids[0]))
+    #expect(!copy.component && copy.instance == "m" && copy.source == "m")
+    #expect(copy.children[0].source == "t" && copy.children[0].id != "t")
+    #expect(doc.parentID(of: ids[0]) == .some("box") && copy.x == 30 && copy.y == 30)
+    #expect(mainComponents(doc) == ["m"])
+}
+
+@Test func duplicateInstanceMakesInstance() throws {
+    var doc = componentDocument()
+    let clip = try LayerClipboard(copying: ["i"], from: doc)
+    let ids = try clip.duplicate(in: &doc)
+    let copy = try #require(doc.node(ids[0]))
+    #expect(copy.instance == "m" && copy.source == "m" && copy.children[0].source == "t")
+    #expect(doc.allIDs().count == doc.nodeCount)
+    // Duplicating the main component follows the same rules as pasting it in the same document.
+    let main = try LayerClipboard(copying: ["m"], from: doc).duplicate(in: &doc)
+    #expect(doc.node(main[0])?.instance == "m" && mainComponents(doc) == ["m"])
+}
+
+@Test func pasteContainerWithMainComponentMakesInstanceInside() throws {
+    var doc = componentDocument()
+    let clip = try LayerClipboard(copying: ["box"], from: doc)
+    let ids = try clip.paste(into: &doc, frame: nil, visible: everywhere, step: 1, related: [])
+    let inner = try #require(doc.node(ids[0])?.children.first)
+    #expect(!inner.component && inner.instance == "m" && inner.source == "m")
+    #expect(inner.x == 20 && inner.y == 20 && inner.children[0].source == "t")
+    #expect(mainComponents(doc) == ["m"])
+    #expect(doc.allIDs().count == doc.nodeCount)
+}
+
+@Test func pasteIntoOtherDocumentKeepsMainComponent() throws {
+    let clip = try LayerClipboard(copying: ["m", "i"], from: componentDocument())
+    var other = DesignDocument()
+    let ids = try clip.paste(into: &other, frame: nil, visible: everywhere, step: 1, related: [])
+    let main = try #require(other.node(ids[0]))
+    #expect(main.component && main.id != "m")
+    let copy = try #require(other.node(ids[1]))
+    #expect(copy.instance == main.id && copy.source == main.id)
+    #expect(copy.children[0].source == main.children[0].id)
+    #expect(mainComponents(other) == [main.id])
+}
+
+@Test func pasteInstanceAloneIntoOtherDocumentDetaches() throws {
+    let clip = try LayerClipboard(copying: ["i"], from: componentDocument())
+    var other = DesignDocument()
+    let ids = try clip.paste(into: &other, frame: nil, visible: everywhere, step: 1, related: [])
+    let copy = try #require(other.node(ids[0]))
+    #expect(copy.instance == nil && copy.source == nil && copy.overrides.isEmpty)
+    #expect(copy.children[0].source == nil && copy.children[0].text?.content == "OK")
+}
+
+@Test func pasteIntoInstanceIsRefused() throws {
+    var doc = componentDocument()
+    let clip = try LayerClipboard(copying: ["box"], from: doc)
+    #expect {
+        _ = try clip.paste(into: &doc, frame: "i", visible: everywhere, step: 1, related: [])
+    } throws: { ($0 as? DesignError)?.message.hasSuffix("is inside instance i; change its main component instead") == true }
+}

@@ -361,6 +361,113 @@ import Testing
         try document.insert(outer, parent: nil, index: nil)
     }
 
+    // MARK: Structure, delete, repair
+
+    @Test func insertDeleteMoveInsideInstanceThrow() throws {
+        var document = componentFixture()
+        let label = instance(document).children[0].id
+        let refusedInsert = DesignError("Layer r is inside instance i; change its main component instead")
+        #expect(throws: refusedInsert) { try document.insert(DesignNode(id: "r", type: .rectangle), parent: "i", index: nil) }
+        #expect(throws: DesignError("Layer \(label) is inside instance i; change its main component instead")) {
+            try document.delete([label])
+        }
+        #expect(throws: DesignError("Layer \(label) is inside instance i; change its main component instead")) {
+            try document.move(label, parent: nil, index: nil)
+        }
+        document.nodes.append(DesignNode(id: "x", type: .frame))
+        #expect(throws: DesignError("Layer x is inside instance i; change its main component instead")) {
+            try document.move("x", parent: "i", index: nil)
+        }
+        // A nested instance inside an instance counts as below its root.
+        var nested = nestedFixture()
+        let copy = nested.node("ia")!.children[0].id
+        #expect(throws: DesignError("Layer \(copy) is inside instance ia; change its main component instead")) {
+            try nested.delete([copy])
+        }
+        // The root itself moves and deletes like any layer; its layers go with it.
+        try document.move("i", parent: "x", index: nil)
+        #expect(document.parentID(of: "i") == .some("x"))
+        try document.delete(["i", label])
+        #expect(document.node("i") == nil)
+    }
+
+    @Test func deletingMainComponentDetachesInstances() throws {
+        let original = edit(componentFixture()) { $0.update(at: [1, 0]) { $0.text?.content = "Go" } }
+        var editor = DesignEditor(document: original, measure: fakeMeasure)
+        let before = editor.document
+        try editor.perform("Delete Layers") { try $0.delete(["m"]) }
+        let root = try #require(editor.document.node("i"))
+        #expect(root.instance == nil && root.source == nil && root.overrides.isEmpty)
+        #expect(root.children[0].source == nil && root.children[0].overrides.isEmpty)
+        #expect(root.children[0].text?.content == "Go")
+        let undone = editor.undo()
+        #expect(undone)
+        #expect(editor.document == before && !editor.canUndo)
+        #expect(editor.document.node("i")?.instance == "m")
+
+        // Without detaching (Cut), the instance keeps pointing at the missing main component.
+        var cut = original
+        try cut.delete(["m"], detachingInstances: false)
+        #expect(cut.node("i")?.instance == "m" && cut.node("i")?.children[0].source == "t")
+    }
+
+    @Test func repairDetachesDanglingMismatchedAndCyclic() {
+        var document = componentFixture()
+        let good = instance(document)
+        var dangling = good
+        dangling.id = "dangling"
+        dangling.instance = "gone"
+        dangling.source = "gone"
+        dangling.children[0].id = "d0"
+        var unknown = good
+        unknown.id = "unknown"
+        unknown.children[0].id = "u0"
+        unknown.children[0].source = "nowhere"
+        var twice = good
+        twice.id = "twice"
+        twice.children = [good.children[0], good.children[0]]
+        twice.children[0].id = "w0"
+        twice.children[1].id = "w1"
+        var notMain = good
+        notMain.id = "notMain"
+        notMain.instance = "plain"
+        notMain.source = "plain"
+        notMain.children[0].id = "n0"
+        var cyclic = DesignNode(id: "c", type: .frame)
+        cyclic.component = true
+        var ids = document.allIDs().union(["c", "plain"])
+        var inner = ComponentSync.makeInstance(of: cyclic, existing: &ids)
+        inner.id = "self"
+        cyclic.children = [inner]
+        document.nodes += [dangling, unknown, twice, notMain, DesignNode(id: "plain", type: .frame), cyclic]
+        ComponentSync.repair(&document)
+        for id in ["dangling", "unknown", "twice", "notMain", "self"] {
+            let node = document.node(id)!
+            #expect(node.instance == nil && node.source == nil, "\(id) is detached")
+            #expect(node.children.allSatisfy { $0.source == nil }, "\(id)'s layers are detached")
+        }
+        #expect(document.node("i") == good)
+        #expect(document.node("c")?.component == true)
+    }
+
+    @Test func repairSyncsNonOverriddenValues() {
+        var document = componentFixture()
+        document.update(at: [1]) { $0.fill = Self.blue; $0.overrides = ["fill"] }
+        document.update(at: [1, 0]) { $0.text?.content = "Stale" }
+        ComponentSync.repair(&document)
+        #expect(instance(document).fill == Self.blue)
+        #expect(instance(document).children[0].text?.content == "OK")
+    }
+
+    @Test func fileWithDanglingInstanceOpens() throws {
+        var document = componentFixture()
+        document.nodes.remove(at: 0)
+        let opened = try DesignDocument.decode(try document.encoded())
+        let root = try #require(opened.node("i"))
+        #expect(root.instance == nil && root.source == nil)
+        #expect(root.children[0].source == nil && root.children[0].text?.content == "OK")
+    }
+
     // MARK: References inside a component
 
     @Test func toggleTargetsRewrittenToInstanceLayers() {

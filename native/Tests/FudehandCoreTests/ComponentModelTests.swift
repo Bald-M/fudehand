@@ -20,6 +20,7 @@ private func file(_ nodes: String, version: Int = 10) -> String {
     @Test func roundTripsComponentFields() throws {
         var main = DesignNode(id: "m", type: .frame)
         main.component = true
+        main.children = [DesignNode(id: "m-title", type: .frame)]
         var root = DesignNode(id: "i", type: .frame)
         root.instance = "m"; root.source = "m"; root.overrides = ["text.content", "fill"]
         var child = DesignNode(id: "i-title", type: .frame)
@@ -65,10 +66,13 @@ private func file(_ nodes: String, version: Int = 10) -> String {
     }
 
     @Test func nestedInstanceRootInsideInstanceIsAllowed() throws {
-        let json = file(frame("i", ",\"instance\":\"m\",\"source\":\"m\"",
-                              children: frame("n", ",\"instance\":\"b\",\"source\":\"m-b\"", children: frame("n1", ",\"source\":\"b1\""))))
-        let document = try decode(json)
-        #expect(document.nodes[0].children[0].instance == "b")
+        let b = frame("b", ",\"component\":true", children: frame("b1"))
+        let m = frame("m", ",\"component\":true",
+                      children: frame("m-b", ",\"instance\":\"b\",\"source\":\"b\"", children: frame("m-b1", ",\"source\":\"b1\"")))
+        let i = frame("i", ",\"instance\":\"m\",\"source\":\"m\"",
+                      children: frame("n", ",\"instance\":\"b\",\"source\":\"m-b\"", children: frame("n1", ",\"source\":\"m-b1\"")))
+        let document = try decode(file([b, m, i].joined(separator: ",")))
+        #expect(document.nodes[2].children[0].instance == "b")
     }
 
     @Test func missingMainComponentIsNotALoadError() throws {
