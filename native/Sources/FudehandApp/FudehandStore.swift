@@ -377,7 +377,7 @@ final class FudehandStore: ObservableObject {
 
     /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.
     func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
-        if selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame { return (id, 0, 0) }
+        if selection.count == 1, let id = selection.first, editor.document.acceptsInsertedLayers(id) { return (id, 0, 0) }
         let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
         return (nil, center.x - width / 2, center.y - height / 2)
     }

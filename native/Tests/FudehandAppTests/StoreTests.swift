@@ -1298,3 +1298,44 @@ private func temporaryDirectory() -> URL {
     store.updateNode("home", "Clear") { $0.children = [] }
     #expect(store.editor.document.node(child) == nil && store.selection.isEmpty)
 }
+
+@Test @MainActor func defaultPlacementSkipsASelectedInstance() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    // The first instance stays selected; the next default-placed ones go to the top level, not into it.
+    let first = try await control(store, .createInstance(component: "home", parent: nil, index: nil, x: nil, y: nil))
+    let second = try await control(store, .createInstance(component: "home", parent: nil, index: nil, x: nil, y: nil))
+    let firstID = try #require(first["id"] as? String), secondID = try #require(second["id"] as? String)
+    #expect(store.editor.document.parentID(of: firstID) == .some(nil) && store.editor.document.parentID(of: secondID) == .some(nil))
+    store.setSelection([secondID])
+    store.insertIcon("sf/star")
+    let icon = try #require(store.selection.first)
+    #expect(store.editor.document.parentID(of: icon) == .some(nil))
+    // A selected main component still takes new layers.
+    store.setSelection(["page"])
+    #expect(store.insertionPlacement(width: 1, height: 1).parent == "page")
+    store.setSelection(["home"])
+    #expect(store.insertionPlacement(width: 1, height: 1).parent == "home")
+}
+
+@Test @MainActor func resetOverridesOnANestedCopyGoesBackToTheOuterMainComponent() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    var box = DesignNode(id: "box", type: .frame, x: 0, y: 400, width: 100, height: 100)
+    box.children = []
+    try store.perform("Add box") { try $0.insert(box, parent: nil, index: nil) }
+    _ = try store.createComponent("box")
+    _ = try store.createInstance(of: "card", parent: "box", index: nil, at: Point(x: 0, y: 0))
+    let outer = try store.createInstance(of: "box", parent: "page", index: nil, at: Point(x: 0, y: 0))
+    let copy = try #require(store.editor.document.node(outer.id)?.children.first)
+    let blue = try DesignColor(hex: "#0000FF")
+    store.updateNode(copy.id, "Change Fill") { $0.fill = blue }
+    #expect(store.editor.document.node(copy.id)?.overrides.contains("fill") == true)
+    _ = try await control(store, .resetOverrides(copy.id, properties: ["fill"]))
+    let red = try DesignColor(hex: "#FF0000")
+    #expect(store.editor.document.node(copy.id)?.fill == red)
+    // Nothing left to reset: no new undo step.
+    let name = store.editor.undoName
+    _ = try await control(store, .resetOverrides(copy.id, properties: nil))
+    #expect(store.editor.undoName == name)
+}

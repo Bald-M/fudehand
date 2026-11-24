@@ -124,3 +124,16 @@ import Testing
     #expect(store.editor.document.node("i")?.fill == DesignColor(r: 0, g: 0, b: 1))
     #expect(store.editor.document.node("i")?.instance == "m")
 }
+
+@Test @MainActor func pasteWithAnInstanceSelectedDoesNotGoIntoIt() async throws {
+    let store = try makeStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 500, y: 0))
+    try store.perform("Add") { try $0.insert(DesignNode(id: "loose", type: .rectangle, x: 0, y: 400, width: 10, height: 10), parent: nil, index: nil) }
+    store.canvasCopy(["loose"], cut: false)
+    store.setSelection([instance.id])
+    let ids = try store.pasteLayers()
+    #expect(store.editor.document.node(instance.id)?.children.count == 1)
+    #expect(store.editor.document.parentID(of: ids[0]) == .some(nil))
+    #expect(store.editor.document.node(ids[0]) != nil)
+}

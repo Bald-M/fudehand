@@ -53,7 +53,7 @@ extension FudehandStore {
         case .createInstance(let component, let parent, let index, let x, let y):
             let at = x == nil && y == nil ? nil : Point(x: x ?? 0, y: y ?? 0)
             let node = try createInstance(of: component, parent: parent, index: index, at: at, step: "Agent: Insert Component")
-            return DesignJSON.object(try requireNode(node.id), includeImageData: false)
+            return DesignJSON.object(node, includeImageData: false)
         case .listComponents:
             return ["components": listComponents().map { entry in
                 ["id": entry.component.id, "name": entry.component.name, "width": entry.component.width, "height": entry.component.height,
