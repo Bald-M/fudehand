@@ -1,3 +1,4 @@
+import AppKit
 import FudehandCore
 import SwiftUI
 
@@ -11,6 +12,15 @@ final class FindModel: ObservableObject {
     @Published fileprivate(set) var current: Int?
     /// Bumped each time Find is chosen, so the search field takes focus again when the bar is already open.
     @Published fileprivate(set) var focusToken = 0
+
+    /// The count beside the search field: "n / m" once a match has been stepped to, "m Results" before that, "No Results" when
+    /// nothing matches, and nothing for an empty query.
+    var status: String {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        if matches.isEmpty { return L("No Results") }
+        if let current { return "\(current + 1) / \(matches.count)" }
+        return matches.count == 1 ? L("1 Result") : L("%d Results", matches.count)
+    }
 }
 
 extension FudehandStore {
@@ -51,13 +61,13 @@ extension FudehandStore {
         focus(id)
     }
 
-    /// Recomputes the matches after the document changes, keeping the current match when it is still at the same place.
+    /// Recomputes the matches after the document changes. The current match follows its layer to its new place; when the layer no
+    /// longer matches, there is no current match and the next step starts from the first.
     func refreshFind() {
         guard find.isOpen, !find.query.isEmpty else { return }
         let previous = find.current.map { find.matches[$0].id }
         find.matches = findLayers(find.query)
-        if let current = find.current, find.matches.indices.contains(current), find.matches[current].id == previous { return }
-        find.current = find.matches.isEmpty ? nil : find.current.map { min($0, find.matches.count - 1) }
+        find.current = previous.flatMap { id in find.matches.firstIndex { $0.id == id } }
     }
 }
 
@@ -76,14 +86,13 @@ struct FindBar: View {
                 .textFieldStyle(.plain)
                 .frame(width: 180)
                 .focused($fieldFocused)
-                .onSubmit { store.findNext() }
-                .onKeyPress(.return, phases: .down) { press in
-                    guard press.modifiers.contains(.shift) else { return .ignored }
-                    store.findPrevious()
-                    return .handled
+                // The field editor turns Return and Shift-Return alike into a submit before `onKeyPress` sees them, so the
+                // direction comes from the key event being handled.
+                .onSubmit {
+                    if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { store.findPrevious() } else { store.findNext() }
                 }
                 .onExitCommand { store.closeFind() }
-            Text(status).monospacedDigit().foregroundStyle(.secondary).lineLimit(1).fixedSize()
+            Text(find.status).monospacedDigit().foregroundStyle(.secondary).lineLimit(1).fixedSize()
             Button { store.findPrevious() } label: { Image(systemName: "chevron.up").iconHitTarget() }
                 .help(L("Previous Match (⇧⌘G)")).accessibilityLabel(L("Previous Match"))
                 .disabled(find.matches.isEmpty)
@@ -101,13 +110,6 @@ struct FindBar: View {
         .shadow(color: .black.opacity(0.16), radius: 10, y: 3)
         .onAppear { fieldFocused = true }
         .onChange(of: find.focusToken) { fieldFocused = true }
-    }
-
-    private var status: String {
-        if find.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
-        if find.matches.isEmpty { return L("No Results") }
-        if let current = find.current { return "\(current + 1) / \(find.matches.count)" }
-        return L("%d Results", find.matches.count)
     }
 }
 

@@ -599,4 +599,5 @@
 "Next Match (⌘G)" = "下一个匹配项（⌘G）";
 "Close Find (Esc)" = "关闭查找（Esc）";
 "No Results" = "无结果";
+"1 Result" = "1 个结果";
 "%d Results" = "%d 个结果";

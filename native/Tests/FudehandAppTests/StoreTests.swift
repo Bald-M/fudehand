@@ -740,9 +740,37 @@ private func temporaryFile() -> URL {
     for _ in 0..<3 { store.findNext() }
     _ = try await control(store, .deleteNodes(["c"]))
     #expect(store.find.matches.map(\.id) == ["a", "b"])
-    #expect(store.find.current.map { store.find.matches.indices.contains($0) } ?? true)
+    #expect(store.find.current == nil)
     store.undo()
     #expect(store.find.matches.map(\.id) == ["a", "b", "c"])
+    store.findNext()
+    #expect(store.selection == ["a"])
+}
+
+@Test @MainActor func findKeepsTheCurrentMatchWhenAnotherMatchIsAddedBeforeIt() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    for _ in 0..<3 { store.findNext() }
+    _ = try await control(store, .createNode(parent: nil, index: 0, node: JSONObject([
+        "id": "z", "type": "text", "text": ["content": "Buy z"],
+    ])))
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c", "z"] || store.find.matches.map(\.id) == ["z", "a", "b", "c"])
+    #expect(store.find.current.map { store.find.matches[$0].id } == "c")
+}
+
+@Test @MainActor func findStatusCountsMatches() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    #expect(store.find.status == "")
+    store.setFindQuery("buy a")
+    #expect(store.find.status == "1 Result")
+    store.setFindQuery("buy")
+    #expect(store.find.status == "3 Results")
+    store.findNext()
+    #expect(store.find.status == "1 / 3")
+    store.setFindQuery("nothing like this")
+    #expect(store.find.status == "No Results")
 }
 
 @Test @MainActor func closeFindKeepsSelection() async throws {

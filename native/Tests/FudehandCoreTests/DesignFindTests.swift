@@ -62,3 +62,13 @@ private func ids(_ document: DesignDocument, _ query: String) -> [String] { Desi
     #expect(ids(DesignDocument(nodes: [text("el", "ΑΛΦΑ")]), "αλφα") == ["el"])
     #expect(DesignFind.matches(in: document, query: "brulee").first?.excerpt == "Crème brûlée")
 }
+
+/// Find compares UTF-8 bytes in place, which bridged NSStrings from JSONSerialization do not offer for non-ASCII text; decoding
+/// stores layer text natively so finding in an opened file stays fast.
+@Test func decodedLayerTextIsStoredAsNativeUTF8() throws {
+    let data = try DesignDocument(nodes: [text("t", "立即购买", name: "购买按钮")]).encoded()
+    let node = try #require(try DesignDocument.decode(data).node("t"))
+    #expect(node.name.utf8.withContiguousStorageIfAvailable { _ in true } == true)
+    #expect(node.text?.content.utf8.withContiguousStorageIfAvailable { _ in true } == true)
+    #expect(DesignFind.matches(in: try DesignDocument.decode(data), query: "购买").map(\.id) == ["t"])
+}
