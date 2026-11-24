@@ -178,6 +178,15 @@ export const tools = [
       library: { type: 'string', enum: ['sf', 'material-outlined', 'material-rounded', 'material-sharp', 'weui', 'lucide'], description: 'Search only this library' },
       limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum number of names, default 50' },
     }, ['query']),
+  controlTool('design_find_nodes', 'find_nodes',
+    'Find layers whose text content or name contains the query, ignoring case and accents, as Edit › Find (⌘F) does. ' +
+    'Hidden and locked layers are included; each layer is listed once, in layer-tree order. ' +
+    'Returns total and matches [{id, name, type, field (text when the text content matched, otherwise name), excerpt (the matched text around the hit)}]. ' +
+    'To step to a match as the find bar does, select it with design_select and show it with canvas_focus_node.',
+    {
+      query: { type: 'string', description: 'Text to find, e.g. a word from a button label' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Maximum number of matches returned, default 50; total still counts all' },
+    }, ['query']),
   controlTool('design_list_colors', 'list_colors',
     'Read the selection colors: every color used by the fills, strokes, text colors, and icon colors of the given layers and all their child layers, merged by hex value, most used first. Returns ids and colors [{color, count}].',
     { ids: { ...ids.ids, description: 'Layer ids; when omitted, the current selection' } }, []),

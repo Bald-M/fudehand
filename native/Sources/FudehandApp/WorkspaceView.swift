@@ -12,6 +12,9 @@ struct WorkspaceView: View {
         } detail: {
             NativeCanvas(store: store, viewportRequest: store.viewportRequest, tool: store.tool, toolbarFrame: toolbarFrame)
                 .clipped()
+                .overlay(alignment: .topTrailing) {
+                    FindOverlay(store: store, find: store.find)
+                }
                 .overlay(alignment: .bottom) {
                     CanvasToolbar(store: store)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("canvas")) } action: { toolbarFrame = $0 }
@@ -54,6 +57,16 @@ struct WorkspaceView: View {
             Toggle(isOn: $store.showingInspector) { Image(systemName: "sidebar.right") }
                 .help(L("Inspector (⌥⌘I)")).accessibilityLabel(L("Inspector")).keyboardShortcut("i", modifiers: [.command, .option])
         }
+    }
+}
+
+/// Shows the find bar while it is open; observes the find bar itself so opening it does not redraw the workspace.
+private struct FindOverlay: View {
+    let store: FudehandStore
+    @ObservedObject var find: FindModel
+
+    var body: some View {
+        if find.isOpen { FindBar(store: store, find: find).padding(12) }
     }
 }
 

@@ -139,6 +139,9 @@ struct FudehandApp: App {
                 DuplicateMenuItem(store: store, selection: store.layerSelection)
                 Divider()
                 ComponentMenuItems(store: store, selection: store.layerSelection, displayed: store.displayed)
+                Divider()
+                Button(L("Find…")) { store.openFind() }.keyboardShortcut("f")
+                FindStepMenuItems(store: store, find: store.find)
             }
             CommandMenu(L("Canvas")) {
                 Button(L("Zoom In")) { store.zoomIn() }.keyboardShortcut("+")

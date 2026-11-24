@@ -28,6 +28,8 @@ final class FudehandStore: ObservableObject {
     /// The selected layers, kept out of the store's published state: selecting in a large document then recomputes only the views
     /// that show the selection, not every view that observes the store (#142).
     let layerSelection = LayerSelection()
+    /// The find bar (⌘F).
+    let find = FindModel()
     var selection: Set<String> { layerSelection.ids }
     /// The layer under the pointer, shared by the canvas and the layers panel.
     let hover = LayerHover()
@@ -197,6 +199,7 @@ final class FudehandStore: ObservableObject {
     private func publish(_ index: DesignIndex) {
         displayed.show(index)
         layerOutline.update(index, collapsed: collapsedLayers)
+        refreshFind()
     }
 
     /// Edits keep the parts of the document they leave alone shared with the saved document, so comparing the two is cheap.
@@ -439,6 +442,11 @@ final class FudehandStore: ObservableObject {
         guard panel.runModal() == .OK else { return }
         do { try importFonts(panel.urls) } catch { alert = error.localizedDescription }
     }
+
+    // MARK: Find
+
+    /// The layers whose text content or name contains the query, for the find bar and the `find_nodes` command.
+    func findLayers(_ query: String) -> [DesignFind.Match] { DesignFind.matches(in: editor.document, query: query) }
 
     // MARK: Viewport
 

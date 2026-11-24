@@ -75,7 +75,10 @@ public enum DesignJSON {
                 if let fallback { return fallback }
                 throw fail("missing \(name(key))")
             }
-            guard let text = raw as? String else { throw fail("\(name(key)) must be a string") }
+            guard var text = raw as? String else { throw fail("\(name(key)) must be a string") }
+            // JSONSerialization hands back bridged NSStrings that keep non-ASCII text in UTF-16; stored natively, find
+            // (`DesignFind`) can compare their UTF-8 bytes instead of converting every layer's text on every search (#257).
+            text.makeContiguousUTF8()
             return text
         }
 

@@ -600,3 +600,18 @@
 "%d Instances" = "%d Instances";
 "Search Components" = "Search Components";
 "Overridden" = "Overridden";
+
+/* Find bar (#257) */
+"Find" = "Find";
+"Find…" = "Find…";
+"Find Next" = "Find Next";
+"Find Previous" = "Find Previous";
+"Previous Match" = "Previous Match";
+"Next Match" = "Next Match";
+"Close Find" = "Close Find";
+"Previous Match (⇧⌘G)" = "Previous Match (⇧⌘G)";
+"Next Match (⌘G)" = "Next Match (⌘G)";
+"Close Find (Esc)" = "Close Find (Esc)";
+"No Results" = "No Results";
+"1 Result" = "1 Result";
+"%d Results" = "%d Results";
