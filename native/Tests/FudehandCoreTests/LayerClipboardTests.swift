@@ -239,3 +239,24 @@ private func mainComponents(_ document: DesignDocument) -> [String] {
         _ = try clip.paste(into: &doc, frame: "i", visible: everywhere, step: 1, related: [])
     } throws: { ($0 as? DesignError)?.message.hasSuffix("is inside instance i; change its main component instead") == true }
 }
+
+@Test func pasteMainComponentIntoMainComponentIsRefused() throws {
+    let refused = { (id: String) in DesignError("Layer \(id): a main component cannot be inside another main component") }
+    var other = DesignNode(id: "k", type: .frame, x: 600, y: 0, width: 300, height: 300)
+    other.component = true
+    // Same document, Cut then Paste into another main component.
+    var doc = componentDocument()
+    doc.nodes.append(other)
+    let cut = try LayerClipboard(copying: ["m"], from: doc)
+    try doc.delete(["m"], detachingInstances: false)
+    let before = doc
+    #expect(throws: refused("m")) { _ = try cut.paste(into: &doc, frame: "k", visible: everywhere, step: 0, related: []) }
+    #expect(doc == before)
+    // Another document.
+    var target = DesignDocument(nodes: [other])
+    let copy = try LayerClipboard(copying: ["m"], from: componentDocument())
+    #expect { _ = try copy.paste(into: &target, frame: "k", visible: everywhere, step: 1, related: []) } throws: {
+        ($0 as? DesignError)?.message.hasSuffix(": a main component cannot be inside another main component") == true
+    }
+    #expect(target == DesignDocument(nodes: [other]))
+}

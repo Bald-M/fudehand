@@ -33,6 +33,11 @@ public struct LayerClipboard: Equatable {
         origin = shared.flatMap { $0 }.flatMap { document.worldRect($0) }.map { Point(x: $0.x, y: $0.y) } ?? Point(x: 0, y: 0)
         nodes = roots.map { id in
             var node = document.node(id)!
+            // Copied out of an instance: nested instances in it stay instances of their own main component.
+            if let root = document.ancestry(of: id).dropLast().lazy.compactMap(document.node).first(where: { $0.instance != nil }),
+               let component = root.instance {
+                ComponentSync.unlink(&node, outOf: component, in: document)
+            }
             let world = document.worldRect(id)!
             node.x = world.x
             node.y = world.y

@@ -177,8 +177,8 @@ extension DesignDocument {
         }
     }
 
-    /// Refuses `node` under the layer at `parentPath` (nil for the top level) when an instance in it would end up inside its own
-    /// main component, directly or through the instances that main component holds.
+    /// Refuses `node` under the layer at `parentPath` (nil for the top level) when a main component in it would end up inside
+    /// another, or an instance in it inside its own main component, directly or through the instances that main component holds.
     private func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
         var enclosing: [String] = []
         if let parentPath {
@@ -201,6 +201,9 @@ extension DesignDocument {
             return result
         }
         func check(_ layer: DesignNode, _ enclosing: [String]) throws {
+            if layer.component, !enclosing.isEmpty {
+                throw DesignError("Layer \(layer.id): a main component cannot be inside another main component")
+            }
             let enclosing = layer.component ? enclosing + [layer.id] : enclosing
             if let id = layer.instance, !enclosing.isEmpty, !reached(id).isDisjoint(with: enclosing) {
                 throw DesignError("Layer \(layer.id): an instance cannot be inside its own main component")

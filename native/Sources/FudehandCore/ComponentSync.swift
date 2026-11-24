@@ -35,7 +35,18 @@ public enum ComponentSync {
     /// `source` moves from the layers of `node`'s main component to the layers of their own main component, and their
     /// `overrides` become the properties whose values differ from those layers. `document` holds the main components.
     public static func detach(_ node: inout DesignNode, in document: DesignDocument) {
-        let outer = node.instance.flatMap { document.node($0) }.map(layers(of:)) ?? [:]
+        detach(&node, outOf: node.instance, in: document, isTop: true)
+    }
+
+    /// A layer copied out of an instance of `componentID` (below its root): its layers lose their link, and nested instances it
+    /// holds become instances of their own main component, as `detach` leaves them. The copied layer itself may be one.
+    public static func unlink(_ layer: inout DesignNode, outOf componentID: String, in document: DesignDocument) {
+        detach(&layer, outOf: componentID, in: document, isTop: false)
+    }
+
+    /// `outer` names the main component whose layers the sources of `node`'s layers name.
+    private static func detach(_ node: inout DesignNode, outOf outer: String?, in document: DesignDocument, isTop top: Bool) {
+        let outer = outer.flatMap { document.node($0) }.map(layers(of:)) ?? [:]
         func clear(_ layer: inout DesignNode, isTop: Bool) {
             if !isTop, let nested = layer.instance {
                 relink(&layer, to: nested)
@@ -70,7 +81,7 @@ public enum ComponentSync {
             }
             recompute(&copy, isRoot: true)
         }
-        clear(&node, isTop: true)
+        clear(&node, isTop: top)
     }
 
     /// Clears `properties` (all overrides when nil) on `node`, a layer inside an instance of `component`, and gives them back the

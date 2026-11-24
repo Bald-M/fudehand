@@ -468,6 +468,57 @@ import Testing
         #expect(root.children[0].source == nil && root.children[0].text?.content == "OK")
     }
 
+    @Test func mainComponentCannotMoveInsideAnother() {
+        var document = nestedFixture()
+        let before = document
+        #expect(throws: DesignError("Layer b: a main component cannot be inside another main component")) {
+            try document.move("b", parent: "a", index: nil)
+        }
+        #expect(document == before)
+    }
+
+    @Test func copyingNestedInstanceOutOfInstanceMakesInstanceOfItsMain() throws {
+        var document = edit(nestedFixture()) { $0.update(at: [1, 0, 0]) { $0.text?.color = Self.green } }
+        let copied = document.node("ia")!.children[0]
+        let clip = try LayerClipboard(copying: [copied.id], from: document)
+        // Beside the original it would go back inside the instance, which is refused; out of view it goes to the top level.
+        #expect(throws: DesignError.self) { try clip.paste(into: &document, frame: nil, visible: nil, step: 1, related: []) }
+        let away = Rect(x: 5000, y: 5000, width: 100, height: 100)
+        let ids = try clip.paste(into: &document, frame: nil, visible: away, step: 1, related: [])
+        let copy = try #require(document.node(ids[0]))
+        #expect(copy.instance == "b" && copy.source == "b" && copy.overrides.isEmpty)
+        #expect(copy.children[0].source == "bt" && copy.children[0].overrides == ["text.color"])
+        #expect(copy.children[0].text?.color == Self.green)
+        #expect(document.parentID(of: ids[0]) == .some(nil))
+    }
+
+    @Test func filesWithCyclicOrDuplicateSourceInstancesOpenDetached() throws {
+        var cyclic = DesignNode(id: "c", type: .frame)
+        cyclic.component = true
+        var ids: Set<String> = ["c"]
+        var inner = ComponentSync.makeInstance(of: cyclic, existing: &ids)
+        inner.id = "self"
+        cyclic.children = [inner]
+        let opened = try DesignDocument.decode(try DesignDocument(nodes: [cyclic]).encoded())
+        #expect(opened.node("self")?.instance == nil && opened.node("self")?.source == nil)
+
+        var document = componentFixture()
+        document.update(at: [1]) { $0.children.append($0.children[0]); $0.children[1].id = "dup" }
+        let reopened = try DesignDocument.decode(try document.encoded())
+        let root = try #require(reopened.node("i"))
+        #expect(root.instance == nil && root.children.allSatisfy { $0.source == nil })
+    }
+
+    @Test func deletingNestedMainLeavesOuterInstancesConsistent() throws {
+        var editor = DesignEditor(document: nestedFixture(), measure: fakeMeasure)
+        try editor.perform("Delete Layers") { try $0.delete(["b"]) }
+        #expect(editor.document.node("n")?.instance == nil && editor.document.node("n")?.source == nil)
+        let copy = try #require(editor.document.node("ia")?.children.first)
+        #expect(copy.instance == nil && copy.source == "n")
+        let reopened = try DesignDocument.decode(try editor.document.encoded())
+        #expect(reopened.node("ia")?.instance == "a" && reopened.node(copy.id)?.instance == nil)
+    }
+
     // MARK: References inside a component
 
     @Test func toggleTargetsRewrittenToInstanceLayers() {
