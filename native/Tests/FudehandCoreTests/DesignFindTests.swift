@@ -1,0 +1,54 @@
+import Foundation
+import Testing
+import FudehandCore
+
+private func text(_ id: String, _ content: String, name: String? = nil) -> DesignNode {
+    var node = DesignNode(id: id, type: .text, name: name ?? id)
+    node.text = DesignText(content: content)
+    return node
+}
+
+private func ids(_ document: DesignDocument, _ query: String) -> [String] { DesignFind.matches(in: document, query: query).map(\.id) }
+
+@Test func findsTextContentAndNamesInDocumentOrder() {
+    var frame = DesignNode(id: "f", type: .frame, name: "Home")
+    frame.children = [text("t1", "Sign in"), DesignNode(id: "bg", type: .rectangle, name: "sign-in background")]
+    let matches = DesignFind.matches(in: DesignDocument(nodes: [frame]), query: "sign")
+    #expect(matches.map(\.id) == ["t1", "bg"])
+    #expect(matches.map(\.field) == [.text, .name])
+    #expect(matches.map(\.type) == [.text, .rectangle])
+    #expect(matches[1].name == "sign-in background" && matches[1].excerpt == "sign-in background")
+}
+
+@Test func matchesCaseAndDiacriticInsensitively() {
+    #expect(ids(DesignDocument(nodes: [text("t", "Café Menu")]), "cafe") == ["t"])
+    #expect(ids(DesignDocument(nodes: [text("t", "Café Menu")]), "MENU") == ["t"])
+}
+
+@Test func listsEachLayerOnceAndPrefersText() {
+    let matches = DesignFind.matches(in: DesignDocument(nodes: [text("t", "Buy now", name: "Buy now")]), query: "buy")
+    #expect(matches.count == 1 && matches.first?.field == .text)
+}
+
+@Test func trimsQueryAndIgnoresBlank() {
+    let document = DesignDocument(nodes: [text("t", "Café Menu")])
+    #expect(ids(document, "").isEmpty && ids(document, "  \n").isEmpty)
+    #expect(ids(document, " menu ") == ["t"])
+}
+
+@Test func includesHiddenAndLockedLayers() {
+    var hidden = text("h", "Price"); hidden.visible = false
+    var locked = text("l", "Price"); locked.locked = true
+    #expect(ids(DesignDocument(nodes: [hidden, locked]), "price") == ["h", "l"])
+}
+
+@Test func excerptsLongTextAroundTheHit() {
+    let content = String(repeating: "a", count: 100) + "\n" + String(repeating: "b", count: 49) + "needle" + String(repeating: "c", count: 64)
+    let excerpt = try! #require(DesignFind.matches(in: DesignDocument(nodes: [text("t", content)]), query: "needle").first).excerpt
+    #expect(excerpt.contains("needle"))
+    #expect(excerpt.hasPrefix("…") && excerpt.hasSuffix("…"))
+    #expect(excerpt.count <= 82)
+    #expect(!excerpt.contains("\n"))
+    let short = DesignFind.matches(in: DesignDocument(nodes: [text("s", "Two\nlines")]), query: "lines").first?.excerpt
+    #expect(short == "Two lines")
+}
