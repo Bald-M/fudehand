@@ -88,3 +88,51 @@ import Testing
         window.close()
     }
 }
+
+/// Dragging a layer inside a main component (#256): the main component is a frame of 50 layers with 50 instances, so every drag
+/// event syncs 50 instances. `instances=0` is the same document with plain frames in place of the instances, for comparison.
+/// Times a drag event with real pointer events, the store's share of one (apply the move, sync the canvas), and the release.
+@Test(.enabled(if: CanvasBenchmark.enabled)) @MainActor func editBenchmarkComponentDrag() throws {
+    for withInstances in [false, true] {
+        var document = CanvasBenchmark.document(frames: 51)
+        if withInstances {
+            document.nodes[0].component = true
+            var existing = document.allIDs()
+            for index in 1...50 {
+                var instance = ComponentSync.makeInstance(of: document.nodes[0], existing: &existing)
+                instance.x = document.nodes[index].x
+                instance.y = document.nodes[index].y
+                document.nodes[index] = instance
+            }
+        }
+        let h = CanvasHarness(document: document)
+        defer { h.dispose() }
+
+        // Press the second layer of the main component (a rectangle at 48, 20 in it) and drag it to and fro with snapping on.
+        let point = NSPoint(x: 63, y: 140)
+        h.send(.leftMouseDown, at: point)
+        let drag = CanvasBenchmark.time(200) { run in
+            h.send(.leftMouseDragged, at: NSPoint(x: point.x + 4 + Double(run % 7), y: point.y))
+        }
+        h.send(.leftMouseUp, at: point)
+        #expect(h.store.selection == ["f0c1"])
+        #expect(h.store.editor.undoName == "Move Layers")
+        if withInstances { #expect(h.store.editor.document.nodes[50].children[1].x == h.node("f0c1")?.x) }
+
+        // The store's share of a drag event: apply the move (and sync the instances), then sync the canvas.
+        let rect = try #require(h.store.index.worldRect("f0c1"))
+        h.store.canvasBeginGesture("Move Layers")
+        let move = CanvasBenchmark.time(200) { run in h.store.canvasMove(["f0c1": Point(x: rect.x + Double(run % 7), y: rect.y)]) }
+        h.store.canvasEndGesture()
+
+        // Releasing a one-event drag: the end of the gesture publishes the document to the panels.
+        let release = CanvasBenchmark.time(20) { run in
+            h.store.canvasBeginGesture("Move Layers")
+            h.store.canvasMove(["f0c1": Point(x: rect.x + Double(run % 2), y: rect.y)])
+            h.store.canvasEndGesture()
+        }
+
+        print(String(format: "[bench] layers=%d instances=%d componentDragEvent=%.2fms componentCanvasMove=%.2fms componentRelease=%.2fms",
+                     h.store.editor.document.nodeCount, withInstances ? 50 : 0, drag, move, release))
+    }
+}
