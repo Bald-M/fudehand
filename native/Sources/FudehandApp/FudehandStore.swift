@@ -732,12 +732,13 @@ final class FudehandStore: ObservableObject {
         return result
     }
 
-    /// The uniform type identifier of project files, exported in Info.plist (extension .fudehand, conforming to public.json).
+    /// The uniform type identifier of project files, exported in Info.plist (extension .fudehand, conforming to public.data and public.content).
+    /// It does not conform to public.json: Finder would then draw the file's JSON text as its thumbnail instead of the Fudehand document icon (#254).
     /// The exported type must be used: a dynamic type synthesized ad hoc from the extension differs from the type the system gives the file, and the open panel would treat the file as not selectable (#50).
     static let contentTypeIdentifier = "local.fudehand.design"
 
     static var contentType: UTType {
-        UTType(exportedAs: contentTypeIdentifier, conformingTo: .json)
+        UTType(exportedAs: contentTypeIdentifier, conformingTo: .data)
     }
 
     /// A project file passed by a Finder double-click or "Open With": asks first when there are unsaved changes, and shows the reason when it cannot be opened.

@@ -16,6 +16,7 @@ names from [GLOSSARY.md](GLOSSARY.md).
 
 ### Fixed
 
+- Project files (`.fudehand`) show the Fudehand document icon in Finder instead of a blank page with their JSON text as the thumbnail, so they are easy to tell apart and double-click open in Fudehand (#254).
 - Opening a large design with many glass layers and layer blurs no longer keeps the system busy for half a minute or freezes the App for seconds at a time: until a top-level layer's canvas bitmap is drawn, the layer shows without its effects (#247).
 
 ## [0.0.5] - 2026-11-21
