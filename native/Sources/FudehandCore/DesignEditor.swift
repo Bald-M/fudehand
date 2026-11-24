@@ -83,6 +83,7 @@ extension DesignDocument {
         try DesignDocument(nodes: [node]).validateUniqueIDs()
         let position = index ?? list.count
         guard (0...list.count).contains(position) else { throw DesignError("index out of range: 0–\(list.count)") }
+        try checkInstanceCycles(node, under: path)
         var next = list
         next.insert(node, at: position)
         setChildren(next, at: path)
@@ -112,6 +113,39 @@ extension DesignDocument {
             }
         }
         nodes = prune(nodes)
+    }
+
+    /// Refuses `node` under the layer at `parentPath` (nil for the top level) when an instance in it would end up inside its own
+    /// main component, directly or through the instances that main component holds.
+    private func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
+        var enclosing: [String] = []
+        if let parentPath {
+            var list = nodes
+            for index in parentPath {
+                if list[index].component { enclosing.append(list[index].id) }
+                list = list[index].children
+            }
+        }
+        var inserted: [String: DesignNode] = [:]
+        DesignDocument(nodes: [node]).forEach { if $0.component { inserted[$0.id] = $0 } }
+        /// `id` and every main component whose instances its main component holds, directly or through nested instances.
+        func reached(_ id: String) -> Set<String> {
+            var result: Set<String> = []
+            var stack = [id]
+            while let next = stack.popLast() {
+                guard result.insert(next).inserted, let main = inserted[next] ?? self.node(next), main.component else { continue }
+                DesignDocument(nodes: main.children).forEach { if let used = $0.instance { stack.append(used) } }
+            }
+            return result
+        }
+        func check(_ layer: DesignNode, _ enclosing: [String]) throws {
+            let enclosing = layer.component ? enclosing + [layer.id] : enclosing
+            if let id = layer.instance, !enclosing.isEmpty, !reached(id).isDisjoint(with: enclosing) {
+                throw DesignError("Layer \(layer.id): an instance cannot be inside its own main component")
+            }
+            for child in layer.children { try check(child, enclosing) }
+        }
+        try check(node, enclosing)
     }
 
     /// Moves to a new parent node (nil for the top level) and position, keeping the absolute position on the canvas. `index` is the position in the new parent after the node is removed.
@@ -210,6 +244,7 @@ public struct DesignEditor {
         defer { if let open { gesture = (open, document, documentMeasured) } }
         var next = document
         let result = try change(&next)
+        ComponentSync.reconcile(old: document, new: &next)
         next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: documentMeasured == measured ? document.nodes : [])
         guard next != document else { return result }
@@ -248,6 +283,7 @@ public struct DesignEditor {
     private mutating func applyLive(_ change: (inout DesignDocument) -> Void, layingOutAll: Bool) {
         var next = document
         change(&next)
+        ComponentSync.reconcile(old: document, new: &next)
         next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: layingOutAll || documentMeasured != measured ? [] : document.nodes)
         documentMeasured = measured

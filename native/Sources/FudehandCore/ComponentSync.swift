@@ -11,7 +11,7 @@ public enum ComponentSync {
     /// Records overrides for edited instance layers, then rebuilds instances whose main component (or own subtree) changed.
     public static func reconcile(old: DesignDocument, new: inout DesignDocument) {
         var changes = Changes()
-        changes.visit(new.nodes, old: old.nodes, path: [], instanceOf: nil)
+        changes.visit(new.nodes, old: old.nodes, path: [], root: nil, instanceOf: nil)
         if !changes.edits.isEmpty { recordOverrides(changes.edits, in: &new) }
         if changes.components.isEmpty && changes.instances.isEmpty { return }
         var ids = FreshIDs(document: new)
@@ -22,6 +22,7 @@ public enum ComponentSync {
     public static func makeInstance(of component: DesignNode, existing: inout Set<String>) -> DesignNode {
         var root = mirror(component) { take(&existing) }
         root.instance = component.id
+        rewriteTargets(&root)
         return root
     }
 
@@ -30,13 +31,44 @@ public enum ComponentSync {
         sync(&instance, from: component) { take(&existing) }
     }
 
-    /// Turns `node` and its layers into ordinary layers. Nested instance roots keep their `instance`.
-    public static func detach(_ node: inout DesignNode) {
+    /// Turns `node` and its layers into ordinary layers. Nested instances of other components stay instances: their layers'
+    /// `source` moves from the layers of `node`'s main component to the layers of their own main component, and their
+    /// `overrides` become the properties whose values differ from those layers. `document` holds the main components.
+    public static func detach(_ node: inout DesignNode, in document: DesignDocument) {
+        let outer = node.instance.flatMap { document.node($0) }.map(layers(of:)) ?? [:]
         func clear(_ layer: inout DesignNode, isTop: Bool) {
+            if !isTop, let nested = layer.instance {
+                relink(&layer, to: nested)
+                return
+            }
             if isTop { layer.instance = nil }
             layer.source = nil
             layer.overrides = []
             for index in layer.children.indices { clear(&layer.children[index], isTop: false) }
+        }
+        func relink(_ copy: inout DesignNode, to componentID: String) {
+            func resolve(_ layer: inout DesignNode) {
+                layer.source = layer.source.flatMap { outer[$0]?.source }
+                for index in layer.children.indices { resolve(&layer.children[index]) }
+            }
+            resolve(&copy)
+            copy.source = componentID
+            let sources = document.node(componentID).flatMap { $0.component ? layers(of: $0) : nil } ?? [:]
+            let ids = instanceLayerIDs(copy)
+            func recompute(_ layer: inout DesignNode, isRoot: Bool) {
+                if let source = layer.source.flatMap({ sources[$0] }) {
+                    var paths = ComponentProperty.changed(source, layer)
+                    if paths.contains("interaction"), layer.interaction == rewritten(source.interaction, ids) {
+                        paths.remove("interaction")
+                    }
+                    if isRoot { paths.subtract(rootOwned) }
+                    layer.overrides = paths
+                } else {
+                    layer.overrides = []
+                }
+                for index in layer.children.indices { recompute(&layer.children[index], isRoot: false) }
+            }
+            recompute(&copy, isRoot: true)
         }
         clear(&node, isTop: true)
     }
@@ -65,7 +97,7 @@ public enum ComponentSync {
             }
             layer.overrides.subtract(paths)
             if let source {
-                for path in paths where !(layer.instance != nil && rootOwned.contains(path)) {
+                for path in paths where !(isInstanceRoot(layer) && rootOwned.contains(path)) {
                     ComponentProperty.named(path)?.copy(from: source, to: &layer)
                 }
             }
@@ -79,11 +111,17 @@ public enum ComponentSync {
     /// The root's x and y belong to the instance: never synced, never overrides.
     private static let rootOwned: Set<String> = ["x", "y"]
 
+    /// An instance root follows its main component itself; a nested instance copied into another instance has `instance` set too,
+    /// but its `source` is a layer of the outer main component.
+    private static func isInstanceRoot(_ layer: DesignNode) -> Bool { layer.instance != nil && layer.source == layer.instance }
+
     /// A layer inside an instance that the edit changed, with its value before the edit.
     private struct Edit {
         let path: [Int]
         let previous: DesignNode
-        /// The main component of the instance the layer sits in.
+        /// The index path of the instance root the layer sits in (the outermost one for layers of nested copies).
+        let root: [Int]
+        /// The main component of that instance, which holds every source layer of it.
         let component: String
     }
 
@@ -91,12 +129,14 @@ public enum ComponentSync {
     private struct Changes {
         /// Main components whose own subtree changed (moving the main component alone does not count).
         var components: Set<String> = []
-        /// Index paths of instance roots whose own subtree changed (moving the instance alone does not count).
+        /// Index paths of instance roots whose own subtree changed (moving the instance alone does not count). Nested instances
+        /// copied into another instance are not roots: they follow the outer instance's main component.
         var instances: [[Int]] = []
         /// Edited layers inside instances, whose overrides are recorded afterwards.
         var edits: [Edit] = []
 
-        mutating func visit(_ new: [DesignNode], old: [DesignNode], path: [Int], instanceOf: String?) {
+        /// `root` and `instanceOf` are the outermost instance root above `new` and its main component.
+        mutating func visit(_ new: [DesignNode], old: [DesignNode], path: [Int], root: [Int]?, instanceOf: String?) {
             if new == old { return }
             var oldByID: [String: DesignNode]?
             for (index, node) in new.enumerated() {
@@ -108,30 +148,34 @@ public enum ComponentSync {
                     previous = oldByID?[node.id]
                 }
                 if let previous, previous == node { continue }
-                if node.component || node.instance != nil {
+                let isRoot = instanceOf == nil && node.instance != nil
+                if node.component || isRoot {
                     let moved = previous.map { ComponentSync.differsOnlyInPosition($0, node) } ?? false
                     if node.component, !moved { components.insert(node.id) }
-                    if node.instance != nil, !moved { instances.append(path + [index]) }
+                    if isRoot, !moved { instances.append(path + [index]) }
                 }
-                let owner = node.instance ?? instanceOf
-                if let previous, node.source != nil, let owner {
-                    edits.append(Edit(path: path + [index], previous: previous, component: owner))
+                let owner = instanceOf ?? node.instance
+                let ownerRoot = isRoot ? path + [index] : root
+                if let previous, node.source != nil, let owner, let ownerRoot {
+                    edits.append(Edit(path: path + [index], previous: previous, root: ownerRoot, component: owner))
                 }
-                visit(node.children, old: previous?.children ?? [], path: path + [index], instanceOf: owner)
+                visit(node.children, old: previous?.children ?? [], path: path + [index], root: ownerRoot, instanceOf: owner)
             }
         }
     }
 
     /// Each changed property of an edited instance layer becomes an override, unless its new value equals the source layer's (new)
-    /// value, which removes the override. All reads happen before the first write.
+    /// value, which removes the override. Toggle targets are compared after rewriting the source's into the instance's layers.
+    /// All reads happen before the first write.
     private static func recordOverrides(_ edits: [Edit], in document: inout DesignDocument) {
         var updates: [(path: [Int], overrides: Set<String>)] = []
         do {
             var sourceLayers: [String: [String: DesignNode]] = [:]
+            var targetIDs: [[Int]: [String: String]] = [:]
             for edit in edits {
                 let layer = document[edit.path]
                 var paths = ComponentProperty.changed(edit.previous, layer)
-                if layer.instance != nil { paths.subtract(rootOwned) }
+                if edit.path == edit.root { paths.subtract(rootOwned) }
                 if paths.isEmpty { continue }
                 if sourceLayers[edit.component] == nil {
                     let main = document.node(edit.component).flatMap { $0.component ? $0 : nil }
@@ -141,7 +185,14 @@ public enum ComponentSync {
                 var overrides = layer.overrides
                 for path in paths {
                     guard let property = ComponentProperty.named(path) else { continue }
-                    if property.equal(layer, source) { overrides.remove(path) } else { overrides.insert(path) }
+                    let equal: Bool
+                    if path == "interaction" {
+                        if targetIDs[edit.root] == nil { targetIDs[edit.root] = instanceLayerIDs(document[edit.root]) }
+                        equal = layer.interaction == rewritten(source.interaction, targetIDs[edit.root] ?? [:])
+                    } else {
+                        equal = property.equal(layer, source)
+                    }
+                    if equal { overrides.remove(path) } else { overrides.insert(path) }
                 }
                 if overrides != layer.overrides { updates.append((edit.path, overrides)) }
             }
@@ -166,42 +217,89 @@ public enum ComponentSync {
 
     // MARK: Syncing
 
-    /// Syncs every instance of a changed main component, and every changed instance, from its main component. Instances whose main
-    /// component is missing (or is not one) are left as they are.
+    /// Syncs every instance of a changed main component, and every changed instance, from its main component. A main component
+    /// holding instances of another is synced after it, and becomes changed when they are. Instances whose main component is
+    /// missing (or is not one), and main components on a cycle of instances, are left as they are.
     private static func syncInstances(in document: inout DesignDocument, changedComponents: Set<String>, changedInstances: [[Int]],
                                       ids: inout FreshIDs) {
-        var mains: [String: DesignNode?] = [:]
-        func main(_ id: String) -> DesignNode? {
-            if let cached = mains[id] { return cached }
-            let found = document.node(id).flatMap { $0.component ? $0 : nil }
-            mains[id] = found
-            return found
-        }
+        let graph = ComponentGraph(document.nodes)
+        let order = graph.order()
+        let synced = Set(order)
         for path in changedInstances {
-            guard let componentID = document[path].instance, !changedComponents.contains(componentID),
-                  let component = main(componentID) else { continue }
+            guard let componentID = document[path].instance, !changedComponents.contains(componentID), synced.contains(componentID),
+                  let mainPath = graph.mains[componentID] else { continue }
+            let component = document[mainPath]
             document.update(at: path) { sync(&$0, from: component) { ids.next() } }
         }
-        if changedComponents.isEmpty { return }
-        let components = changedComponents.compactMap { id in main(id).map { (id, $0) } }
-        let byID = Dictionary(uniqueKeysWithValues: components)
-        if byID.isEmpty { return }
-        func visit(_ nodes: inout [DesignNode]) {
-            for index in nodes.indices {
-                if let componentID = nodes[index].instance {
-                    if let component = byID[componentID] { sync(&nodes[index], from: component) { ids.next() } }
-                    continue
-                }
-                visit(&nodes[index].children)
+        var changed = changedComponents
+        for componentID in order where changed.contains(componentID) {
+            guard let mainPath = graph.mains[componentID] else { continue }
+            // Read after the instances inside it were synced.
+            let component = document[mainPath]
+            for instance in graph.instances[componentID] ?? [] {
+                document.update(at: instance.path) { sync(&$0, from: component) { ids.next() } }
+                if let container = instance.container { changed.insert(container) }
             }
         }
-        visit(&document.nodes)
+    }
+
+    /// Where the main components and the instance roots of a document are, and which main components hold instances of which.
+    /// Instance roots are those not inside another instance; nested copies follow their outer instance.
+    private struct ComponentGraph {
+        var mains: [String: [Int]] = [:]
+        /// Instance roots by main component, each with the main component it sits in, if any.
+        var instances: [String: [(path: [Int], container: String?)]] = [:]
+        /// Main component → the main components whose instances it holds.
+        var uses: [String: Set<String>] = [:]
+
+        init(_ nodes: [DesignNode]) { walk(nodes, path: [], container: nil) }
+
+        private mutating func walk(_ nodes: [DesignNode], path: [Int], container: String?) {
+            for (index, node) in nodes.enumerated() {
+                let nodePath = path + [index]
+                if let componentID = node.instance {
+                    instances[componentID, default: []].append((nodePath, container))
+                    if let container { uses[container, default: []].insert(componentID) }
+                    continue
+                }
+                var inner = container
+                if node.component {
+                    if mains[node.id] == nil { mains[node.id] = nodePath }
+                    inner = node.id
+                }
+                walk(node.children, path: nodePath, container: inner)
+            }
+        }
+
+        /// The main components in sync order (one holding instances of another after it), without those on a cycle.
+        func order() -> [String] {
+            func reachesItself(_ id: String) -> Bool {
+                var seen: Set<String> = []
+                var stack = Array(uses[id] ?? [])
+                while let next = stack.popLast() {
+                    if next == id { return true }
+                    if seen.insert(next).inserted { stack += uses[next] ?? [] }
+                }
+                return false
+            }
+            let cyclic = Set(mains.keys.filter(reachesItself))
+            var result: [String] = []
+            var done: Set<String> = []
+            func add(_ id: String) {
+                guard !cyclic.contains(id), mains[id] != nil, done.insert(id).inserted else { return }
+                for used in (uses[id] ?? []).sorted() { add(used) }
+                result.append(id)
+            }
+            for id in mains.keys.sorted() { add(id) }
+            return result
+        }
     }
 
     private static func sync(_ instance: inout DesignNode, from component: DesignNode, newID: () -> String) {
         syncCount?.count += 1
         syncLayer(&instance, from: component, isRoot: true, newID: newID)
         instance.instance = component.id
+        rewriteTargets(&instance)
     }
 
     /// Takes every property of `source` that `layer` does not override, then matches children by `source`: kept ones are synced,
@@ -217,6 +315,7 @@ public enum ComponentSync {
             }
         }
         layer.source = source.id
+        if !isRoot { layer.instance = source.instance }
         var existing: [String: DesignNode] = [:]
         for child in layer.children { if let id = child.source, existing[id] == nil { existing[id] = child } }
         layer.children = source.children.map { sourceChild in
@@ -226,16 +325,48 @@ public enum ComponentSync {
         }
     }
 
-    /// A copy of `source` and its layers with fresh ids, each pointing back at the layer it mirrors.
+    /// A copy of `source` and its layers with fresh ids, each pointing back at the layer it mirrors. Nested instance roots keep
+    /// their `instance`.
     private static func mirror(_ source: DesignNode, newID: () -> String) -> DesignNode {
         var layer = source
         layer.id = newID()
         layer.component = false
-        layer.instance = nil
         layer.source = source.id
         layer.overrides = []
         layer.children = source.children.map { mirror($0, newID: newID) }
         return layer
+    }
+
+    // MARK: References inside a component
+
+    /// The instance's layer ids by the id of the main component layer each mirrors.
+    private static func instanceLayerIDs(_ root: DesignNode) -> [String: String] {
+        var result: [String: String] = [:]
+        func add(_ layer: DesignNode) {
+            if let source = layer.source { result[source] = layer.id }
+            layer.children.forEach(add)
+        }
+        add(root)
+        return result
+    }
+
+    /// Toggle targets among `ids`' keys become the matching instance layers; other targets and interactions stay as they are.
+    private static func rewritten(_ interaction: DesignInteraction?, _ ids: [String: String]) -> DesignInteraction? {
+        guard case .toggleVisibility(let targets) = interaction else { return interaction }
+        return .toggleVisibility(targets: targets.map { ids[$0] ?? $0 })
+    }
+
+    /// Points the toggle targets that the instance's layers took from the main component at the instance's own layers.
+    private static func rewriteTargets(_ root: inout DesignNode) {
+        let ids = instanceLayerIDs(root)
+        func visit(_ layer: inout DesignNode) {
+            if !layer.overrides.contains("interaction"), case .toggleVisibility = layer.interaction {
+                let next = rewritten(layer.interaction, ids)
+                if next != layer.interaction { layer.interaction = next }
+            }
+            for index in layer.children.indices { visit(&layer.children[index]) }
+        }
+        visit(&root)
     }
 
     /// A top-level property path with the field paths of its nested object (none for plain properties). Copying the whole object

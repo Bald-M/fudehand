@@ -225,9 +225,174 @@ import Testing
     @Test func detachClearsComponentFields() {
         let document = edit(componentFixture()) { $0.update(at: [1, 0]) { $0.text?.content = "Go" } }
         var root = instance(document)
-        ComponentSync.detach(&root)
+        ComponentSync.detach(&root, in: document)
         #expect(root.instance == nil && root.source == nil && root.overrides.isEmpty)
         #expect(root.children[0].source == nil && root.children[0].overrides.isEmpty)
         #expect(root.children[0].text?.content == "Go")
+    }
+
+    // MARK: Nested instances
+
+    /// Main component `b` (text `bt` "B"), main component `a` holding instance `n` of `b` at x 10, and instance `ia` of `a`.
+    /// Paths: b [0], bt [0, 0], a [1], n [1, 0], n's label [1, 0, 0], ia [2], its copy of n [2, 0], that copy's label [2, 0, 0].
+    private func nestedFixture() -> DesignDocument {
+        var b = DesignNode(id: "b", type: .frame, name: "Icon", width: 40, height: 40)
+        b.component = true
+        var label = DesignNode(id: "bt", type: .text, name: "Glyph", width: 20, height: 20)
+        label.text = DesignText(content: "B")
+        b.children = [label]
+        var existing: Set<String> = ["b", "bt", "a", "n", "ia"]
+        var a = DesignNode(id: "a", type: .frame, name: "Card", x: 100, width: 200, height: 100)
+        a.component = true
+        var n = ComponentSync.makeInstance(of: b, existing: &existing)
+        n.id = "n"
+        n.x = 10
+        a.children = [n]
+        var ia = ComponentSync.makeInstance(of: a, existing: &existing)
+        ia.id = "ia"
+        ia.x = 400
+        return DesignDocument(nodes: [b, a, ia])
+    }
+
+    @Test func nestedCopyKeepsInstanceAndFollowsNearestMain() {
+        let document = nestedFixture()
+        let copy = document.node("ia")!.children[0]
+        #expect(copy.instance == "b")
+        #expect(copy.source == "n")
+        #expect(copy.children[0].source == document.node("n")!.children[0].id)
+        #expect(copy.x == 10)
+        #expect(Set(document.allIDs()).count == document.nodeCount)
+    }
+
+    @Test func nestedChangeReachesOuterInstances() {
+        // A's nested instance overrides B's color; the outer instance's copy keeps that, and B's new content reaches both.
+        var document = edit(nestedFixture()) { $0.update(at: [1, 0, 0]) { $0.text?.color = Self.green } }
+        #expect(document.node("n")!.children[0].overrides == ["text.color"])
+        #expect(document.node("ia")!.children[0].children[0].text?.color == Self.green)
+        document = edit(document) { $0.update(at: [0, 0]) { $0.text?.content = "B2"; $0.text?.color = Self.red } }
+        let inner = document.node("n")!.children[0]
+        #expect(inner.text?.content == "B2" && inner.text?.color == Self.green)
+        let copy = document.node("ia")!.children[0]
+        #expect(copy.instance == "b" && copy.source == "n")
+        #expect(copy.children[0].text?.content == "B2" && copy.children[0].text?.color == Self.green)
+        #expect(copy.children[0].overrides.isEmpty && copy.overrides.isEmpty)
+
+        // A new layer in B reaches A's nested instance and, through it, A's instances, with unique ids.
+        document = edit(document) { $0.update(at: [0]) { $0.children.append(DesignNode(id: "dot", type: .ellipse)) } }
+        let nested = document.node("n")!
+        #expect(nested.children.map(\.source) == ["bt", "dot"])
+        #expect(document.node("ia")!.children[0].children.map(\.source) == nested.children.map(\.id))
+        #expect(Set(document.allIDs()).count == document.nodeCount)
+    }
+
+    @Test func nestedCopyEditIsOverrideAgainstA() {
+        let document = edit(nestedFixture()) {
+            $0.update(at: [2, 0]) { $0.x = 30 }
+            $0.update(at: [2, 0, 0]) { $0.text?.content = "I" }
+        }
+        let copy = document.node("ia")!.children[0]
+        #expect(copy.overrides == ["x"])
+        #expect(copy.children[0].overrides == ["text.content"])
+        #expect(copy.x == 30 && copy.children[0].text?.content == "I")
+        #expect(document.node("n")!.x == 10)
+    }
+
+    @Test func resetOnNestedCopyGoesBackToA() throws {
+        var document = edit(nestedFixture()) { $0.update(at: [1, 0, 0]) { $0.text?.content = "A" } }
+        document = edit(document) {
+            $0.update(at: [2, 0]) { $0.x = 30 }
+            $0.update(at: [2, 0, 0]) { $0.text?.content = "I" }
+        }
+        let main = try #require(document.node("a"))
+        var copy = document.node("ia")!.children[0]
+        ComponentSync.resetOverrides(&copy.children[0], component: main, properties: ["text.content"])
+        #expect(copy.children[0].text?.content == "A")
+        #expect(copy.children[0].overrides.isEmpty)
+
+        copy.children[0].text?.content = "I"
+        copy.children[0].overrides = ["text.content"]
+        ComponentSync.resetOverrides(&copy, component: main, properties: nil)
+        #expect(copy.x == 10 && copy.overrides.isEmpty)
+        #expect(copy.children[0].text?.content == "A" && copy.children[0].overrides.isEmpty)
+    }
+
+    @Test func detachOuterKeepsNestedInstanceOfB() {
+        var document = edit(nestedFixture()) { $0.update(at: [1, 0, 0]) { $0.text?.color = Self.green } }
+        document = edit(document) { $0.update(at: [2, 0, 0]) { $0.text?.content = "I" } }
+        var root = document.node("ia")!
+        ComponentSync.detach(&root, in: document)
+        #expect(root.instance == nil && root.source == nil && root.overrides.isEmpty)
+        let copy = root.children[0]
+        #expect(copy.instance == "b")
+        #expect(copy.source == "b")
+        #expect(copy.overrides.isEmpty)
+        #expect(copy.children[0].source == "bt")
+        #expect(copy.children[0].overrides == ["text.content", "text.color"])
+        #expect(copy.children[0].text?.content == "I" && copy.children[0].text?.color == Self.green)
+    }
+
+    @Test func cycleIsNotCreated() throws {
+        // Reconcile leaves a main component holding an instance of itself as it is.
+        var main = DesignNode(id: "m", type: .frame)
+        main.component = true
+        var existing: Set<String> = ["m"]
+        var inner = ComponentSync.makeInstance(of: main, existing: &existing)
+        inner.id = "self"
+        main.children = [inner]
+        let cyclic = edit(DesignDocument(nodes: [main])) { $0.update(at: [0]) { $0.fill = Self.blue } }
+        #expect(cyclic.node("self")?.fill != Self.blue)
+        #expect(cyclic.nodeCount == 2)
+
+        // Inserting or moving an instance into its own main component, directly or through nested instances, is refused.
+        var document = nestedFixture()
+        var ids = document.allIDs()
+        var outer = ComponentSync.makeInstance(of: document.node("a")!, existing: &ids)
+        outer.id = "outer"
+        #expect(throws: DesignError("Layer outer: an instance cannot be inside its own main component")) {
+            try document.insert(outer, parent: "a", index: nil)
+        }
+        #expect(throws: DesignError("Layer outer: an instance cannot be inside its own main component")) {
+            try document.insert(outer, parent: "b", index: nil)
+        }
+        #expect(throws: DesignError("Layer ia: an instance cannot be inside its own main component")) {
+            try document.move("ia", parent: "b", index: nil)
+        }
+        #expect(document.node("outer") == nil && document.indexPath(of: "ia") == [2])
+        try document.insert(outer, parent: nil, index: nil)
+    }
+
+    // MARK: References inside a component
+
+    @Test func toggleTargetsRewrittenToInstanceLayers() {
+        var document = edit(componentFixture()) {
+            $0.update(at: [0]) { $0.children.append(DesignNode(id: "s", type: .rectangle)) }
+        }
+        document = edit(document) { $0.update(at: [0, 0]) { $0.interaction = .toggleVisibility(targets: ["s", "elsewhere"]) } }
+        let root = instance(document)
+        let rewritten = DesignInteraction.toggleVisibility(targets: [root.children[1].id, "elsewhere"])
+        #expect(root.children[0].interaction == rewritten)
+        #expect(root.children[0].overrides.isEmpty)
+        #expect(document.node("t")?.interaction == .toggleVisibility(targets: ["s", "elsewhere"]))
+
+        document = edit(document) { $0.update(at: [1, 0]) { $0.interaction = .toggleVisibility(targets: ["s"]) } }
+        #expect(instance(document).children[0].overrides == ["interaction"])
+        document = edit(document) { $0.update(at: [1, 0]) { $0.interaction = rewritten } }
+        #expect(instance(document).children[0].overrides.isEmpty)
+    }
+
+    @Test func toggleTargetsRewrittenInNewInstances() {
+        var main = componentFixture().node("m")!
+        main.children.append(DesignNode(id: "s", type: .rectangle))
+        main.children[0].interaction = .toggleVisibility(targets: ["s"])
+        var existing: Set<String> = ["m", "t", "s"]
+        let root = ComponentSync.makeInstance(of: main, existing: &existing)
+        #expect(root.children[0].interaction == .toggleVisibility(targets: [root.children[1].id]))
+    }
+
+    @Test func navigateTargetsKept() {
+        let navigate = DesignInteraction.navigate(destination: "home", transition: PrototypeTransition())
+        let document = edit(componentFixture()) { $0.update(at: [0, 0]) { $0.interaction = navigate } }
+        #expect(instance(document).children[0].interaction == navigate)
+        #expect(instance(document).children[0].overrides.isEmpty)
     }
 }

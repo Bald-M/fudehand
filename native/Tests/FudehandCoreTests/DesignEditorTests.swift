@@ -214,3 +214,66 @@ private func reopened(_ e: DesignEditor) throws -> DesignDocument {
     try e.perform("Move") { try $0.update("box") { $0.x = 10 } }
     #expect(e.document.node("label")?.width == 60)
 }
+
+// MARK: Components
+
+/// Main component `m` (a hugging auto-layout frame with text `t`) and its instance `i`; the instance's layers have fresh ids.
+private func componentEditor() -> DesignEditor {
+    var main = DesignNode(id: "m", type: .frame, width: 100, height: 40)
+    main.component = true
+    main.layout = AutoLayout(direction: .horizontal)
+    main.sizing = Sizing(horizontal: .hug, vertical: .hug)
+    var label = DesignNode(id: "t", type: .text)
+    label.text = DesignText(content: "OK", autoResize: .widthAndHeight)
+    main.children = [label]
+    var existing: Set<String> = ["m", "t", "i"]
+    var instance = ComponentSync.makeInstance(of: main, existing: &existing)
+    instance.id = "i"
+    instance.x = 300
+    return DesignEditor(document: DesignDocument(nodes: [main, instance]), measure: fakeMeasure)
+}
+
+@Test func mainComponentEditIsOneUndoStep() throws {
+    var e = componentEditor()
+    let blue = DesignColor(r: 0, g: 0, b: 1)
+    try e.perform("Fill") { try $0.update("m") { $0.fill = blue } }
+    #expect(e.document.node("i")?.fill == blue)
+    #expect(e.undo() && e.document.node("i")?.fill == nil && e.document.node("m")?.fill == nil)
+    #expect(!e.canUndo)
+}
+
+@Test func undoRestoresInstancesAndIDs() throws {
+    var e = componentEditor()
+    let before = e.document
+    try e.perform("Insert") { try $0.insert(DesignNode(id: "r", type: .rectangle), parent: "m", index: nil) }
+    let added = try #require(e.document.node("i")?.children.last)
+    #expect(added.source == "r" && added.id != "r")
+    let after = e.document
+    #expect(e.undo() && e.document == before)
+    #expect(e.redo() && e.document == after)
+}
+
+@Test func dragInMainComponentIsOneStep() throws {
+    var e = componentEditor()
+    try e.perform("Layout") { try $0.update("m") { $0.layout = nil; $0.sizing = .fixed } }
+    e.beginGesture("Move Layers")
+    for x in [11.0, 12, 13] {
+        e.applyLive { try? $0.update("t") { $0.x = x } }
+        #expect(e.document.node("i")?.children.first?.x == x)
+    }
+    e.endGesture()
+    #expect(e.undoName == "Move Layers")
+    #expect(e.undo() && e.document.node("i")?.children.first?.x == 0)
+    #expect(e.undoName == "Layout")
+}
+
+@Test func overriddenTextReflowsInstanceLayout() throws {
+    var e = componentEditor()
+    let labelID = try #require(e.document.node("i")?.children.first?.id)
+    try e.perform("Text") { try $0.update(labelID) { $0.text?.content = "Much longer" } }
+    let main = try #require(e.document.node("m"))
+    let instance = try #require(e.document.node("i"))
+    #expect(instance.children[0].overrides == ["text.content"])
+    #expect(instance.width > main.width)
+    #expect(instance.children[0].width == 110)
+}
