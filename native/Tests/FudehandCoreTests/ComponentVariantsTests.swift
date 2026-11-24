@@ -384,16 +384,18 @@ import Testing
         return DesignDocument(nodes: [instance]).allIDs().sorted()
     }
 
-    /// Component set "s" (State × Size): "v1" Default/Small holds text "Label" (toggling "Mark"), text "Mark", rectangle "Icon"; "v2" Hover/Small
-    /// (red, 300 wide) holds text "Label" (toggling "Mark"), rectangle "Mark", rectangle "Badge"; "v3" Default/Large and "v4" Hover/Large hold text
+    /// Component set "s" (State × Size): "v1" Default/Small holds text "Label" (toggling "Mark"), text "Mark", rectangle "Icon", frame "Box"; "v2" Hover/Small
+    /// (red, 300 wide) holds text "Label" (toggling "Mark"), rectangle "Mark", rectangle "Badge", rectangle "Box"; "v3" Default/Large and "v4" Hover/Large hold text
     /// "Label".
     private func switchFixture() -> DesignDocument {
         var v2 = variant("v2", ["State": "Hover", "Size": "Small"],
-                         [layer("v2t", .text, "Label"), layer("v2m", .rectangle, "Mark"), layer("v2b", .rectangle, "Badge")])
+                         [layer("v2t", .text, "Label"), layer("v2m", .rectangle, "Mark"), layer("v2b", .rectangle, "Badge"),
+                          layer("v2x", .rectangle, "Box")])
         v2.fill = Self.red
         v2.width = 300
         var v1 = variant("v1", ["State": "Default", "Size": "Small"],
-                         [layer("v1t", .text, "Label"), layer("v1m", .text, "Mark"), layer("v1i", .rectangle, "Icon")])
+                         [layer("v1t", .text, "Label"), layer("v1m", .text, "Mark"), layer("v1i", .rectangle, "Icon"),
+                          layer("v1x", .frame, "Box")])
         v1.children[0].interaction = .toggleVisibility(targets: ["v1m"])
         v2.children[0].interaction = .toggleVisibility(targets: ["v2m"])
         let set = componentSet("s", ["State", "Size"], [
@@ -465,6 +467,58 @@ import Testing
         #expect(node.overrides == ["fill"] && node.fill == blue)
     }
 
+    @Test func switchDropsTypeBoundOverridesWhenTypeChanges() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        let box = try #require(document.node("i")).children[3].id
+        let blue = DesignColor(r: 0, g: 0, b: 1)
+        try edit(&document) {
+            try $0.update(box) {
+                $0.layout = AutoLayout(direction: .horizontal)
+                $0.clipsContent = false
+                $0.effects = [DesignEffect(type: .perspective)]
+                $0.fill = blue
+            }
+        }
+        #expect(document.node(box)?.overrides == ["layout", "clipsContent", "effects", "fill"])
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        let node = try #require(document.node(box))
+        #expect(node.type == .rectangle && node.overrides == ["fill"] && node.fill == blue)
+        #expect(node.layout == nil && node.effects.isEmpty)
+        #expect(try DesignDocument.decode(document.encoded()) == document)
+    }
+
+    @Test func switchDropsTypeBoundRootOverridesWhenTypeChanges() throws {
+        var shape = DesignNode(id: "r", type: .rectangle, name: "Shape", x: 16, y: 100, width: 50, height: 50)
+        shape.component = true
+        shape.variant = ["Kind": "Shape"]
+        var document = DesignDocument(nodes: [componentSet("s", ["Kind"], [variant("f", ["Kind": "Frame"], []), shape])])
+        instantiate("f", as: "i", in: &document)
+        let blue = DesignColor(r: 0, g: 0, b: 1)
+        try edit(&document) { try $0.update("i") { $0.layout = AutoLayout(direction: .vertical); $0.fill = blue } }
+        try switchVariant(["i"], ["Kind": "Shape"], in: &document)
+        let node = try #require(document.node("i"))
+        #expect(node.type == .rectangle && node.overrides == ["fill"] && node.layout == nil && node.fill == blue)
+        #expect(try DesignDocument.decode(document.encoded()) == document)
+    }
+
+    @Test func switchMapsCarriedToggleTargets() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        let children = try #require(document.node("i")).children.map(\.id)
+        let (label, mark, icon) = (children[0], children[1], children[2])
+        try edit(&document) {
+            try $0.update(label) { $0.interaction = .toggleVisibility(targets: [icon, mark, "v3"]) }
+            try $0.update(mark) { $0.interaction = .toggleVisibility(targets: [icon]) }
+        }
+        #expect(document.node(label)?.overrides.contains("interaction") == true)
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        // Targets inside the instance follow the matched layers; the unmatched icon is gone; targets outside stay.
+        #expect(document.node(label)?.interaction == .toggleVisibility(targets: [mark, "v3"]))
+        #expect(document.node(mark)?.interaction == nil)
+        #expect(try DesignDocument.decode(document.encoded()) == document)
+    }
+
     @Test func switchKeepsIdsAndAnnotations() throws {
         var document = switchFixture()
         instantiate("v1", as: "i", in: &document)
@@ -495,7 +549,7 @@ import Testing
         // Back to the first variant: the badge goes, a new icon comes.
         try switchVariant(["i"], ["State": "Default"], in: &document)
         #expect(document.node(badge.id) == nil)
-        #expect(document.node("i")?.children.map(\.source) == ["v1t", "v1m", "v1i"])
+        #expect(document.node("i")?.children.map(\.source) == ["v1t", "v1m", "v1i", "v1x"])
         try document.validateComponents()
     }
 

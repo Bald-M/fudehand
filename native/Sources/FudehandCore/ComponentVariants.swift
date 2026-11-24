@@ -184,10 +184,14 @@ public enum ComponentVariants {
             carry(old, onto: &switched, renamed: &renamed, in: next)
             switched.x = old.x
             switched.y = old.y
-            // makeInstance pointed toggle targets at the fresh ids; matched layers took back their old ids.
+            // makeInstance pointed toggle targets at the fresh ids, and matched layers took back their old ids; targets that
+            // carried overrides name on unmatched (removed) layers are dropped.
+            let removed = DesignDocument(nodes: [old]).allIDs().subtracting(DesignDocument(nodes: [switched]).allIDs())
             func retarget(_ layer: inout DesignNode) {
-                if case .toggleVisibility(let targets) = layer.interaction, targets.contains(where: { renamed[$0] != nil }) {
-                    layer.interaction = .toggleVisibility(targets: targets.map { renamed[$0] ?? $0 })
+                if case .toggleVisibility(let targets) = layer.interaction,
+                   targets.contains(where: { renamed[$0] != nil || removed.contains($0) }) {
+                    let next = targets.map { renamed[$0] ?? $0 }.filter { !removed.contains($0) }
+                    layer.interaction = next.isEmpty ? nil : .toggleVisibility(targets: next)
                 }
                 for index in layer.children.indices { retarget(&layer.children[index]) }
             }
@@ -198,12 +202,17 @@ public enum ComponentVariants {
     }
 
     /// Gives `new`, a layer built from the new variant, the id of `old`, the layer it matched, with the values and overrides of
-    /// `old`'s overrides that exist on `new`; then pairs their children by name. `renamed` maps replaced ids to the kept ones.
+    /// `old`'s overrides that exist on `new` (only the `typeIndependent` ones when their types differ); then pairs their children
+    /// by name. `renamed` maps replaced ids to the kept ones.
     private static func carry(_ old: DesignNode, onto new: inout DesignNode, renamed: inout [String: String],
                               in document: DesignDocument) {
         renamed[new.id] = old.id
         new.id = old.id
-        let kept = old.overrides.filter { ComponentProperty.named($0)?.exists(on: new) ?? false }
+        let sameType = old.type == new.type
+        let kept = old.overrides.filter { path in
+            guard ComponentProperty.named(path)?.exists(on: new) ?? false else { return false }
+            return sameType || typeIndependent.contains(String(path.prefix { $0 != "." }))
+        }
         // Sorted, a whole object ("text") is copied before its fields ("text.content").
         for path in kept.sorted() { ComponentProperty.named(path)!.copy(from: old, to: &new) }
         new.overrides = kept
@@ -217,6 +226,13 @@ public enum ComponentVariants {
             }
         }
     }
+
+    /// The override paths (with their fields) every layer type takes; the others (layout, text, effects, …) are bound to the
+    /// type and are dropped when a switch pairs layers of different types.
+    private static let typeIndependent: Set<String> = [
+        "name", "visible", "locked", "opacity", "x", "y", "width", "height", "fill", "stroke", "sizing", "interaction", "states",
+        "animation",
+    ]
 
     /// Whether same-named layers at the same position pair up: neither is an instance, or both are instances of the same main
     /// component or of variants of the same component set.
