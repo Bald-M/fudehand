@@ -75,6 +75,11 @@ extension DesignDocument {
     }
 
     public mutating func insert(_ node: DesignNode, parent: String?, index: Int?) throws {
+        try insert(node, parent: parent, index: index, intoSet: false)
+    }
+
+    /// `intoSet` allows a component set as the parent: only `ComponentVariants` and reordering a set's variants pass it.
+    mutating func insert(_ node: DesignNode, parent: String?, index: Int?, intoSet: Bool) throws {
         let (path, list) = try children(of: parent)
         let existing = allIDs()
         var duplicate: String?
@@ -83,6 +88,7 @@ extension DesignDocument {
         try DesignDocument(nodes: [node]).validateUniqueIDs()
         let position = index ?? list.count
         guard (0...list.count).contains(position) else { throw DesignError("index out of range: 0–\(list.count)") }
+        if !intoSet, let path, self[path].componentSet != nil { throw Self.componentSetRefusal(self[path].id) }
         if let path, let root = enclosingInstance(path, includingLast: true) {
             // The caller knows the parent, not necessarily the new layer's id, so the parent is named.
             let target = self[path].id
@@ -146,6 +152,11 @@ extension DesignDocument {
         return nil
     }
 
+    /// Layers go into or out of a component set only through Combine as Variants and Add Variant.
+    static func componentSetRefusal(_ set: String) -> DesignError {
+        DesignError("Layer \(set) is a component set; use Combine as Variants or Add Variant")
+    }
+
     private func insideInstance(_ id: String, _ root: String) -> DesignError {
         DesignError("Layer \(id) is inside instance \(root); change its main component instead")
     }
@@ -183,7 +194,7 @@ extension DesignDocument {
 
     /// Refuses `node` under the layer at `parentPath` (nil for the top level) when a main component in it would end up inside
     /// another, or an instance in it inside its own main component, directly or through the instances that main component holds.
-    private func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
+    func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
         var enclosing: [String] = []
         if let parentPath {
             var list = nodes
@@ -205,6 +216,9 @@ extension DesignDocument {
             return result
         }
         func check(_ layer: DesignNode, _ enclosing: [String]) throws {
+            if layer.componentSet != nil, !enclosing.isEmpty {
+                throw DesignError("Layer \(layer.id): a component set cannot be inside a main component")
+            }
             if layer.component, !enclosing.isEmpty {
                 throw DesignError("Layer \(layer.id): a main component cannot be inside another main component")
             }
@@ -221,6 +235,10 @@ extension DesignDocument {
     public mutating func move(_ id: String, parent: String?, index: Int?) throws {
         guard let path = indexPath(of: id), let world = worldRect(id) else { throw DesignError("Layer not found: \(id)") }
         if let parent, ancestry(of: parent).contains(id) { throw DesignError("Cannot move a layer into itself or its descendants") }
+        // Only reordering keeps a variant in its component set; nothing moves into or out of one.
+        let oldParent = path.count > 1 ? self[Array(path.dropLast())] : nil
+        let inSet = oldParent?.componentSet != nil
+        if inSet, parent != oldParent?.id { throw Self.componentSetRefusal(oldParent!.id) }
         var node = self[path]
         var copy = self
         try copy.delete([id], detachingInstances: false)
@@ -230,7 +248,7 @@ extension DesignDocument {
         }
         node.x = world.x - (origin?.x ?? 0)
         node.y = world.y - (origin?.y ?? 0)
-        try copy.insert(node, parent: parent, index: index)
+        try copy.insert(node, parent: parent, index: index, intoSet: inSet)
         self = copy
     }
 

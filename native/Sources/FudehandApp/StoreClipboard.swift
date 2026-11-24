@@ -39,7 +39,7 @@ extension FudehandStore {
         let clip = try LayerClipboard(data: data)
         var state = clipboardPastes.changeCount == pasteboard.changeCount ? clipboardPastes
             : (changeCount: pasteboard.changeCount, step: 1, pasted: Set<String>())
-        let frame = LayerClipboard.target(selection: selection, in: editor.document, excluding: Set(clip.sources).union(state.pasted))
+        let frame = clip.target(selection: selection, in: editor.document, excluding: Set(clip.sources).union(state.pasted))
         var ids: [String] = []
         try perform(step) { ids = try clip.paste(into: &$0, frame: frame, visible: visibleRect, step: state.step, related: state.pasted) }
         state.step += 1

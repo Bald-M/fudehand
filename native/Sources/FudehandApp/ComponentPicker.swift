@@ -2,10 +2,10 @@ import AppKit
 import FudehandCore
 import SwiftUI
 
-/// The Insert Component popover: the document's main components by name with a small preview, searchable. Choosing one
-/// inserts an instance of it (see "Components" in `docs/macos.md`).
+/// The Insert Component popover: the document's component sets and the main components outside them, by name with a small
+/// preview (a set's first variant), searchable. Choosing one inserts an instance of it (see "Components" in `docs/macos.md`).
 struct ComponentPicker: View {
-    let components: [DesignNode]
+    let components: [(id: String, name: String, preview: DesignNode)]
     let choose: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -15,7 +15,7 @@ struct ComponentPicker: View {
 
     private static let previewSide = 40.0
 
-    private var shown: [DesignNode] {
+    private var shown: [(id: String, name: String, preview: DesignNode)] {
         let query = query.trimmingCharacters(in: .whitespaces)
         return query.isEmpty ? components : components.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
@@ -34,7 +34,7 @@ struct ComponentPicker: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(shown) { component in
+                        ForEach(shown, id: \.id) { component in
                             ComponentRow(name: component.name, preview: previews[component.id]) {
                                 choose(component.id)
                                 dismiss()
@@ -49,12 +49,12 @@ struct ComponentPicker: View {
         .onAppear { searchFocused = true }
         .onExitCommand { dismiss() }
         .task {
-            for component in components where previews[component.id] == nil {
+            for (id, _, component) in components where previews[id] == nil {
                 let side = max(component.width, component.height)
                 guard side > 0 else { continue }
                 let scale = Self.previewSide * 2 / side
                 let rect = CGRect(x: 0, y: 0, width: component.width, height: component.height)
-                previews[component.id] = try? DesignRenderer.image(of: component, in: rect, scale: scale)
+                previews[id] = try? DesignRenderer.image(of: component, in: rect, scale: scale)
                 await Task.yield()
             }
         }

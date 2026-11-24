@@ -56,10 +56,28 @@ extension FudehandStore {
             let node = try createInstance(of: component, parent: parent, index: index, at: at, step: "Agent: Insert Component")
             return DesignJSON.object(node, includeImageData: false)
         case .listComponents:
+            let sets = listComponentSets()
+            let owner = Dictionary(sets.flatMap { set in set.variants.map { ($0.id, set.id) } }) { first, _ in first }
             return ["components": listComponents().map { entry in
-                ["id": entry.component.id, "name": entry.component.name, "width": entry.component.width, "height": entry.component.height,
-                 "instances": entry.instances] as [String: Any]
+                var item: [String: Any] = ["id": entry.component.id, "name": entry.component.name, "width": entry.component.width,
+                                           "height": entry.component.height, "instances": entry.instances]
+                if let set = owner[entry.component.id] { item["set"] = set }
+                if let variant = entry.component.variant { item["variant"] = variant }
+                return item
+            }, "sets": sets.map { set in
+                ["id": set.id, "name": set.name, "properties": set.properties, "variants": set.variants.map(\.id)] as [String: Any]
             }]
+        case .combineAsVariants(let ids):
+            return DesignJSON.object(try combineAsVariants(ids, step: "Agent: Combine as Variants"), includeImageData: false)
+        case .setVariantProperties(let id, let properties, let rename):
+            return DesignJSON.object(try setVariantProperties(id, properties, rename: rename, step: "Agent: Edit Variant Properties"),
+                                     includeImageData: false)
+        case .setVariant(let id, let values):
+            return DesignJSON.object(try setVariant(id, values: values, step: "Agent: Edit Variant"), includeImageData: false)
+        case .addVariant(let id):
+            return DesignJSON.object(try addVariant(id, step: "Agent: Add Variant"), includeImageData: false)
+        case .switchVariant(let ids, let values):
+            return try pastedResult(try switchVariant(ids, values: values, step: "Agent: Switch Variant").map(\.id))
         case .resetOverrides(let id, let properties):
             return DesignJSON.object(try resetOverrides(id, properties: properties.map(Set.init), step: "Agent: Reset Overrides"), includeImageData: false)
         case .detachInstance(let ids):
@@ -292,7 +310,8 @@ extension FudehandStore {
         DesignDocument(nodes: [node]).forEach { layer in
             guard refusal == nil else { return }
             let key = layer.component ? "component" : layer.instance != nil ? "instance" : layer.source != nil ? "source"
-                : !layer.overrides.isEmpty ? "overrides" : nil
+                : !layer.overrides.isEmpty ? "overrides" : layer.componentSet != nil ? "componentSet"
+                : layer.variant != nil ? "variant" : nil
             if let key { refusal = DesignError("Layer \(layer.id): cannot set \(key)") }
         }
         if let refusal { throw refusal }

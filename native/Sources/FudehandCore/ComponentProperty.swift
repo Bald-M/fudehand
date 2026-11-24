@@ -14,6 +14,8 @@ public struct ComponentProperty: Sendable {
 
     public func equal(_ a: DesignNode, _ b: DesignNode) -> Bool { isEqual(a, b) }
     public func copy(from source: DesignNode, to target: inout DesignNode) { assign(source, &target) }
+    /// False for a field of a nested object that `node` lacks (`text.content` on a layer without text); true otherwise.
+    public func exists(on node: DesignNode) -> Bool { isWholeObject || isPresent(node) }
 
     /// Every overridable property: the paths of `DesignJSON.nodeKeys` except `id`, `type`, `children`, and the component keys,
     /// with each nested object split into one path per field plus a whole-object path.

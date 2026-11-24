@@ -135,6 +135,35 @@ struct NumberText: View {
     }
 }
 
+/// A bare text field, committed on Return or when focus is lost; a draft typed for another layer is dropped, as in `NumberText`.
+struct CommitText: View {
+    let label: String
+    let value: String
+    let commit: (String) -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    @Environment(\.inspectedLayer) private var layer
+    @State private var draftLayer: String?
+
+    var body: some View {
+        TextField(label, text: $text)
+            .textFieldStyle(.plain).focused($focused)
+            .onSubmit(submit)
+            .onChange(of: focused) { _, isFocused in if !isFocused { submit() } }
+            .accessibilityLabel(label)
+            .onAppear { text = value; draftLayer = layer }
+            .onChange(of: value) { _, next in text = next }
+            .onChange(of: layer) { text = value; draftLayer = layer }
+    }
+
+    /// Shows the current value again afterwards: the committed one once the edit lands, the old one when it is refused.
+    private func submit() {
+        guard draftLayer == layer else { text = value; draftLayer = layer; return }
+        if text != value { commit(text) }
+        text = value
+    }
+}
+
 /// A number input in a box, led by a short caption or an icon. With `scrub`, dragging the caption sideways changes the
 /// value by `scrub` per point; the caller coalesces the edits, so a continuous drag is one undo step.
 struct NumberField: View {

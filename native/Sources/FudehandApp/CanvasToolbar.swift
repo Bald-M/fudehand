@@ -25,7 +25,7 @@ struct CanvasToolbar: View {
                 .popover(isPresented: $pickingIcon, arrowEdge: .top) { IconPicker(current: nil) { store.insertIcon($0) } }
             ToolButton(title: L("Insert Component"), symbol: "plus.diamond", selected: pickingComponent) { pickingComponent = true }
                 .popover(isPresented: $pickingComponent, arrowEdge: .top) {
-                    ComponentPicker(components: store.listComponents().map(\.component)) { store.insertComponent($0) }
+                    ComponentPicker(components: store.insertableComponents()) { store.insertComponent($0) }
                 }
         }
         .padding(6)

@@ -1,6 +1,6 @@
 # Components Are Materialized Instances Kept in Step by the Editor
 
-2026-11-24 (#256, step 1). Status: **accepted**. The design is in the [components spec](../superpowers/specs/2026-11-24-components-design.md); variants and component sets are step 2 and get their own decision.
+2026-11-24 (#256, step 1). Status: **accepted**. The design is in the [components spec](../superpowers/specs/2026-11-24-components-design.md); variants and component sets (step 2) are recorded in [ADR 0015](0015-component-sets-store-variant-properties.md).
 
 A part that repeats across screens — a header, a tab bar, a button — could only be reused by copy and paste, and copies have no link to their original, so changing the header meant editing every copy. Fudehand now has **main components** and **instances**: a person or an Agent edits the main component once and every instance follows, while each instance keeps its own **overrides** (its text, colors, visibility, and other properties it changed).
 
@@ -26,7 +26,7 @@ A part that repeats across screens — a header, a tab bar, a button — could o
 
 - A project file stores every instance's layers in full, so a heavily reused component grows the file by its size per instance.
 - Every edit pays for a walk over the subtrees it changed, and an edit to a main component rebuilds each of its instances. `pnpm bench:native` only prints `[bench]` lines for these cases, with no threshold, so a regression shows only when someone compares its numbers before and after a change.
-- Instances cannot add, remove, or reorder their own layers; a variation in structure needs its own main component until variants exist.
+- Instances cannot add, remove, or reorder their own layers; a variation in structure needs its own main component. Variants ([ADR 0015](0015-component-sets-store-variant-properties.md)) gather such main components into a component set, and an instance switches between them keeping its overrides.
 - When an instance is detached while its main component is missing (the main component was cut and not pasted, and the file was saved and reopened), the instances of other main components nested in it are detached too: their links ran through the missing main component's layers, so they cannot be traced back to their own. This is accepted; Delete, which detaches while the main component is still there, keeps them as instances.
 - While a main component is cut and not yet pasted, edits to its instances are not recorded as overrides, since there is no main component to compare them with; pasting it back syncs the instances and those edits are lost. This is accepted: Cut is meant to be followed by Paste, and the alternative (remembering pending edits) would need a second override record.
 - Components shared between project files, libraries, and keeping component structure in HTML export remain out of scope; instances export as the layers they are.

@@ -615,3 +615,16 @@
 "No Results" = "无结果";
 "1 Result" = "1 个结果";
 "%d Results" = "%d 个结果";
+"Property 1" = "属性 1";
+
+/* Variants (#256) */
+"Combine as Variants" = "组合为变体";
+"Component Set" = "组件集";
+"Variant" = "变体";
+"Variant Properties" = "变体属性";
+"Add Property" = "添加属性";
+"Remove Property" = "移除属性";
+"Add Variant" = "添加变体";
+"Property Name" = "属性名称";
+"Property %d" = "属性 %d";
+"Mixed" = "混合";

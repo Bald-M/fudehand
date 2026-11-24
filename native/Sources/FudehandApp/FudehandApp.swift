@@ -277,6 +277,8 @@ private struct ComponentMenuItems: View {
         Button(L("Create Component")) { store.createComponent(from: selection.ids) }
             .keyboardShortcut("k", modifiers: [.command, .option])
             .disabled(!store.canCreateComponent(selection.ids))
+        Button(L("Combine as Variants")) { store.combineAsVariants(from: selection.ids) }
+            .disabled(!store.canCombineAsVariants(selection.ids))
         Button(L("Detach Instance")) { store.detachInstances(from: selection.ids) }
             .keyboardShortcut("b", modifiers: [.command, .option])
             .disabled(!store.canDetachInstances(selection.ids))

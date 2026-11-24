@@ -400,12 +400,13 @@ public enum ComponentSync {
         }
     }
 
-    /// A copy of `source` and its layers with fresh ids, each pointing back at the layer it mirrors. Nested instance roots keep
-    /// their `instance`.
+    /// A copy of `source` and its layers with fresh ids, each pointing back at the layer it mirrors; the copy is neither a main
+    /// component nor a variant. Nested instance roots keep their `instance`.
     private static func mirror(_ source: DesignNode, newID: () -> String) -> DesignNode {
         var layer = source
         layer.id = newID()
         layer.component = false
+        layer.variant = nil
         layer.source = source.id
         layer.overrides = []
         layer.children = source.children.map { mirror($0, newID: newID) }

@@ -22,6 +22,16 @@ public enum ControlCommand: Equatable, Sendable {
     /// Resets overrides of a layer inside an instance: the named properties, or all of them when nil.
     case resetOverrides(String, properties: [String]?)
     case detachInstance([String])
+    /// Wraps main components in a new component set, each becoming a variant.
+    case combineAsVariants([String])
+    /// Sets a component set's variant property names in order; `rename` maps current names to new ones.
+    case setVariantProperties(String, properties: [String], rename: [String: String])
+    /// Sets some of a variant's values.
+    case setVariant(String, values: [String: String])
+    /// Copies a variant (or a component set's last variant) into its set.
+    case addVariant(String)
+    /// Switches instances to the variant that has the given values (the others they already have are kept where they can be).
+    case switchVariant([String], values: [String: String])
     case moveNode(String, parent: String?, index: Int?)
     case select([String])
     case undo
@@ -240,6 +250,17 @@ public enum ControlProtocol {
             }
             return list.map { $0 as! String }
         }
+        /// A string-to-string object; `allowEmpty` false rejects `{}`.
+        func stringMap(_ key: String, allowEmpty: Bool) throws -> [String: String] {
+            guard let value = args[key] else { throw Message(text: "Missing argument: \(key)") }
+            guard let object = value as? [String: Any], allowEmpty || !object.isEmpty else { throw Message(text: "Invalid argument type: \(key)") }
+            var map: [String: String] = [:]
+            for (name, item) in object {
+                guard let text = item as? String else { throw Message(text: "Invalid argument type: \(key)") }
+                map[name] = text
+            }
+            return map
+        }
         func flag(_ key: String) throws -> Bool {
             guard let value = args[key], !(value is NSNull) else { return false }
             guard let number = value as? NSNumber, isBool(number) else { throw Message(text: "Invalid argument type: \(key)") }
@@ -353,6 +374,19 @@ public enum ControlProtocol {
             let ids = try strings("ids")
             guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
             return .detachInstance(ids)
+        case "combine_as_variants":
+            let ids = try strings("ids")
+            guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+            return .combineAsVariants(ids)
+        case "set_variant_properties":
+            let rename = args["rename"] == nil || args["rename"] is NSNull ? [:] : try stringMap("rename", allowEmpty: true)
+            return .setVariantProperties(try string("id"), properties: try strings("properties"), rename: rename)
+        case "set_variant": return .setVariant(try string("id"), values: try stringMap("values", allowEmpty: false))
+        case "add_variant": return .addVariant(try string("id"))
+        case "switch_variant":
+            let ids = try strings("ids")
+            guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+            return .switchVariant(ids, values: try stringMap("values", allowEmpty: false))
         case "move_node": return .moveNode(try string("id"), parent: try optionalString("parent"), index: try optionalIndex("index"))
         case "select": return .select(try strings("ids"))
         case "undo": return .undo

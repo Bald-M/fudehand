@@ -6,9 +6,9 @@ public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
                                         "scroll", "fixedOnScroll", "states", "versionSnapshot", "layoutGuides", "effects", "children",
-                                        "component", "instance", "source", "overrides"]
+                                        "component", "instance", "source", "overrides", "componentSet", "variant"]
     /// The component fields: read from files and the clipboard, but never changed by an update.
-    public static let componentKeys: Set<String> = ["component", "instance", "source", "overrides"]
+    public static let componentKeys: Set<String> = ["component", "instance", "source", "overrides", "componentSet", "variant"]
     /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, `effects`, and `text.sequence` are
     /// not among them, nor is the `layoutGuides` array: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding", "versionSnapshot"]
@@ -212,6 +212,16 @@ public enum DesignJSON {
         if let raw = reader.value("overrides") {
             guard let list = raw as? [Any], list.allSatisfy({ $0 is String }) else { throw reader.fail("overrides must be an array of strings") }
             node.overrides = Set(list.map { $0 as! String })
+        }
+        if let raw = reader.value("componentSet") {
+            guard let list = raw as? [Any], list.allSatisfy({ $0 is String }) else { throw reader.fail("componentSet must be an array of strings") }
+            node.componentSet = list.map { $0 as! String }
+        }
+        if let raw = reader.value("variant") {
+            guard let values = raw as? [String: Any], values.values.allSatisfy({ $0 is String }) else {
+                throw reader.fail("variant must be an object of strings")
+            }
+            node.variant = values.mapValues { $0 as! String }
         }
         if let states = try reader.child("states") {
             try states.checkKeys(["hover", "pressed"])
@@ -550,6 +560,8 @@ public enum DesignJSON {
         if let instance = node.instance { object["instance"] = instance }
         if let source = node.source { object["source"] = source }
         if !node.overrides.isEmpty { object["overrides"] = node.overrides.sorted() }
+        if let componentSet = node.componentSet { object["componentSet"] = componentSet }
+        if let variant = node.variant { object["variant"] = variant }
         if let states = node.states {
             func style(_ value: LayerStyle) -> [String: Any] {
                 var style: [String: Any] = [:]

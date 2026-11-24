@@ -28,7 +28,7 @@ _Avoid_: device simulator (设备模拟器), web frame (网页框)
 **Duplicate (创建副本 / 複製)**: Copying the selected layers in place in one step, without the clipboard. Copy (复制 / 拷貝) and Paste (粘贴 / 貼上) go through the clipboard, which also reaches another document.
 
 **Main component (主组件 / 主元件)**: A layer marked as the source of instances; it is edited like any layer, and every edit reaches its instances in the same undo step. A main component is never inside another main component or inside an instance. Deleting it detaches its instances ([ADR 0014](docs/adr/0014-components-are-materialized-instances.md)).
-_Avoid_: master, symbol, component alone (组件) when the main component is meant; variant, component set (a later step of #256)
+_Avoid_: master, symbol, component alone (组件) when the main component is meant
 
 **Instance (实例 / 實例)**: A layer whose content mirrors a main component, placed anywhere in the same design document. Its layers are ordinary layers with ids of their own; their properties can be changed (each change is an override), but layers cannot be added, removed, or reordered inside it.
 _Avoid_: copy, clone (a copy has no link to its original)
@@ -36,6 +36,15 @@ _Avoid_: copy, clone (a copy has no link to its original)
 **Override (覆盖 / 覆寫)**: A property of a layer inside an instance (the instance itself included) that the instance changed, so it no longer follows the main component; the other properties keep following it. *Reset Override* (重置覆盖 / 重設覆寫) gives it back the main component's value. An instance's own position is never an override.
 
 **Detach instance (分离实例 / 中斷實例連結)**: Turning an instance into ordinary layers that no longer follow the main component; instances of other main components nested in it stay instances.
+
+**Component set (组件集 / 元件集)**: A frame whose direct children are the variants of one component, such as every state of a button. It holds only variants, is never inside a main component, an instance, or another component set, and is never a main component itself ([ADR 0015](docs/adr/0015-component-sets-store-variant-properties.md)).
+_Avoid_: variant group, component group
+
+**Variant (变体 / 變體)**: A main component inside a component set, described by a value for each of the set's variant properties (`State = Hover`). An instance of a variant can switch to another variant of its set, keeping the overrides on layers that match by name.
+_Avoid_: state (a prototype layer state, below), version
+
+**Variant property (变体属性 / 變體屬性)**: A named dimension of a component set, such as *State* or *Size*, with the values its variants use; no two variants of a set have the same values.
+_Avoid_: component property (Figma's boolean, text, and instance-swap properties, which Fudehand does not have)
 
 **Version snapshot (版本快照 / 版本快照)**: A read-only picture of a frame as it looked when it was saved, with the time and an optional note, kept as an image layer beside the frame so the old and new versions can be compared side by side or overlaid. It is saved in the project file and deleted like any other layer ([ADR 0010](docs/adr/0010-version-snapshots-are-image-layers.md)).
 _Avoid_: version history, backup (a snapshot never restores the frame), snapshot alone (`design_snapshot` is the Agent's own PNG capture, which adds nothing to the document)
@@ -61,7 +70,7 @@ _Avoid_: modal, popup, popover
 **Scrolling (滚动 / 捲動)**: A frame's setting (None, Vertical, Horizontal) that lets its overflowing content scroll in the prototype window. A direct child marked *Fix position when scrolling* (滚动时固定位置 / 捲動時固定位置) stays put above the scrolled content.
 
 **State (状态 / 狀態)**: How a layer looks in the prototype window *while hovered* (悬停时 / 懸停時) and *while pressed* (按下时 / 按下時): a fill and an opacity that replace the layer's own, eased in and out.
-_Avoid_: variant (variants of a main component come in a later step of #256)
+_Avoid_: variant (a main component in a component set, above)
 
 **Toggle Visibility (切换显示 / 切換顯示)**: The interaction that shows the hidden and hides the shown among chosen layers, for tabs, switches, checkboxes, and expand/collapse. The change lasts only for that playback; the design document is not changed.
 
