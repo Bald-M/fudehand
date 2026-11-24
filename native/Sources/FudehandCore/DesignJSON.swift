@@ -5,7 +5,10 @@ import ImageIO
 public enum DesignJSON {
     static let nodeKeys: Set<String> = ["id", "type", "name", "x", "y", "width", "height", "visible", "locked", "opacity", "fill",
                                         "stroke", "cornerRadius", "clipsContent", "sizing", "text", "image", "icon", "layout", "interaction", "animation",
-                                        "scroll", "fixedOnScroll", "states", "versionSnapshot", "layoutGuides", "effects", "children"]
+                                        "scroll", "fixedOnScroll", "states", "versionSnapshot", "layoutGuides", "effects", "children",
+                                        "component", "instance", "source", "overrides"]
+    /// The component fields: read from files and the clipboard, but never changed by an update.
+    public static let componentKeys: Set<String> = ["component", "instance", "source", "overrides"]
     /// The nested objects that are merged field by field on update. `interaction`, `animation`, `states`, `effects`, and `text.sequence` are
     /// not among them, nor is the `layoutGuides` array: an update replaces them whole.
     static let nestedKeys: Set<String> = ["stroke", "sizing", "text", "image", "icon", "layout", "padding", "versionSnapshot"]
@@ -200,6 +203,13 @@ public enum DesignJSON {
         }
         node.scroll = try reader.choice("scroll", default: .none)
         node.fixedOnScroll = try reader.bool("fixedOnScroll", default: false)
+        node.component = try reader.bool("component", default: false)
+        if reader.value("instance") != nil { node.instance = try reader.string("instance") }
+        if reader.value("source") != nil { node.source = try reader.string("source") }
+        if let raw = reader.value("overrides") {
+            guard let list = raw as? [Any], list.allSatisfy({ $0 is String }) else { throw reader.fail("overrides must be an array of strings") }
+            node.overrides = Set(list.map { $0 as! String })
+        }
         if let states = try reader.child("states") {
             try states.checkKeys(["hover", "pressed"])
             func style(_ key: String) throws -> LayerStyle? {
@@ -533,6 +543,10 @@ public enum DesignJSON {
         }
         if node.scroll != .none { object["scroll"] = node.scroll.rawValue }
         if node.fixedOnScroll { object["fixedOnScroll"] = true }
+        if node.component { object["component"] = true }
+        if let instance = node.instance { object["instance"] = instance }
+        if let source = node.source { object["source"] = source }
+        if !node.overrides.isEmpty { object["overrides"] = node.overrides.sorted() }
         if let states = node.states {
             func style(_ value: LayerStyle) -> [String: Any] {
                 var style: [String: Any] = [:]
@@ -603,7 +617,7 @@ public enum DesignJSON {
 
     /// Applies a partial field patch to a node: nested objects are merged field by field, and null clears a field; the whole node is validated again, and on failure the node is unchanged.
     public static func apply(_ changes: [String: Any], to node: inout DesignNode) throws {
-        for key in ["id", "type", "children"] where changes[key] != nil {
+        for key in ["id", "type", "children"] + componentKeys.sorted() where changes[key] != nil {
             throw DesignError("Layer \(node.id): cannot change \(key)")
         }
         var object = self.object(node, includeImageData: true, includeChildren: false)

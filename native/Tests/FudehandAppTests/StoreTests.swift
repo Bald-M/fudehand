@@ -161,9 +161,9 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     _ = try await control(store, .saveDocument(temporaryFile().path))
     let bad = temporaryFile()
-    try Data(#"{"format":"fudehand.design","version":10,"nodes":[]}"#.utf8).write(to: bad)
+    try Data(#"{"format":"fudehand.design","version":11,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 10); upgrade Fudehand to open it")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 11); upgrade Fudehand to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 
