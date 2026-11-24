@@ -586,3 +586,17 @@
 "Color" = "颜色";
 "Start" = "起点";
 "End" = "终点";
+
+/* Find bar (#257) */
+"Find" = "查找";
+"Find…" = "查找…";
+"Find Next" = "查找下一个";
+"Find Previous" = "查找上一个";
+"Previous Match" = "上一个匹配项";
+"Next Match" = "下一个匹配项";
+"Close Find" = "关闭查找";
+"Previous Match (⇧⌘G)" = "上一个匹配项（⇧⌘G）";
+"Next Match (⌘G)" = "下一个匹配项（⌘G）";
+"Close Find (Esc)" = "关闭查找（Esc）";
+"No Results" = "无结果";
+"%d Results" = "%d 个结果";

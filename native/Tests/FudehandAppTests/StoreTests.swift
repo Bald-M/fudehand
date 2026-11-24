@@ -693,6 +693,69 @@ private func temporaryFile() -> URL {
     #expect(!store.isDirty && !store.canUndo)
 }
 
+/// A clean store holding three text layers that contain "Buy".
+@MainActor private func storeWithThreeBuys() async throws -> FudehandStore {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let nodes = ["a", "b", "c"].map { id -> DesignNode in
+        var node = DesignNode(id: id, type: .text, name: "Label \(id)")
+        node.text = DesignText(content: "Buy \(id)")
+        return node
+    }
+    try DesignDocument(nodes: nodes).encoded().write(to: url)
+    try await store.open(url) { true }
+    return store
+}
+
+@Test @MainActor func findStepsThroughMatchesAndWraps() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    #expect(store.find.isOpen)
+    store.setFindQuery("buy")
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c"] && store.find.current == nil && store.selection.isEmpty)
+    var visited: [Set<String>] = []
+    for _ in 0..<4 { store.findNext(); visited.append(store.selection) }
+    #expect(visited == [["a"], ["b"], ["c"], ["a"]])
+    store.findPrevious()
+    #expect(store.selection == ["c"] && store.find.current == 2)
+    #expect(!store.isDirty && !store.canUndo)
+}
+
+@Test @MainActor func findPreviousFromNoMatchStartsAtTheLast() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    store.findPrevious()
+    #expect(store.selection == ["c"])
+    store.setFindQuery("nothing like this")
+    store.findNext()
+    #expect(store.find.matches.isEmpty && store.find.current == nil && store.selection == ["c"])
+}
+
+@Test @MainActor func findRefreshesWhenTheDocumentChanges() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    for _ in 0..<3 { store.findNext() }
+    _ = try await control(store, .deleteNodes(["c"]))
+    #expect(store.find.matches.map(\.id) == ["a", "b"])
+    #expect(store.find.current.map { store.find.matches.indices.contains($0) } ?? true)
+    store.undo()
+    #expect(store.find.matches.map(\.id) == ["a", "b", "c"])
+}
+
+@Test @MainActor func closeFindKeepsSelection() async throws {
+    let store = try await storeWithThreeBuys()
+    store.openFind()
+    store.setFindQuery("buy")
+    store.findNext(); store.findNext()
+    store.closeFind()
+    #expect(!store.find.isOpen && store.find.query.isEmpty && store.find.matches.isEmpty && store.selection == ["b"])
+    store.findNext()
+    #expect(store.selection == ["b"])
+}
+
 @Test @MainActor func iconSnapshotViaControl() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([
