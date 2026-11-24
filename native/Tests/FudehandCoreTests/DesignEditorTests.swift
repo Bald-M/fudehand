@@ -277,3 +277,38 @@ private func componentEditor() -> DesignEditor {
     #expect(instance.width > main.width)
     #expect(instance.children[0].width == 110)
 }
+
+@Test func switchIsOneUndoStep() throws {
+    func variant(_ id: String, _ state: String) -> DesignNode {
+        var node = DesignNode(id: id, type: .frame, x: 16, y: 16, width: 100, height: 40)
+        node.component = true
+        node.variant = ["State": state]
+        var label = DesignNode(id: "\(id)t", type: .text, name: "Label", width: 40, height: 20)
+        label.text = DesignText(content: "OK")
+        node.children = [label]
+        return node
+    }
+    let blue = DesignColor(r: 0, g: 0, b: 1)
+    var on = variant("v2", "On")
+    on.fill = blue
+    var set = DesignNode(id: "s", type: .frame, width: 300, height: 200)
+    set.componentSet = ["State"]
+    set.children = [variant("v1", "Off"), on]
+    var existing: Set<String> = ["s", "v1", "v1t", "v2", "v2t", "i"]
+    var instance = ComponentSync.makeInstance(of: set.children[0], existing: &existing)
+    instance.id = "i"
+    instance.x = 400
+    var e = DesignEditor(document: DesignDocument(nodes: [set, instance]), measure: fakeMeasure)
+    let label = instance.children[0].id
+    try e.perform("Text") { try $0.update(label) { $0.text?.content = "Go" } }
+    let before = e.document
+    try e.perform("Switch Variant") { try ComponentVariants.switchInstances(["i"], to: ["State": "On"], in: &$0) }
+    let switched = try #require(e.document.node("i"))
+    #expect(e.undoName == "Switch Variant")
+    #expect(switched.instance == "v2" && switched.fill == blue && switched.overrides.isEmpty && switched.x == 400)
+    #expect(switched.children[0].id == label && switched.children[0].overrides == ["text.content"])
+    #expect(switched.children[0].text?.content == "Go")
+    let after = e.document
+    #expect(e.undo() && e.document == before && e.undoName == "Text")
+    #expect(e.redo() && e.document == after)
+}

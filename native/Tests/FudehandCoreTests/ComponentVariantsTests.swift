@@ -346,4 +346,264 @@ import Testing
         #expect(document.node("a") == nil && document.node("b") == nil)
         try document.validateComponents()
     }
+
+    // MARK: Switching
+
+    private func layer(_ id: String, _ type: NodeType, _ name: String) -> DesignNode {
+        var node = DesignNode(id: id, type: type, name: name, x: 0, y: 0, width: 40, height: 20)
+        if type == .text { node.text = DesignText(content: name) }
+        return node
+    }
+
+    private func variant(_ id: String, _ values: [String: String], _ children: [DesignNode], name: String? = nil) -> DesignNode {
+        var node = DesignNode(id: id, type: .frame, name: name ?? id, x: 16, y: 16, width: 200, height: 60)
+        node.component = true
+        node.variant = values
+        node.children = children
+        return node
+    }
+
+    private func componentSet(_ id: String, _ properties: [String], _ variants: [DesignNode]) -> DesignNode {
+        var set = DesignNode(id: id, type: .frame, name: id, x: 0, y: 0, width: 600, height: 400)
+        set.componentSet = properties
+        set.children = variants
+        return set
+    }
+
+    /// Appends an instance `id` of main component `componentID` at (x, y) to the top level; returns its layers' ids in order.
+    @discardableResult
+    private func instantiate(_ componentID: String, as id: String, in document: inout DesignDocument, x: Double = 2000,
+                             y: Double = 50) -> [String] {
+        var existing = document.allIDs()
+        existing.insert(id)
+        var instance = ComponentSync.makeInstance(of: document.node(componentID)!, existing: &existing)
+        instance.id = id
+        instance.x = x
+        instance.y = y
+        document.nodes.append(instance)
+        return DesignDocument(nodes: [instance]).allIDs().sorted()
+    }
+
+    /// Component set "s" (State × Size): "v1" Default/Small holds text "Label" (toggling "Mark"), text "Mark", rectangle "Icon"; "v2" Hover/Small
+    /// (red, 300 wide) holds text "Label" (toggling "Mark"), rectangle "Mark", rectangle "Badge"; "v3" Default/Large and "v4" Hover/Large hold text
+    /// "Label".
+    private func switchFixture() -> DesignDocument {
+        var v2 = variant("v2", ["State": "Hover", "Size": "Small"],
+                         [layer("v2t", .text, "Label"), layer("v2m", .rectangle, "Mark"), layer("v2b", .rectangle, "Badge")])
+        v2.fill = Self.red
+        v2.width = 300
+        var v1 = variant("v1", ["State": "Default", "Size": "Small"],
+                         [layer("v1t", .text, "Label"), layer("v1m", .text, "Mark"), layer("v1i", .rectangle, "Icon")])
+        v1.children[0].interaction = .toggleVisibility(targets: ["v1m"])
+        v2.children[0].interaction = .toggleVisibility(targets: ["v2m"])
+        let set = componentSet("s", ["State", "Size"], [
+            v1,
+            v2,
+            variant("v3", ["State": "Default", "Size": "Large"], [layer("v3t", .text, "Label")]),
+            variant("v4", ["State": "Hover", "Size": "Large"], [layer("v4t", .text, "Label")]),
+        ])
+        return DesignDocument(nodes: [set])
+    }
+
+    private func switchVariant(_ ids: [String], _ changes: [String: String], in document: inout DesignDocument) throws {
+        try edit(&document) { try ComponentVariants.switchInstances(ids, to: changes, in: &$0) }
+    }
+
+    @Test func targetExactMatch() {
+        let document = switchFixture()
+        #expect(ComponentVariants.target(for: "v1", changing: ["State": "Hover"], in: document) == "v2")
+        #expect(ComponentVariants.target(for: "v1", changing: ["Size": "Large"], in: document) == "v3")
+        #expect(ComponentVariants.target(for: "v1", changing: ["State": "Hover", "Size": "Large"], in: document) == "v4")
+        #expect(ComponentVariants.target(for: "v2", changing: [:], in: document) == "v2")
+        #expect(ComponentVariants.target(for: "v1", changing: ["State": "Pressed"], in: document) == nil)
+        #expect(ComponentVariants.target(for: "v1", changing: ["Color": "Red"], in: document) == nil)
+        #expect(ComponentVariants.target(for: "s", changing: ["State": "Hover"], in: document) == nil)
+    }
+
+    @Test func targetClosestMatchTieFirst() {
+        let values = { (a: String, b: String, c: String) in ["A": a, "B": b, "C": c] }
+        let document = DesignDocument(nodes: [componentSet("s", ["A", "B", "C"], [
+            variant("p1", values("a1", "b1", "c1"), []),
+            variant("q3", values("a2", "b2", "c2"), []),
+            variant("q1", values("a2", "b2", "c1"), []),
+            variant("q2", values("a2", "b1", "c2"), []),
+        ])])
+        // a2/b1/c1 does not exist; q1 and q2 each share one other value with p1, q3 none: the first of the tie wins.
+        #expect(ComponentVariants.target(for: "p1", changing: ["A": "a2"], in: document) == "q1")
+        // a1/b1/c2 does not exist; q2 shares B with p1, q3 shares nothing.
+        #expect(ComponentVariants.target(for: "p1", changing: ["C": "c2"], in: document) == "q2")
+    }
+
+    @Test func switchKeepsOverridesOnMatchedLayers() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        let label = try #require(document.node("i")).children[0].id
+        try edit(&document) { try $0.update(label) { $0.text?.content = "Go" } }
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        let instance = try #require(document.node("i"))
+        #expect(instance.instance == "v2" && instance.source == "v2" && instance.overrides.isEmpty)
+        #expect(instance.fill == Self.red && instance.width == 300)
+        let moved = instance.children[0]
+        #expect(moved.id == label && moved.source == "v2t" && moved.text?.content == "Go" && moved.overrides == ["text.content"])
+        #expect(instance.children.dropFirst().allSatisfy { $0.overrides.isEmpty })
+        try document.validateComponents()
+        // Still linked to the new variant.
+        try edit(&document) { try $0.update("v2t") { $0.text?.fontSize = 30 } }
+        #expect(document.node(label)?.text?.fontSize == 30 && document.node(label)?.text?.content == "Go")
+    }
+
+    @Test func switchDropsOverridesNewLayerLacks() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        let mark = try #require(document.node("i")).children[1].id
+        let blue = DesignColor(r: 0, g: 0, b: 1)
+        try edit(&document) { try $0.update(mark) { $0.text?.content = "X"; $0.fill = blue } }
+        #expect(document.node(mark)?.overrides == ["text.content", "fill"])
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        let node = try #require(document.node(mark))
+        #expect(node.type == .rectangle && node.text == nil && node.source == "v2m")
+        #expect(node.overrides == ["fill"] && node.fill == blue)
+    }
+
+    @Test func switchKeepsIdsAndAnnotations() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        let ids = try #require(document.node("i")?.children.map(\.id))
+        document.annotations = [
+            DesignAnnotation(id: "n1", node: ids[0], x: 0, y: 0, author: .person, text: "Label note"),
+            DesignAnnotation(id: "n2", node: ids[2], x: 0, y: 0, author: .person, text: "Icon note"),
+            DesignAnnotation(id: "n3", node: "i", x: 0, y: 0, author: .person, text: "Root note"),
+        ]
+        var editor = DesignEditor(document: document, measure: fakeMeasure)
+        try editor.perform("Switch Variant") { try ComponentVariants.switchInstances(["i"], to: ["State": "Hover"], in: &$0) }
+        #expect(editor.document.node("i")?.children.prefix(2).map(\.id) == Array(ids.prefix(2)))
+        #expect(editor.document.annotations.map(\.id) == ["n1", "n3"])
+    }
+
+    @Test func switchRemovesUnmatchedAndAddsNew() throws {
+        var document = switchFixture()
+        let before = instantiate("v1", as: "i", in: &document)
+        let ids = try #require(document.node("i")).children.map(\.id)
+        let icon = ids[2]
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        #expect(document.node(icon) == nil)
+        let badge = try #require(document.node("i")?.children[2])
+        #expect(badge.name == "Badge" && badge.source == "v2b" && !before.contains(badge.id) && badge.id != "v2b")
+        // The label's toggle target is the instance's own mark, which kept its id; that is no override.
+        let label = try #require(document.node(ids[0]))
+        #expect(label.interaction == .toggleVisibility(targets: [ids[1]]) && label.overrides.isEmpty)
+        // Back to the first variant: the badge goes, a new icon comes.
+        try switchVariant(["i"], ["State": "Default"], in: &document)
+        #expect(document.node(badge.id) == nil)
+        #expect(document.node("i")?.children.map(\.source) == ["v1t", "v1m", "v1i"])
+        try document.validateComponents()
+    }
+
+    @Test func switchPairsSameNamedSiblingsInOrder() throws {
+        let dots = { (prefix: String, count: Int) in (1...count).map { self.layer("\(prefix)\($0)", .rectangle, "Dot") } }
+        var document = DesignDocument(nodes: [componentSet("s", ["Count"], [
+            variant("v1", ["Count": "Two"], dots("v1d", 2)),
+            variant("v2", ["Count": "Three"], dots("v2d", 3)),
+        ])])
+        instantiate("v1", as: "i", in: &document)
+        let ids = try #require(document.node("i")?.children.map(\.id))
+        try edit(&document) {
+            try $0.update(ids[0]) { $0.opacity = 0.5 }
+            try $0.update(ids[1]) { $0.opacity = 0.25 }
+        }
+        try switchVariant(["i"], ["Count": "Three"], in: &document)
+        let children = try #require(document.node("i")?.children)
+        #expect(children.map(\.source) == ["v2d1", "v2d2", "v2d3"])
+        #expect(Array(children.prefix(2).map(\.id)) == ids && !ids.contains(children[2].id))
+        #expect(children.map(\.opacity) == [0.5, 0.25, 1])
+        // Back: the third dot is unmatched and goes.
+        try switchVariant(["i"], ["Count": "Two"], in: &document)
+        #expect(document.node("i")?.children.map(\.id) == ids)
+        #expect(document.node("i")?.children.map(\.opacity) == [0.5, 0.25])
+    }
+
+    @Test func switchKeepsRootOverridesAndPosition() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document, x: 2000, y: 50)
+        let blue = DesignColor(r: 0, g: 0, b: 1)
+        try edit(&document) { try $0.update("i") { $0.width = 500; $0.fill = blue; $0.y = 70 } }
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        let instance = try #require(document.node("i"))
+        #expect(instance.x == 2000 && instance.y == 70 && instance.width == 500 && instance.fill == blue)
+        #expect(instance.overrides == ["width", "fill"] && instance.height == 60)
+    }
+
+    @Test func switchNestedInstanceSameSet() throws {
+        var knobOff = layer("w1k", .text, "Knob")
+        knobOff.text?.content = "Off"
+        var w2 = variant("w2", ["Value": "On"], [layer("w2k", .text, "Knob")], name: "Toggle")
+        w2.fill = Self.red
+        let toggles = componentSet("t", ["Value"], [variant("w1", ["Value": "Off"], [knobOff], name: "Toggle"), w2])
+        var box = DesignNode(id: "m", type: .frame, name: "Box", x: 0, y: 500, width: 20, height: 20)
+        box.component = true
+        var document = DesignDocument(nodes: [toggles, box])
+        var existing = document.allIDs().union(["s", "v1", "v2", "v1x", "v2x", "i"])
+        func nested(_ main: DesignNode, _ id: String) -> DesignNode {
+            var node = ComponentSync.makeInstance(of: main, existing: &existing)
+            node.id = id
+            return node
+        }
+        let set = componentSet("s", ["State"], [
+            variant("v1", ["State": "Default"], [nested(toggles.children[0], "v1n"), nested(box, "v1b")]),
+            variant("v2", ["State": "Hover"], [nested(w2, "v2n"), layer("v2x", .frame, "Box")]),
+        ])
+        document.nodes.insert(set, at: 0)
+        try document.validateComponents()
+        instantiate("v1", as: "i", in: &document)
+        let old = try #require(document.node("i")?.children)
+        let knob = old[0].children[0].id
+        try edit(&document) { try $0.update(knob) { $0.text?.content = "Yes" } }
+        try switchVariant(["i"], ["State": "Hover"], in: &document)
+        let children = try #require(document.node("i")?.children)
+        let toggle = children[0]
+        #expect(toggle.id == old[0].id && toggle.instance == "w2" && toggle.source == "v2n" && toggle.fill == Self.red)
+        #expect(toggle.children[0].id == knob && toggle.children[0].text?.content == "Yes")
+        #expect(toggle.children[0].overrides == ["text.content"])
+        #expect(toggle.children[0].source == document.node("v2n")?.children[0].id)
+        // "Box" is an instance in v1 but a plain frame in v2: unmatched.
+        #expect(children[1].source == "v2x" && children[1].instance == nil && children[1].id != old[1].id)
+        #expect(document.node(old[1].id) == nil)
+        try document.validateComponents()
+    }
+
+    @Test func switchManyInstancesOwnValues() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i1", in: &document)
+        instantiate("v3", as: "i2", in: &document, y: 300)
+        try switchVariant(["i1", "i2"], ["State": "Hover"], in: &document)
+        #expect(document.node("i1")?.instance == "v2" && document.node("i2")?.instance == "v4")
+        #expect(document.node("i2")?.y == 300)
+    }
+
+    @Test func switchRefusesNonInstanceOrNoSet() throws {
+        var document = switchFixture()
+        instantiate("v1", as: "i", in: &document)
+        var main = DesignNode(id: "m", type: .frame, x: 0, y: 900, width: 10, height: 10)
+        main.component = true
+        document.nodes.append(main)
+        instantiate("m", as: "j", in: &document)
+        let inner = try #require(document.node("i")).children[0].id
+        let original = document
+        #expect(throws: DesignError("Layer not found: nope")) {
+            try ComponentVariants.switchInstances(["nope"], to: ["State": "Hover"], in: &document)
+        }
+        #expect(throws: DesignError("Layer v1 is not an instance")) {
+            try ComponentVariants.switchInstances(["v1"], to: ["State": "Hover"], in: &document)
+        }
+        #expect(throws: DesignError("Layer \(inner) is not an instance")) {
+            try ComponentVariants.switchInstances([inner], to: ["State": "Hover"], in: &document)
+        }
+        #expect(throws: DesignError("Layer j is an instance of m, which is not a variant")) {
+            try ComponentVariants.switchInstances(["i", "j"], to: ["State": "Hover"], in: &document)
+        }
+        #expect(throws: DesignError("Component set s has no variant with State = Pressed")) {
+            try ComponentVariants.switchInstances(["i"], to: ["State": "Pressed"], in: &document)
+        }
+        #expect(document == original)
+    }
 }

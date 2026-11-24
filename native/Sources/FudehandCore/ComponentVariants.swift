@@ -137,6 +137,100 @@ public enum ComponentVariants {
                                  in: &document)
     }
 
+    // MARK: Switching
+
+    /// The variant chosen when `instanceVariant`'s values change by `changes`: the variant with exactly the changed values, else
+    /// the one with the changed values that shares the most other values with `instanceVariant` (ties: the first in set order).
+    /// Nil when `instanceVariant` is not a variant or no variant of its set has the changed values.
+    public static func target(for instanceVariant: String, changing changes: [String: String],
+                              in document: DesignDocument) -> String? {
+        guard let setID = set(of: instanceVariant, in: document), let set = document.node(setID),
+              let current = document.node(instanceVariant)?.variant else { return nil }
+        let wanted = current.merging(changes) { $1 }
+        if let exact = set.children.first(where: { $0.variant == wanted }) { return exact.id }
+        let others = (set.componentSet ?? []).filter { changes[$0] == nil }
+        var best: (id: String, shared: Int)?
+        for variant in set.children {
+            let values = variant.variant ?? [:]
+            guard changes.allSatisfy({ values[$0.key] == $0.value }) else { continue }
+            let shared = others.filter { values[$0] == current[$0] }.count
+            if shared > best?.shared ?? -1 { best = (variant.id, shared) }
+        }
+        return best?.id
+    }
+
+    /// Switches each instance root in `ids` to the variant `target` picks from its own current variant and `changes`. The root
+    /// keeps its id, x/y, and overrides; each layer below it is paired with the layer of the new variant at the same name path
+    /// (same-named siblings in order) and keeps its id, annotations, and the overrides the new layer has. Unmatched layers are
+    /// removed and new ones added with fresh ids. Refused, changing nothing, when a layer is not an instance root of a variant
+    /// or its set has no variant with the changed values.
+    public static func switchInstances(_ ids: [String], to changes: [String: String], in document: inout DesignDocument) throws {
+        var next = document
+        var existing = next.allIDs()
+        for id in ids {
+            guard let path = next.indexPath(of: id) else { throw DesignError("Layer not found: \(id)") }
+            let old = next[path]
+            guard let current = old.instance, old.source == current else { throw DesignError("Layer \(id) is not an instance") }
+            guard let setID = set(of: current, in: next) else {
+                throw DesignError("Layer \(id) is an instance of \(current), which is not a variant")
+            }
+            guard let target = target(for: current, changing: changes, in: next) else {
+                let wanted = changes.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: ", ")
+                throw DesignError("Component set \(setID) has no variant with \(wanted)")
+            }
+            if target == current { continue }
+            var switched = ComponentSync.makeInstance(of: next.node(target)!, existing: &existing)
+            var renamed: [String: String] = [:]
+            carry(old, onto: &switched, renamed: &renamed, in: next)
+            switched.x = old.x
+            switched.y = old.y
+            // makeInstance pointed toggle targets at the fresh ids; matched layers took back their old ids.
+            func retarget(_ layer: inout DesignNode) {
+                if case .toggleVisibility(let targets) = layer.interaction, targets.contains(where: { renamed[$0] != nil }) {
+                    layer.interaction = .toggleVisibility(targets: targets.map { renamed[$0] ?? $0 })
+                }
+                for index in layer.children.indices { retarget(&layer.children[index]) }
+            }
+            retarget(&switched)
+            next[path] = switched
+        }
+        document = next
+    }
+
+    /// Gives `new`, a layer built from the new variant, the id of `old`, the layer it matched, with the values and overrides of
+    /// `old`'s overrides that exist on `new`; then pairs their children by name. `renamed` maps replaced ids to the kept ones.
+    private static func carry(_ old: DesignNode, onto new: inout DesignNode, renamed: inout [String: String],
+                              in document: DesignDocument) {
+        renamed[new.id] = old.id
+        new.id = old.id
+        let kept = old.overrides.filter { ComponentProperty.named($0)?.exists(on: new) ?? false }
+        // Sorted, a whole object ("text") is copied before its fields ("text.content").
+        for path in kept.sorted() { ComponentProperty.named(path)!.copy(from: old, to: &new) }
+        new.overrides = kept
+        var unpaired = Dictionary(grouping: old.children, by: \.name)
+        for index in new.children.indices {
+            let name = new.children[index].name
+            guard let match = unpaired[name]?.first else { continue }
+            unpaired[name]!.removeFirst()
+            if pairs(match, new.children[index], in: document) {
+                carry(match, onto: &new.children[index], renamed: &renamed, in: document)
+            }
+        }
+    }
+
+    /// Whether same-named layers at the same position pair up: neither is an instance, or both are instances of the same main
+    /// component or of variants of the same component set.
+    private static func pairs(_ old: DesignNode, _ new: DesignNode, in document: DesignDocument) -> Bool {
+        switch (old.instance, new.instance) {
+        case (nil, nil): return true
+        case let (a?, b?):
+            if a == b { return true }
+            guard let set = set(of: a, in: document) else { return false }
+            return set == self.set(of: b, in: document)
+        default: return false
+        }
+    }
+
     /// The component set `variant` belongs to; nil when it is not a variant.
     public static func set(of variant: String, in document: DesignDocument) -> String? {
         guard let path = document.indexPath(of: variant), path.count > 1, document[path].variant != nil else { return nil }
