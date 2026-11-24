@@ -262,11 +262,11 @@ final class FudehandStore: ObservableObject {
     }
 
     /// Creates a layer at a canvas rectangle: when the start point falls inside a top-level frame that takes new layers (not an
-    /// instance), it is put into the topmost such frame.
+    /// instance or a component set), it is put into the topmost such frame.
     func create(_ type: NodeType, in rect: Rect, clicked: Bool) {
         let point = Point(x: rect.x, y: rect.y)
         let parent = type == .frame ? nil : editor.document.nodes.last {
-            $0.type == .frame && $0.instance == nil && $0.visible && !$0.locked && $0.frame.contains(point)
+            $0.type == .frame && $0.instance == nil && $0.componentSet == nil && $0.visible && !$0.locked && $0.frame.contains(point)
         }
         let origin = parent.map { Point(x: $0.x, y: $0.y) } ?? Point(x: 0, y: 0)
         let id = DesignDocument.newID(existing: editor.document.allIDs())

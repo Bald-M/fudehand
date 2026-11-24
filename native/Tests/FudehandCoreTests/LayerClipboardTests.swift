@@ -122,13 +122,29 @@ private let everywhere = Rect(x: -10_000, y: -10_000, width: 20_000, height: 20_
     #expect(copy.children[1].interaction == nil)
 }
 
-@Test func pasteTargetIsTheOneSelectedFrameNotCopiedOrPasted() {
+@Test func pasteTargetIsTheOneSelectedFrameNotCopiedOrPasted() throws {
     let doc = document()
-    #expect(LayerClipboard.target(selection: ["g"], in: doc, excluding: []) == "g")
-    #expect(LayerClipboard.target(selection: ["g"], in: doc, excluding: ["g"]) == nil)
-    #expect(LayerClipboard.target(selection: ["a"], in: doc, excluding: []) == nil)
-    #expect(LayerClipboard.target(selection: ["g", "f"], in: doc, excluding: []) == nil)
-    #expect(LayerClipboard.target(selection: [], in: doc, excluding: []) == nil)
+    let clip = try LayerClipboard(copying: ["b"], from: doc)
+    #expect(clip.target(selection: ["g"], in: doc, excluding: []) == "g")
+    #expect(clip.target(selection: ["g"], in: doc, excluding: ["g"]) == nil)
+    #expect(clip.target(selection: ["a"], in: doc, excluding: []) == nil)
+    #expect(clip.target(selection: ["g", "f"], in: doc, excluding: []) == nil)
+    #expect(clip.target(selection: [], in: doc, excluding: []) == nil)
+}
+
+@Test func pasteTargetIsASelectedSetOnlyForMainComponents() throws {
+    var main = DesignNode(id: "m", type: .frame, x: 0, y: 0, width: 50, height: 50)
+    main.component = true
+    var set = DesignNode(id: "s", type: .frame, x: 100, y: 0, width: 100, height: 100)
+    set.componentSet = ["State"]
+    let doc = DesignDocument(nodes: document().nodes + [main, set])
+    let components = try LayerClipboard(copying: ["m"], from: doc)
+    #expect(components.target(selection: ["s"], in: doc, excluding: []) == "s")
+    #expect(components.target(selection: ["s"], in: doc, excluding: ["s"]) == nil)
+    let rectangle = try LayerClipboard(copying: ["a"], from: doc)
+    #expect(rectangle.target(selection: ["s"], in: doc, excluding: []) == nil)
+    let mixed = try LayerClipboard(copying: ["m", "a"], from: doc)
+    #expect(mixed.target(selection: ["s"], in: doc, excluding: []) == nil)
 }
 
 @Test func pasteIsOneUndoStep() throws {

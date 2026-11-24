@@ -1707,6 +1707,33 @@ private func temporaryDirectory() -> URL {
     #expect(await failure(store, .switchVariant([first.id], values: [name: "Nope"])) != nil)
 }
 
+@Test @MainActor func switchVariantRefusesAnInstanceIntoItsOwnMainComponent() async throws {
+    let (store, _) = try makeVariantStore()
+    let name = L("Property 1")
+    let inner = try store.createInstance(of: "a", parent: "b", index: nil, at: Point(x: 0, y: 0))
+    let before = store.editor.document
+    let message = "Layer \(inner.id): an instance cannot be inside its own main component"
+    #expect(throws: DesignError(message)) { _ = try store.switchVariant([inner.id], values: [name: "Hover"]) }
+    #expect(await failure(store, .switchVariant([inner.id], values: [name: "Hover"])) == message)
+    #expect(store.editor.document == before && store.editor.document.node(inner.id)?.instance == "a")
+}
+
+@Test @MainActor func drawingOverATopLevelSetSkipsIt() throws {
+    let (store, set) = try makeVariantStore()
+    // Move the set out of "page" to the top level, over empty canvas.
+    try store.perform("Setup") { try $0.move(set, parent: nil, index: nil) }
+    let rect = try #require(store.editor.document.worldRect(set))
+    store.create(.rectangle, in: Rect(x: rect.x + 4, y: rect.y + 4, width: 10, height: 10), clicked: false)
+    let id = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: id) == .some("page"))
+    #expect(store.editor.document.node(set)?.children.map(\.id) == ["a", "b"])
+    try store.perform("Setup") { try $0.update(set) { $0.x += 2000 } }
+    let moved = try #require(store.editor.document.worldRect(set))
+    store.create(.ellipse, in: Rect(x: moved.x + 4, y: moved.y + 4, width: 10, height: 10), clicked: false)
+    let loose = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: loose) == .some(nil))
+}
+
 @Test @MainActor func instanceOfSetUsesFirstVariant() async throws {
     let (store, set) = try makeVariantStore()
     let ofSet = try await control(store, .createInstance(component: set, parent: "page", index: nil, x: 0, y: 0))

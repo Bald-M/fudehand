@@ -270,8 +270,8 @@ import Testing
         var (document, set) = try combined()
         // A set is never where Paste puts layers by default, and only main components go into it.
         #expect(!document.acceptsInsertedLayers(set))
-        #expect(LayerClipboard.target(selection: [set], in: document, excluding: []) == nil)
         let rectangle = try LayerClipboard(copying: ["r"], from: document)
+        #expect(rectangle.target(selection: [set], in: document, excluding: []) == nil)
         let before = document
         #expect(throws: Self.setRefusal(set)) {
             _ = try rectangle.paste(into: &document, frame: set, visible: everywhere, step: 1, related: [])
@@ -409,6 +409,40 @@ import Testing
 
     private func switchVariant(_ ids: [String], _ changes: [String: String], in document: inout DesignDocument) throws {
         try edit(&document) { try ComponentVariants.switchInstances(ids, to: changes, in: &$0) }
+    }
+
+    @Test func switchRefusesAnInstanceIntoItsOwnMainComponent() throws {
+        var (document, _) = try combined()
+        // An instance of "a" inside variant "b" is fine; switched to "b" it would be inside its own main component.
+        var existing = document.allIDs()
+        var inner = ComponentSync.makeInstance(of: document.node("a")!, existing: &existing)
+        inner.id = "inner"
+        try edit(&document) { try $0.insert(inner, parent: "b", index: nil) }
+        var next = document
+        #expect(throws: DesignError("Layer inner: an instance cannot be inside its own main component")) {
+            try ComponentVariants.switchInstances(["ia", "inner"], to: ["Property 1": "Hover"], in: &next)
+        }
+        #expect(next == document)
+
+        // Through a nested instance: main component "c" holds an instance of "a", and "b" holds an instance of "c".
+        var c = DesignNode(id: "c", type: .frame, name: "Card", x: 3000, y: 0, width: 100, height: 100)
+        c.component = true
+        existing = document.allIDs().union(["c"])
+        var nested = ComponentSync.makeInstance(of: document.node("a")!, existing: &existing)
+        nested.id = "nested"
+        c.children = [nested]
+        try edit(&document) {
+            try $0.delete(["inner"])
+            try $0.insert(c, parent: nil, index: nil)
+        }
+        existing = document.allIDs()
+        let ofC = ComponentSync.makeInstance(of: document.node("c")!, existing: &existing)
+        try edit(&document) { try $0.insert(ofC, parent: "b", index: nil) }
+        next = document
+        #expect(throws: DesignError("Layer nested: an instance cannot be inside its own main component")) {
+            try ComponentVariants.switchInstances(["nested"], to: ["Property 1": "Hover"], in: &next)
+        }
+        #expect(next == document)
     }
 
     @Test func targetExactMatch() {

@@ -162,8 +162,8 @@ public enum ComponentVariants {
     /// Switches each instance root in `ids` to the variant `target` picks from its own current variant and `changes`. The root
     /// keeps its id, x/y, and overrides; each layer below it is paired with the layer of the new variant at the same name path
     /// (same-named siblings in order) and keeps its id, annotations, and the overrides the new layer has. Unmatched layers are
-    /// removed and new ones added with fresh ids. Refused, changing nothing, when a layer is not an instance root of a variant
-    /// or its set has no variant with the changed values.
+    /// removed and new ones added with fresh ids. Refused, changing nothing, when a layer is not an instance root of a variant,
+    /// its set has no variant with the changed values, or the new variant would put the instance inside its own main component.
     public static func switchInstances(_ ids: [String], to changes: [String: String], in document: inout DesignDocument) throws {
         var next = document
         var existing = next.allIDs()
@@ -196,6 +196,8 @@ public enum ComponentVariants {
                 for index in layer.children.indices { retarget(&layer.children[index]) }
             }
             retarget(&switched)
+            // As inserting it would be: refused when the new variant reaches a main component around the instance.
+            try next.checkInstanceCycles(switched, under: path.count > 1 ? Array(path.dropLast()) : nil)
             next[path] = switched
         }
         document = next

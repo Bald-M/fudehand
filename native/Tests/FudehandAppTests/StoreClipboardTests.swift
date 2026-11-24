@@ -151,3 +151,34 @@ import Testing
     #expect(store.editor.document.nodes.map(\.id) == ["home", instance.id, ids[0]])
     #expect(store.editor.document.node(instance.id)?.children.count == 1)
 }
+
+@Test @MainActor func pasteWithASetSelectedAddsCopiedMainComponentsAsVariants() async throws {
+    let store = try makeStore()
+    for (id, name, x) in [("m1", "Default", 400.0), ("m2", "Hover", 600.0), ("x", "Default", 800.0)] {
+        var main = DesignNode(id: id, type: .frame, name: name, x: x, y: 0, width: 100, height: 40)
+        main.component = true
+        try store.perform("Setup") { try $0.insert(main, parent: nil, index: nil) }
+    }
+    let set = try store.combineAsVariants(["m1", "m2"]).id
+    let name = L("Property 1")
+    store.canvasCopy(["x"], cut: false)
+    store.setSelection([set])
+    let ids = try store.pasteLayers()
+    #expect(ids.count == 1 && store.editor.document.parentID(of: ids[0]) == .some(set))
+    #expect(store.editor.document.node(ids[0])?.variant == [name: "Default 2"] && store.editor.undoName == "Paste Layers")
+    store.undo()
+    #expect(store.editor.document.node(ids[0]) == nil && store.editor.document.node(set)?.children.map(\.id) == ["m1", "m2"])
+
+    // The Agent's paste does the same.
+    store.setSelection([set])
+    let viaAgent = try #require(try await control(store, .paste)["ids"] as? [String])
+    #expect(store.editor.document.parentID(of: viaAgent[0]) == .some(set))
+    store.undo()
+
+    // Anything else does not go into the set.
+    store.canvasCopy(["card"], cut: false)
+    store.setSelection([set])
+    let rectangle = try store.pasteLayers()
+    #expect(store.alert == nil && store.editor.document.parentID(of: rectangle[0]) == .some("home"))
+    #expect(store.editor.document.node(set)?.children.map(\.id) == ["m1", "m2"])
+}

@@ -75,11 +75,13 @@ public struct LayerClipboard: Equatable {
     public var bounds: Rect { Rect.union(nodes.map(\.frame))! }
 
     /// The frame Paste puts the layers into: the one selected layer when it is a frame that takes new layers (not an instance or
-    /// inside one), unless it is in `excluding` (the copied layers and the copies already pasted from this clipboard, so pasting
-    /// a copied frame again puts it beside, not inside).
-    public static func target(selection: Set<String>, in document: DesignDocument, excluding: Set<String>) -> String? {
-        guard selection.count == 1, let id = selection.first, !excluding.contains(id), document.acceptsInsertedLayers(id) else { return nil }
-        return id
+    /// inside one), or a component set when every copied layer is a main component (they become new variants), unless it is in
+    /// `excluding` (the copied layers and the copies already pasted from this clipboard, so pasting a copied frame again puts it
+    /// beside, not inside).
+    public func target(selection: Set<String>, in document: DesignDocument, excluding: Set<String>) -> String? {
+        guard selection.count == 1, let id = selection.first, !excluding.contains(id) else { return nil }
+        let intoSet = document.node(id)?.componentSet != nil && nodes.allSatisfy(\.component)
+        return intoSet || document.acceptsInsertedLayers(id) ? id : nil
     }
 
     /// Inserts a copy of the layers with new ids and returns the ids of the outermost copies.

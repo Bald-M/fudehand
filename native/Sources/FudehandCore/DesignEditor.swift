@@ -194,7 +194,7 @@ extension DesignDocument {
 
     /// Refuses `node` under the layer at `parentPath` (nil for the top level) when a main component in it would end up inside
     /// another, or an instance in it inside its own main component, directly or through the instances that main component holds.
-    private func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
+    func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
         var enclosing: [String] = []
         if let parentPath {
             var list = nodes
