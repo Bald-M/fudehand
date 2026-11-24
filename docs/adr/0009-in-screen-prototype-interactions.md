@@ -14,7 +14,7 @@
 
 ## Rejected Alternatives
 
-- **Components and variants for states and tabs**: out of scope (#150 non-goals); a visibility toggle on plain layers expresses tabs, switches, and expand/collapse.
+- **Components and variants for states and tabs**: out of scope for #150; a visibility toggle on plain layers expresses tabs, switches, and expand/collapse. Main components and instances have since been added ([ADR 0014](0014-components-are-materialized-instances.md)), and a toggle inside an instance targets that instance's own layers; variants come in a later step of #256.
 - **A separate overlay window or layer stack outside the renderer**: two places to keep in sync with document edits and transitions; rendering overlays as part of the scene reuses the incremental renderer.
 - **Saving toggled visibility into the document**: playback must never edit the design; a restart returns to the designed state.
 - **Configurable state transition timing**: no request for it; a fixed short ease keeps the panel small.

@@ -586,6 +586,20 @@
 "Color" = "颜色";
 "Start" = "起点";
 "End" = "终点";
+"Create Component" = "创建组件";
+"Main Component" = "主组件";
+"Instance" = "实例";
+"Insert Component" = "插入组件";
+"Go to Main Component" = "前往主组件";
+"Select Instances" = "选择实例";
+"Reset All Overrides" = "重置所有覆盖";
+"Reset Override" = "重置覆盖";
+"Reset Overrides" = "重置此图层的覆盖";
+"Detach Instance" = "分离实例";
+"No Components" = "没有组件";
+"%d Instances" = "%d 个实例";
+"Search Components" = "搜索组件";
+"Overridden" = "已覆盖";
 
 /* Find bar (#257) */
 "Find" = "查找";

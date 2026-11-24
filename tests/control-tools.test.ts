@@ -24,7 +24,7 @@ describe('design tools', () => {
     const names = tools.map((tool: { name: string }) => tool.name)
     expect(names).toEqual([
       'design_get_state', 'design_get_document', 'design_get_node', 'design_create_node', 'design_update_node',
-      'design_delete_nodes', 'design_copy_nodes', 'design_paste', 'design_duplicate_nodes', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
+      'design_delete_nodes', 'design_copy_nodes', 'design_paste', 'design_duplicate_nodes', 'design_create_component', 'design_create_instance', 'design_list_components', 'design_reset_overrides', 'design_detach_instance', 'design_move_node', 'design_select', 'design_undo', 'design_redo',
       'design_new_document', 'design_open_document', 'design_save_document',
       'canvas_focus_node', 'canvas_fit_all', 'canvas_zoom', 'canvas_set_view', 'prototype_play', 'prototype_get_playback', 'prototype_close', 'design_list_shaders', 'design_list_fonts', 'design_import_font', 'design_search_icons', 'design_find_nodes', 'design_list_colors', 'design_replace_color', 'design_save_version_snapshot', 'design_list_version_snapshots',
       'design_list_annotations', 'design_add_annotation', 'design_update_annotation', 'design_delete_annotation', 'design_snapshot', 'design_export_html',
@@ -432,6 +432,33 @@ describe('design tools', () => {
       { command: 'list_version_snapshots', args: { frame: 'home' } },
       { command: 'list_version_snapshots', args: {} },
     ])
+  })
+
+  it('forwards component tools to the App unchanged and describes them', async () => {
+    const byName = (name: string) => (tools as { name: string, description: string }[]).find(tool => tool.name === name)!
+    for (const word of ['main component', 'instance', 'override', 'detach']) expect(byName('design_create_instance').description + byName('design_detach_instance').description).toContain(word)
+    expect(byName('design_get_node').description).toContain('component')
+    expect(byName('design_update_node').description).toContain('design_create_component')
+    expect(byName('design_create_node').description).toContain('design_create_instance')
+    const fake = await app(echo)
+    const ctx = { root: '/repo', socketPath: fake.socketPath }
+    await callTool('design_create_component', { id: 'card' }, ctx)
+    await callTool('design_create_instance', { component: 'card' }, ctx)
+    await callTool('design_create_instance', { component: 'card', parent: 'f', index: 1, x: 4, y: 8 }, ctx)
+    await callTool('design_list_components', {}, ctx)
+    await callTool('design_reset_overrides', { id: 'i' }, ctx)
+    await callTool('design_reset_overrides', { id: 'i', properties: ['fill', 'text.content'] }, ctx)
+    await callTool('design_detach_instance', { ids: ['a', 'b'] }, ctx)
+    expect(fake.received.map(({ command, args }) => ({ command, args }))).toEqual([
+      { command: 'create_component', args: { id: 'card' } },
+      { command: 'create_instance', args: { component: 'card' } },
+      { command: 'create_instance', args: { component: 'card', parent: 'f', index: 1, x: 4, y: 8 } },
+      { command: 'list_components', args: {} },
+      { command: 'reset_overrides', args: { id: 'i' } },
+      { command: 'reset_overrides', args: { id: 'i', properties: ['fill', 'text.content'] } },
+      { command: 'detach_instance', args: { ids: ['a', 'b'] } },
+    ])
+    await fake.close()
   })
 
   it('design_snapshot returns the snapshot as MCP image content', async () => {

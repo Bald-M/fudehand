@@ -138,6 +138,8 @@ struct FudehandApp: App {
             CommandGroup(after: .pasteboard) {
                 DuplicateMenuItem(store: store, selection: store.layerSelection)
                 Divider()
+                ComponentMenuItems(store: store, selection: store.layerSelection, displayed: store.displayed)
+                Divider()
                 Button(L("Find…")) { store.openFind() }.keyboardShortcut("f")
                 FindStepMenuItems(store: store, find: store.find)
             }
@@ -248,8 +250,8 @@ private struct ExportHTMLMenuItem: View {
     }
 }
 
-/// Edit › Duplicate (⌘D), available with layers selected; a focused text field leaves it alone. It observes the selection itself,
-/// as Export as HTML… does.
+/// Edit › Duplicate (⌘D), available with layers selected, none of them inside an instance; a focused text field leaves it alone.
+/// It observes the selection itself, as Export as HTML… does.
 private struct DuplicateMenuItem: View {
     let store: FudehandStore
     @ObservedObject var selection: LayerSelection
@@ -260,6 +262,23 @@ private struct DuplicateMenuItem: View {
             store.duplicateSelection()
         }
         .keyboardShortcut("d")
-        .disabled(selection.ids.isEmpty)
+        .disabled(selection.ids.isEmpty || store.hasLayersInsideInstance(selection.ids))
+    }
+}
+
+/// Edit › Create Component (⌥⌘K) and Detach Instance (⌥⌘B), each available when the selection allows it. They observe the
+/// selection and the document themselves, as Duplicate does, since creating or detaching leaves the selection unchanged.
+private struct ComponentMenuItems: View {
+    let store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+    @ObservedObject var displayed: DisplayedDocument
+
+    var body: some View {
+        Button(L("Create Component")) { store.createComponent(from: selection.ids) }
+            .keyboardShortcut("k", modifiers: [.command, .option])
+            .disabled(!store.canCreateComponent(selection.ids))
+        Button(L("Detach Instance")) { store.detachInstances(from: selection.ids) }
+            .keyboardShortcut("b", modifiers: [.command, .option])
+            .disabled(!store.canDetachInstances(selection.ids))
     }
 }

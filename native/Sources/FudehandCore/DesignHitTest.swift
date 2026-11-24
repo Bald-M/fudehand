@@ -6,15 +6,16 @@ public enum DesignHitTest {
     /// children outside a frame that clips its content cannot be hit.
     public static func path(at point: Point, in document: DesignDocument) -> [String] {
         func search(_ nodes: [DesignNode], origin: Point) -> [String]? {
-            for node in nodes.reversed() where node.visible && !node.locked {
-                let rect = Rect(x: origin.x + node.x, y: origin.y + node.y, width: node.width, height: node.height)
+            // Indexing reads the fields in place, where `for node in` would copy every layer it passes.
+            for i in nodes.indices.reversed() where nodes[i].visible && !nodes[i].locked {
+                let rect = Rect(x: origin.x + nodes[i].x, y: origin.y + nodes[i].y, width: nodes[i].width, height: nodes[i].height)
                 let inside = point.x >= rect.minX && point.x <= rect.maxX && point.y >= rect.minY && point.y <= rect.maxY
-                let clips = node.type == .frame && node.clipsContent
-                if !clips || inside, let deeper = search(node.children, origin: Point(x: rect.x, y: rect.y)) {
-                    return [node.id] + deeper
+                let clips = nodes[i].type == .frame && nodes[i].clipsContent
+                if !clips || inside, let deeper = search(nodes[i].children, origin: Point(x: rect.x, y: rect.y)) {
+                    return [nodes[i].id] + deeper
                 }
                 // A group has no content of its own and can only be hit through its children.
-                if inside, node.type != .group { return [node.id] }
+                if inside, nodes[i].type != .group { return [nodes[i].id] }
             }
             return nil
         }

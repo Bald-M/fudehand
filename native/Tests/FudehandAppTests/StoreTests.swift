@@ -161,9 +161,9 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     _ = try await control(store, .saveDocument(temporaryFile().path))
     let bad = temporaryFile()
-    try Data(#"{"format":"fudehand.design","version":10,"nodes":[]}"#.utf8).write(to: bad)
+    try Data(#"{"format":"fudehand.design","version":11,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 10); upgrade Fudehand to open it")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 11); upgrade Fudehand to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 
@@ -1267,4 +1267,317 @@ private func temporaryDirectory() -> URL {
     #expect(store.documentIndex.node("a")?.name == "Box")
     store.undo()
     #expect(store.documentIndex.node("a")?.name == store.document.node("a")?.name)
+}
+
+// MARK: Components
+
+/// A store holding frame "home" with rectangle "card" (fill red) and text "label", and an empty frame "page".
+@MainActor private func makeComponentStore() throws -> FudehandStore {
+    let store = makeStore()
+    var home = DesignNode(id: "home", type: .frame, x: 0, y: 0, width: 300, height: 300)
+    var card = DesignNode(id: "card", type: .rectangle, x: 10, y: 10, width: 50, height: 40)
+    card.fill = try DesignColor(hex: "#FF0000")
+    home.children = [card]
+    let page = DesignNode(id: "page", type: .frame, x: 400, y: 0, width: 300, height: 300)
+    try store.perform("Setup") { document in
+        try document.insert(home, parent: nil, index: nil)
+        try document.insert(page, parent: nil, index: nil)
+    }
+    return store
+}
+
+@Test @MainActor func createComponentViaControlMatchesUI() async throws {
+    let store = try makeComponentStore()
+    let viaControl = try await control(store, .createComponent("card"))
+    #expect(viaControl["component"] as? Bool == true)
+    #expect(store.editor.undoName == "Agent: Create Component")
+    store.undo()
+    #expect(store.editor.document.node("card")?.component == false)
+    let node = try store.createComponent("card")
+    #expect(node.component && store.editor.undoName == "Create Component")
+    #expect(store.editor.document.node("card")?.component == true)
+}
+
+@Test @MainActor func createInstanceViaControlIsOneAgentStep() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    let created = try await control(store, .createInstance(component: "card", parent: "page", index: nil, x: 20, y: 30))
+    let id = try #require(created["id"] as? String)
+    let instance = try #require(store.editor.document.node(id))
+    #expect(instance.instance == "card" && instance.source == "card" && instance.x == 20 && instance.y == 30)
+    #expect(store.editor.document.parentID(of: id) == .some("page"))
+    #expect(store.editor.undoName == "Agent: Insert Component" && store.selection == [id])
+    store.undo()
+    #expect(store.editor.document.node(id) == nil)
+    // Without x, y, or a parent the instance is placed as an inserted layer is: at the viewport center, at the top level.
+    let placed = try store.createInstance(of: "card", parent: nil, index: nil, at: nil)
+    #expect(store.editor.document.parentID(of: placed.id) == .some(nil) && store.editor.undoName == "Insert Component")
+    // With a parent and no position, it sits at the parent's origin.
+    let inParent = try store.createInstance(of: "card", parent: "page", index: nil, at: nil)
+    #expect(store.editor.document.node(inParent.id)?.x == 0 && store.editor.document.node(inParent.id)?.y == 0)
+}
+
+@Test @MainActor func createInstanceRefusesWhatIsNotAMainComponentOrWouldNest() async throws {
+    let store = try makeComponentStore()
+    #expect(await failure(store, .createInstance(component: "card", parent: nil, index: nil, x: nil, y: nil)) == "Layer card is not a main component")
+    #expect(await failure(store, .createInstance(component: "nope", parent: nil, index: nil, x: nil, y: nil)) == "Layer not found: nope")
+    _ = try store.createComponent("home")
+    #expect(await failure(store, .createInstance(component: "home", parent: "home", index: nil, x: nil, y: nil)) != nil)
+    #expect(store.editor.document.node("home")?.children.count == 1)
+}
+
+@Test @MainActor func resetOverridesViaControl() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    store.updateNode(child, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    #expect(store.editor.document.node(child)?.overrides.contains("fill") == true)
+    let result = try await control(store, .resetOverrides(child, properties: ["fill"]))
+    #expect(result["id"] as? String == child)
+    #expect(store.editor.document.node(child)?.overrides.isEmpty == true)
+    let red = try DesignColor(hex: "#FF0000")
+    #expect(store.editor.document.node(child)?.fill == red)
+    #expect(store.editor.undoName == "Agent: Reset Overrides")
+    #expect(await failure(store, .resetOverrides("home", properties: nil)) == "Layer home is not inside an instance")
+    #expect(await failure(store, .resetOverrides(child, properties: ["nonsense"])) == "Unknown property: nonsense")
+    // The instance root with no property list resets every layer of it.
+    store.updateNode(child, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    _ = try await control(store, .resetOverrides(instance.id, properties: nil))
+    #expect(store.editor.document.node(child)?.overrides.isEmpty == true)
+}
+
+@Test @MainActor func detachViaControl() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let first = try store.createInstance(of: "home", parent: "page", index: nil, at: Point(x: 0, y: 0))
+    let second = try store.createInstance(of: "home", parent: "page", index: nil, at: Point(x: 10, y: 10))
+    let result = try await control(store, .detachInstance([first.id, second.id]))
+    #expect((result["ids"] as? [String]) == [first.id, second.id])
+    for id in [first.id, second.id] {
+        let node = try #require(store.editor.document.node(id))
+        #expect(node.instance == nil && node.source == nil && node.children.allSatisfy { $0.source == nil })
+    }
+    #expect(store.editor.undoName == "Agent: Detach Instance")
+    store.undo()
+    #expect(store.editor.document.node(first.id)?.instance == "home")
+    #expect(await failure(store, .detachInstance(["page"])) == "Layer page is not an instance")
+    let child = try #require(store.editor.document.node(first.id)?.children.first?.id)
+    #expect(await failure(store, .detachInstance([child])) == "Layer \(child) is inside instance \(first.id); detach that instance instead")
+}
+
+@Test @MainActor func listComponentsCountsNestedCopies() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    // A second main component holding an instance of "card".
+    var box = DesignNode(id: "box", type: .frame, x: 0, y: 400, width: 100, height: 100)
+    box.children = []
+    try store.perform("Add box") { try $0.insert(box, parent: nil, index: nil) }
+    _ = try store.createComponent("box")
+    let inner = try store.createInstance(of: "card", parent: "box", index: nil, at: Point(x: 0, y: 0))
+    let outer = try store.createInstance(of: "box", parent: "page", index: nil, at: Point(x: 0, y: 0))
+    let list = try #require(try await store.handleControl(.listComponents) as? [String: Any])["components"] as? [[String: Any]]
+    let byID = Dictionary(uniqueKeysWithValues: try #require(list).map { ($0["id"] as! String, $0) })
+    #expect(byID["box"]?["instances"] as? [String] == [outer.id])
+    let cardInstances = try #require(byID["card"]?["instances"] as? [String])
+    // The instance inside "box", and its copy inside the instance of "box".
+    #expect(cardInstances.count == 2 && cardInstances.contains(inner.id))
+    #expect(byID["card"]?["width"] as? Double == 50 && byID["card"]?["name"] as? String == store.editor.document.node("card")?.name)
+    #expect(store.listComponents().map(\.component.id) == ["card", "box"])
+}
+
+@Test @MainActor func createComponentInsideInstanceFails() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    #expect(await failure(store, .createComponent(child)) == "Layer \(child) is inside instance \(instance.id); change its main component instead")
+    #expect(await failure(store, .createComponent(instance.id)) == "Layer \(instance.id) is an instance; detach it first")
+    #expect(await failure(store, .createComponent("home")) == "Layer home is already a main component")
+    #expect(await failure(store, .createComponent("card")) == "Layer card is inside main component home; a main component cannot be inside another main component")
+    #expect(await failure(store, .createComponent("nope")) == "Layer not found: nope")
+    #expect(store.editor.undoName == "Insert Component")
+}
+
+@Test @MainActor func selectionDropsLayersRemovedBySync() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    store.setSelection([child])
+    store.updateNode("home", "Clear") { $0.children = [] }
+    #expect(store.editor.document.node(child) == nil && store.selection.isEmpty)
+}
+
+@Test @MainActor func defaultPlacementSkipsASelectedInstance() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    // The first instance stays selected; the next default-placed ones go to the top level, not into it.
+    let first = try await control(store, .createInstance(component: "home", parent: nil, index: nil, x: nil, y: nil))
+    let second = try await control(store, .createInstance(component: "home", parent: nil, index: nil, x: nil, y: nil))
+    let firstID = try #require(first["id"] as? String), secondID = try #require(second["id"] as? String)
+    #expect(store.editor.document.parentID(of: firstID) == .some(nil) && store.editor.document.parentID(of: secondID) == .some(nil))
+    store.setSelection([secondID])
+    store.insertIcon("sf/star")
+    let icon = try #require(store.selection.first)
+    #expect(store.editor.document.parentID(of: icon) == .some(nil))
+    // A selected main component still takes new layers.
+    store.setSelection(["page"])
+    #expect(store.insertionPlacement(width: 1, height: 1).parent == "page")
+    store.setSelection(["home"])
+    #expect(store.insertionPlacement(width: 1, height: 1).parent == "home")
+}
+
+@Test @MainActor func resetOverridesOnANestedCopyGoesBackToTheOuterMainComponent() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    var box = DesignNode(id: "box", type: .frame, x: 0, y: 400, width: 100, height: 100)
+    box.children = []
+    try store.perform("Add box") { try $0.insert(box, parent: nil, index: nil) }
+    _ = try store.createComponent("box")
+    _ = try store.createInstance(of: "card", parent: "box", index: nil, at: Point(x: 0, y: 0))
+    let outer = try store.createInstance(of: "box", parent: "page", index: nil, at: Point(x: 0, y: 0))
+    let copy = try #require(store.editor.document.node(outer.id)?.children.first)
+    let blue = try DesignColor(hex: "#0000FF")
+    store.updateNode(copy.id, "Change Fill") { $0.fill = blue }
+    #expect(store.editor.document.node(copy.id)?.overrides.contains("fill") == true)
+    _ = try await control(store, .resetOverrides(copy.id, properties: ["fill"]))
+    let red = try DesignColor(hex: "#FF0000")
+    #expect(store.editor.document.node(copy.id)?.fill == red)
+    // Nothing left to reset: no new undo step.
+    let name = store.editor.undoName
+    _ = try await control(store, .resetOverrides(copy.id, properties: nil))
+    #expect(store.editor.undoName == name)
+}
+
+@Test @MainActor func insertComponentPlacesLikeIcon() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    // Nothing selected: centered in the viewport, at the top level, selected, one step.
+    store.setSelection([])
+    store.insertComponent("card")
+    let centered = try #require(store.selection.first)
+    let node = try #require(store.editor.document.node(centered))
+    let center = CanvasGeometry.screenToWorld(Point(x: store.canvasSize.width / 2, y: store.canvasSize.height / 2), viewport: store.viewport)
+    #expect(store.selection.count == 1 && node.instance == "card")
+    #expect(node.frame == Rect(x: center.x - 25, y: center.y - 20, width: 50, height: 40))
+    #expect(store.editor.document.parentID(of: centered) == .some(nil))
+    #expect(store.editor.undoName == "Insert Component")
+    store.undo()
+    #expect(store.editor.document.node(centered) == nil && store.editor.undoName == "Create Component")
+    // A frame selected: at its top-left.
+    store.setSelection(["page"])
+    store.insertComponent("card")
+    let inFrame = try #require(store.selection.first)
+    #expect(store.editor.document.parentID(of: inFrame) == .some("page"))
+    #expect(store.editor.document.node(inFrame).map { ($0.x, $0.y) } ?? (-1, -1) == (0, 0))
+    // Not a main component: an alert, nothing inserted.
+    let count = store.editor.document.nodeCount
+    store.insertComponent("page")
+    #expect(store.alert == "Layer page is not a main component" && store.editor.document.nodeCount == count)
+}
+
+@Test @MainActor func componentMenuItemsFollowTheSelection() throws {
+    let store = try makeComponentStore()
+    #expect(store.canCreateComponent(["card"]))
+    #expect(!store.canCreateComponent(["card", "page"]) && !store.canCreateComponent([]))
+    store.createComponent(from: ["card"])
+    #expect(store.editor.document.node("card")?.component == true && store.editor.undoName == "Create Component")
+    #expect(!store.canCreateComponent(["card"]) && !store.canCreateComponent(["home"]))
+    let instance = try store.createInstance(of: "card", parent: "page", index: nil, at: nil)
+    #expect(store.canDetachInstances([instance.id]) && !store.canDetachInstances(["card"]) && !store.canDetachInstances([]))
+    #expect(!store.canCreateComponent([instance.id]))
+    // Select Instances, then Go to Main Component.
+    store.selectInstances(of: "card")
+    #expect(store.selection == [instance.id])
+    store.goToMainComponent(of: instance.id)
+    #expect(store.selection == ["card"])
+    store.detachInstances(from: [instance.id])
+    #expect(store.editor.document.node(instance.id)?.instance == nil && store.editor.undoName == "Detach Instance")
+}
+
+@Test @MainActor func resetOverrideFromThePanelIsOneStep() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    store.updateNode(child, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    store.updateNode(child, "Change Opacity") { $0.opacity = 0.5 }
+    store.resetOverrides(of: child, ["fill"])
+    #expect(store.editor.document.node(child)?.overrides == ["opacity"] && store.editor.undoName == "Reset Overrides")
+    store.resetOverrides(of: instance.id, nil)
+    #expect(store.editor.document.node(child)?.overrides.isEmpty == true && store.editor.document.node(child)?.opacity == 1)
+}
+
+@Test @MainActor func structuralCommandsSkipLayersInsideAnInstance() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    #expect(store.hasLayersInsideInstance([child]) && store.hasLayersInsideInstance([child, "page"]))
+    #expect(!store.hasLayersInsideInstance([instance.id]) && !store.hasLayersInsideInstance(["home", "card", "page"]))
+    #expect(!store.canvasCanRestructure([child]) && store.canvasCanRestructure([instance.id]))
+    // Delete and Cut leave the document, the undo history, and the selection alone.
+    store.setSelection([child])
+    let document = store.editor.document
+    store.canvasDelete([child])
+    store.canvasCopy([child], cut: true)
+    #expect(store.editor.document == document && store.selection == [child])
+    #expect(store.editor.undoName == "Insert Component" && store.alert == nil)
+    // The instance root itself is deleted like any layer.
+    store.canvasDelete([instance.id])
+    #expect(store.editor.document.node(instance.id) == nil)
+}
+
+@Test @MainActor func agentCreateNodeRefusesComponentFields() async throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let before = store.editor.document
+    let cases: [(JSONObject, String)] = [
+        (JSONObject(["id": "c", "type": "frame", "component": true]), "Layer c: cannot set component"),
+        (JSONObject(["id": "c", "type": "frame", "instance": "home"]), "Layer c: cannot set instance"),
+        (JSONObject(["id": "c", "type": "frame", "children": [["id": "k", "type": "rectangle", "source": "card"]]]), "Layer k: cannot set source"),
+        (JSONObject(["id": "c", "type": "frame", "children": [["id": "k", "type": "rectangle", "overrides": ["fill"]]]]), "Layer k: cannot set overrides"),
+    ]
+    for (object, message) in cases {
+        #expect(await failure(store, .createNode(parent: nil, index: nil, node: object)) == message)
+    }
+    #expect(store.editor.document == before && store.editor.undoName == "Create Component")
+    // A false or empty value sets nothing and is accepted.
+    _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "ok", "type": "frame", "component": false])))
+    #expect(store.editor.document.node("ok")?.component == false)
+}
+
+@Test @MainActor func drawingOverATopLevelInstanceSkipsIt() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    // An instance at the top level, over empty canvas: the new shape goes to the top level.
+    let loose = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 1000, y: 0))
+    store.create(.rectangle, in: Rect(x: 1010, y: 10, width: 20, height: 20), clicked: false)
+    let first = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: first) == .some(nil))
+    #expect(store.editor.document.node(loose.id)?.children.count == 1)
+    // An instance at the top level over a frame: the frame under it takes the shape.
+    let over = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 400, y: 0))
+    store.create(.ellipse, in: Rect(x: 420, y: 20, width: 20, height: 20), clicked: false)
+    let second = try #require(store.selection.first)
+    #expect(store.alert == nil && store.editor.document.parentID(of: second) == .some("page"))
+    #expect(store.editor.document.node(over.id)?.children.count == 1)
+}
+
+@Test @MainActor func resetAllOverridesOfALayerBelowTheRootKeepsSiblings() throws {
+    let store = try makeComponentStore()
+    var extra = DesignNode(id: "dot", type: .ellipse, x: 100, y: 100, width: 10, height: 10)
+    extra.fill = try DesignColor(hex: "#0000FF")
+    try store.perform("Add dot") { try $0.insert(extra, parent: "home", index: nil) }
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let children = try #require(store.editor.document.node(instance.id)?.children.map(\.id))
+    let green = try DesignColor(hex: "#00FF00")
+    store.updateNode(children[0], "Change") { $0.fill = green; $0.opacity = 0.5 }
+    store.updateNode(children[1], "Change") { $0.fill = green }
+    store.resetOverrides(of: children[0], nil)
+    #expect(store.editor.document.node(children[0])?.overrides.isEmpty == true)
+    #expect(store.editor.document.node(children[0])?.opacity == 1)
+    #expect(store.editor.document.node(children[1])?.overrides == ["fill"])
 }

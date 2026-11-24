@@ -586,6 +586,20 @@
 "Color" = "顏色";
 "Start" = "起點";
 "End" = "終點";
+"Create Component" = "建立元件";
+"Main Component" = "主元件";
+"Instance" = "實例";
+"Insert Component" = "插入元件";
+"Go to Main Component" = "前往主元件";
+"Select Instances" = "選取實例";
+"Reset All Overrides" = "重設所有覆寫";
+"Reset Override" = "重設覆寫";
+"Reset Overrides" = "重設此圖層的覆寫";
+"Detach Instance" = "中斷實例連結";
+"No Components" = "沒有元件";
+"%d Instances" = "%d 個實例";
+"Search Components" = "搜尋元件";
+"Overridden" = "已覆寫";
 
 /* Find bar (#257) */
 "Find" = "尋找";

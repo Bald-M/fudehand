@@ -97,3 +97,57 @@ import Testing
     #expect(await failure(store, .duplicateNodes(ids: ["missing"])) == "Layer not found: missing")
     #expect(store.editor.undoName == "Setup")
 }
+
+@Test @MainActor func cutPasteMainComponentKeepsLinks() throws {
+    let store = try makeStore()
+    var main = DesignNode(id: "m", type: .frame, x: 400, y: 0, width: 100, height: 40)
+    main.component = true
+    main.children = [DesignNode(id: "t", type: .rectangle, x: 4, y: 4, width: 10, height: 10)]
+    var existing = store.editor.document.allIDs().union(["m", "t", "i"])
+    var instance = ComponentSync.makeInstance(of: main, existing: &existing)
+    instance.id = "i"
+    instance.x = 600
+    try store.perform("Setup") {
+        try $0.insert(main, parent: nil, index: nil)
+        try $0.insert(instance, parent: nil, index: nil)
+    }
+    try store.copyLayers(["m"], cut: true)
+    // The cut leaves the instance pointing at the missing main component.
+    #expect(store.editor.document.node("m") == nil)
+    #expect(store.editor.document.node("i")?.instance == "m" && store.editor.document.node("i")?.children[0].source == "t")
+    let ids = try store.pasteLayers()
+    #expect(ids == ["m"])
+    #expect(store.editor.document.node("m")?.component == true && store.editor.document.node("m")?.children[0].id == "t")
+    #expect(store.editor.document.worldRect("m") == Rect(x: 400, y: 0, width: 100, height: 40))
+    // The instance follows the main component again.
+    try store.perform("Fill") { try $0.update("m") { $0.fill = DesignColor(r: 0, g: 0, b: 1) } }
+    #expect(store.editor.document.node("i")?.fill == DesignColor(r: 0, g: 0, b: 1))
+    #expect(store.editor.document.node("i")?.instance == "m")
+}
+
+@Test @MainActor func pasteWithAnInstanceSelectedDoesNotGoIntoIt() async throws {
+    let store = try makeStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 500, y: 0))
+    try store.perform("Add") { try $0.insert(DesignNode(id: "loose", type: .rectangle, x: 0, y: 400, width: 10, height: 10), parent: nil, index: nil) }
+    store.canvasCopy(["loose"], cut: false)
+    store.setSelection([instance.id])
+    let ids = try store.pasteLayers()
+    #expect(store.editor.document.node(instance.id)?.children.count == 1)
+    #expect(store.editor.document.parentID(of: ids[0]) == .some(nil))
+    #expect(store.editor.document.node(ids[0]) != nil)
+}
+
+@Test @MainActor func agentPastesLayerCopiedOutOfAnInstanceBesideIt() async throws {
+    let store = try makeStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: nil, index: nil, at: Point(x: 500, y: 0))
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    _ = try await control(store, .copyNodes(ids: [child], cut: false))
+    store.setSelection([])
+    let result = try await control(store, .paste)
+    let ids = try #require(result["ids"] as? [String])
+    #expect(store.editor.document.parentID(of: ids[0]) == .some(nil))
+    #expect(store.editor.document.nodes.map(\.id) == ["home", instance.id, ids[0]])
+    #expect(store.editor.document.node(instance.id)?.children.count == 1)
+}

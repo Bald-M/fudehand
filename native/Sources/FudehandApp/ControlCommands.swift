@@ -16,6 +16,7 @@ extension FudehandStore {
         case .createNode(let parent, let index, let object):
             var existing = editor.document.allIDs()
             let node = try DesignJSON.node(from: DesignDocument.assigningIDs(Self.iconDefaults(object.value), existing: &existing))
+            try Self.refuseComponentFields(in: node)
             var icons: [String] = []
             DesignDocument(nodes: [node]).forEach { if let icon = $0.icon { icons.append(icon.name) } }
             try icons.forEach(requireIcon)
@@ -48,6 +49,21 @@ extension FudehandStore {
             return try pastedResult(try pasteLayers(step: "Agent: Paste Layers"))
         case .duplicateNodes(let ids):
             return try pastedResult(try duplicateLayers(Set(try colorLayers(ids)), step: "Agent: Duplicate Layers"))
+        case .createComponent(let id):
+            return DesignJSON.object(try createComponent(id, step: "Agent: Create Component"), includeImageData: false)
+        case .createInstance(let component, let parent, let index, let x, let y):
+            let at = x == nil && y == nil ? nil : Point(x: x ?? 0, y: y ?? 0)
+            let node = try createInstance(of: component, parent: parent, index: index, at: at, step: "Agent: Insert Component")
+            return DesignJSON.object(node, includeImageData: false)
+        case .listComponents:
+            return ["components": listComponents().map { entry in
+                ["id": entry.component.id, "name": entry.component.name, "width": entry.component.width, "height": entry.component.height,
+                 "instances": entry.instances] as [String: Any]
+            }]
+        case .resetOverrides(let id, let properties):
+            return DesignJSON.object(try resetOverrides(id, properties: properties.map(Set.init), step: "Agent: Reset Overrides"), includeImageData: false)
+        case .detachInstance(let ids):
+            return try pastedResult(try detachInstances(Set(ids), step: "Agent: Detach Instance").map(\.id))
         case .moveNode(let id, let parent, let index):
             try perform("Agent: Move Layer") { try $0.move(id, parent: parent, index: index) }
             return DesignJSON.object(try requireNode(id), includeImageData: false)
@@ -267,6 +283,19 @@ extension FudehandStore {
         }
         if let children = object["children"] as? [Any] { object["children"] = children.map { ($0 as? [String: Any]).map(iconDefaults) ?? $0 } }
         return object
+    }
+
+    /// Files and the clipboard carry component fields, but a created layer may not: main components and instances are made with
+    /// `design_create_component` and `design_create_instance`, which keep them consistent.
+    nonisolated static func refuseComponentFields(in node: DesignNode) throws {
+        var refusal: DesignError?
+        DesignDocument(nodes: [node]).forEach { layer in
+            guard refusal == nil else { return }
+            let key = layer.component ? "component" : layer.instance != nil ? "instance" : layer.source != nil ? "source"
+                : !layer.overrides.isEmpty ? "overrides" : nil
+            if let key { refusal = DesignError("Layer \(layer.id): cannot set \(key)") }
+        }
+        if let refusal { throw refusal }
     }
 
     /// The new layers made by Paste or Duplicate, as `design_create_node` returns a layer.

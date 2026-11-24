@@ -342,6 +342,34 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     /// Frames only: grids, columns, and rows drawn over the frame on the editing canvas, in the order they were added.
     public var layoutGuides: [LayoutGuide] = []
     public var children: [DesignNode] = []
+    /// The component fields below, held out of line and nil on a layer that has none: copying a node then costs one pointer
+    /// instead of three reference-counted values, so documents without components walk and copy the tree as fast as before.
+    @usableFromInline var componentBox: ComponentBox?
+    /// Set on a main component: the source that instances mirror.
+    public var component: Bool {
+        @inlinable get { componentBox?.fields.component ?? false }
+        set { componentFields.component = newValue }
+    }
+    /// On an instance's root layer: the id of its main component.
+    public var instance: String? {
+        @inlinable get { componentBox?.fields.instance }
+        set { componentFields.instance = newValue }
+    }
+    /// On every layer inside an instance, the root included: the id of the layer in the main component that it mirrors.
+    public var source: String? {
+        @inlinable get { componentBox?.fields.source }
+        set { componentFields.source = newValue }
+    }
+    /// On layers inside an instance: the property paths this layer overrides, so they no longer follow the main component.
+    public var overrides: Set<String> {
+        @inlinable get { componentBox?.fields.overrides ?? [] }
+        set { componentFields.overrides = newValue }
+    }
+
+    private var componentFields: ComponentFields {
+        get { componentBox?.fields ?? ComponentFields() }
+        set { componentBox = newValue == ComponentFields() ? nil : ComponentBox(newValue) }
+    }
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
                 width: Double = 100, height: Double = 100) {
@@ -355,15 +383,31 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     }
 }
 
+/// A layer's component fields (`DesignNode.component`, `instance`, `source`, `overrides`).
+@usableFromInline struct ComponentFields: Equatable, Sendable {
+    @usableFromInline var component = false
+    @usableFromInline var instance: String?
+    @usableFromInline var source: String?
+    @usableFromInline var overrides: Set<String> = []
+}
+
+/// Immutable storage for a layer's component fields; never holds the defaults (the node keeps nil instead), so two nodes are
+/// equal exactly when their fields are.
+@usableFromInline final class ComponentBox: Equatable, Sendable {
+    @usableFromInline let fields: ComponentFields
+    init(_ fields: ComponentFields) { self.fields = fields }
+    @usableFromInline static func == (lhs: ComponentBox, rhs: ComponentBox) -> Bool { lhs === rhs || lhs.fields == rhs.fields }
+}
+
 /// A design document: the ordered list of top-level layers and the annotations pinned to them.
 public struct DesignDocument: Equatable, Sendable {
     public static let format = "fudehand.design"
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
     /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
-    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 frame layout guides, 9 effects; older files open unchanged and are
+    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 frame layout guides, 9 effects, 10 components; older files open unchanged and are
     /// written as the current version.
-    public static let formatVersion = 9
+    public static let formatVersion = 10
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
@@ -388,10 +432,14 @@ public struct DesignDocument: Equatable, Sendable {
         case let list as [Any]: annotations = list
         default: throw DesignError("annotations must be an array")
         }
-        let document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) },
+        var document = DesignDocument(nodes: try nodes.map { try DesignJSON.node(from: $0) },
                                       annotations: try annotations.map(DesignAnnotation.from))
         try document.validateUniqueIDs()
+        try document.validateComponents()
         try document.validateAnnotations()
+        // Broken component references never stop a file from opening: those instances open detached, the rest synced.
+        ComponentSync.repair(&document)
+        document.pruneAnnotations()
         return document
     }
 
@@ -409,6 +457,27 @@ public struct DesignDocument: Equatable, Sendable {
         var duplicate: String?
         forEach { node in if !seen.insert(node.id).inserted, duplicate == nil { duplicate = node.id } }
         if let duplicate { throw DesignError("Duplicate layer id: \(duplicate)") }
+    }
+
+    /// The structural component rules: a main component is not an instance and is not inside a main component or an instance; `source`
+    /// and `overrides` appear only inside an instance. Missing main components, cycles, and mismatched sources are not errors here.
+    func validateComponents() throws {
+        func visit(_ nodes: [DesignNode], inComponent: Bool, inInstance: Bool) throws {
+            for node in nodes {
+                if node.component {
+                    if node.instance != nil { throw DesignError("Layer \(node.id): a main component cannot be an instance") }
+                    if inComponent { throw DesignError("Layer \(node.id): a main component cannot be inside another main component") }
+                    if inInstance { throw DesignError("Layer \(node.id): a main component cannot be inside an instance") }
+                }
+                let insideInstance = inInstance || node.instance != nil
+                if !insideInstance {
+                    if node.source != nil { throw DesignError("Layer \(node.id): source is only allowed inside an instance") }
+                    if !node.overrides.isEmpty { throw DesignError("Layer \(node.id): overrides are only allowed inside an instance") }
+                }
+                try visit(node.children, inComponent: inComponent || node.component, inInstance: insideInstance)
+            }
+        }
+        try visit(nodes, inComponent: false, inInstance: false)
     }
 
     /// Depth-first traversal of all nodes.

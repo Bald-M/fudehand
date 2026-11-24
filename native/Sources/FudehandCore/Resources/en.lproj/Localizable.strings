@@ -586,6 +586,20 @@
 "Color" = "Color";
 "Start" = "Start";
 "End" = "End";
+"Create Component" = "Create Component";
+"Main Component" = "Main Component";
+"Instance" = "Instance";
+"Insert Component" = "Insert Component";
+"Go to Main Component" = "Go to Main Component";
+"Select Instances" = "Select Instances";
+"Reset All Overrides" = "Reset All Overrides";
+"Reset Override" = "Reset Override";
+"Reset Overrides" = "Reset Overrides";
+"Detach Instance" = "Detach Instance";
+"No Components" = "No Components";
+"%d Instances" = "%d Instances";
+"Search Components" = "Search Components";
+"Overridden" = "Overridden";
 
 /* Find bar (#257) */
 "Find" = "Find";

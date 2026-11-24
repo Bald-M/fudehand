@@ -83,6 +83,12 @@ extension DesignDocument {
         try DesignDocument(nodes: [node]).validateUniqueIDs()
         let position = index ?? list.count
         guard (0...list.count).contains(position) else { throw DesignError("index out of range: 0–\(list.count)") }
+        if let path, let root = enclosingInstance(path, includingLast: true) {
+            // The caller knows the parent, not necessarily the new layer's id, so the parent is named.
+            let target = self[path].id
+            throw target == root ? DesignError("Layer \(root) is an instance; change its main component instead") : insideInstance(target, root)
+        }
+        try checkInstanceCycles(node, under: path)
         var next = list
         next.insert(node, at: position)
         setChildren(next, at: path)
@@ -100,10 +106,24 @@ extension DesignDocument {
         self[path] = node
     }
 
-    /// Deletes nodes and their subtrees; when any id does not exist, nothing is deleted.
-    public mutating func delete(_ ids: Set<String>) throws {
+    /// Deletes nodes and their subtrees; when any id does not exist, or one is a layer inside an instance (below its root) whose
+    /// instance is not deleted with it, nothing is deleted. Instances of the main components deleted are detached first, in the
+    /// same change, unless `detachingInstances` is false (Cut, which leaves them pointing at the missing main component).
+    public mutating func delete(_ ids: Set<String>, detachingInstances: Bool = true) throws {
         let existing = allIDs()
         if let missing = ids.sorted().first(where: { !existing.contains($0) }) { throw DesignError("Layer not found: \(missing)") }
+        /// `root` is the outermost instance above `list`, nil when there is none or a deleted layer is above it.
+        func checkStructure(_ list: [DesignNode], root: String?) throws {
+            for node in list {
+                if ids.contains(node.id) {
+                    if let root { throw insideInstance(node.id, root) }
+                    continue
+                }
+                try checkStructure(node.children, root: root ?? (node.instance != nil ? node.id : nil))
+            }
+        }
+        try checkStructure(nodes, root: nil)
+        if detachingInstances { detachInstances(ofComponentsIn: ids) }
         func prune(_ list: [DesignNode]) -> [DesignNode] {
             list.filter { !ids.contains($0.id) }.map { node in
                 var copy = node
@@ -114,13 +134,96 @@ extension DesignDocument {
         nodes = prune(nodes)
     }
 
+    /// The outermost instance root among the layers along `path` (the last one only when `includingLast`): a layer below it is
+    /// inside that instance, whose structure only its main component changes.
+    private func enclosingInstance(_ path: [Int], includingLast: Bool) -> String? {
+        var list = nodes
+        for (depth, index) in path.enumerated() {
+            if depth == path.count - 1 && !includingLast { break }
+            if list[index].instance != nil { return list[index].id }
+            list = list[index].children
+        }
+        return nil
+    }
+
+    private func insideInstance(_ id: String, _ root: String) -> DesignError {
+        DesignError("Layer \(id) is inside instance \(root); change its main component instead")
+    }
+
+    /// Detaches the instances, outside the deleted subtrees, of the main components in them. Detaching an instance can leave the
+    /// nested instances it held as instances of their own main component, so this repeats until none of a deleted one is left.
+    private mutating func detachInstances(ofComponentsIn ids: Set<String>) {
+        var removed: Set<String> = []
+        func collect(_ list: [DesignNode], deleting: Bool) {
+            for node in list {
+                let deleting = deleting || ids.contains(node.id)
+                if deleting && node.component { removed.insert(node.id) }
+                collect(node.children, deleting: deleting)
+            }
+        }
+        collect(nodes, deleting: false)
+        if removed.isEmpty { return }
+        while true {
+            var roots: [[Int]] = []
+            func find(_ list: [DesignNode], path: [Int]) {
+                for (index, node) in list.enumerated() where !ids.contains(node.id) {
+                    if let component = node.instance, node.source == component, removed.contains(component) {
+                        roots.append(path + [index])
+                    } else {
+                        find(node.children, path: path + [index])
+                    }
+                }
+            }
+            find(nodes, path: [])
+            if roots.isEmpty { return }
+            let before = self
+            for path in roots { update(at: path) { ComponentSync.detach(&$0, in: before) } }
+        }
+    }
+
+    /// Refuses `node` under the layer at `parentPath` (nil for the top level) when a main component in it would end up inside
+    /// another, or an instance in it inside its own main component, directly or through the instances that main component holds.
+    private func checkInstanceCycles(_ node: DesignNode, under parentPath: [Int]?) throws {
+        var enclosing: [String] = []
+        if let parentPath {
+            var list = nodes
+            for index in parentPath {
+                if list[index].component { enclosing.append(list[index].id) }
+                list = list[index].children
+            }
+        }
+        var inserted: [String: DesignNode] = [:]
+        DesignDocument(nodes: [node]).forEach { if $0.component { inserted[$0.id] = $0 } }
+        /// `id` and every main component whose instances its main component holds, directly or through nested instances.
+        func reached(_ id: String) -> Set<String> {
+            var result: Set<String> = []
+            var stack = [id]
+            while let next = stack.popLast() {
+                guard result.insert(next).inserted, let main = inserted[next] ?? self.node(next), main.component else { continue }
+                DesignDocument(nodes: main.children).forEach { if let used = $0.instance { stack.append(used) } }
+            }
+            return result
+        }
+        func check(_ layer: DesignNode, _ enclosing: [String]) throws {
+            if layer.component, !enclosing.isEmpty {
+                throw DesignError("Layer \(layer.id): a main component cannot be inside another main component")
+            }
+            let enclosing = layer.component ? enclosing + [layer.id] : enclosing
+            if let id = layer.instance, !enclosing.isEmpty, !reached(id).isDisjoint(with: enclosing) {
+                throw DesignError("Layer \(layer.id): an instance cannot be inside its own main component")
+            }
+            for child in layer.children { try check(child, enclosing) }
+        }
+        try check(node, enclosing)
+    }
+
     /// Moves to a new parent node (nil for the top level) and position, keeping the absolute position on the canvas. `index` is the position in the new parent after the node is removed.
     public mutating func move(_ id: String, parent: String?, index: Int?) throws {
         guard let path = indexPath(of: id), let world = worldRect(id) else { throw DesignError("Layer not found: \(id)") }
         if let parent, ancestry(of: parent).contains(id) { throw DesignError("Cannot move a layer into itself or its descendants") }
         var node = self[path]
         var copy = self
-        try copy.delete([id])
+        try copy.delete([id], detachingInstances: false)
         let origin = try parent.map { parent -> Rect in
             guard let rect = copy.worldRect(parent) else { throw DesignError("Layer not found: \(parent)") }
             return rect
@@ -210,6 +313,7 @@ public struct DesignEditor {
         defer { if let open { gesture = (open, document, documentMeasured) } }
         var next = document
         let result = try change(&next)
+        ComponentSync.reconcile(old: document, new: &next)
         next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: documentMeasured == measured ? document.nodes : [])
         guard next != document else { return result }
@@ -248,6 +352,7 @@ public struct DesignEditor {
     private mutating func applyLive(_ change: (inout DesignDocument) -> Void, layingOutAll: Bool) {
         var next = document
         change(&next)
+        ComponentSync.reconcile(old: document, new: &next)
         next.pruneAnnotations()
         DesignLayout.apply(to: &next.nodes, measure: measure, unchangedFrom: layingOutAll || documentMeasured != measured ? [] : document.nodes)
         documentMeasured = measured

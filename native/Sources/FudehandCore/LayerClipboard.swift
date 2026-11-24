@@ -33,6 +33,11 @@ public struct LayerClipboard: Equatable {
         origin = shared.flatMap { $0 }.flatMap { document.worldRect($0) }.map { Point(x: $0.x, y: $0.y) } ?? Point(x: 0, y: 0)
         nodes = roots.map { id in
             var node = document.node(id)!
+            // Copied out of an instance: nested instances in it stay instances of their own main component.
+            if let root = document.ancestry(of: id).dropLast().lazy.compactMap(document.node).first(where: { $0.instance != nil }),
+               let component = root.instance {
+                ComponentSync.unlink(&node, outOf: component, in: document)
+            }
             let world = document.worldRect(id)!
             node.x = world.x
             node.y = world.y
@@ -69,10 +74,11 @@ public struct LayerClipboard: Equatable {
     /// The copied layers' bounding box on the canvas.
     public var bounds: Rect { Rect.union(nodes.map(\.frame))! }
 
-    /// The frame Paste puts the layers into: the one selected layer when it is a frame, unless it is in `excluding` (the copied
-    /// layers and the copies already pasted from this clipboard, so pasting a copied frame again puts it beside, not inside).
+    /// The frame Paste puts the layers into: the one selected layer when it is a frame that takes new layers (not an instance or
+    /// inside one), unless it is in `excluding` (the copied layers and the copies already pasted from this clipboard, so pasting
+    /// a copied frame again puts it beside, not inside).
     public static func target(selection: Set<String>, in document: DesignDocument, excluding: Set<String>) -> String? {
-        guard selection.count == 1, let id = selection.first, !excluding.contains(id), document.node(id)?.type == .frame else { return nil }
+        guard selection.count == 1, let id = selection.first, !excluding.contains(id), document.acceptsInsertedLayers(id) else { return nil }
         return id
     }
 
@@ -81,7 +87,9 @@ public struct LayerClipboard: Equatable {
     /// - Into `frame` when given: at the same offset from it that the layers had from their parent, when that fits inside it,
     ///   otherwise centered in it.
     /// - Otherwise into the parent the layers came from when this document still has it (the top level otherwise), moved
-    ///   `step` × `pasteOffset` down and right, just above the topmost of `related` and the copied layers in that parent.
+    ///   `step` × `pasteOffset` down and right, just above the topmost of `related` and the copied layers in that parent. When
+    ///   that parent is an instance or inside one (layers copied out of an instance), they go into the parent of the outermost
+    ///   instance root instead, just above it (or above `related`).
     ///   When that place does not overlap `visible` (nil counts as visible), the copies go to the top level, centered in `visible`.
     ///
     /// Toggle-visibility targets inside the copy are pointed at the copied layers; references to layers this document lacks are dropped.
@@ -110,32 +118,35 @@ public struct LayerClipboard: Equatable {
             if let visible, !box.offsetBy(delta).intersects(visible) {
                 delta = Point(x: visible.midX - box.midX, y: visible.midY - box.midY)
             } else {
-                target = home
-                let siblings = home.flatMap { document.node($0)?.children } ?? document.nodes
-                let near = related.union(sources)
+                // Nothing can be inserted inside an instance, so copies of its layers go beside its outermost root.
+                let instance = home.flatMap { document.ancestry(of: $0).first { document.node($0)?.instance != nil } }
+                target = instance.map { document.parentID(of: $0) ?? nil } ?? home
+                let siblings = target.flatMap { document.node($0)?.children } ?? document.nodes
+                let near = related.union(sources).union(instance.map { [$0] } ?? [])
                 index = siblings.lastIndex { near.contains($0.id) }.map { $0 + 1 }
             }
         }
         let parentOrigin = target.flatMap(document.worldRect) ?? Rect(x: 0, y: 0, width: 0, height: 0)
 
-        let copies = renamedCopies(existing: document.allIDs())
+        let copies = preparedCopies(for: document)
         var roots: [String] = []
         for (offset, node) in nodes.enumerated() {
-            var next = copies.nodes[offset]
+            var next = copies[offset]
             next.x = node.x + delta.x - parentOrigin.x
             next.y = node.y + delta.y - parentOrigin.y
             try document.insert(next, parent: target, index: index.map { $0 + offset })
             roots.append(next.id)
         }
-        try dropUnreachableReferences(of: copies.ids, in: &document)
+        ComponentSync.repair(&document, within: Set(roots))
+        try dropUnreachableReferences(of: copies, in: &document)
         return roots
     }
 
     /// Duplicate: inserts a copy of each copied layer just above its original, in the original's parent, moved `pasteOffset` down
     /// and right, and returns the copies' ids. The originals must still be in `document`.
     public func duplicate(in document: inout DesignDocument) throws -> [String] {
-        let copies = renamedCopies(existing: document.allIDs())
-        for (source, copy) in zip(sources, copies.nodes) {
+        let copies = preparedCopies(for: document)
+        for (source, copy) in zip(sources, copies) {
             guard let path = document.indexPath(of: source) else { throw DesignError("Layer not found: \(source)") }
             var next = copy
             let original = document.node(source)!
@@ -143,34 +154,74 @@ public struct LayerClipboard: Equatable {
             next.y = original.y + Self.pasteOffset
             try document.insert(next, parent: document.parentID(of: source)!, index: path.last! + 1)
         }
-        try dropUnreachableReferences(of: copies.ids, in: &document)
-        return copies.nodes.map(\.id)
+        ComponentSync.repair(&document, within: Set(copies.map(\.id)))
+        try dropUnreachableReferences(of: copies, in: &document)
+        return copies.map(\.id)
     }
 
-    /// The copied layers with new ids that `existing` lacks, toggle-visibility targets inside the copy pointed at the copies,
-    /// and every new id.
-    private func renamedCopies(existing: Set<String>) -> (nodes: [DesignNode], ids: [String]) {
-        var existing = existing
+    /// The copied layers as they go into `document` (see "Creating" in the components spec), with new ids:
+    /// - A copied main component whose id is a main component in `document` becomes an instance of it.
+    /// - One whose id (and its layers' ids) `document` lacks while instances there still name it (Cut, then Paste) keeps its ids.
+    /// - Any other stays a main component with a new id, and copied instances of it are linked to the copy.
+    /// Layers copied out of an instance (below its root) lose their link; instances that cannot be linked are detached by the
+    /// repair after inserting.
+    private func preparedCopies(for document: DesignDocument) -> [DesignNode] {
+        var referenced: Set<String> = []
+        document.forEach { if let id = $0.instance { referenced.insert(id) } }
+        let existing = document.allIDs()
+        var asInstance: Set<String> = []
+        var kept: Set<String> = []
+        /// Main components copied under a new id: instances of them copied with them follow the copy.
+        var movedMains: Set<String> = []
+        DesignDocument(nodes: nodes).forEach { node in
+            guard node.component else { return }
+            let ids = DesignDocument(nodes: [node]).allIDs()
+            if document.node(node.id)?.component == true {
+                asInstance.insert(node.id)
+            } else if referenced.contains(node.id), ids.isDisjoint(with: existing) {
+                kept.formUnion(ids)
+            } else {
+                movedMains.insert(node.id)
+            }
+        }
+        var taken = existing.union(kept)
         var renamed: [String: String] = [:]
         DesignDocument(nodes: nodes).forEach { node in
-            let id = DesignDocument.newID(existing: existing)
-            existing.insert(id)
+            if kept.contains(node.id) { renamed[node.id] = node.id; return }
+            let id = DesignDocument.newID(existing: taken)
+            taken.insert(id)
             renamed[node.id] = id
         }
-        func copy(_ node: DesignNode) -> DesignNode {
+        /// `relink` is true inside an instance whose main component is copied with it under a new id.
+        func copy(_ node: DesignNode, inInstance: Bool, relink: Bool) -> DesignNode {
+            if node.component, asInstance.contains(node.id) {
+                var instance = ComponentSync.makeInstance(of: document.node(node.id)!, existing: &taken)
+                instance.x = node.x
+                instance.y = node.y
+                return instance
+            }
             var next = node
             next.id = renamed[node.id]!
             if case .toggleVisibility(let targets) = node.interaction { next.interaction = .toggleVisibility(targets: targets.map { renamed[$0] ?? $0 }) }
-            next.children = node.children.map(copy)
+            let isRoot = !inInstance && node.instance != nil
+            let relink = relink || (isRoot && node.instance.map(movedMains.contains) == true)
+            if !inInstance && !isRoot {
+                next.source = nil
+                next.overrides = []
+            } else if relink {
+                next.source = node.source.map { renamed[$0] ?? $0 }
+                next.instance = node.instance.map { movedMains.contains($0) ? renamed[$0]! : $0 }
+            }
+            next.children = node.children.map { copy($0, inInstance: inInstance || isRoot, relink: relink) }
             return next
         }
-        return (nodes.map(copy), Array(renamed.values))
+        return nodes.map { copy($0, inInstance: false, relink: false) }
     }
 
-    /// Removes interactions of the copies that point at frames or layers `document` lacks.
-    private func dropUnreachableReferences(of ids: [String], in document: inout DesignDocument) throws {
+    /// Removes interactions of the copies (and their layers) that point at frames or layers `document` lacks.
+    private func dropUnreachableReferences(of copies: [DesignNode], in document: inout DesignDocument) throws {
         let all = document.allIDs(), pasted = document
-        for id in ids {
+        for id in DesignDocument(nodes: copies).allIDs() where all.contains(id) {
             try document.update(id) { node in
                 switch node.interaction {
                 case .navigate(let destination, _), .openOverlay(let destination, _, _):
@@ -182,5 +233,14 @@ public struct LayerClipboard: Equatable {
                 }
             }
         }
+    }
+}
+
+extension DesignDocument {
+    /// Whether `id` is a frame that inserted or pasted layers can go into: a frame that is not an instance and not inside one
+    /// (a main component is fine), since an instance's structure only changes through its main component.
+    public func acceptsInsertedLayers(_ id: String) -> Bool {
+        let chain = ancestry(of: id).compactMap(node)
+        return chain.last?.type == .frame && !chain.contains { $0.instance != nil }
     }
 }

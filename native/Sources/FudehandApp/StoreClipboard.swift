@@ -22,7 +22,7 @@ extension FudehandStore {
         let clip = try LayerClipboard(copying: ids, from: editor.document)
         let data = try clip.data()
         if cut {
-            try perform(step) { try $0.delete(Set(clip.sources)) }
+            try perform(step) { try $0.delete(Set(clip.sources), detachingInstances: false) }
             setSelection([])
         }
         pasteboard.clearContents()
@@ -76,11 +76,13 @@ extension FudehandStore {
 
 extension FudehandStore {
     func canvasCopy(_ ids: Set<String>, cut: Bool) {
-        guard !ids.isEmpty else { return }
+        guard !ids.isEmpty, !cut || !hasLayersInsideInstance(ids) else { return }
         do { try copyLayers(ids, cut: cut) } catch { alert = error.localizedDescription }
     }
 
     func canvasPaste() { paste() }
 
     var canvasCanPaste: Bool { canPasteLayers }
+
+    func canvasCanRestructure(_ ids: Set<String>) -> Bool { !hasLayersInsideInstance(ids) }
 }

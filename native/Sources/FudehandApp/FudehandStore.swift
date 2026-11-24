@@ -261,11 +261,12 @@ final class FudehandStore: ObservableObject {
         return node
     }
 
-    /// Creates a layer at a canvas rectangle: when the start point falls inside a top-level frame, it is put into that frame.
+    /// Creates a layer at a canvas rectangle: when the start point falls inside a top-level frame that takes new layers (not an
+    /// instance), it is put into the topmost such frame.
     func create(_ type: NodeType, in rect: Rect, clicked: Bool) {
         let point = Point(x: rect.x, y: rect.y)
         let parent = type == .frame ? nil : editor.document.nodes.last {
-            $0.type == .frame && $0.visible && !$0.locked && $0.frame.contains(point)
+            $0.type == .frame && $0.instance == nil && $0.visible && !$0.locked && $0.frame.contains(point)
         }
         let origin = parent.map { Point(x: $0.x, y: $0.y) } ?? Point(x: 0, y: 0)
         let id = DesignDocument.newID(existing: editor.document.allIDs())
@@ -379,8 +380,8 @@ final class FudehandStore: ObservableObject {
     }
 
     /// Where an inserted layer goes: at the origin of the one selected frame, otherwise centered in the viewport at the top level.
-    private func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
-        if selection.count == 1, let id = selection.first, editor.document.node(id)?.type == .frame { return (id, 0, 0) }
+    func insertionPlacement(width: Double, height: Double) -> (parent: String?, x: Double, y: Double) {
+        if selection.count == 1, let id = selection.first, editor.document.acceptsInsertedLayers(id) { return (id, 0, 0) }
         let center = CanvasGeometry.screenToWorld(Point(x: canvasSize.width / 2, y: canvasSize.height / 2), viewport: viewport)
         return (nil, center.x - width / 2, center.y - height / 2)
     }
@@ -868,6 +869,7 @@ extension FudehandStore: CanvasHost {
     }
 
     func canvasDelete(_ ids: Set<String>) {
+        guard !hasLayersInsideInstance(ids) else { return }
         edit("Delete Layers") { try $0.delete(ids) }
         setSelection([])
     }
