@@ -132,7 +132,7 @@ public enum ComponentVariants {
             throw DesignError("Layer \(id) is not a variant or a component set")
         }
         var existing = document.allIDs()
-        let copy = freshCopy(source, existing: &existing)
+        let copy = freshCopies([source], existing: &existing)[0]
         return try insertVariant(copy, values: source.variant ?? [:], fallback: source.name, into: setID, after: source.id,
                                  in: &document)
     }
@@ -172,8 +172,13 @@ public enum ComponentVariants {
         }
         var next: [String: String] = [:]
         for name in set.componentSet! { next[name] = values[name].flatMap { $0.isEmpty ? nil : $0 } ?? L("Default") }
-        let base = values[first].flatMap { $0.isEmpty ? nil : $0 } ?? (fallback.isEmpty ? copy.type.title : fallback)
-        next[first] = uniqueValue(base, among: Set(set.children.compactMap { $0.variant?[first] }))
+        var base = values[first].flatMap { $0.isEmpty ? nil : $0 } ?? (fallback.isEmpty ? copy.type.title : fallback)
+        let used = Set(set.children.compactMap { $0.variant?[first] })
+        // A copy of "Hover 2" is "Hover 3", not "Hover 2 2", when "Hover" is one of the values.
+        if let space = base.lastIndex(of: " "), Int(base[base.index(after: space)...]) != nil, used.contains(String(base[..<space])) {
+            base = String(base[..<space])
+        }
+        next[first] = uniqueValue(base, among: used)
         variant.variant = next
         variant.component = true
         try document.insert(variant, parent: setID, index: index + 1, intoSet: true)
@@ -184,10 +189,11 @@ public enum ComponentVariants {
         return variant.id
     }
 
-    /// A copy of `node` and its layers with ids `existing` lacks (added to it); toggle targets inside it follow the copies.
-    static func freshCopy(_ node: DesignNode, existing: inout Set<String>) -> DesignNode {
+    /// Copies of `nodes` and their layers with ids `existing` lacks (added to it). Toggle targets inside them, and instances in
+    /// them of main components among them, follow the copies.
+    static func freshCopies(_ nodes: [DesignNode], existing: inout Set<String>) -> [DesignNode] {
         var renamed: [String: String] = [:]
-        DesignDocument(nodes: [node]).forEach { layer in
+        DesignDocument(nodes: nodes).forEach { layer in
             let id = DesignDocument.newID(existing: existing)
             existing.insert(id)
             renamed[layer.id] = id
@@ -195,12 +201,14 @@ public enum ComponentVariants {
         func copy(_ layer: DesignNode) -> DesignNode {
             var next = layer
             next.id = renamed[layer.id]!
+            next.instance = layer.instance.map { renamed[$0] ?? $0 }
+            next.source = layer.source.map { renamed[$0] ?? $0 }
             if case .toggleVisibility(let targets) = layer.interaction {
                 next.interaction = .toggleVisibility(targets: targets.map { renamed[$0] ?? $0 })
             }
             next.children = layer.children.map(copy)
             return next
         }
-        return copy(node)
+        return nodes.map(copy)
     }
 }

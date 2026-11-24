@@ -1399,6 +1399,26 @@ private func temporaryDirectory() -> URL {
     #expect(store.editor.undoName == "Insert Component")
 }
 
+@Test @MainActor func createComponentRefusesComponentSets() async throws {
+    // An empty component set (its last variant deleted), alone and inside a frame.
+    let store = makeStore()
+    var set = DesignNode(id: "set", type: .frame)
+    set.componentSet = ["State"]
+    var outer = DesignNode(id: "outer", type: .frame, x: 300)
+    var inner = set
+    inner.id = "inner"
+    outer.children = [inner]
+    try store.perform("Add sets") { document in
+        try document.insert(set, parent: nil, index: nil)
+        try document.insert(outer, parent: nil, index: nil)
+    }
+    let before = store.editor.document
+    #expect(await failure(store, .createComponent("set")) == "Layer set is a component set; a component set cannot be a main component")
+    #expect(await failure(store, .createComponent("outer"))
+        == "Layer outer contains component set inner; a component set cannot be inside a main component")
+    #expect(store.editor.document == before)
+}
+
 @Test @MainActor func selectionDropsLayersRemovedBySync() async throws {
     let store = try makeComponentStore()
     _ = try store.createComponent("home")

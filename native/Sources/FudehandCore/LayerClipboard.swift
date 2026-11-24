@@ -131,7 +131,7 @@ public struct LayerClipboard: Equatable {
         }
         let parentOrigin = target.flatMap(document.worldRect) ?? Rect(x: 0, y: 0, width: 0, height: 0)
 
-        let copies = preparedCopies(for: document)
+        let copies = preparedCopies(of: nodes, for: document)
         var roots: [String] = []
         for (offset, node) in nodes.enumerated() {
             var next = copies[offset]
@@ -150,12 +150,10 @@ public struct LayerClipboard: Equatable {
     private func pasteVariants(into document: inout DesignDocument, set: String) throws -> [String] {
         guard nodes.allSatisfy(\.component) else { throw DesignDocument.componentSetRefusal(set) }
         var existing = document.allIDs()
-        var copies: [DesignNode] = []
-        for node in nodes {
-            let copy = ComponentVariants.freshCopy(node, existing: &existing)
+        let copies = ComponentVariants.freshCopies(nodes, existing: &existing)
+        for (node, copy) in zip(nodes, copies) {
             _ = try ComponentVariants.insertVariant(copy, values: node.variant ?? [:], fallback: node.name, into: set, after: nil,
                                                     in: &document)
-            copies.append(copy)
         }
         ComponentSync.repair(&document, within: Set(copies.map(\.id)))
         try dropUnreachableReferences(of: copies, in: &document)
@@ -166,15 +164,14 @@ public struct LayerClipboard: Equatable {
     /// and right, and returns the copies' ids. A copied variant becomes a new variant of its set instead, as Add Variant makes
     /// it. The originals must still be in `document`.
     public func duplicate(in document: inout DesignDocument) throws -> [String] {
-        let copies = preparedCopies(for: document)
-        var result = copies.map(\.id)
-        var variants: [Int] = []
-        for (offset, (source, copy)) in zip(sources, copies).enumerated() {
+        let variants = sources.indices.filter { ComponentVariants.set(of: sources[$0], in: document) != nil }
+        let others = sources.indices.filter { !variants.contains($0) }
+        let copies = preparedCopies(of: others.map { nodes[$0] }, for: document)
+        var result = Array(repeating: "", count: sources.count)
+        for (offset, copy) in zip(others, copies) {
+            let source = sources[offset]
             guard let path = document.indexPath(of: source) else { throw DesignError("Layer not found: \(source)") }
-            if ComponentVariants.set(of: source, in: document) != nil {
-                variants.append(offset)
-                continue
-            }
+            result[offset] = copy.id
             var next = copy
             let original = document.node(source)!
             next.x = original.x + Self.pasteOffset
@@ -194,7 +191,7 @@ public struct LayerClipboard: Equatable {
     /// - Any other stays a main component with a new id, and copied instances of it are linked to the copy.
     /// Layers copied out of an instance (below its root) lose their link; instances that cannot be linked are detached by the
     /// repair after inserting.
-    private func preparedCopies(for document: DesignDocument) -> [DesignNode] {
+    private func preparedCopies(of nodes: [DesignNode], for document: DesignDocument) -> [DesignNode] {
         var referenced: Set<String> = []
         document.forEach { if let id = $0.instance { referenced.insert(id) } }
         let existing = document.allIDs()

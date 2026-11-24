@@ -3,7 +3,7 @@ import FudehandCore
 /// Main components and instances (see "Components" in `docs/macos.md`). The UI and the control channel both call these.
 extension FudehandStore {
     /// Turns a layer into a main component, as one undo step. Refused for a layer that is already one, an instance, or inside an
-    /// instance or another main component, and for one holding a main component.
+    /// instance or another main component, for one holding a main component, and for a component set or a layer holding one.
     @discardableResult
     func createComponent(_ id: String, step: String = "Create Component") throws -> DesignNode {
         if let refusal = createComponentRefusal(id) { throw refusal }
@@ -18,6 +18,7 @@ extension FudehandStore {
         guard let node = chain.last else { return DesignError("Layer not found: \(id)") }
         if node.component { return DesignError("Layer \(id) is already a main component") }
         if node.instance != nil { return DesignError("Layer \(id) is an instance; detach it first") }
+        if node.componentSet != nil { return DesignError("Layer \(id) is a component set; a component set cannot be a main component") }
         for ancestor in chain.dropLast() {
             if ancestor.instance != nil { return DesignError("Layer \(id) is inside instance \(ancestor.id); change its main component instead") }
             if ancestor.component {
@@ -27,6 +28,9 @@ extension FudehandStore {
         var inner: String?
         DesignDocument(nodes: node.children).forEach { if inner == nil, $0.component { inner = $0.id } }
         if let inner { return DesignError("Layer \(id) holds main component \(inner); a main component cannot be inside another main component") }
+        var set: String?
+        DesignDocument(nodes: node.children).forEach { if set == nil, $0.componentSet != nil { set = $0.id } }
+        if let set { return DesignError("Layer \(id) contains component set \(set); a component set cannot be inside a main component") }
         return nil
     }
 

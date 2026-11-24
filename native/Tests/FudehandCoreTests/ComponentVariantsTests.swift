@@ -209,7 +209,13 @@ import Testing
         // From the set: copies its last variant.
         let more = try ComponentVariants.addVariant(from: set, in: &document)
         #expect(document.node(set)?.children.last?.id == more)
-        #expect(document.node(more)?.variant == ["Property 1": "Hover 2 2"])
+        #expect(document.node(more)?.variant == ["Property 1": "Hover 3"])
+        // Duplicating the original again takes the next free number too; a value merely ending in a number keeps it.
+        let again = try ComponentVariants.addVariant(from: "b", in: &document)
+        #expect(document.node(again)?.variant == ["Property 1": "Hover 4"])
+        try ComponentVariants.setValues("a", ["Property 1": "Size 12"], in: &document)
+        let sized = try ComponentVariants.addVariant(from: "a", in: &document)
+        #expect(document.node(sized)?.variant == ["Property 1": "Size 12 2"])
         try document.validateComponents()
         #expect(throws: DesignError("Layer r is not a variant or a component set")) {
             _ = try ComponentVariants.addVariant(from: "r", in: &document)
@@ -313,6 +319,24 @@ import Testing
         let lone = try main.paste(into: &third, frame: nil, visible: everywhere, step: 1, related: [])
         #expect(third.node(lone[0])?.component == true && third.node(lone[0])?.variant == nil)
         try third.validateComponents()
+    }
+
+    @Test func pastedComponentsIntoSetLinkInstancesToEachOther() throws {
+        let everywhere = Rect(x: -10_000, y: -10_000, width: 20_000, height: 20_000)
+        var (document, set) = try combined()
+        // Another document: main component "x", and main component "y" holding an instance of "x".
+        let x = component("x", "Small", y: 0)
+        var existing: Set<String> = ["x", "xt", "y", "yi"]
+        var inner = ComponentSync.makeInstance(of: x, existing: &existing)
+        inner.id = "yi"
+        var y = component("y", "Large", y: 300)
+        y.children.append(inner)
+        let clip = try LayerClipboard(copying: ["x", "y"], from: DesignDocument(nodes: [x, y]))
+        let ids = try clip.paste(into: &document, frame: set, visible: everywhere, step: 1, related: [])
+        let copied = try #require(document.node(ids[1])?.children.last)
+        #expect(copied.instance == ids[0] && copied.source == ids[0])
+        #expect(copied.children.first?.source == document.node(ids[0])?.children.first?.id)
+        try document.validateComponents()
     }
 
     @Test func deleteSetDetachesAllInstances() throws {
