@@ -74,8 +74,9 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
 | Copy, cut, paste, and duplicate layers (Edit menu, layers panel context menu) | `design_copy_nodes`, `design_paste`, `design_duplicate_nodes` |
-| Create a main component from a layer; insert an instance; list main components with their instances | `design_create_component`, `design_create_instance`, `design_list_components` |
+| Create a main component from a layer; insert an instance; list main components with their instances | `design_create_component`, `design_create_instance`, `design_list_components` (variants show `set` and `variant`; `sets` lists the component sets) |
 | Edit a layer inside an instance (records an override); reset overrides; detach an instance | `design_update_node`, `design_reset_overrides`, `design_detach_instance` |
+| Combine main components into a component set; edit variant properties and a variant's values; add a variant; switch instances to another variant; insert an instance of a set (its first variant) | `design_combine_as_variants`, `design_set_variant_properties`, `design_set_variant`, `design_add_variant`, `design_switch_variant`, `design_create_instance` |
 | Read component links (`component`, `instance`, `source`, `overrides`) | `design_get_node`, `design_get_document` |
 | Select layers | `design_select` |
 | Undo, redo | `design_undo`, `design_redo` |

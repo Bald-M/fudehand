@@ -1618,3 +1618,111 @@ private func temporaryDirectory() -> URL {
     #expect(store.editor.document.node(children[0])?.opacity == 1)
     #expect(store.editor.document.node(children[1])?.overrides == ["fill"])
 }
+
+// MARK: Variants
+
+/// A store with main components "a" and "b" (children "at" and "bt") in frame "page", combined into a set.
+@MainActor private func makeVariantStore() throws -> (store: FudehandStore, set: String) {
+    let store = makeStore()
+    var page = DesignNode(id: "page", type: .frame, x: 0, y: 0, width: 1000, height: 1000)
+    for (id, name, y) in [("a", "Default", 100.0), ("b", "Hover", 200.0)] {
+        var main = DesignNode(id: id, type: .frame, name: name, x: 100, y: y, width: 200, height: 60)
+        main.children = [DesignNode(id: "\(id)t", type: .rectangle, name: "Fill", x: 0, y: 0, width: 20, height: 20)]
+        page.children.append(main)
+    }
+    try store.perform("Setup") { try $0.insert(page, parent: nil, index: nil) }
+    _ = try store.createComponent("a")
+    _ = try store.createComponent("b")
+    let set = try store.combineAsVariants(["a", "b"])
+    return (store, set.id)
+}
+
+@Test @MainActor func combineAsVariantsViaControlMatchesUI() async throws {
+    let store = try makeVariantStore().store
+    store.undo()
+    let viaControl = try await control(store, .combineAsVariants(["a", "b"]))
+    let set = try #require(viaControl["id"] as? String)
+    #expect(store.editor.undoName == "Agent: Combine as Variants" && store.selection == [set])
+    #expect(store.editor.document.node(set)?.componentSet == [L("Property 1")])
+    #expect(store.editor.document.node("a")?.variant == [L("Property 1"): "Default"])
+    store.undo()
+    #expect(store.editor.document.node(set) == nil && store.editor.document.node("a")?.variant == nil)
+    #expect(await failure(store, .combineAsVariants(["page"])) == "Layer page is not a main component")
+}
+
+@Test @MainActor func setVariantPropertiesViaControlMatchesUI() async throws {
+    let (store, set) = try makeVariantStore()
+    let name = L("Property 1")
+    let result = try await control(store, .setVariantProperties(set, properties: ["Mode", "Size"], rename: [name: "Mode"]))
+    #expect(result["id"] as? String == set && store.editor.undoName == "Agent: Edit Variant Properties")
+    #expect(store.editor.document.node(set)?.componentSet == ["Mode", "Size"])
+    #expect(store.editor.document.node("a")?.variant == ["Mode": "Default", "Size": L("Default")])
+    store.undo()
+    #expect(store.editor.document.node(set)?.componentSet == [name])
+    let node = try store.setVariantProperties(set, ["Mode"], rename: [name: "Mode"])
+    #expect(node.componentSet == ["Mode"] && store.editor.undoName == "Edit Variant Properties")
+    #expect(await failure(store, .setVariantProperties("a", properties: ["X"], rename: [:])) == "Layer a is not a component set")
+}
+
+@Test @MainActor func setVariantViaControlMatchesUI() async throws {
+    let (store, set) = try makeVariantStore()
+    let name = L("Property 1")
+    let result = try await control(store, .setVariant("b", values: [name: "Pressed"]))
+    #expect((result["variant"] as? [String: String]) == [name: "Pressed"] && store.editor.undoName == "Agent: Edit Variant")
+    store.undo()
+    #expect(store.editor.document.node("b")?.variant == [name: "Hover"])
+    let node = try store.setVariant("b", values: [name: "Pressed"])
+    #expect(node.variant == [name: "Pressed"] && store.editor.undoName == "Edit Variant")
+    #expect(await failure(store, .setVariant("b", values: [name: "Default"])) != nil)
+    #expect(await failure(store, .setVariant(set, values: [name: "x"])) == "Layer \(set) is not a variant")
+}
+
+@Test @MainActor func addVariantViaControlSelectsTheNewVariant() async throws {
+    let (store, set) = try makeVariantStore()
+    let result = try await control(store, .addVariant("a"))
+    let id = try #require(result["id"] as? String)
+    #expect(store.editor.undoName == "Agent: Add Variant" && store.selection == [id])
+    #expect(store.editor.document.node(id)?.component == true && store.editor.document.parentID(of: id) == .some(set))
+    store.undo()
+    #expect(store.editor.document.node(id) == nil)
+    let viaUI = try store.addVariant(set)
+    #expect(store.editor.undoName == "Add Variant" && store.selection == [viaUI.id])
+    #expect(await failure(store, .addVariant("page")) == "Layer page is not a variant or a component set")
+}
+
+@Test @MainActor func switchVariantViaControlSwitchesInstancesAsOneStep() async throws {
+    let (store, _) = try makeVariantStore()
+    let name = L("Property 1")
+    let first = try store.createInstance(of: "a", parent: "page", index: nil, at: Point(x: 500, y: 0))
+    let second = try store.createInstance(of: "a", parent: "page", index: nil, at: Point(x: 600, y: 0))
+    let result = try await control(store, .switchVariant([first.id, second.id], values: [name: "Hover"]))
+    #expect((result["ids"] as? [String]) == [first.id, second.id])
+    #expect(store.editor.undoName == "Agent: Switch Variant" && store.selection == [first.id, second.id])
+    #expect(store.editor.document.node(first.id)?.instance == "b" && store.editor.document.node(second.id)?.instance == "b")
+    store.undo()
+    #expect(store.editor.document.node(first.id)?.instance == "a" && store.editor.document.node(second.id)?.instance == "a")
+    let nodes = try store.switchVariant([first.id], values: [name: "Hover"])
+    #expect(nodes.map(\.id) == [first.id] && store.editor.undoName == "Switch Variant")
+    #expect(await failure(store, .switchVariant(["page"], values: [name: "Hover"])) == "Layer page is not an instance")
+    #expect(await failure(store, .switchVariant([first.id], values: [name: "Nope"])) != nil)
+}
+
+@Test @MainActor func instanceOfSetUsesFirstVariant() async throws {
+    let (store, set) = try makeVariantStore()
+    let ofSet = try await control(store, .createInstance(component: set, parent: "page", index: nil, x: 0, y: 0))
+    #expect(ofSet["instance"] as? String == "a")
+    let ofVariant = try await control(store, .createInstance(component: "b", parent: "page", index: nil, x: 0, y: 0))
+    #expect(ofVariant["instance"] as? String == "b")
+}
+
+@Test @MainActor func listComponentsIncludesSets() async throws {
+    let (store, set) = try makeVariantStore()
+    let name = L("Property 1")
+    let list = try #require(try await store.handleControl(.listComponents) as? [String: Any])
+    let components = try #require(list["components"] as? [[String: Any]])
+    let byID = Dictionary(uniqueKeysWithValues: components.map { ($0["id"] as! String, $0) })
+    #expect(byID["a"]?["set"] as? String == set && (byID["b"]?["variant"] as? [String: String]) == [name: "Hover"])
+    let sets = try #require(list["sets"] as? [[String: Any]])
+    #expect(sets.count == 1 && sets[0]["id"] as? String == set && sets[0]["properties"] as? [String] == [name])
+    #expect(sets[0]["variants"] as? [String] == ["a", "b"])
+}

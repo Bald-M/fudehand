@@ -38,7 +38,9 @@ extension FudehandStore {
     /// neither, where an inserted layer goes (the selected frame, else the viewport center).
     @discardableResult
     func createInstance(of component: String, parent: String?, index: Int?, at point: Point?, step: String = "Insert Component") throws -> DesignNode {
-        guard let main = editor.document.node(component) else { throw DesignError("Layer not found: \(component)") }
+        guard var main = editor.document.node(component) else { throw DesignError("Layer not found: \(component)") }
+        // An instance of a component set is an instance of its first variant.
+        if main.componentSet != nil, let first = main.children.first { main = first }
         guard main.component else { throw DesignError("Layer \(component) is not a main component") }
         var place: (parent: String?, x: Double, y: Double) = (parent, point?.x ?? 0, point?.y ?? 0)
         if parent == nil, point == nil { place = insertionPlacement(width: main.width, height: main.height) }
@@ -60,6 +62,55 @@ extension FudehandStore {
             if let id = $0.instance { instances[id, default: []].append($0.id) }
         }
         return components.map { ($0, instances[$0.id] ?? []) }
+    }
+
+    /// Every component set in document order.
+    func listComponentSets() -> [(id: String, name: String, properties: [String], variants: [DesignNode])] {
+        var sets: [(id: String, name: String, properties: [String], variants: [DesignNode])] = []
+        editor.document.forEach { if let properties = $0.componentSet { sets.append(($0.id, $0.name, properties, $0.children)) } }
+        return sets
+    }
+
+    /// Wraps main components that share a parent in a new component set, as one undo step, and selects the set.
+    @discardableResult
+    func combineAsVariants(_ ids: [String], step: String = "Combine as Variants") throws -> DesignNode {
+        var set = ""
+        try perform(step) { set = try ComponentVariants.combine(ids, in: &$0, propertyName: L("Property 1")) }
+        setSelection([set])
+        return try layer(set)
+    }
+
+    /// Sets a component set's variant property names in order (see `ComponentVariants.setProperties`), as one undo step.
+    @discardableResult
+    func setVariantProperties(_ set: String, _ properties: [String], rename: [String: String], step: String = "Edit Variant Properties") throws -> DesignNode {
+        try perform(step) {
+            try ComponentVariants.setProperties(set, properties, rename: rename, defaultValue: L("Default"), in: &$0)
+        }
+        return try layer(set)
+    }
+
+    /// Sets some of a variant's values, as one undo step.
+    @discardableResult
+    func setVariant(_ id: String, values: [String: String], step: String = "Edit Variant") throws -> DesignNode {
+        try perform(step) { try ComponentVariants.setValues(id, values, in: &$0) }
+        return try layer(id)
+    }
+
+    /// Copies a variant, or a component set's last variant, into its set as a new variant, as one undo step, and selects it.
+    @discardableResult
+    func addVariant(_ id: String, step: String = "Add Variant") throws -> DesignNode {
+        var added = ""
+        try perform(step) { added = try ComponentVariants.addVariant(from: id, in: &$0) }
+        setSelection([added])
+        return try layer(added)
+    }
+
+    /// Switches instances to the variant with the given values, as one undo step, and selects them.
+    @discardableResult
+    func switchVariant(_ ids: [String], values: [String: String], step: String = "Switch Variant") throws -> [DesignNode] {
+        try perform(step) { try ComponentVariants.switchInstances(ids, to: values, in: &$0) }
+        setSelection(Set(ids))
+        return try ids.map(layer)
     }
 
     /// Gives the properties of a layer inside an instance (all of them when nil; for an instance, every layer of it) back the
