@@ -366,6 +366,17 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
         set { componentFields.overrides = newValue }
     }
 
+    /// On a component set: its variant property names, in display order.
+    public var componentSet: [String]? {
+        @inlinable get { componentBox?.fields.componentSet }
+        set { componentFields.componentSet = newValue }
+    }
+    /// On a variant (a main component directly inside a component set): its value for each of the set's properties.
+    public var variant: [String: String]? {
+        @inlinable get { componentBox?.fields.variant }
+        set { componentFields.variant = newValue }
+    }
+
     private var componentFields: ComponentFields {
         get { componentBox?.fields ?? ComponentFields() }
         set { componentBox = newValue == ComponentFields() ? nil : ComponentBox(newValue) }
@@ -383,12 +394,14 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     }
 }
 
-/// A layer's component fields (`DesignNode.component`, `instance`, `source`, `overrides`).
+/// A layer's component fields (`DesignNode.component`, `instance`, `source`, `overrides`, `componentSet`, `variant`).
 @usableFromInline struct ComponentFields: Equatable, Sendable {
     @usableFromInline var component = false
     @usableFromInline var instance: String?
     @usableFromInline var source: String?
     @usableFromInline var overrides: Set<String> = []
+    @usableFromInline var componentSet: [String]?
+    @usableFromInline var variant: [String: String]?
 }
 
 /// Immutable storage for a layer's component fields; never holds the defaults (the node keeps nil instead), so two nodes are
@@ -405,9 +418,9 @@ public struct DesignDocument: Equatable, Sendable {
     /// The format name written before the product was renamed; files carrying it still open.
     static let legacyFormat = "ui-atlas.design"
     /// 2 added layer interactions, 3 layer animations and text sequences, 4 scrolling, layer states, overlays, and visibility
-    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 frame layout guides, 9 effects, 10 components; older files open unchanged and are
+    /// toggles, 5 icon layers, 6 version snapshots, 7 annotations, 8 frame layout guides, 9 effects, 10 components, 11 component sets and variants; older files open unchanged and are
     /// written as the current version.
-    public static let formatVersion = 10
+    public static let formatVersion = 11
     public static let fileExtension = "fudehand"
 
     public var nodes: [DesignNode]
@@ -460,24 +473,61 @@ public struct DesignDocument: Equatable, Sendable {
     }
 
     /// The structural component rules: a main component is not an instance and is not inside a main component or an instance; `source`
-    /// and `overrides` appear only inside an instance. Missing main components, cycles, and mismatched sources are not errors here.
+    /// and `overrides` appear only inside an instance. A component set is a frame outside components, instances, and other sets whose
+    /// children are all variants; a variant has a value for each of the set's properties, and no two variants share all values. Missing
+    /// main components, cycles, and mismatched sources are not errors here.
     func validateComponents() throws {
-        func visit(_ nodes: [DesignNode], inComponent: Bool, inInstance: Bool) throws {
+        func validateSet(_ node: DesignNode, properties: [String]) throws {
+            var seenNames = Set<String>()
+            for name in properties {
+                if name.isEmpty { throw DesignError("Layer \(node.id): variant property names cannot be empty") }
+                if !seenNames.insert(name).inserted { throw DesignError("Layer \(node.id): duplicate variant property \(name)") }
+            }
+            var seenValues = Set<[String]>()
+            for child in node.children {
+                guard child.component, let values = child.variant else {
+                    throw DesignError("Layer \(child.id): only variants can be inside component set \(node.id)")
+                }
+                if Set(values.keys) != seenNames {
+                    throw DesignError("Layer \(child.id): variant values must match the properties of component set \(node.id)")
+                }
+                if values.values.contains(where: \.isEmpty) { throw DesignError("Layer \(child.id): variant values cannot be empty") }
+                if !seenValues.insert(properties.map { values[$0]! }).inserted {
+                    throw DesignError("Layer \(child.id): another variant of component set \(node.id) has the same values")
+                }
+            }
+        }
+        func visit(_ nodes: [DesignNode], inComponent: Bool, inInstance: Bool, inSet: Bool, parentIsSet: Bool) throws {
             for node in nodes {
                 if node.component {
                     if node.instance != nil { throw DesignError("Layer \(node.id): a main component cannot be an instance") }
                     if inComponent { throw DesignError("Layer \(node.id): a main component cannot be inside another main component") }
                     if inInstance { throw DesignError("Layer \(node.id): a main component cannot be inside an instance") }
                 }
+                if node.variant != nil {
+                    if !node.component { throw DesignError("Layer \(node.id): a variant must be a main component") }
+                    if !parentIsSet { throw DesignError("Layer \(node.id): variant is only allowed directly inside a component set") }
+                }
+                if let properties = node.componentSet {
+                    if node.type != .frame { throw DesignError("Layer \(node.id): a component set must be a frame") }
+                    if node.component || node.instance != nil {
+                        throw DesignError("Layer \(node.id): a component set cannot be a main component or an instance")
+                    }
+                    if inComponent || inInstance || inSet {
+                        throw DesignError("Layer \(node.id): a component set cannot be inside a main component, an instance, or another component set")
+                    }
+                    try validateSet(node, properties: properties)
+                }
                 let insideInstance = inInstance || node.instance != nil
                 if !insideInstance {
                     if node.source != nil { throw DesignError("Layer \(node.id): source is only allowed inside an instance") }
                     if !node.overrides.isEmpty { throw DesignError("Layer \(node.id): overrides are only allowed inside an instance") }
                 }
-                try visit(node.children, inComponent: inComponent || node.component, inInstance: insideInstance)
+                try visit(node.children, inComponent: inComponent || node.component, inInstance: insideInstance,
+                          inSet: inSet || node.componentSet != nil, parentIsSet: node.componentSet != nil)
             }
         }
-        try visit(nodes, inComponent: false, inInstance: false)
+        try visit(nodes, inComponent: false, inInstance: false, inSet: false, parentIsSet: false)
     }
 
     /// Depth-first traversal of all nodes.

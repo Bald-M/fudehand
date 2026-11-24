@@ -292,7 +292,8 @@ extension FudehandStore {
         DesignDocument(nodes: [node]).forEach { layer in
             guard refusal == nil else { return }
             let key = layer.component ? "component" : layer.instance != nil ? "instance" : layer.source != nil ? "source"
-                : !layer.overrides.isEmpty ? "overrides" : nil
+                : !layer.overrides.isEmpty ? "overrides" : layer.componentSet != nil ? "componentSet"
+                : layer.variant != nil ? "variant" : nil
             if let key { refusal = DesignError("Layer \(layer.id): cannot set \(key)") }
         }
         if let refusal { throw refusal }

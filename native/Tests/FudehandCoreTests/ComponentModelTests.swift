@@ -29,7 +29,7 @@ private func file(_ nodes: String, version: Int = 10) -> String {
         let document = DesignDocument(nodes: [main, root])
         let data = try document.encoded()
         let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(object["version"] as? Int == 10)
+        #expect(object["version"] as? Int == 11)
         let nodes = try #require(object["nodes"] as? [[String: Any]])
         #expect(nodes[1]["overrides"] as? [String] == ["fill", "text.content"])
         #expect(try DesignDocument.decode(data) == document)
@@ -43,7 +43,7 @@ private func file(_ nodes: String, version: Int = 10) -> String {
     @Test func version9FileOpens() throws {
         let document = try decode(file(frame("a"), version: 9))
         let object = try #require(JSONSerialization.jsonObject(with: document.encoded()) as? [String: Any])
-        #expect(object["version"] as? Int == 10)
+        #expect(object["version"] as? Int == 11)
     }
 
     @Test func componentInsideInstanceIsLoadError() {

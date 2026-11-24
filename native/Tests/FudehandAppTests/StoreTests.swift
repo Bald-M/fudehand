@@ -161,9 +161,9 @@ private func temporaryFile() -> URL {
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "r", "type": "rectangle"])))
     _ = try await control(store, .saveDocument(temporaryFile().path))
     let bad = temporaryFile()
-    try Data(#"{"format":"fudehand.design","version":11,"nodes":[]}"#.utf8).write(to: bad)
+    try Data(#"{"format":"fudehand.design","version":12,"nodes":[]}"#.utf8).write(to: bad)
     defer { try? FileManager.default.removeItem(at: bad) }
-    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 11); upgrade Fudehand to open it")
+    #expect(await failure(store, .openDocument(bad.path, discard: false)) == "File was created by a newer version of Fudehand (format version 12); upgrade Fudehand to open it")
     #expect(store.editor.document.node("r") != nil)
 }
 
@@ -1546,6 +1546,23 @@ private func temporaryDirectory() -> URL {
     // A false or empty value sets nothing and is accepted.
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject(["id": "ok", "type": "frame", "component": false])))
     #expect(store.editor.document.node("ok")?.component == false)
+}
+
+@Test @MainActor func agentCreateAndUpdateRefuseVariantFields() async throws {
+    let store = try makeComponentStore()
+    let before = store.editor.document
+    let cases: [(JSONObject, String)] = [
+        (JSONObject(["id": "c", "type": "frame", "componentSet": ["State"]]), "Layer c: cannot set componentSet"),
+        (JSONObject(["id": "c", "type": "frame", "children": [["id": "k", "type": "frame", "variant": ["State": "A"]]]]), "Layer k: cannot set variant"),
+    ]
+    for (object, message) in cases {
+        #expect(await failure(store, .createNode(parent: nil, index: nil, node: object)) == message)
+    }
+    for key in ["componentSet", "variant"] {
+        let value: Any = key == "variant" ? ["State": "A"] : ["State"]
+        #expect(await failure(store, .updateNode("home", changes: JSONObject([key: value]))) == "Layer home: cannot change \(key)")
+    }
+    #expect(store.editor.document == before)
 }
 
 @Test @MainActor func drawingOverATopLevelInstanceSkipsIt() throws {
