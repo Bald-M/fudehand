@@ -342,14 +342,34 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
     /// Frames only: grids, columns, and rows drawn over the frame on the editing canvas, in the order they were added.
     public var layoutGuides: [LayoutGuide] = []
     public var children: [DesignNode] = []
+    /// The component fields below, held out of line and nil on a layer that has none: copying a node then costs one pointer
+    /// instead of three reference-counted values, so documents without components walk and copy the tree as fast as before.
+    @usableFromInline var componentBox: ComponentBox?
     /// Set on a main component: the source that instances mirror.
-    public var component = false
+    public var component: Bool {
+        @inlinable get { componentBox?.fields.component ?? false }
+        set { componentFields.component = newValue }
+    }
     /// On an instance's root layer: the id of its main component.
-    public var instance: String?
+    public var instance: String? {
+        @inlinable get { componentBox?.fields.instance }
+        set { componentFields.instance = newValue }
+    }
     /// On every layer inside an instance, the root included: the id of the layer in the main component that it mirrors.
-    public var source: String?
+    public var source: String? {
+        @inlinable get { componentBox?.fields.source }
+        set { componentFields.source = newValue }
+    }
     /// On layers inside an instance: the property paths this layer overrides, so they no longer follow the main component.
-    public var overrides: Set<String> = []
+    public var overrides: Set<String> {
+        @inlinable get { componentBox?.fields.overrides ?? [] }
+        set { componentFields.overrides = newValue }
+    }
+
+    private var componentFields: ComponentFields {
+        get { componentBox?.fields ?? ComponentFields() }
+        set { componentBox = newValue == ComponentFields() ? nil : ComponentBox(newValue) }
+    }
 
     public init(id: String, type: NodeType, name: String? = nil, x: Double = 0, y: Double = 0,
                 width: Double = 100, height: Double = 100) {
@@ -361,6 +381,22 @@ public struct DesignNode: Equatable, Sendable, Identifiable {
         get { Rect(x: x, y: y, width: width, height: height) }
         set { x = newValue.x; y = newValue.y; width = newValue.width; height = newValue.height }
     }
+}
+
+/// A layer's component fields (`DesignNode.component`, `instance`, `source`, `overrides`).
+@usableFromInline struct ComponentFields: Equatable, Sendable {
+    @usableFromInline var component = false
+    @usableFromInline var instance: String?
+    @usableFromInline var source: String?
+    @usableFromInline var overrides: Set<String> = []
+}
+
+/// Immutable storage for a layer's component fields; never holds the defaults (the node keeps nil instead), so two nodes are
+/// equal exactly when their fields are.
+@usableFromInline final class ComponentBox: Equatable, Sendable {
+    @usableFromInline let fields: ComponentFields
+    init(_ fields: ComponentFields) { self.fields = fields }
+    @usableFromInline static func == (lhs: ComponentBox, rhs: ComponentBox) -> Bool { lhs === rhs || lhs.fields == rhs.fields }
 }
 
 /// A design document: the ordered list of top-level layers and the annotations pinned to them.

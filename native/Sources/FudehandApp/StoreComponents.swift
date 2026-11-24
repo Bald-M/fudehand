@@ -13,7 +13,8 @@ extension FudehandStore {
 
     /// Why layer `id` cannot become a main component, or nil when it can.
     private func createComponentRefusal(_ id: String) -> DesignError? {
-        let chain = layers(from: editor.document, to: id)
+        let index = self.index
+        let chain = index.ancestry(of: id).compactMap(index.node)
         guard let node = chain.last else { return DesignError("Layer not found: \(id)") }
         if node.component { return DesignError("Layer \(id) is already a main component") }
         if node.instance != nil { return DesignError("Layer \(id) is an instance; detach it first") }
@@ -104,16 +105,17 @@ extension FudehandStore {
     }
 
     /// Whether any of these layers is below an instance's root. Structure there follows the main component, so the commands that
-    /// insert, delete, move, or reorder layers are disabled for such a selection.
+    /// insert, delete, move, or reorder layers are disabled for such a selection. The menus ask on every selection change, so this
+    /// and the other checks the UI asks look layers up in the store's index instead of searching the tree.
     func hasLayersInsideInstance(_ ids: Set<String>) -> Bool {
-        let document = editor.document
-        return ids.contains { id in document.ancestry(of: id).dropLast().contains { document.node($0)?.instance != nil } }
+        let index = self.index
+        return ids.contains { id in index.ancestry(of: id).dropLast().contains { index.node($0)?.instance != nil } }
     }
 
     /// Whether Detach Instance applies to these layers: one or more, all instance roots.
     func canDetachInstances(_ ids: Set<String>) -> Bool {
-        let document = editor.document
-        return !ids.isEmpty && ids.allSatisfy { id in document.node(id).map { $0.instance != nil && $0.source == $0.instance } ?? false }
+        let index = self.index
+        return !ids.isEmpty && ids.allSatisfy { id in index.node(id).map { $0.instance != nil && $0.source == $0.instance } ?? false }
     }
 
     func createComponent(from ids: Set<String>) {
