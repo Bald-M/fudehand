@@ -74,6 +74,9 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | Reorder or reparent layers (bring forward, send to back, drag in the layers panel) | `design_move_node` |
 | Delete layers | `design_delete_nodes` |
 | Copy, cut, paste, and duplicate layers (Edit menu, layers panel context menu) | `design_copy_nodes`, `design_paste`, `design_duplicate_nodes` |
+| Create a main component from a layer; insert an instance; list main components with their instances | `design_create_component`, `design_create_instance`, `design_list_components` |
+| Edit a layer inside an instance (records an override); reset overrides; detach an instance | `design_update_node`, `design_reset_overrides`, `design_detach_instance` |
+| Read component links (`component`, `instance`, `source`, `overrides`) | `design_get_node`, `design_get_document` |
 | Select layers | `design_select` |
 | Undo, redo | `design_undo`, `design_redo` |
 | New, open, save, save as | `design_new_document`, `design_open_document`, `design_save_document` |

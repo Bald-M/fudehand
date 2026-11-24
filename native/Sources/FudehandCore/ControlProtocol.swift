@@ -14,6 +14,14 @@ public enum ControlCommand: Equatable, Sendable {
     case paste
     /// Duplicates layers (the selection when `ids` is nil).
     case duplicateNodes(ids: [String]?)
+    /// Turns a layer into a main component.
+    case createComponent(String)
+    /// Inserts an instance of a main component; a nil `x` or `y` with no `parent` places it as an inserted layer is placed.
+    case createInstance(component: String, parent: String?, index: Int?, x: Double?, y: Double?)
+    case listComponents
+    /// Resets overrides of a layer inside an instance: the named properties, or all of them when nil.
+    case resetOverrides(String, properties: [String]?)
+    case detachInstance([String])
     case moveNode(String, parent: String?, index: Int?)
     case select([String])
     case undo
@@ -327,6 +335,22 @@ public enum ControlProtocol {
         case "copy_nodes": return .copyNodes(ids: try layers(), cut: try flag("cut"))
         case "paste": return .paste
         case "duplicate_nodes": return .duplicateNodes(ids: try layers())
+        case "create_component": return .createComponent(try string("id"))
+        case "create_instance":
+            return .createInstance(component: try string("component"), parent: try optionalString("parent"), index: try optionalIndex("index"),
+                                   x: try optionalNumber("x"), y: try optionalNumber("y"))
+        case "list_components": return .listComponents
+        case "reset_overrides":
+            var properties: [String]?
+            if !(args["properties"] == nil || args["properties"] is NSNull) {
+                properties = try strings("properties")
+                guard properties?.isEmpty == false else { throw Message(text: "Invalid argument type: properties") }
+            }
+            return .resetOverrides(try string("id"), properties: properties)
+        case "detach_instance":
+            let ids = try strings("ids")
+            guard !ids.isEmpty else { throw Message(text: "Invalid argument type: ids") }
+            return .detachInstance(ids)
         case "move_node": return .moveNode(try string("id"), parent: try optionalString("parent"), index: try optionalIndex("index"))
         case "select": return .select(try strings("ids"))
         case "undo": return .undo
