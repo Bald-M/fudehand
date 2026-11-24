@@ -66,10 +66,12 @@ extension FudehandStore {
         case .newDocument(let discard):
             try requireDiscardable(discard)
             replace(DesignDocument(), url: nil)
+            await editorPresented()
             return controlState()
         case .openDocument(let path, let discard):
             try requireDiscardable(discard)
             try await open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath)) { try requireDiscardable(discard); return true }
+            await editorPresented()
             return controlState()
         case .saveDocument(let path):
             guard let url = path.map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }) ?? fileURL else {
@@ -150,6 +152,7 @@ extension FudehandStore {
                 throw ControlCommandError("File not found: \(path) (deleted or moved); remove it from the list with app_remove_recent")
             }
             try await openFile(URL(fileURLWithPath: entry.path)) { try requireDiscardable(discard); return true }
+            await editorPresented()
             return controlState()
         case .removeRecent(let path):
             let entry = try requireRecent(path)
@@ -167,6 +170,7 @@ extension FudehandStore {
                     + (templates.isEmpty ? "none" : templates.map(\.name).joined(separator: ", ")))
             }
             try newDocument(fromTemplate: template) { try requireDiscardable(discard); return true }
+            await editorPresented()
             return controlState()
         case .exportHTML(let id, let directory):
             _ = try requireNode(id)
@@ -190,6 +194,13 @@ extension FudehandStore {
             try deleteAnnotation(id, by: .agent)
             return ["deleted": id]
         }
+    }
+
+    /// Waits until the editor window has opened, a turn after the document loads (#252), so the Agent's next command finds the
+    /// window and its canvas. The run loop performs the block after the main-queue work under way, so the command resumes
+    /// behind the window opening already queued and ahead of the work the new window queues.
+    private func editorPresented() async {
+        await withCheckedContinuation { done in RunLoop.main.perform(inModes: [.common]) { done.resume() } }
     }
 
     /// The entry for `path`, which may be spelled differently from the entry: entries are recorded with symlinks resolved.
