@@ -10,8 +10,9 @@ public enum ComponentSync {
 
     /// Records overrides for edited instance layers, then rebuilds instances whose main component (or own subtree) changed.
     public static func reconcile(old: DesignDocument, new: inout DesignDocument) {
-        var changes = Changes(document: new)
-        changes.visit(&new.nodes, old: old.nodes, path: [], instanceOf: nil)
+        var changes = Changes()
+        changes.visit(new.nodes, old: old.nodes, path: [], instanceOf: nil)
+        if !changes.edits.isEmpty { recordOverrides(changes.edits, in: &new) }
         if changes.components.isEmpty && changes.instances.isEmpty { return }
         var ids = FreshIDs(document: new)
         syncInstances(in: &new, changedComponents: changes.components, changedInstances: changes.instances, ids: &ids)
@@ -45,9 +46,25 @@ public enum ComponentSync {
     public static func resetOverrides(_ node: inout DesignNode, component: DesignNode, properties: Set<String>?) {
         let sources = layers(of: component)
         func reset(_ layer: inout DesignNode, recursive: Bool) {
-            let paths = properties ?? layer.overrides
+            let source = layer.source.flatMap { sources[$0] }
+            var paths = properties ?? layer.overrides
+            for path in paths {
+                if let dot = path.firstIndex(of: ".") {
+                    // Resetting one field of a whole-object override keeps the object's other differing fields overridden.
+                    let whole = String(path[..<dot])
+                    guard layer.overrides.remove(whole) != nil else { continue }
+                    let group = propertyGroups.first { $0.whole.path == whole }
+                    for field in group?.fields ?? [] where !paths.contains(field.path) {
+                        if let source, field.equal(layer, source) { continue }
+                        layer.overrides.insert(field.path)
+                    }
+                } else {
+                    // Resetting a whole object resets its fields too.
+                    paths.formUnion(layer.overrides.filter { $0.hasPrefix(path + ".") })
+                }
+            }
             layer.overrides.subtract(paths)
-            if let source = layer.source.flatMap({ sources[$0] }) {
+            if let source {
                 for path in paths where !(layer.instance != nil && rootOwned.contains(path)) {
                     ComponentProperty.named(path)?.copy(from: source, to: &layer)
                 }
@@ -62,60 +79,74 @@ public enum ComponentSync {
     /// The root's x and y belong to the instance: never synced, never overrides.
     private static let rootOwned: Set<String> = ["x", "y"]
 
-    /// One walk over old and new that descends only into subtrees that differ.
+    /// A layer inside an instance that the edit changed, with its value before the edit.
+    private struct Edit {
+        let path: [Int]
+        let previous: DesignNode
+        /// The main component of the instance the layer sits in.
+        let component: String
+    }
+
+    /// One read-only walk over old and new that descends only into subtrees that differ.
     private struct Changes {
-        /// The document after the edit, before overrides are recorded: source layers are looked up here.
-        let document: DesignDocument
         /// Main components whose own subtree changed (moving the main component alone does not count).
         var components: Set<String> = []
         /// Index paths of instance roots whose own subtree changed (moving the instance alone does not count).
         var instances: [[Int]] = []
-        private var sourceLayers: [String: [String: DesignNode]] = [:]
+        /// Edited layers inside instances, whose overrides are recorded afterwards.
+        var edits: [Edit] = []
 
-        init(document: DesignDocument) { self.document = document }
-
-        mutating func visit(_ new: inout [DesignNode], old: [DesignNode], path: [Int], instanceOf: String?) {
+        mutating func visit(_ new: [DesignNode], old: [DesignNode], path: [Int], instanceOf: String?) {
             if new == old { return }
             var oldByID: [String: DesignNode]?
-            for index in new.indices {
-                let id = new[index].id
+            for (index, node) in new.enumerated() {
                 let previous: DesignNode?
-                if index < old.count, old[index].id == id {
+                if index < old.count, old[index].id == node.id {
                     previous = old[index]
                 } else {
                     if oldByID == nil { oldByID = Dictionary(old.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
-                    previous = oldByID?[id]
+                    previous = oldByID?[node.id]
                 }
-                if let previous, previous == new[index] { continue }
-                let node = new[index]
-                let moved = previous.map { ComponentSync.differsOnlyInPosition($0, node) } ?? false
-                if node.component, !moved { components.insert(id) }
-                if node.instance != nil, !moved { instances.append(path + [index]) }
+                if let previous, previous == node { continue }
+                if node.component || node.instance != nil {
+                    let moved = previous.map { ComponentSync.differsOnlyInPosition($0, node) } ?? false
+                    if node.component, !moved { components.insert(node.id) }
+                    if node.instance != nil, !moved { instances.append(path + [index]) }
+                }
                 let owner = node.instance ?? instanceOf
-                if let previous, node.source != nil, let owner { recordOverrides(&new[index], previous: previous, component: owner) }
-                visit(&new[index].children, old: previous?.children ?? [], path: path + [index], instanceOf: owner)
+                if let previous, node.source != nil, let owner {
+                    edits.append(Edit(path: path + [index], previous: previous, component: owner))
+                }
+                visit(node.children, old: previous?.children ?? [], path: path + [index], instanceOf: owner)
             }
         }
+    }
 
-        /// Each changed property becomes an override, unless its new value equals the source layer's, which removes the override.
-        private mutating func recordOverrides(_ layer: inout DesignNode, previous: DesignNode, component: String) {
-            var paths = ComponentProperty.changed(previous, layer)
-            if layer.instance != nil { paths.subtract(ComponentSync.rootOwned) }
-            if paths.isEmpty { return }
-            guard let source = layer.source.flatMap({ layers(of: component)[$0] }) else { return }
-            for path in paths {
-                guard let property = ComponentProperty.named(path) else { continue }
-                if property.equal(layer, source) { layer.overrides.remove(path) } else { layer.overrides.insert(path) }
+    /// Each changed property of an edited instance layer becomes an override, unless its new value equals the source layer's (new)
+    /// value, which removes the override. All reads happen before the first write.
+    private static func recordOverrides(_ edits: [Edit], in document: inout DesignDocument) {
+        var updates: [(path: [Int], overrides: Set<String>)] = []
+        do {
+            var sourceLayers: [String: [String: DesignNode]] = [:]
+            for edit in edits {
+                let layer = document[edit.path]
+                var paths = ComponentProperty.changed(edit.previous, layer)
+                if layer.instance != nil { paths.subtract(rootOwned) }
+                if paths.isEmpty { continue }
+                if sourceLayers[edit.component] == nil {
+                    let main = document.node(edit.component).flatMap { $0.component ? $0 : nil }
+                    sourceLayers[edit.component] = main.map(layers(of:)) ?? [:]
+                }
+                guard let source = layer.source.flatMap({ sourceLayers[edit.component]?[$0] }) else { continue }
+                var overrides = layer.overrides
+                for path in paths {
+                    guard let property = ComponentProperty.named(path) else { continue }
+                    if property.equal(layer, source) { overrides.remove(path) } else { overrides.insert(path) }
+                }
+                if overrides != layer.overrides { updates.append((edit.path, overrides)) }
             }
         }
-
-        private mutating func layers(of component: String) -> [String: DesignNode] {
-            if let cached = sourceLayers[component] { return cached }
-            let main = document.node(component).flatMap { $0.component ? $0 : nil }
-            let result = main.map(ComponentSync.layers(of:)) ?? [:]
-            sourceLayers[component] = result
-            return result
-        }
+        for update in updates { document.update(at: update.path) { $0.overrides = update.overrides } }
     }
 
     private static func differsOnlyInPosition(_ old: DesignNode, _ new: DesignNode) -> Bool {

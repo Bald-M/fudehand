@@ -126,14 +126,59 @@ import Testing
             var next = document
             next.update(at: [0, 0]) { $0.fill = Self.blue }
             let changed = next.nodes
+            let storage = (Self.storage(next.nodes), Self.storage(next.nodes[0].children))
             ComponentSync.reconcile(old: document, new: &next)
             #expect(next.nodes == changed)
+            // No mutable access: the changed path's arrays were not copied.
+            #expect(Self.storage(next.nodes) == storage.0)
+            #expect(Self.storage(next.nodes[0].children) == storage.1)
 
             var same = document
             ComponentSync.reconcile(old: document, new: &same)
             #expect(same == document)
         }
         #expect(counter.count == 0)
+    }
+
+    private static func storage(_ nodes: [DesignNode]) -> UnsafeRawPointer? {
+        nodes.withUnsafeBufferPointer { $0.baseAddress.map(UnsafeRawPointer.init) }
+    }
+
+    @Test func mainChildMovePropagates() {
+        let document = edit(componentFixture()) { $0.update(at: [0, 0]) { $0.x = 40 } }
+        let root = instance(document)
+        #expect(root.children[0].x == 40)
+        #expect(root.children[0].overrides.isEmpty && root.overrides.isEmpty)
+        #expect(root.x == 300)
+    }
+
+    @Test func instanceChildMoveBecomesOverride() {
+        var document = edit(componentFixture()) { $0.update(at: [1, 0]) { $0.x = 40 } }
+        #expect(instance(document).children[0].overrides == ["x"])
+        document = edit(document) { $0.update(at: [0, 0]) { $0.y = 33 } }
+        let label = instance(document).children[0]
+        #expect(label.x == 40 && label.y == 33)
+        #expect(label.overrides == ["x"])
+    }
+
+    @Test func resetWholeObjectAndFieldOverrides() throws {
+        let document = edit(componentFixture()) {
+            $0.update(at: [1, 0]) { $0.text?.content = "Go"; $0.text?.color = Self.green }
+        }
+        let main = try #require(document.node("m"))
+        var label = instance(document).children[0]
+        ComponentSync.resetOverrides(&label, component: main, properties: ["text"])
+        #expect(label.overrides.isEmpty)
+        #expect(label.text == main.children[0].text)
+
+        // A whole-object override: resetting one field keeps the other differing fields as field overrides.
+        label.text?.content = "Go"
+        label.text?.color = Self.green
+        label.overrides = ["text"]
+        ComponentSync.resetOverrides(&label, component: main, properties: ["text.color"])
+        #expect(label.overrides == ["text.content"])
+        #expect(label.text?.content == "Go")
+        #expect(label.text?.color == main.children[0].text?.color)
     }
 
     @Test func unrelatedEditDoesNotSyncInstances() {
