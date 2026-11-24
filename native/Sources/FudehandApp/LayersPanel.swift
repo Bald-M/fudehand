@@ -16,6 +16,25 @@ extension NodeType {
     }
 }
 
+extension DesignNode {
+    /// What the inspector header calls this layer: its component role when it has one, otherwise its type.
+    var kindTitle: String {
+        if componentSet != nil { return L("Component Set") }
+        if variant != nil { return L("Variant") }
+        if component { return L("Main Component") }
+        if instance != nil { return L("Instance") }
+        return type.title
+    }
+
+    /// The symbol for this layer, matching its row in the layers panel.
+    var kindSymbol: String {
+        if componentSet != nil { return "square.grid.2x2" }
+        if component { return "square.on.square.dashed" }
+        if instance != nil { return "diamond" }
+        return layout != nil ? "square.split.1x2" : type.symbol
+    }
+}
+
 /// The rows of the layers panel, published apart from the store. The store updates them after every edit, and they change
 /// only with what the rows show: moving or restyling layers on the canvas leaves the panel alone (#228).
 final class LayerOutline: ObservableObject {
