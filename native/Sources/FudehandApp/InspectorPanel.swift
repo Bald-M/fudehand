@@ -249,7 +249,7 @@ private struct NodeInspector: View {
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: InspectorMetrics.gap) {
-                Image(systemName: node.layout != nil ? "square.split.1x2" : node.type.symbol)
+                Image(systemName: node.kindSymbol)
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                     .frame(width: 28, height: 28).background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
                     .accessibilityHidden(true)
@@ -260,7 +260,7 @@ private struct NodeInspector: View {
                         .onChange(of: node.name) { _, next in name = next }
                         .onChange(of: node.id) { name = node.name; content = node.text?.content ?? ""; note = node.versionSnapshot?.note ?? ""; previewing = false }
                         .accessibilityLabel(L("Layer name"))
-                    Text(node.type.title).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(node.kindTitle).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 Button { update(node.visible ? "Hide Layer" : "Show Layer") { $0.visible.toggle() } } label: {
