@@ -32,8 +32,6 @@ final class LayerOutline: ObservableObject {
         let depth: Int
         let component: Bool
         let instance: Bool
-        /// Below an instance's root: its structure follows the main component, so structural commands are disabled.
-        let inInstance: Bool
         let overridden: Bool
 
         var symbol: String {
@@ -52,18 +50,18 @@ final class LayerOutline: ObservableObject {
     func update(_ index: DesignIndex, collapsed: Set<String>) {
         var next: [Row] = []
         next.reserveCapacity(rows.count)
-        func visit(_ nodes: [DesignNode], depth: Int, inInstance: Bool) {
+        func visit(_ nodes: [DesignNode], depth: Int) {
             // Upper layers come first in the list.
             for node in nodes.reversed() {
                 let isCollapsed = collapsed.contains(node.id)
                 next.append(Row(id: node.id, name: node.name, type: node.type, hasLayout: node.layout != nil, visible: node.visible,
                                 locked: node.locked, hasChildren: !node.children.isEmpty, collapsed: isCollapsed, depth: depth,
-                                component: node.component, instance: node.instance != nil, inInstance: inInstance,
+                                component: node.component, instance: node.instance != nil,
                                 overridden: !node.overrides.isEmpty))
-                if !isCollapsed { visit(node.children, depth: depth + 1, inInstance: inInstance || node.instance != nil) }
+                if !isCollapsed { visit(node.children, depth: depth + 1) }
             }
         }
-        visit(index.document.nodes, depth: 0, inInstance: false)
+        visit(index.document.nodes, depth: 0)
         if next != rows { rows = next }
         if index.count != count { count = index.count }
     }
@@ -177,12 +175,12 @@ struct LayersPanel: View {
                 Button(L("Bring to Front")) { reorder(node.id, toTop: true) }
                 Button(L("Send to Back")) { reorder(node.id, toTop: false) }
             }
-            .disabled(node.inInstance)
+            .disabled(store.hasLayersInsideInstance([node.id]))
             Divider()
             Button(L("Copy")) { store.canvasCopy(targets(node), cut: false) }
-            Button(L("Cut")) { store.canvasCopy(targets(node), cut: true) }.disabled(node.inInstance)
+            Button(L("Cut")) { store.canvasCopy(targets(node), cut: true) }.disabled(store.hasLayersInsideInstance(targets(node)))
             Button(L("Paste")) { guard store.canPasteLayers else { return }; store.setSelection([node.id]); store.paste() }
-            Button(L("Duplicate")) { store.setSelection(targets(node)); store.duplicateSelection() }.disabled(node.inInstance)
+            Button(L("Duplicate")) { store.setSelection(targets(node)); store.duplicateSelection() }.disabled(store.hasLayersInsideInstance(targets(node)))
             Divider()
             Button(L("Create Component")) { store.createComponent(from: [node.id]) }
                 .disabled(!store.canCreateComponent([node.id]))
@@ -192,7 +190,7 @@ struct LayersPanel: View {
             Button(L("Zoom to Layer")) { store.focus(node.id) }
             Button(L("Export as HTML…")) { store.setSelection([node.id]); store.exportHTMLWithPanel() }
             Divider()
-            Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }.disabled(node.inInstance)
+            Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }.disabled(store.hasLayersInsideInstance([node.id]))
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(node.kind) \(node.name)")

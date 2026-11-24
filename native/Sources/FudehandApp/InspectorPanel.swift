@@ -301,7 +301,10 @@ private struct NodeInspector: View {
                 }
             }
         } else {
-            InspectorSection(fillTitle, adding: L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
+            InspectorSection(fillTitle, accessory: {
+                overrideReset(["fill"])
+                AddButton(label: L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
+            }) { EmptyView() }
         }
         if let stroke = node.stroke {
             InspectorSection(L("Stroke"), accessory: { overrideReset(node.overrides.filter { $0 == "stroke" || $0.hasPrefix("stroke.") }) }) {
@@ -315,7 +318,10 @@ private struct NodeInspector: View {
                 }
             }
         } else {
-            InspectorSection(L("Stroke"), adding: L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
+            InspectorSection(L("Stroke"), accessory: {
+                overrideReset(node.overrides.filter { $0 == "stroke" || $0.hasPrefix("stroke.") })
+                AddButton(label: L("Add Stroke")) { update("Add Stroke") { $0.stroke = DesignStroke(color: .black, width: 1) } }
+            }) { EmptyView() }
         }
         if node.type.hasEffects { EffectsSection(node: node, update: update) }
         SelectionColorsSection(store: store, displayed: displayed, ids: [node.id])
@@ -351,10 +357,10 @@ private struct NodeInspector: View {
     /// For a main component, its instances; for an instance, its main component and the commands that act on the whole instance.
     @ViewBuilder private var componentSection: some View {
         if node.component {
-            let instances = store.listComponents().first { $0.component.id == node.id }?.instances ?? []
+            let count = Self.instanceCount(of: node.id, in: displayed.document)
             InspectorSection(L("Main Component")) {
-                Text(L("%d Instances", instances.count)).foregroundStyle(.secondary)
-                Button(L("Select Instances")) { store.selectInstances(of: node.id) }.disabled(instances.isEmpty)
+                Text(L("%d Instances", count)).foregroundStyle(.secondary)
+                Button(L("Select Instances")) { store.selectInstances(of: node.id) }.disabled(count == 0)
             }
         } else if let component = node.instance, node.source == component {
             let main = displayed.index.node(component).flatMap { $0.component ? $0 : nil }
@@ -366,6 +372,13 @@ private struct NodeInspector: View {
                 Button(L("Detach Instance")) { store.detachInstances(from: [node.id]) }
             }
         }
+    }
+
+    /// Counts layers only, without collecting ids or the other main components' instances.
+    private nonisolated static func instanceCount(of id: String, in document: DesignDocument) -> Int {
+        var count = 0
+        document.forEach { if $0.instance == id { count += 1 } }
+        return count
     }
 
     private nonisolated static func hasOverrides(_ node: DesignNode) -> Bool {

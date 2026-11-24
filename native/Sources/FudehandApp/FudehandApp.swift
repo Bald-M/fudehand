@@ -247,8 +247,8 @@ private struct ExportHTMLMenuItem: View {
     }
 }
 
-/// Edit › Duplicate (⌘D), available with layers selected; a focused text field leaves it alone. It observes the selection itself,
-/// as Export as HTML… does.
+/// Edit › Duplicate (⌘D), available with layers selected, none of them inside an instance; a focused text field leaves it alone.
+/// It observes the selection itself, as Export as HTML… does.
 private struct DuplicateMenuItem: View {
     let store: FudehandStore
     @ObservedObject var selection: LayerSelection
@@ -259,7 +259,7 @@ private struct DuplicateMenuItem: View {
             store.duplicateSelection()
         }
         .keyboardShortcut("d")
-        .disabled(selection.ids.isEmpty)
+        .disabled(selection.ids.isEmpty || store.hasLayersInsideInstance(selection.ids))
     }
 }
 

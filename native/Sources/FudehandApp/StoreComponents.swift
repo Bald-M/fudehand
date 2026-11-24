@@ -103,6 +103,13 @@ extension FudehandStore {
         ids.count == 1 && ids.first.flatMap(createComponentRefusal) == nil
     }
 
+    /// Whether any of these layers is below an instance's root. Structure there follows the main component, so the commands that
+    /// insert, delete, move, or reorder layers are disabled for such a selection.
+    func hasLayersInsideInstance(_ ids: Set<String>) -> Bool {
+        let document = editor.document
+        return ids.contains { id in document.ancestry(of: id).dropLast().contains { document.node($0)?.instance != nil } }
+    }
+
     /// Whether Detach Instance applies to these layers: one or more, all instance roots.
     func canDetachInstances(_ ids: Set<String>) -> Bool {
         let document = editor.document

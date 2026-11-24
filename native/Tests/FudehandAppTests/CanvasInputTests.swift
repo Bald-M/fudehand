@@ -31,6 +31,7 @@ final class RecordingHost: CanvasHost {
     func canvasCopy(_ ids: Set<String>, cut: Bool) { store.canvasCopy(ids, cut: cut) }
     func canvasPaste() { store.canvasPaste() }
     var canvasCanPaste: Bool { store.canvasCanPaste }
+    func canvasCanRestructure(_ ids: Set<String>) -> Bool { store.canvasCanRestructure(ids) }
 }
 
 /// Top-level frame a (0,0 400×300, containing card 20,20 100×50) and rectangle b (600,0 300×300); viewport (0, 100) at 100%, with the frame's name label visible on screen.

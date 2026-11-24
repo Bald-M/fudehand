@@ -76,11 +76,13 @@ extension FudehandStore {
 
 extension FudehandStore {
     func canvasCopy(_ ids: Set<String>, cut: Bool) {
-        guard !ids.isEmpty else { return }
+        guard !ids.isEmpty, !cut || !hasLayersInsideInstance(ids) else { return }
         do { try copyLayers(ids, cut: cut) } catch { alert = error.localizedDescription }
     }
 
     func canvasPaste() { paste() }
 
     var canvasCanPaste: Bool { canPasteLayers }
+
+    func canvasCanRestructure(_ ids: Set<String>) -> Bool { !hasLayersInsideInstance(ids) }
 }

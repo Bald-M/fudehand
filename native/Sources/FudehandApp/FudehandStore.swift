@@ -860,6 +860,7 @@ extension FudehandStore: CanvasHost {
     }
 
     func canvasDelete(_ ids: Set<String>) {
+        guard !hasLayersInsideInstance(ids) else { return }
         edit("Delete Layers") { try $0.delete(ids) }
         setSelection([])
     }

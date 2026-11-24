@@ -33,6 +33,8 @@ protocol CanvasHost: AnyObject {
     func canvasPaste()
     /// Whether the pasteboard holds layers to paste.
     var canvasCanPaste: Bool { get }
+    /// Whether layers can be removed from where they are (Cut, Delete): not when one is inside an instance.
+    func canvasCanRestructure(_ ids: Set<String>) -> Bool
 }
 
 /// The annotation whose thread is expanded on the canvas: an existing one, or a new one being written that is not added until
@@ -765,7 +767,8 @@ final class FudehandCanvasView: NSView {
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(copy(_:)), #selector(cut(_:)): return !selection.isEmpty && interaction.isIdle
+        case #selector(copy(_:)): return !selection.isEmpty && interaction.isIdle
+        case #selector(cut(_:)): return !selection.isEmpty && interaction.isIdle && host?.canvasCanRestructure(selection) == true
         case #selector(paste(_:)): return interaction.isIdle && host?.canvasCanPaste == true
         default: return true
         }

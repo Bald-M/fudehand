@@ -1398,3 +1398,23 @@ private func temporaryDirectory() -> URL {
     store.resetOverrides(of: instance.id, nil)
     #expect(store.editor.document.node(child)?.overrides.isEmpty == true && store.editor.document.node(child)?.opacity == 1)
 }
+
+@Test @MainActor func structuralCommandsSkipLayersInsideAnInstance() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    #expect(store.hasLayersInsideInstance([child]) && store.hasLayersInsideInstance([child, "page"]))
+    #expect(!store.hasLayersInsideInstance([instance.id]) && !store.hasLayersInsideInstance(["home", "card", "page"]))
+    #expect(!store.canvasCanRestructure([child]) && store.canvasCanRestructure([instance.id]))
+    // Delete and Cut leave the document, the undo history, and the selection alone.
+    store.setSelection([child])
+    let document = store.editor.document
+    store.canvasDelete([child])
+    store.canvasCopy([child], cut: true)
+    #expect(store.editor.document == document && store.selection == [child])
+    #expect(store.editor.undoName == "Insert Component" && store.alert == nil)
+    // The instance root itself is deleted like any layer.
+    store.canvasDelete([instance.id])
+    #expect(store.editor.document.node(instance.id) == nil)
+}
