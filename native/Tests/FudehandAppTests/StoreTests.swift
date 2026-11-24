@@ -1783,13 +1783,13 @@ private func temporaryDirectory() -> URL {
     let (store, set) = try makeVariantStore()
     let name = L("Property 1")
     let instance = try store.createInstance(of: set, parent: "page", index: nil, at: Point(x: 500, y: 0))
-    let choices = store.variantChoices(of: instance.id)
+    let choices = store.variantChoices(of: [instance.id])
     #expect(choices.count == 1 && choices.first?.property == name)
     #expect(choices.first?.values == ["Default", "Hover"] && choices.first?.current == "Default")
-    #expect(store.variantChoices(of: "a").isEmpty && store.variantChoices(of: "page").isEmpty)
+    #expect(store.variantChoices(of: ["a"]).isEmpty && store.variantChoices(of: ["page"]).isEmpty && store.variantChoices(of: []).isEmpty)
     store.switchVariant(of: [instance.id], property: name, value: "Hover")
     #expect(store.editor.document.node(instance.id)?.instance == "b" && store.editor.undoName == "Switch Variant")
-    #expect(store.variantChoices(of: instance.id).first?.current == "Hover")
+    #expect(store.variantChoices(of: [instance.id]).first?.current == "Hover")
 }
 
 @Test @MainActor func insertComponentListsSetsOnce() throws {
@@ -1839,4 +1839,42 @@ private func temporaryDirectory() -> URL {
     try store.copyLayers(["home"], cut: true)
     #expect(store.editor.document.node(instance.id)?.instance == "home")
     #expect(!store.canResetOverrides(instance.id) && !store.canResetOverrides(child))
+}
+
+@Test @MainActor func variantChoicesForSeveralInstances() throws {
+    let store = try makeVariantStore().store
+    let name = L("Property 1")
+    let first = try store.createInstance(of: "a", parent: "page", index: nil, at: Point(x: 500, y: 0))
+    let second = try store.createInstance(of: "a", parent: "page", index: nil, at: Point(x: 600, y: 0))
+    // Agreeing values.
+    let agreeing = store.variantChoices(of: [first.id, second.id])
+    #expect(agreeing.count == 1 && agreeing.first?.values == ["Default", "Hover"] && agreeing.first?.current == "Default")
+    // Differing values: offered, with no current value.
+    _ = try store.switchVariant([second.id], values: [name: "Hover"])
+    let differing = store.variantChoices(of: [first.id, second.id])
+    #expect(differing.count == 1 && differing.first?.property == name && differing.first?.current == nil)
+    // Not offered for a selection that holds anything but instance roots of variants of one set.
+    #expect(store.variantChoices(of: [first.id, "page"]).isEmpty && store.variantChoices(of: [first.id, "a"]).isEmpty)
+    let lone = DesignNode(id: "c", type: .frame, x: 2000, y: 0, width: 50, height: 50)
+    try store.perform("Add c") { try $0.insert(lone, parent: nil, index: nil) }
+    _ = try store.createComponent("c")
+    _ = try store.combineAsVariants(["c"])
+    let other = try store.createInstance(of: "c", parent: "page", index: nil, at: Point(x: 700, y: 0))
+    #expect(store.variantChoices(of: [first.id, other.id]).isEmpty)
+    // Switching both from the panel is one undo step.
+    store.switchVariant(of: [first.id, second.id], property: name, value: "Hover")
+    #expect(store.editor.document.node(first.id)?.instance == "b" && store.editor.document.node(second.id)?.instance == "b")
+    #expect(store.editor.undoName == "Switch Variant" && store.selection == [first.id, second.id])
+    store.undo()
+    #expect(store.editor.document.node(first.id)?.instance == "a" && store.editor.document.node(second.id)?.instance == "b")
+}
+
+@Test @MainActor func variantChoicesIncludeACurrentValueTheSetLacks() throws {
+    let (store, _) = try makeVariantStore()
+    let name = L("Property 1")
+    let instance = try store.createInstance(of: "a", parent: "page", index: nil, at: Point(x: 500, y: 0))
+    // A variant whose value for a property is missing (as in a hand-edited file).
+    try store.perform("Drop value") { try $0.update("a") { $0.variant = [:] } }
+    let choices = store.variantChoices(of: [instance.id])
+    #expect(choices.first?.property == name && choices.first?.current == "" && choices.first?.values == ["Hover", ""])
 }

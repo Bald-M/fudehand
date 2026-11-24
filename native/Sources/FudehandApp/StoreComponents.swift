@@ -274,17 +274,28 @@ extension FudehandStore {
         do { try addVariant(id) } catch { alert = error.localizedDescription }
     }
 
-    /// For an instance root of a variant: each property of its set with the values the set's variants use (in set order) and
-    /// the instance's current value. Empty for any other layer.
-    func variantChoices(of id: String) -> [(property: String, values: [String], current: String)] {
+    /// For instance roots of variants of one component set: each property of the set with the values its variants use (in set
+    /// order) and the instances' current value, nil when they differ. A current value the set's variants lack is listed last.
+    /// Empty for any other selection.
+    func variantChoices(of ids: Set<String>) -> [(property: String, values: [String], current: String?)] {
         let index = self.index
-        guard let node = index.node(id), let variantID = node.instance, node.source == variantID,
-              let current = index.node(variantID)?.variant, let setID = index.parentID(of: variantID) ?? nil,
-              let set = index.node(setID), let properties = set.componentSet else { return [] }
+        var setID: String?
+        var currents: [[String: String]] = []
+        for id in ids {
+            guard let node = index.node(id), let variantID = node.instance, node.source == variantID,
+                  let current = index.node(variantID)?.variant, let parent = index.parentID(of: variantID) ?? nil,
+                  setID == nil || setID == parent else { return [] }
+            setID = parent
+            currents.append(current)
+        }
+        guard let setID, let set = index.node(setID), let properties = set.componentSet else { return [] }
         return properties.map { property in
             var values: [String] = []
             for variant in set.children { if let value = variant.variant?[property], !values.contains(value) { values.append(value) } }
-            return (property, values, current[property] ?? "")
+            let used = Set(currents.map { $0[property] ?? "" })
+            let current = used.count == 1 ? used.first : nil
+            if let current, !values.contains(current) { values.append(current) }
+            return (property, values, current)
         }
     }
 

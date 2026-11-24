@@ -65,6 +65,26 @@ private struct InspectorTabs: View {
     }
 }
 
+/// One pop-up per variant property for instance roots of variants of one component set, showing *Mixed* where their values
+/// differ; choosing a value switches every one of them.
+private struct VariantPickers: View {
+    let store: FudehandStore
+    let ids: Set<String>
+    let choices: [(property: String, values: [String], current: String?)]
+
+    var body: some View {
+        ForEach(choices, id: \.property) { choice in
+            Picker(choice.property, selection: Binding(get: { choice.current ?? "" }, set: { value in
+                guard value != choice.current, choice.values.contains(value) else { return }
+                store.switchVariant(of: ids, property: choice.property, value: value)
+            })) {
+                if choice.current == nil { Text(L("Mixed")).tag("") }
+                ForEach(choice.values, id: \.self) { Text($0).tag($0) }
+            }
+        }
+    }
+}
+
 private struct DesignInspector: View {
     @ObservedObject var store: FudehandStore
     @ObservedObject var displayed: DisplayedDocument
@@ -94,6 +114,10 @@ private struct DesignInspector: View {
                     // A typed draft belongs to this set of layers and is dropped when the selection changes.
                     .environment(\.inspectedLayer, selected.map(\.id).sorted().joined(separator: ","))
                     SelectionColorsSection(store: store, displayed: displayed, ids: selection.ids)
+                    let choices = store.variantChoices(of: selection.ids)
+                    if !choices.isEmpty {
+                        InspectorSection(L("Instance")) { VariantPickers(store: store, ids: selection.ids, choices: choices) }
+                    }
                 } else if selected.count > 1 {
                     InspectorSection(L("%d layers selected", selected.count)) {
                         Text(L("Select one layer to edit its prototype settings."))
@@ -393,12 +417,7 @@ private struct NodeInspector: View {
             let resettable = store.canResetOverrides(node.id)
             InspectorSection(L("Instance")) {
                 LabeledContent(L("Main Component")) { Text(main?.name ?? L("Deleted")).lineLimit(1) }
-                ForEach(store.variantChoices(of: node.id), id: \.property) { choice in
-                    Picker(choice.property, selection: Binding(get: { choice.current },
-                                                               set: { store.switchVariant(of: [node.id], property: choice.property, value: $0) })) {
-                        ForEach(choice.values, id: \.self) { Text($0).tag($0) }
-                    }
-                }
+                VariantPickers(store: store, ids: [node.id], choices: store.variantChoices(of: [node.id]))
                 Button(L("Go to Main Component")) { store.goToMainComponent(of: node.id) }.disabled(main == nil)
                 Button(L("Reset All Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(!resettable || !FudehandStore.hasOverrides(node))
                 Button(L("Detach Instance")) { store.detachInstances(from: [node.id]) }
@@ -426,6 +445,7 @@ private struct NodeInspector: View {
                 Image(systemName: "arrow.counterclockwise").font(.system(size: 11)).iconHitTarget()
             }
             .buttonStyle(.borderless).foregroundStyle(.secondary)
+            .disabled(!store.canResetOverrides(node.id))
             .help(L("Reset Override")).accessibilityLabel(L("Reset Override"))
         }
     }
