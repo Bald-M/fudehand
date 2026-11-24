@@ -6,22 +6,27 @@ extension FudehandStore {
     /// instance or another main component, and for one holding a main component.
     @discardableResult
     func createComponent(_ id: String, step: String = "Create Component") throws -> DesignNode {
-        let document = editor.document
-        let chain = layers(from: document, to: id)
-        guard let node = chain.last else { throw DesignError("Layer not found: \(id)") }
-        if node.component { throw DesignError("Layer \(id) is already a main component") }
-        if node.instance != nil { throw DesignError("Layer \(id) is an instance; detach it first") }
+        if let refusal = createComponentRefusal(id) { throw refusal }
+        try perform(step) { try $0.update(id) { $0.component = true } }
+        return try layer(id)
+    }
+
+    /// Why layer `id` cannot become a main component, or nil when it can.
+    private func createComponentRefusal(_ id: String) -> DesignError? {
+        let chain = layers(from: editor.document, to: id)
+        guard let node = chain.last else { return DesignError("Layer not found: \(id)") }
+        if node.component { return DesignError("Layer \(id) is already a main component") }
+        if node.instance != nil { return DesignError("Layer \(id) is an instance; detach it first") }
         for ancestor in chain.dropLast() {
-            if ancestor.instance != nil { throw DesignError("Layer \(id) is inside instance \(ancestor.id); change its main component instead") }
+            if ancestor.instance != nil { return DesignError("Layer \(id) is inside instance \(ancestor.id); change its main component instead") }
             if ancestor.component {
-                throw DesignError("Layer \(id) is inside main component \(ancestor.id); a main component cannot be inside another main component")
+                return DesignError("Layer \(id) is inside main component \(ancestor.id); a main component cannot be inside another main component")
             }
         }
         var inner: String?
         DesignDocument(nodes: node.children).forEach { if inner == nil, $0.component { inner = $0.id } }
-        if let inner { throw DesignError("Layer \(id) holds main component \(inner); a main component cannot be inside another main component") }
-        try perform(step) { try $0.update(id) { $0.component = true } }
-        return try layer(id)
+        if let inner { return DesignError("Layer \(id) holds main component \(inner); a main component cannot be inside another main component") }
+        return nil
     }
 
     /// Inserts an instance of a main component as one undo step and selects it. Without `at` it goes to the origin of `parent`; with
@@ -88,6 +93,52 @@ extension FudehandStore {
             for id in order { try document.update(id) { ComponentSync.detach(&$0, in: before) } }
         }
         return try order.map(layer)
+    }
+
+    // The UI entry points: the Edit menu, the layers panel, the properties panel, and the Insert Component popover. They show an
+    // error in an alert.
+
+    /// Whether Create Component applies to these layers: exactly one, which can become a main component.
+    func canCreateComponent(_ ids: Set<String>) -> Bool {
+        ids.count == 1 && ids.first.flatMap(createComponentRefusal) == nil
+    }
+
+    /// Whether Detach Instance applies to these layers: one or more, all instance roots.
+    func canDetachInstances(_ ids: Set<String>) -> Bool {
+        let document = editor.document
+        return !ids.isEmpty && ids.allSatisfy { id in document.node(id).map { $0.instance != nil && $0.source == $0.instance } ?? false }
+    }
+
+    func createComponent(from ids: Set<String>) {
+        guard canCreateComponent(ids), let id = ids.first else { return }
+        do { try createComponent(id) } catch { alert = error.localizedDescription }
+    }
+
+    func detachInstances(from ids: Set<String>) {
+        guard canDetachInstances(ids) else { return }
+        do { try detachInstances(ids) } catch { alert = error.localizedDescription }
+    }
+
+    /// Inserts an instance of main component `id` where Insert Icon puts an icon, and selects it.
+    func insertComponent(_ id: String) {
+        do { try createInstance(of: id, parent: nil, index: nil, at: nil) } catch { alert = error.localizedDescription }
+    }
+
+    /// Resets the given properties of a layer inside an instance; nil resets all of them (for an instance root, on every layer of it).
+    func resetOverrides(of id: String, _ properties: Set<String>?) {
+        do { try resetOverrides(id, properties: properties) } catch { alert = error.localizedDescription }
+    }
+
+    /// Selects every instance of main component `id`.
+    func selectInstances(of id: String) {
+        setSelection(Set(listComponents().first { $0.component.id == id }?.instances ?? []))
+    }
+
+    /// Selects the main component of instance `id` and brings it into view.
+    func goToMainComponent(of id: String) {
+        guard let component = editor.document.node(id)?.instance, editor.document.node(component)?.component == true else { return }
+        setSelection([component])
+        focus(component)
     }
 
     /// The layers from the top level down to `id` (inclusive); empty when there is no such layer.

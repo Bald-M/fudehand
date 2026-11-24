@@ -30,6 +30,19 @@ final class LayerOutline: ObservableObject {
         let hasChildren: Bool
         let collapsed: Bool
         let depth: Int
+        let component: Bool
+        let instance: Bool
+        /// Below an instance's root: its structure follows the main component, so structural commands are disabled.
+        let inInstance: Bool
+        let overridden: Bool
+
+        var symbol: String {
+            if component { return "square.on.square.dashed" }
+            if instance { return "diamond" }
+            return hasLayout ? "square.split.1x2" : type.symbol
+        }
+
+        var kind: String { component ? L("Main Component") : instance ? L("Instance") : type.title }
     }
 
     @Published private(set) var rows: [Row] = []
@@ -39,16 +52,18 @@ final class LayerOutline: ObservableObject {
     func update(_ index: DesignIndex, collapsed: Set<String>) {
         var next: [Row] = []
         next.reserveCapacity(rows.count)
-        func visit(_ nodes: [DesignNode], depth: Int) {
+        func visit(_ nodes: [DesignNode], depth: Int, inInstance: Bool) {
             // Upper layers come first in the list.
             for node in nodes.reversed() {
                 let isCollapsed = collapsed.contains(node.id)
                 next.append(Row(id: node.id, name: node.name, type: node.type, hasLayout: node.layout != nil, visible: node.visible,
-                                locked: node.locked, hasChildren: !node.children.isEmpty, collapsed: isCollapsed, depth: depth))
-                if !isCollapsed { visit(node.children, depth: depth + 1) }
+                                locked: node.locked, hasChildren: !node.children.isEmpty, collapsed: isCollapsed, depth: depth,
+                                component: node.component, instance: node.instance != nil, inInstance: inInstance,
+                                overridden: !node.overrides.isEmpty))
+                if !isCollapsed { visit(node.children, depth: depth + 1, inInstance: inInstance || node.instance != nil) }
             }
         }
-        visit(index.document.nodes, depth: 0)
+        visit(index.document.nodes, depth: 0, inInstance: false)
         if next != rows { rows = next }
         if index.count != count { count = index.count }
     }
@@ -116,8 +131,9 @@ struct LayersPanel: View {
             .buttonStyle(.plain).foregroundStyle(.secondary)
             .opacity(node.hasChildren ? 1 : 0).disabled(!node.hasChildren)
             .accessibilityLabel(node.collapsed ? L("Expand") : L("Collapse"))
-            Image(systemName: node.hasLayout ? "square.split.1x2" : node.type.symbol)
+            Image(systemName: node.symbol)
                 .font(.system(size: 11)).frame(width: 16).foregroundStyle(selected ? Color.accentColor : .secondary)
+                .accessibilityLabel(node.kind)
             if renaming == node.id {
                 TextField(L("Name"), text: $draftName)
                     .textFieldStyle(.plain).focused($renameFocused)
@@ -127,6 +143,10 @@ struct LayersPanel: View {
             } else {
                 Text(node.name).lineLimit(1).truncationMode(.tail)
                     .foregroundStyle(node.visible ? .primary : .secondary)
+                if node.overridden {
+                    Circle().fill(Color.accentColor.opacity(0.7)).frame(width: 5, height: 5)
+                        .help(L("Overridden")).accessibilityLabel(L("Overridden"))
+                }
                 Spacer(minLength: 4)
             }
             Button { store.updateNode(node.id, node.locked ? "Unlock Layer" : "Lock Layer") { $0.locked.toggle() } } label: {
@@ -151,23 +171,31 @@ struct LayersPanel: View {
         .gesture(renaming == node.id ? nil : DragGesture(minimumDistance: 0).onChanged { _ in press(node) })
         .contextMenu {
             Button(L("Rename")) { beginRename(node) }
-            Button(L("Bring Forward")) { step(node.id, by: 1) }
-            Button(L("Send Backward")) { step(node.id, by: -1) }
-            Button(L("Bring to Front")) { reorder(node.id, toTop: true) }
-            Button(L("Send to Back")) { reorder(node.id, toTop: false) }
+            Group {
+                Button(L("Bring Forward")) { step(node.id, by: 1) }
+                Button(L("Send Backward")) { step(node.id, by: -1) }
+                Button(L("Bring to Front")) { reorder(node.id, toTop: true) }
+                Button(L("Send to Back")) { reorder(node.id, toTop: false) }
+            }
+            .disabled(node.inInstance)
             Divider()
             Button(L("Copy")) { store.canvasCopy(targets(node), cut: false) }
-            Button(L("Cut")) { store.canvasCopy(targets(node), cut: true) }
+            Button(L("Cut")) { store.canvasCopy(targets(node), cut: true) }.disabled(node.inInstance)
             Button(L("Paste")) { guard store.canPasteLayers else { return }; store.setSelection([node.id]); store.paste() }
-            Button(L("Duplicate")) { store.setSelection(targets(node)); store.duplicateSelection() }
+            Button(L("Duplicate")) { store.setSelection(targets(node)); store.duplicateSelection() }.disabled(node.inInstance)
+            Divider()
+            Button(L("Create Component")) { store.createComponent(from: [node.id]) }
+                .disabled(!store.canCreateComponent([node.id]))
+            Button(L("Detach Instance")) { store.detachInstances(from: targets(node)) }
+                .disabled(!store.canDetachInstances(targets(node)))
             Divider()
             Button(L("Zoom to Layer")) { store.focus(node.id) }
             Button(L("Export as HTML…")) { store.setSelection([node.id]); store.exportHTMLWithPanel() }
             Divider()
-            Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }
+            Button(L("Delete"), role: .destructive) { store.canvasDelete([node.id]) }.disabled(node.inInstance)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(node.type.title) \(node.name)")
+        .accessibilityLabel("\(node.kind) \(node.name)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction { store.setSelection([node.id]) }
     }

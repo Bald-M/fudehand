@@ -137,6 +137,8 @@ struct FudehandApp: App {
             }
             CommandGroup(after: .pasteboard) {
                 DuplicateMenuItem(store: store, selection: store.layerSelection)
+                Divider()
+                ComponentMenuItems(store: store, selection: store.layerSelection, displayed: store.displayed)
             }
             CommandMenu(L("Canvas")) {
                 Button(L("Zoom In")) { store.zoomIn() }.keyboardShortcut("+")
@@ -258,5 +260,22 @@ private struct DuplicateMenuItem: View {
         }
         .keyboardShortcut("d")
         .disabled(selection.ids.isEmpty)
+    }
+}
+
+/// Edit › Create Component (⌥⌘K) and Detach Instance (⌥⌘B), each available when the selection allows it. They observe the
+/// selection and the document themselves, as Duplicate does, since creating or detaching leaves the selection unchanged.
+private struct ComponentMenuItems: View {
+    let store: FudehandStore
+    @ObservedObject var selection: LayerSelection
+    @ObservedObject var displayed: DisplayedDocument
+
+    var body: some View {
+        Button(L("Create Component")) { store.createComponent(from: selection.ids) }
+            .keyboardShortcut("k", modifiers: [.command, .option])
+            .disabled(!store.canCreateComponent(selection.ids))
+        Button(L("Detach Instance")) { store.detachInstances(from: selection.ids) }
+            .keyboardShortcut("b", modifiers: [.command, .option])
+            .disabled(!store.canDetachInstances(selection.ids))
     }
 }

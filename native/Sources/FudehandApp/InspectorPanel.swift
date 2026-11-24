@@ -244,6 +244,7 @@ private struct NodeInspector: View {
                 }
                 .buttonStyle(.borderless).foregroundStyle(.secondary)
                 .help(node.visible ? L("Hide") : L("Show")).accessibilityLabel(node.visible ? L("Hide %@", node.name) : L("Show %@", node.name))
+                overrideReset(["visible"])
             }
             .padding(.horizontal, InspectorMetrics.margin).padding(.vertical, 12)
             Divider()
@@ -251,6 +252,7 @@ private struct NodeInspector: View {
     }
 
     @ViewBuilder private var designPage: some View {
+        componentSection
         InspectorSection(L("Position and Size")) {
             let inLayout = parentLayout != nil
             // A group's size always equals the union of its child layers, so sizing modes have no effect on it (#60).
@@ -258,6 +260,7 @@ private struct NodeInspector: View {
             HStack(spacing: InspectorMetrics.gap) {
                 NumberField(label: "X", value: node.x, disabled: inLayout) { v in update("Change Position") { $0.x = v } }
                 NumberField(label: "Y", value: node.y, disabled: inLayout) { v in update("Change Position") { $0.y = v } }
+                overrideReset(["x", "y"])
             }
             HStack(spacing: InspectorMetrics.gap) {
                 NumberField(label: "W", value: node.width, minimum: 0, disabled: node.type == .group,
@@ -268,6 +271,7 @@ private struct NodeInspector: View {
                             accessory: sizing ? AnyView(SizingChip(label: L("Height"), mode: node.sizing.vertical) { mode in update("Change Sizing") { $0.sizing.vertical = mode } }) : nil) { v in
                     update("Change Size") { $0.height = v; $0.sizing.vertical = .fixed; if $0.text != nil { $0.text?.autoResize = .none } }
                 }
+                overrideReset(["width", "height"])
             }
         }
         if node.type == .frame {
@@ -286,11 +290,12 @@ private struct NodeInspector: View {
                 } else {
                     Spacer().frame(maxWidth: .infinity)
                 }
+                overrideReset(["opacity", "cornerRadius"])
             }
         }
         let fillTitle = node.type == .text ? L("Background") : L("Fill")
         if let fill = node.fill {
-            InspectorSection(fillTitle) {
+            InspectorSection(fillTitle, accessory: { overrideReset(["fill"]) }) {
                 ColorField(label: fillTitle, color: fill, removeLabel: L("Remove fill"), remove: { update("Remove Fill") { $0.fill = nil } }) { c in
                     update("Change Fill", "fill") { $0.fill = c }
                 }
@@ -299,7 +304,7 @@ private struct NodeInspector: View {
             InspectorSection(fillTitle, adding: L("Add Fill")) { update("Add Fill") { $0.fill = .white } }
         }
         if let stroke = node.stroke {
-            InspectorSection(L("Stroke")) {
+            InspectorSection(L("Stroke"), accessory: { overrideReset(node.overrides.filter { $0 == "stroke" || $0.hasPrefix("stroke.") }) }) {
                 ColorField(label: L("Stroke"), color: stroke.color, removeLabel: L("Remove stroke"), remove: { update("Remove Stroke") { $0.stroke = nil } }) { c in
                     update("Change Stroke", "stroke") { $0.stroke?.color = c }
                 }
@@ -329,7 +334,10 @@ private struct NodeInspector: View {
         if let icon = node.icon {
             InspectorSection(L("Icon")) {
                 LabeledContent(L("Icon name")) { Text(icon.name).textSelection(.enabled).monospaced() }
-                ColorField(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
+                HStack(spacing: InspectorMetrics.gap) {
+                    ColorField(label: L("Icon color"), color: icon.color) { c in update("Change Icon Color", "icon.color") { $0.icon?.color = c } }
+                    overrideReset(["icon.color"])
+                }
                 Button(L("Replace Icon…")) { replacingIcon = true }
                     .popover(isPresented: $replacingIcon, arrowEdge: .leading) {
                         IconPicker(current: icon.name) { store.replaceIcon(node.id, with: $0) }
@@ -338,6 +346,42 @@ private struct NodeInspector: View {
         }
         if let snapshot = node.versionSnapshot { versionSnapshotSection(snapshot) }
         if node.type == .frame { frameSnapshotsSection }
+    }
+
+    /// For a main component, its instances; for an instance, its main component and the commands that act on the whole instance.
+    @ViewBuilder private var componentSection: some View {
+        if node.component {
+            let instances = store.listComponents().first { $0.component.id == node.id }?.instances ?? []
+            InspectorSection(L("Main Component")) {
+                Text(L("%d Instances", instances.count)).foregroundStyle(.secondary)
+                Button(L("Select Instances")) { store.selectInstances(of: node.id) }.disabled(instances.isEmpty)
+            }
+        } else if let component = node.instance, node.source == component {
+            let main = displayed.index.node(component).flatMap { $0.component ? $0 : nil }
+            let overridden = Self.hasOverrides(node)
+            InspectorSection(L("Instance")) {
+                LabeledContent(L("Main Component")) { Text(main?.name ?? L("Deleted")).lineLimit(1) }
+                Button(L("Go to Main Component")) { store.goToMainComponent(of: node.id) }.disabled(main == nil)
+                Button(L("Reset All Overrides")) { store.resetOverrides(of: node.id, nil) }.disabled(main == nil || !overridden)
+                Button(L("Detach Instance")) { store.detachInstances(from: [node.id]) }
+            }
+        }
+    }
+
+    private nonisolated static func hasOverrides(_ node: DesignNode) -> Bool {
+        !node.overrides.isEmpty || node.children.contains(where: hasOverrides)
+    }
+
+    /// A reset control for the properties among `paths` that the selected layer overrides; nothing when it overrides none.
+    @ViewBuilder private func overrideReset<Paths: Sequence<String>>(_ paths: Paths) -> some View {
+        let overridden = Set(paths).intersection(node.overrides)
+        if !overridden.isEmpty {
+            Button { store.resetOverrides(of: node.id, overridden) } label: {
+                Image(systemName: "arrow.counterclockwise").font(.system(size: 11)).iconHitTarget()
+            }
+            .buttonStyle(.borderless).foregroundStyle(.secondary)
+            .help(L("Reset Override")).accessibilityLabel(L("Reset Override"))
+        }
     }
 
     private static let snapshotTime = Date.FormatStyle.dateTime.year().month().day().hour().minute()
@@ -381,7 +425,7 @@ private struct NodeInspector: View {
     }
 
     private func textSection(_ text: DesignText) -> some View {
-        InspectorSection(L("Text")) {
+        InspectorSection(L("Text"), accessory: { overrideReset(["text.content"]) }) {
             TextEditor(text: $content)
                 .font(.system(size: 12)).frame(minHeight: 54, maxHeight: 120)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
@@ -406,7 +450,10 @@ private struct NodeInspector: View {
                     ForEach([100, 200, 300, 400, 500, 600, 700, 800, 900], id: \.self) { Text(Self.weightName($0)).tag($0) }
                 }.labelsHidden()
             }
-            ColorField(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
+            HStack(spacing: InspectorMetrics.gap) {
+                ColorField(label: L("Text color"), color: text.color) { c in update("Change Text Color", "text.color") { $0.text?.color = c } }
+                overrideReset(["text.color"])
+            }
             Picker(L("Alignment"), selection: Binding(get: { text.align }, set: { v in update("Change Alignment") { $0.text?.align = v } })) {
                 Image(systemName: "text.alignleft").accessibilityLabel(L("Left")).tag(TextAlign.left)
                 Image(systemName: "text.aligncenter").accessibilityLabel(L("Center")).tag(TextAlign.center)

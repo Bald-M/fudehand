@@ -1,10 +1,11 @@
 import FudehandCore
 import SwiftUI
 
-/// The bar floating over the bottom of the canvas: the canvas tools, Insert Image, and the icon picker.
+/// The bar floating over the bottom of the canvas: the canvas tools, Insert Image, the icon picker, and the component picker.
 struct CanvasToolbar: View {
     @ObservedObject var store: FudehandStore
     @State private var pickingIcon = false
+    @State private var pickingComponent = false
 
     /// Tool, name key, shortcut key, symbol.
     static let tools: [(CanvasTool, String, String, String)] = [
@@ -22,6 +23,10 @@ struct CanvasToolbar: View {
             ToolButton(title: L("Insert Image"), symbol: "photo.badge.plus", selected: false) { store.insertImage() }
             ToolButton(title: L("Insert Icon"), symbol: "star.square.on.square", selected: pickingIcon) { pickingIcon = true }
                 .popover(isPresented: $pickingIcon, arrowEdge: .top) { IconPicker(current: nil) { store.insertIcon($0) } }
+            ToolButton(title: L("Insert Component"), symbol: "plus.diamond", selected: pickingComponent) { pickingComponent = true }
+                .popover(isPresented: $pickingComponent, arrowEdge: .top) {
+                    ComponentPicker(components: store.listComponents().map(\.component)) { store.insertComponent($0) }
+                }
         }
         .padding(6)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -1339,3 +1339,62 @@ private func temporaryDirectory() -> URL {
     _ = try await control(store, .resetOverrides(copy.id, properties: nil))
     #expect(store.editor.undoName == name)
 }
+
+@Test @MainActor func insertComponentPlacesLikeIcon() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("card")
+    // Nothing selected: centered in the viewport, at the top level, selected, one step.
+    store.setSelection([])
+    store.insertComponent("card")
+    let centered = try #require(store.selection.first)
+    let node = try #require(store.editor.document.node(centered))
+    let center = CanvasGeometry.screenToWorld(Point(x: store.canvasSize.width / 2, y: store.canvasSize.height / 2), viewport: store.viewport)
+    #expect(store.selection.count == 1 && node.instance == "card")
+    #expect(node.frame == Rect(x: center.x - 25, y: center.y - 20, width: 50, height: 40))
+    #expect(store.editor.document.parentID(of: centered) == .some(nil))
+    #expect(store.editor.undoName == "Insert Component")
+    store.undo()
+    #expect(store.editor.document.node(centered) == nil && store.editor.undoName == "Create Component")
+    // A frame selected: at its top-left.
+    store.setSelection(["page"])
+    store.insertComponent("card")
+    let inFrame = try #require(store.selection.first)
+    #expect(store.editor.document.parentID(of: inFrame) == .some("page"))
+    #expect(store.editor.document.node(inFrame).map { ($0.x, $0.y) } ?? (-1, -1) == (0, 0))
+    // Not a main component: an alert, nothing inserted.
+    let count = store.editor.document.nodeCount
+    store.insertComponent("page")
+    #expect(store.alert == "Layer page is not a main component" && store.editor.document.nodeCount == count)
+}
+
+@Test @MainActor func componentMenuItemsFollowTheSelection() throws {
+    let store = try makeComponentStore()
+    #expect(store.canCreateComponent(["card"]))
+    #expect(!store.canCreateComponent(["card", "page"]) && !store.canCreateComponent([]))
+    store.createComponent(from: ["card"])
+    #expect(store.editor.document.node("card")?.component == true && store.editor.undoName == "Create Component")
+    #expect(!store.canCreateComponent(["card"]) && !store.canCreateComponent(["home"]))
+    let instance = try store.createInstance(of: "card", parent: "page", index: nil, at: nil)
+    #expect(store.canDetachInstances([instance.id]) && !store.canDetachInstances(["card"]) && !store.canDetachInstances([]))
+    #expect(!store.canCreateComponent([instance.id]))
+    // Select Instances, then Go to Main Component.
+    store.selectInstances(of: "card")
+    #expect(store.selection == [instance.id])
+    store.goToMainComponent(of: instance.id)
+    #expect(store.selection == ["card"])
+    store.detachInstances(from: [instance.id])
+    #expect(store.editor.document.node(instance.id)?.instance == nil && store.editor.undoName == "Detach Instance")
+}
+
+@Test @MainActor func resetOverrideFromThePanelIsOneStep() throws {
+    let store = try makeComponentStore()
+    _ = try store.createComponent("home")
+    let instance = try store.createInstance(of: "home", parent: "page", index: nil, at: nil)
+    let child = try #require(store.editor.document.node(instance.id)?.children.first?.id)
+    store.updateNode(child, "Change Fill") { $0.fill = try? DesignColor(hex: "#00FF00") }
+    store.updateNode(child, "Change Opacity") { $0.opacity = 0.5 }
+    store.resetOverrides(of: child, ["fill"])
+    #expect(store.editor.document.node(child)?.overrides == ["opacity"] && store.editor.undoName == "Reset Overrides")
+    store.resetOverrides(of: instance.id, nil)
+    #expect(store.editor.document.node(child)?.overrides.isEmpty == true && store.editor.document.node(child)?.opacity == 1)
+}
