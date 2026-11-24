@@ -87,6 +87,7 @@ Every feature and the tool that covers it. When a pull request changes this, upd
 | List, add, reply to, edit, and delete annotations | `design_list_annotations`, `design_add_annotation` (`replyTo` for a reply), `design_update_annotation`, `design_delete_annotation` |
 | Expand or collapse an annotation's thread on the canvas | Exception: expanding only shows the thread a tool already returns with `design_list_annotations`, and changes nothing. |
 | Search the built-in icon libraries; insert or replace an icon from the icon picker | `design_search_icons`; inserting is `design_create_node` with an icon layer, replacing is `design_update_node` with `icon.name` |
+| Find layers by text content or name (Edit › Find, ⌘F); step to a match in the find bar | `design_find_nodes`; stepping to a match is `design_select` + `canvas_focus_node` |
 
 ### Canvas and windows
 

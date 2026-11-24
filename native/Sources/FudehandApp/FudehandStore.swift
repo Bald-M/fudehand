@@ -439,6 +439,11 @@ final class FudehandStore: ObservableObject {
         do { try importFonts(panel.urls) } catch { alert = error.localizedDescription }
     }
 
+    // MARK: Find
+
+    /// The layers whose text content or name contains the query, for the find bar and the `find_nodes` command.
+    func findLayers(_ query: String) -> [DesignFind.Match] { DesignFind.matches(in: editor.document, query: query) }
+
     // MARK: Viewport
 
     private func request(_ next: Viewport, animated: Bool) {

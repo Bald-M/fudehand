@@ -674,6 +674,25 @@ private func temporaryFile() -> URL {
     #expect((symbols["icons"] as? [String])?.first == "sf/house.fill")
 }
 
+@Test @MainActor func findNodesReturnsMatchesAndTotal() async throws {
+    let store = makeStore()
+    let url = temporaryFile()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var first = DesignNode(id: "a", type: .text, name: "Primary")
+    first.text = DesignText(content: "Buy now")
+    var second = DesignNode(id: "b", type: .text, name: "Secondary")
+    second.text = DesignText(content: "Buy later")
+    try DesignDocument(nodes: [first, second]).encoded().write(to: url)
+    try await store.open(url) { true }
+    let result = try await control(store, .findNodes(query: "buy", limit: 1))
+    #expect(result["total"] as? Int == 2)
+    let matches = try #require(result["matches"] as? [[String: Any]])
+    #expect(matches.count == 1)
+    #expect(matches[0]["id"] as? String == "a" && matches[0]["name"] as? String == "Primary")
+    #expect(matches[0]["type"] as? String == "text" && matches[0]["field"] as? String == "text" && matches[0]["excerpt"] as? String == "Buy now")
+    #expect(!store.isDirty && !store.canUndo)
+}
+
 @Test @MainActor func iconSnapshotViaControl() async throws {
     let store = makeStore()
     _ = try await control(store, .createNode(parent: nil, index: nil, node: JSONObject([

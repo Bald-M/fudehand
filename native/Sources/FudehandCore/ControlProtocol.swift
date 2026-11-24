@@ -32,6 +32,8 @@ public enum ControlCommand: Equatable, Sendable {
     case listShaders
     case importFont(String)
     case searchIcons(query: String, library: IconLibrary?, limit: Int)
+    /// Layers whose text content or name contains the query (`DesignFind`), at most `limit` of them.
+    case findNodes(query: String, limit: Int)
     /// Selection colors of the given layers, or of the selection when `ids` is nil.
     case listColors(ids: [String]?)
     case replaceColor(from: DesignColor, to: DesignColor, ids: [String]?)
@@ -374,6 +376,10 @@ public enum ControlProtocol {
             let limit = try positive("limit", default: 50)
             guard limit <= 200, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
             return .searchIcons(query: try string("query"), library: library, limit: Int(limit))
+        case "find_nodes":
+            let limit = try positive("limit", default: 50)
+            guard limit <= 500, limit == limit.rounded() else { throw Message(text: "Invalid argument type: limit") }
+            return .findNodes(query: try string("query"), limit: Int(limit))
         case "list_colors": return .listColors(ids: try layers())
         case "replace_color": return .replaceColor(from: try color("from"), to: try color("to"), ids: try layers())
         case "play": return .playPrototype(frame: try optionalString("frame"))
