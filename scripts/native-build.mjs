@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -11,8 +11,31 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 // the tools it carries.
 export async function buildNativeApp({ configuration = 'release', distribution = false } = {}) {
   const scratch = await runSwift('build', { configuration })
-  const app = join(root, 'dist', 'Fudehand.app')
-  const contents = join(app, 'Contents')
+  const dist = join(root, 'dist')
+  const app = join(dist, 'Fudehand.app')
+  await mkdir(dist, { recursive: true })
+  const staging = await mkdtemp(join(dist, '.fudehand-build-'))
+  try {
+    const stagedApp = join(staging, 'Fudehand.app')
+    await assembleNativeApp(join(stagedApp, 'Contents'), { scratch, configuration, distribution })
+    await runCommand('codesign', ['--force', '--deep', '--sign', '-', stagedApp])
+    // Swapping the complete bundles leaves the old executable's contents intact for any running process.
+    const publish = join(staging, 'publish-native-app')
+    await runCommand('clang', [join(root, 'scripts', 'publish-native-app.c'), '-o', publish])
+    await runCommand(publish, [stagedApp, app])
+  } finally {
+    // After a swap, staging holds the old App. Removing its directory entries leaves open mappings intact.
+    try {
+      await rm(staging, { recursive: true, force: true })
+    } catch (error) {
+      console.warn(`Could not remove build staging directory ${staging}.`, error.message)
+    }
+  }
+  console.log(`Native app built: ${app}`)
+  return app
+}
+
+async function assembleNativeApp(contents, { scratch, configuration, distribution }) {
   await mkdir(join(contents, 'MacOS'), { recursive: true })
   await mkdir(join(contents, 'Resources'), { recursive: true })
   await copyFile(join(scratch, configuration, 'FudehandApp'), join(contents, 'MacOS', 'FudehandApp'))
@@ -24,12 +47,9 @@ export async function buildNativeApp({ configuration = 'release', distribution =
   await copyIcons(join(contents, 'Resources', 'Icons'))
   await copyTools(join(contents, 'Resources', 'Tools'))
   // Local build metadata: the chat panel and the MCP connectors use the source workspace's scripts with this Node.
-  const workspace = join(contents, 'Resources', 'workspace.json')
-  if (distribution) await rm(workspace, { force: true })
-  else await writeFile(workspace, JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
-  await runCommand('codesign', ['--force', '--deep', '--sign', '-', app])
-  console.log(`Native app built: ${app}`)
-  return app
+  if (!distribution) {
+    await writeFile(join(contents, 'Resources', 'workspace.json'), JSON.stringify({ root, node: process.execPath, path: process.env.PATH || '' }, null, 2))
+  }
 }
 
 // The scripts the MCP server and the chat panel's Agent harness run, with their production dependencies, so an App without this checkout
@@ -37,7 +57,6 @@ export async function buildNativeApp({ configuration = 'release', distribution =
 const toolScripts = ['mcp-server.mjs', 'agent-chat.mjs', 'agent-providers.mjs', 'fudehand-tools.mjs', 'control-client.mjs', 'design-guidance.mjs', 'style-library.mjs']
 
 async function copyTools(target) {
-  await rm(target, { recursive: true, force: true })
   await mkdir(join(target, 'scripts'), { recursive: true })
   for (const name of ['package.json', 'pnpm-lock.yaml', '.npmrc']) await copyFile(join(root, name), join(target, name))
   for (const name of toolScripts) await copyFile(join(root, 'scripts', name), join(target, 'scripts', name))
@@ -50,10 +69,9 @@ async function copyTools(target) {
   await writeFile(join(target, 'build-id'), `${version} ${randomUUID()}\n`)
 }
 
-// The launch window's templates: the .fudehand files under native/Resources/Templates/; clear first so deleted templates do not stay in the app bundle.
+// The launch window's templates: the .fudehand files under native/Resources/Templates/.
 async function copyTemplates(target) {
   const source = join(root, 'native', 'Resources', 'Templates')
-  await rm(target, { recursive: true, force: true })
   await mkdir(target, { recursive: true })
   for (const name of await readdir(source)) {
     if (name.toLowerCase().endsWith('.fudehand')) await copyFile(join(source, name), join(target, name))
@@ -63,18 +81,14 @@ async function copyTemplates(target) {
 // The bundled icon libraries and their licenses (see scripts/build-icons.mjs); IconCatalog reads them from here.
 async function copyIcons(target) {
   const source = join(root, 'native', 'Sources', 'FudehandCore', 'Resources', 'Icons')
-  await rm(target, { recursive: true, force: true })
   await mkdir(target, { recursive: true })
   for (const name of await readdir(source)) await copyFile(join(source, name), join(target, name))
 }
 
 // UI string tables: the App reads them from its own bundle, and their presence tells AppKit which languages
-// the system-provided menu items may use. Clear old ones first so a removed language does not linger.
+// the system-provided menu items may use.
 async function copyLocalizations(resources) {
   const source = join(root, 'native', 'Sources', 'FudehandCore', 'Resources')
-  for (const name of await readdir(resources)) {
-    if (name.endsWith('.lproj')) await rm(join(resources, name), { recursive: true, force: true })
-  }
   for (const name of await readdir(source)) {
     if (!name.endsWith('.lproj')) continue
     await mkdir(join(resources, name), { recursive: true })
